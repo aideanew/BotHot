@@ -82,43 +82,96 @@ CHANNELS: dict[str, ChannelSpec] = {
     ),
     "dajiala": ChannelSpec(
         name="dajiala",
-        description="极致了 Dajiala 文章发现（按 ghid 拉最新发文清单 + HTML 详情兜底）",
+        description=(
+            "极致了 Dajiala 文章发现（ghid/nickname/url 四选一 + HTML 详情兜底）。"
+            "计价 CNY/次（实测 ¥0.04~0.16）。实时性 ✅（13:20 发布→13:32 可见）。"
+            "标识体系 ghid+nickname+biz+gh_（article_html 同时返回 biz+gh_id）。"
+            "请求形态 POST JSON body {key, verifycode}。"
+            "失败计费口径：article_detail 缺陷端点扣费但 data=null（¥0.045/次）。"
+            "详情主路径=免费直抓（6/6 成功），article_html 仅兜底。"
+        ),
         implemented=True,
         required_setting="DAJIALA_API_KEY",
         available=lambda s: bool(s.dajiala_api_key),
         factory=_make_dajiala_provider,
         contract_verified_at="2026-09-29",
-        verified_scope="活体实测（TC-A1 系列）：post_condition 发现 + article_html 详情",
+        verified_scope=(
+            "格级证据：发现(post_condition ghid/nickname)=活体实测 TC-A1-02/09；"
+            "发现(post_history url)=活体实测 TC-A1-04；"
+            "详情(article_html)=活体实测 TC-A1-07 稳定可用 ¥0.04；"
+            "详情(article_detail)=活体实测 TC-A1-03/05/08 缺陷禁用（扣费 data=null）；"
+            "搜索(kw_search)=文档级（chunk 反解，未调用，单价/参数/响应未知）。"
+        ),
     ),
     "justoneapi": ChannelSpec(
         name="justoneapi",
-        description="JustOneAPI 文章发现（按 ghid 拉历史发文清单 + 带正文详情兜底）",
+        description=(
+            "JustOneAPI 文章发现（ghid 拉历史发文清单 + 带正文详情兜底）。"
+            "计价 CNY/次（实测 ¥0.15~0.40）。实时性 ✅（sessionid≈调用时刻）。"
+            "标识体系 ghid+biz+gh_+nickname（history v2 返回 AccountInfo.UserName）。"
+            "请求形态坑：history=POST form，detail=GET query；参数名不统一（history=ghid，detail=articleUrl）。"
+            "失败计费口径：405/400 不扣费。"
+            "详情主路径=免费直抓，detail/v1 仅兜底。"
+        ),
         implemented=True,
         required_setting="JUSTONEAPI_API_KEY",
         available=lambda s: bool(s.justoneapi_api_key),
         factory=_make_justoneapi_provider,
         contract_verified_at="2026-09-29",
-        verified_scope="活体实测（TC-A3 系列）：get-account-history-articles/v2 发现 + get-article-detail/v1 详情",
+        verified_scope=(
+            "格级证据：发现(history/v2 ghid)=活体实测 TC-A3-01；"
+            "详情(detail/v1 articleUrl)=活体实测 TC-A3-07 含正文 ¥0.15；"
+            "详情(detail/v5)=活体实测 TC-A3-06 仅指标无正文；"
+            "搜索(search-article/v1·v2 ¥0.80, search-account/v1 ¥0.40, v2 ¥1.50)=契约级"
+            "（价目表在册 293 接口，未调用）；"
+            "convert-article-link=活体实测 TC-A3-02/03/04 不可用（405/参数名不符）。"
+        ),
     ),
     "tikhub": ChannelSpec(
         name="tikhub",
-        description="TikHub 文章发现（按 username 拉账号文章列表 + 关键词搜索，需付费余额）",
+        description=(
+            "TikHub 文章发现（username 拉账号文章列表 + 关键词搜索）。"
+            "计价 USD/请求（$0.001~0.01，非 credits——credits 是 Wellbyte 单位）。"
+            "实时性 ❓未实测（文档自称即时回源）。"
+            "标识体系强依赖 gh_（username=gh_形态，需 biz→gh_ 映射层 T16）。"
+            "请求形态 POST JSON body + Header Bearer。"
+            "失败计费口径：402 余额不足不扣费。"
+            "⚠️ Excel 报价表 web/* 旧端点已从现行 OpenAPI 下线（TC-A2-04 404）；"
+            "契约真源=api.tikhub.io/openapi.json（1050 paths），不是 Excel。"
+        ),
         implemented=True,
         required_setting="TIKHUB_API_KEY",
         available=lambda s: bool(s.tikhub_api_key),
         factory=_make_tikhub_provider,
         contract_verified_at="2026-09-29",
-        verified_scope="契约级（OpenAPI 1050 paths 读取 + TC-A2 鉴权实测）；付费端点 402 需充值后启用",
+        verified_scope=(
+            "格级证据：发现(fetch_account_articles v2)=契约级（OpenAPI 在案，TC-A2-02b 402 未实测）；"
+            "搜索(fetch_search)=契约级（TC-A2-02b 402 证实路由在，$0.01）；"
+            "详情(v2 组 fetch_article_detail/h5/full 等 13 端点)=契约级（OpenAPI 在案，未实测）；"
+            "详情(web/* 旧端点)=活体实测已下线 TC-A2-04 404（Excel 漂移）。"
+        ),
     ),
     "wellbyte": ChannelSpec(
         name="wellbyte",
-        description="Wellbyte 数井文章发现（关键词搜索 + URL 驱动的历史文章清单）",
+        description=(
+            "Wellbyte 数井文章发现（关键词搜索 + URL 驱动的历史文章清单）。"
+            "计价 credits（$0.001/cr，实测 78~155cr/次）。实时性 ✅（4.7 分钟前文章可见）。"
+            "标识体系 URL 驱动（传文章 URL 即免费返回 gh_——biz→gh_ 映射零成本路径 TC-A4-04）。"
+            "请求形态坑：必须 JSON body（form→40001，文档自相矛盾）；Cloudflare 1010 拦截 Python urllib，须用 httpx。"
+            "失败计费口径：422 质量门槛拒绝扣 0（实测 TC-A4-05/06/07 三连拒）。"
+            "详情主路径=免费直抓，detail_v2 禁用待厂商。"
+        ),
         implemented=True,
         required_setting="WELLBYTE_API_KEY",
         available=lambda s: bool(s.wellbyte_api_key),
         factory=_make_wellbyte_provider,
         contract_verified_at="2026-09-29",
-        verified_scope="活体实测（TC-A4 系列）：article_v1 搜索 + account_history_v2 发现；detail_v2 禁用（422 三连拒）",
+        verified_scope=(
+            "格级证据：搜索(article_v1 keyword)=活体实测 TC-A4-02 155cr 分钟级；"
+            "发现(account_history_v2 URL)=活体实测 TC-A4-04 78cr + 免费侧产 gh_；"
+            "详情(detail_v2)=活体实测 TC-A4-05/06/07 422 三连拒禁用（0 扣费）；"
+            "CF 指纹坑=活体实测 TC-A4-03（urllib 被 1010 拦截，httpx 通过）。"
+        ),
     ),}
 
 

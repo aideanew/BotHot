@@ -201,12 +201,57 @@ class JustOneApiClient:
         )
 
     # ── 关键词搜索 ────────────────────────────────────────────────────
+    # 证据级别：契约级（未实测）——价目表（justoneapi-pricing-20260929-110843.xlsx，
+    # 293 接口）确认以下搜索端点在册但本轮未调用：
+    #   search-article/v1  ¥0.80   搜索文章
+    #   search-article/v2  ¥0.80   搜索文章（支持 latest 类目）
+    #   search-account/v1  ¥0.40   搜索公众号
+    #   search-account/v2  ¥1.50   搜索公众号
+    # 参数名/响应形状均未实测——实现按 JustOneAPI 统一包裹 {code, message, data} 推断，
+    # suppress_errors 降级返回空列表。充值后需补 TC-A3-08 活体用例。
 
     async def search_articles(
         self, keyword: str, *, sort: str = "latest", time_range: str = ""
     ) -> list[ArticleSearchResult]:
-        """JustOneAPI 无独立关键词搜索端点，返回空列表。"""
-        return []
+        """关键词搜索文章（search-article/v1，¥0.80/次）。
+
+        ⚠️ 契约级实现（未实测）：端点在价目表在册，但参数名/响应形状未活体验证。
+        失败时降级返回空列表（suppress_errors），不抛异常。
+        """
+        if not self._api_key:
+            return []
+
+        # JustOneAPI 鉴权方式：URL 参数 ?token=（与 detail 接口一致）
+        params = {"token": self._api_key, "keyword": keyword}
+        try:
+            resp = await self._http.get(
+                f"{self._base_url}/api/weixin/search-article/v1",
+                params=params,
+            )
+        except httpx.HTTPError as exc:
+            logger.warning("JustOneAPI search 不可达: %s", exc)
+            return []
+
+        payload = await self._handle_response(resp, "search-article/v1", suppress_errors=True)
+        if payload is None:
+            return []
+
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(data, list):
+            return []
+
+        results: list[ArticleSearchResult] = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            results.append(ArticleSearchResult(
+                url=item.get("url", "") or item.get("content_url", ""),
+                title=item.get("title", ""),
+                digest=item.get("digest", ""),
+                author=item.get("author", "") or item.get("nick_name", ""),
+                source="justoneapi",
+            ))
+        return results
 
     # ── HTTP 层 ──────────────────────────────────────────────────────
 

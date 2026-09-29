@@ -14,7 +14,7 @@ OpenAPI 契约获取：GET /openapi.json（1050 paths，wechat_mp v2 仅 13 端�
 契约级实现 + 禁用态注册——充值后按 TC-A2-02b 形态补活体用例即可启用。
 
 发现策略：query_work_list 用 fetch_account_articles（username=ghid，offset=base64 游标）。
-详情策略：fetch_article_detail 返回 None（契约未实测，不冒险）。
+详情策略：fetch_article_detail 调用 v2 组详情端点（fetch_article_detail 等），契约在案未实测。
 """
 
 from __future__ import annotations
@@ -145,9 +145,57 @@ class TikhubClient:
     # ── 详情兜底 ──────────────────────────────────────────────────────
 
     async def fetch_article_detail(self, url: str) -> ArticleDetail | None:
-        """TikHub 详情端点在现行 OpenAPI 中已下线（404），返回 None 降级。"""
-        logger.debug("TikHub 详情端点已下线，跳过")
-        return None
+        """TikHub v2 组详情端点（fetch_article_detail），契约在案未实测。
+
+        ⚠️ 范围澄清（2026-09-29 修正）：
+        - Excel 报价表里的 /api/v1/wechat_mp/web/* 旧端点（含 fetch_mp_article_detail_json）
+          已从现行 OpenAPI 下线（TC-A2-04 实测 404）。
+        - 但 v2 组详情端点仍在现行 OpenAPI（api.tikhub.io/openapi.json，1050 paths）：
+          /api/v1/wechat_mp/v2/fetch_article_detail、fetch_article_detail_h5（官方标推荐）、
+          fetch_article_full 等 13 个端点。
+        - 本方法调用 v2 组端点；因 TikHub 余额为 0（TC-A2-02b 402），从未活体实测。
+        失败时降级返回 None（suppress_errors），不抛异常。
+        """
+        if not self._api_key:
+            return None
+
+        # v2 组详情端点（契约在案，未实测）
+        # 优先尝试 fetch_article_detail_h5（官方标"推荐"）
+        params = {"url": url}
+        try:
+            resp = await self._http.get(
+                f"{self._base_url}/api/v1/wechat_mp/v2/fetch_article_detail_h5",
+                params=params,
+                headers=self._headers(),
+            )
+        except httpx.HTTPError as exc:
+            logger.warning("TikHub v2 detail 不可达: %s", exc)
+            return None
+
+        payload = await self._handle_response(resp, "v2/fetch_article_detail_h5", suppress_402=True)
+        if payload is None:
+            return None
+
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(data, dict):
+            return None
+
+        # v2 端点响应形状未实测，按 TikHub 统一结构推断
+        content_html = data.get("content", "") or data.get("html", "")
+        content_text = data.get("content_text", "")
+        if not content_html and not content_text:
+            return None
+
+        return ArticleDetail(
+            url=url,
+            title=data.get("title", ""),
+            content_html=content_html,
+            content_text=content_text,
+            author=data.get("author", "") or data.get("nick_name", ""),
+            biz=data.get("biz", ""),
+            ghid=data.get("gh_id", "") or data.get("user_name", ""),
+            source="tikhub",
+        )
 
     # ── 关键词搜索 ────────────────────────────────────────────────────
 

@@ -10,7 +10,7 @@
 - article_html    ¥0.04/次  — 全 HTML + 元数据（标题/biz/gh_id/作者/发布时间）✅
 - article_detail  ¥0.045/次 — 实测缺陷（data 恒 null），禁用
 - short2long      ¥0.015/次 — 短链转长链
-- kw_search       ?/次      — 关键词搜索
+- kw_search       ?/次      — 关键词搜索（⚠️ 端点存在但未实测：URL 从前端 SPA JS chunk 反解所得，单价/参数/响应形状全部未知，资费页口径约 ¥0.5/次起）
 
 发现策略：query_work_list 用 post_condition（按 ghid 拉最新清单），字段映射到
 manifest._map_row 的别名（url/title/digest/post_time）。
@@ -170,7 +170,14 @@ class DajialaClient:
     async def search_articles(
         self, keyword: str, *, sort: str = "latest", time_range: str = ""
     ) -> list[ArticleSearchResult]:
-        """Dajiala kw_search 关键词搜索（未实测计费与响应格式，返回空列表降级）。"""
+        """Dajiala kw_search 关键词搜索。
+
+        ⚠️ 证据级别：文档级（未实测）——kw_search 端点 URL 从前端 SPA JS chunk 反解所得
+        （static1.dajiala.com/static/js/{89,120,...}.*.js），仅证明端点存在；
+        单价、参数名、响应形状全部未知（资费页口径约 ¥0.5/次起）。
+        本实现按 Dajiala 统一包裹 {code, data} 推断，失败时降级返回空列表。
+        充值后需补 TC-A1-10 活体用例确认参数/响应。
+        """
         if not self._api_key:
             return []
         try:

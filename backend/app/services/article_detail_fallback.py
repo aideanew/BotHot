@@ -1,14 +1,17 @@
 """文章详情兜底协调器。
 
-当直抓（WechatArticleFetcher）失败或正文为空时，按优先级尝试付费详情 API
-获取文章正文。各平台详情能力不同：
+⚠️ 架构前提：详情主路径 = 免费直抓（WechatArticleFetcher，实测 6/6 成功率），
+所有付费详情 API 仅作兜底——默认关闭（article_detail_fallback_enabled=False），
+仅在直抓失败且非图集类（item_show_type ≠ 8）时触发。
 
-- Dajiala article_html    ¥0.04/次  ✅ HTML 全文
-- JustOneAPI detail v1    ¥0.15/次  ✅ 带正文 content + 60+ 字段
-- TikHub detail           端点已下线（404）  ❌
-- Wellbyte detail v2      422 质量门槛三连拒  ❌
+格级证据级别（每个平台的能力格自带证据状态，不用行级标签覆盖）：
+- Dajiala article_html    ¥0.04/次   活体实测 TC-A1-07 ✅稳定可用（HTML 全文+元数据）
+- JustOneAPI detail v1    ¥0.15/次   活体实测 TC-A3-07 ✅含正文 content+content_multi_text
+- TikHub v2 fetch_*_h5    $0.001~0.01 契约级（OpenAPI 在案，TC-A2-02b 402 未实测）⚠️
+  ※ 仅 web/* 旧端点已下线（TC-A2-04 404），v2 组详情端点仍在现行 OpenAPI
+- Wellbyte detail_v2      30cr       活体实测 TC-A4-05/06/07 ❌422三连拒禁用（0扣费）
 
-协调器按成本升序尝试：Dajiala → JustOneAPI →（TikHub/Wellbyte 跳过）。
+协调器按成本升序尝试：Dajiala → JustOneAPI → TikHub（Wellbyte 禁用不列入）。
 首个返回有效 ArticleDetail 的平台即止，不重复消费。
 
 触发条件（由调用方判断）：
@@ -39,8 +42,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # 按成本升序排列的详情兜底平台优先级
-# TikHub 和 Wellbyte 的详情端点不可用，不列入
-_DETAIL_FALLBACK_ORDER: list[str] = ["dajiala", "justoneapi"]
+# 证据级别（格级，非行级）：
+#   dajiala   article_html      ¥0.04/次    活体实测 TC-A1-07 ✅稳定可用
+#   justoneapi detail/v1        ¥0.15/次    活体实测 TC-A3-07 ✅含正文
+#   tikhub    v2 fetch_*_h5     $0.001~0.01 契约级（OpenAPI 在案，402 未实测）⚠️
+#   wellbyte  detail_v2         30cr        活体实测 TC-A4-05/06/07 ❌422三连拒禁用
+# Wellbyte detail_v2 禁用不列入；TikHub v2 端点契约在案但未实测，列入但靠后
+_DETAIL_FALLBACK_ORDER: list[str] = ["dajiala", "justoneapi", "tikhub"]
 
 
 class ArticleDetailFallbackCoordinator:
