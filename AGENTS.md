@@ -64,6 +64,7 @@ PLAN 规划 → SPEC 规格 → APPROVE 批准 → IMPLEMENT 实施 → VERIFY �
 - **后端**：FastAPI + SQLAlchemy 2.0 + Alembic，9 个业务域
 - **前端**：Next.js 14 App Router，10 个功能域
 - **推送**：6 渠道 Provider 已实现真实投递（飞书/钉钉/企微/Webhook/站内通知已通，微信 ClawBot 需部署服务）；PushScheduler 在 backend 进程内 60s 调度
+- **文章来源**：4 平台已接入（providers/article_sources/）—— Dajiala 极致了（发现+HTML详情）、JustOneAPI（发现+正文详情）、TikHub（发现+搜索，需充值）、Wellbyte 数井（搜索+URL驱动发现）；与 RedFox 共存于发现注册表，详情兜底协调器按成本排序
 - **热点**：数据模型已建，聚簇/评分/日报逻辑待实现
 - **目录结构**：当前 backend/ + frontend/，目标 apps/api/ + apps/web/（见 project-structure-design.md）
 

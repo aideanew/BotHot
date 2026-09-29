@@ -160,6 +160,16 @@ services:
       - LANGBOT_ADMIN_USERNAME=${LANGBOT_ADMIN_USERNAME:-admin@bothot.local}
       - LANGBOT_ADMIN_PASSWORD=${LANGBOT_ADMIN_PASSWORD:-}
       - REDFOX_API_KEY=${REDFOX_API_KEY:-}
+      # ── 文章来源平台（providers/article_sources/，ADR-0008）────────
+      - DAJIALA_API_KEY=${DAJIALA_API_KEY:-}
+      - DAJIALA_BASE_URL=${DAJIALA_BASE_URL:-https://www.dajiala.com/fbmain/monitor/v3}
+      - JUSTONEAPI_API_KEY=${JUSTONEAPI_API_KEY:-}
+      - JUSTONEAPI_BASE_URL=${JUSTONEAPI_BASE_URL:-https://api.justoneapi.com}
+      - TIKHUB_API_KEY=${TIKHUB_API_KEY:-}
+      - TIKHUB_BASE_URL=${TIKHUB_BASE_URL:-https://api.tikhub.io}
+      - WELLBYTE_API_KEY=${WELLBYTE_API_KEY:-}
+      - WELLBYTE_BASE_URL=${WELLBYTE_BASE_URL:-https://api.wellbyte.net}
+      - ARTICLE_DETAIL_FALLBACK_ENABLED=${ARTICLE_DETAIL_FALLBACK_ENABLED:-false}
       # R6.2.1：OIDC iss/aud 校验（生产守卫：APP_ENV=production 时二者为空则拒启；
       # 开发环境默认空=跳过校验，向后兼容）
       - OIDC_ISSUER_EXPECTED=${OIDC_ISSUER_EXPECTED:-}

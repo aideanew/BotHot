@@ -80,7 +80,46 @@ CHANNELS: dict[str, ChannelSpec] = {
             "manifest._map_row 的字段别名直接消化，接入点只有 _ID_KEYS 需补 guid"
         ),
     ),
-}
+    "dajiala": ChannelSpec(
+        name="dajiala",
+        description="极致了 Dajiala 文章发现（按 ghid 拉最新发文清单 + HTML 详情兜底）",
+        implemented=True,
+        required_setting="DAJIALA_API_KEY",
+        available=lambda s: bool(s.dajiala_api_key),
+        factory=_make_dajiala_provider,
+        contract_verified_at="2026-09-29",
+        verified_scope="活体实测（TC-A1 系列）：post_condition 发现 + article_html 详情",
+    ),
+    "justoneapi": ChannelSpec(
+        name="justoneapi",
+        description="JustOneAPI 文章发现（按 ghid 拉历史发文清单 + 带正文详情兜底）",
+        implemented=True,
+        required_setting="JUSTONEAPI_API_KEY",
+        available=lambda s: bool(s.justoneapi_api_key),
+        factory=_make_justoneapi_provider,
+        contract_verified_at="2026-09-29",
+        verified_scope="活体实测（TC-A3 系列）：get-account-history-articles/v2 发现 + get-article-detail/v1 详情",
+    ),
+    "tikhub": ChannelSpec(
+        name="tikhub",
+        description="TikHub 文章发现（按 username 拉账号文章列表 + 关键词搜索，需付费余额）",
+        implemented=True,
+        required_setting="TIKHUB_API_KEY",
+        available=lambda s: bool(s.tikhub_api_key),
+        factory=_make_tikhub_provider,
+        contract_verified_at="2026-09-29",
+        verified_scope="契约级（OpenAPI 1050 paths 读取 + TC-A2 鉴权实测）；付费端点 402 需充值后启用",
+    ),
+    "wellbyte": ChannelSpec(
+        name="wellbyte",
+        description="Wellbyte 数井文章发现（关键词搜索 + URL 驱动的历史文章清单）",
+        implemented=True,
+        required_setting="WELLBYTE_API_KEY",
+        available=lambda s: bool(s.wellbyte_api_key),
+        factory=_make_wellbyte_provider,
+        contract_verified_at="2026-09-29",
+        verified_scope="活体实测（TC-A4 系列）：article_v1 搜索 + account_history_v2 发现；detail_v2 禁用（422 三连拒）",
+    ),}
 
 
 def _whitelist(settings: Settings) -> set[str]:
@@ -184,3 +223,52 @@ def _selection_reason(settings: Settings, default: str | None) -> str:
     if default is None:
         return "none-available"
     return "configured" if _whitelist(settings) else "registration-order"
+
+
+# ── 文章来源平台工厂（providers/article_sources/）──────────────────
+# 4 个第三方 API 平台作为文章发现渠道，与 RedFox 共存于发现注册表。
+# 每个工厂遵循 RedFox 模式：无 Key → None（显式缺省，不造数）。
+# ArticleSourceProvider 协议与 WorkListProvider 结构兼容（同形 query_work_list + aclose）。
+
+def _make_dajiala_provider(settings: Settings) -> WorkListProvider | None:
+    if not settings.dajiala_api_key:
+        return None
+    from app.providers.article_sources.dajiala import DajialaClient
+
+    return DajialaClient(
+        api_key=settings.dajiala_api_key,
+        base_url=settings.dajiala_base_url,
+    )
+
+
+def _make_justoneapi_provider(settings: Settings) -> WorkListProvider | None:
+    if not settings.justoneapi_api_key:
+        return None
+    from app.providers.article_sources.justoneapi import JustOneApiClient
+
+    return JustOneApiClient(
+        api_key=settings.justoneapi_api_key,
+        base_url=settings.justoneapi_base_url,
+    )
+
+
+def _make_tikhub_provider(settings: Settings) -> WorkListProvider | None:
+    if not settings.tikhub_api_key:
+        return None
+    from app.providers.article_sources.tikhub import TikhubClient
+
+    return TikhubClient(
+        api_key=settings.tikhub_api_key,
+        base_url=settings.tikhub_base_url,
+    )
+
+
+def _make_wellbyte_provider(settings: Settings) -> WorkListProvider | None:
+    if not settings.wellbyte_api_key:
+        return None
+    from app.providers.article_sources.wellbyte import WellbyteClient
+
+    return WellbyteClient(
+        api_key=settings.wellbyte_api_key,
+        base_url=settings.wellbyte_base_url,
+    )

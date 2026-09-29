@@ -39,6 +39,9 @@ _BIZ_RE = re.compile(
 )
 _CT_RE = re.compile(r'var\s+ct\s*=\s*"(\d{10})"')
 _CREATE_TIME_RE = re.compile(r"var\s+createTime\s*=\s*['\"](\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?)['\"]")
+_ITEM_SHOW_TYPE_RE = re.compile(r"var\s+(?:msg_type|app_msg_type|item_show_type)\s*=\s*[\"']?(\d+)[\"']?")
+# item_show_type 枚举：8 = 图集/贴纸类（天然无文字正文，不应触发付费详情兜底）
+ITEM_SHOW_TYPE_GALLERY = 8
 
 
 def normalize_article_url(raw: str) -> str:
@@ -111,6 +114,27 @@ def parse_author(html: str) -> str:
 def has_article_anchors(html: str) -> bool:
     """文章页判定：正文或标题锚点任一存在（缺失 → 20001 非文章页）。"""
     return 'id="js_content"' in html or 'id="activity-name"' in html
+
+
+def parse_item_show_type(html: str) -> int | None:
+    """item_show_type 提取（0=图文 5=视频 7=音频 8=图集/贴纸）。
+
+    测试报告 §8.1 建议：item_show_type = 8（图集类）时不应触发付费详情兜底——
+    图集类天然无文字正文，付费 API 也只能取到图片描述，成本浪费。
+    返回 None 表示页面未声明该字段（按图文处理）。
+    """
+    match = _ITEM_SHOW_TYPE_RE.search(html)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def is_gallery_type(html: str) -> bool:
+    """是否为图集/贴纸类页面（item_show_type == 8）。"""
+    return parse_item_show_type(html) == ITEM_SHOW_TYPE_GALLERY
 
 
 class _ContentParser(HTMLParser):

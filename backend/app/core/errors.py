@@ -191,6 +191,13 @@ class InternalError(AppError):
     http_status = 500
 
 
+class ConfigurationError(AppError):
+    """配置缺失或无效（API key 未配置、必填项为空等）。"""
+
+    code = 50003
+    http_status = 500
+
+
 class DependencyUnavailableError(AppError):
     """外部依赖不可用（主平台/LangBot/Redis 等）。"""
 
@@ -221,6 +228,7 @@ _CODE_TO_CLASS: dict[int, type[AppError]] = {
         SpaceNameConflictError,
         InternalError,
         DependencyUnavailableError,
+        ConfigurationError,
     )
 }
 

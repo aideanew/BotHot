@@ -81,6 +81,24 @@ class Settings(BaseSettings):
     redfox_base_url: str = "https://redfox.hk"
     redfox_api_key: str = ""
 
+    # ── 文章来源平台（providers/article_sources/）──────────────────
+    # 4 个第三方 API 平台作为文章发现 + 详情兜底渠道（ADR-0008）。
+    # 未配置 key 的平台自动跳过注册，不影响启动。
+    # Dajiala 极致了（发现 + HTML 详情兜底）
+    dajiala_base_url: str = "https://www.dajiala.com/fbmain/monitor/v3"
+    dajiala_api_key: str = ""
+    # JustOneAPI（历史文章发现 + 带正文详情兜底）
+    justoneapi_base_url: str = "https://api.justoneapi.com"
+    justoneapi_api_key: str = ""
+    # TikHub（发现 + 搜索，需付费余额）
+    tikhub_base_url: str = "https://api.tikhub.io"
+    tikhub_api_key: str = ""
+    # Wellbyte 数井（关键词搜索 + URL 驱动的文章发现）
+    wellbyte_base_url: str = "https://api.wellbyte.net"
+    wellbyte_api_key: str = ""
+    # 详情兜底总开关：直抓失败时是否尝试付费详情 API（默认关，按需开）
+    article_detail_fallback_enabled: bool = False
+
     # AB-P004 P4 引擎可插拔（ADR-0004 §五：全走 env 占位，.env 写真实值，代码零明文）
     kb_default_engine: str = "builtin"  # 默认引擎位
     # R1 修复：默认仅 builtin；main 待 Ragflow 实接+Key 轮换后显式开，SaaS 按 Key 到位逐个开

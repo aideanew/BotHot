@@ -24,7 +24,7 @@ BotHot 是从 AideanBot 全面升级而来的多渠道机器人推送与知识�
 > ⚠️ **当前实现状态**：数据模型已建（HotTopic, DailyReport, FeedItem），聚簇/评分/日报逻辑待 v0.5 落地。
 
 ### 3. 知识库管理（继承 AideanBot）
-- 公众号链接解析入库（RedFox + Wandao）
+- 公众号链接解析入库（RedFox + 4 平台文章来源：Dajiala/JustOneAPI/TikHub/Wellbyte）
 - LangBot RAG 知识引擎
 - 多空间隔离、公共库共享
 - 整号订阅与增量同步

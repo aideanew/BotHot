@@ -27,6 +27,17 @@ updated: 2026-09-29
 > Provider（`implemented=False`）。`services/push.py` 仍引用旧端口；`bots.py` 和
 > `push_scheduler.py` 已使用新 `providers/push/` 包。迁移 `push.py` 到新包是 TECH-001 的工作。
 
+### ARTSRC-001~004：四平台文章来源 Provider ✅
+- **状态**：4 个第三方 API 平台已接入（`providers/article_sources/` 包）
+- **Dajiala 极致了**：post_condition 发现 + article_html 详情兜底（¥0.04~0.14/次）✅ 活体实测
+- **JustOneAPI**：get-account-history-articles/v2 发现 + get-article-detail/v1 详情兜底（¥0.15~0.40/次）✅ 活体实测
+- **TikHub**：fetch_account_articles 发现 + fetch_search 搜索 ✅ 契约级（OpenAPI 读取 + 鉴权实测，付费端点 402 需充值）
+- **Wellbyte 数井**：article_v1 搜索 + account_history_v2 发现 ✅ 活体实测（detail_v2 三连 422 禁用）
+- **发现注册**：4 平台已注册到 `discovery/registry.py`，与 RedFox 共存，后台 `discovery_channels` 白名单可控
+- **详情兜底**：`ArticleDetailFallbackCoordinator` 按成本排序（Dajiala ¥0.04 → JustOneAPI ¥0.15），总开关 `ARTICLE_DETAIL_FALLBACK_ENABLED`
+- **item_show_type 检测**：`parse_item_show_type` / `is_gallery_type` 已加入 source_resolver，图集类(=8)不触发付费兜底
+- **测试证据**：`docs/06_validation/evidence/channeltest-20260929/`
+
 ### PUSH-007：PushScheduler 定时调度 ✅
 - **状态**：已实现，在 backend 进程内运行（FastAPI lifespan 启动/停止）
 - **调度间隔**：60s
