@@ -1,0 +1,125 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+const vm = require('node:vm');
+
+const repoRoot = path.resolve(__dirname, '..');
+const appSource = fs.readFileSync(path.join(repoRoot, 'wandao_electron', 'renderer', 'app.js'), 'utf8');
+const stylesSource = fs.readFileSync(path.join(repoRoot, 'wandao_electron', 'renderer', 'styles.css'), 'utf8');
+const noticeManifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs', 'tutorial-announcements.json'), 'utf8'));
+const sponsorArticle = fs.readFileSync(path.join(repoRoot, 'docs', 'announcements', 'fluxion-ai-sponsor.md'), 'utf8');
+
+function sourceBetween(start, end, source = appSource) {
+  const startIndex = source.indexOf(start);
+  const endIndex = source.indexOf(end, startIndex);
+  assert.notEqual(startIndex, -1, `missing source marker: ${start}`);
+  assert.notEqual(endIndex, -1, `missing source marker: ${end}`);
+  return source.slice(startIndex, endIndex);
+}
+
+test('export sponsor logs appear for completed exports and partial exports at or above 90%', () => {
+  const logs = [];
+  const context = {
+    FLUXION_REGISTER_URL: 'https://fluxionai.space/register?source=github&campaign=wandao',
+    FLUXION_EXPORT_SUCCESS_MESSAGE: '完成导出啦！送你一个 3 美元兑换码，用于 AI 辅助学习。',
+    FLUXION_REDEEM_MESSAGE: '兑换码：WANNENGDAO — 登录后在工作台「兑换」输入，即可获得 $3 API 额度。',
+    appendUserLog: (message, type, presentation) => logs.push({ message, type, presentation })
+  };
+  vm.runInNewContext([
+    sourceBetween('function isExportAction(action) {', '\nfunction compactLogSummary('),
+    'globalThis.__append = appendExportSuccessSponsorLogs;'
+  ].join('\n'), context);
+
+  context.__append('partial', '导出', { stats: { imageSuccess: 8, imageFailed: 2 } });
+  assert.equal(logs.length, 0);
+  context.__append('partial', '导出', { stats: { imageSuccess: 9, imageFailed: 1 } });
+  assert.deepEqual(logs.map((entry) => entry.presentation), ['fluxion-export-success', 'fluxion-register', 'fluxion-redeem']);
+  logs.length = 0;
+  for (const outcome of ['paused', 'stopped', 'failed']) context.__append(outcome, '导出');
+  for (const action of ['导入', '登录', '读取目录', 'upload']) {
+    context.__append('completed', action);
+  }
+  assert.equal(logs.length, 0);
+
+  context.__append('completed', '导出');
+  assert.equal(logs.length, 3);
+  logs.length = 0;
+  context.__append('completed', { kind: 'export', actionName: '执行导出' });
+  assert.equal(logs.length, 3);
+  assert.match(logs[0].message, /完成导出啦/);
+});
+
+test('resource recovery logs always include the failed page and resource link', () => {
+  const logs = [];
+  const context = {
+    appendUserLog: (message, type, presentation) => logs.push({ message, type, presentation })
+  };
+  vm.runInNewContext([
+    sourceBetween('function isExportAction(action) {', '\nfunction compactLogSummary('),
+    'globalThis.__resource = appendExportResourceRecoveryLog;'
+  ].join('\n'), context);
+  const report = {
+    stats: { imageSuccess: 9, imageFailed: 1 },
+    documentFailures: [],
+    resourceFailures: [{ document: '第二页', url: 'https://cdn.example.test/image.png', error: '404' }]
+  };
+
+  context.__resource('partial', '导出', report);
+  assert.match(logs[0].message, /网络波动或资源不存在/);
+  assert.match(logs[0].message, /第二页/);
+  assert.match(logs[0].message, /https:\/\/cdn\.example\.test\/image\.png/);
+  logs.length = 0;
+  context.__resource('partial', '导出', report, true);
+  assert.match(logs[0].message, /重试后仍有/);
+  assert.match(logs[0].message, /第二页/);
+  assert.equal(logs[0].type, 'warn');
+});
+
+test('all export completion entry points place sponsor logs before structured details and the final outcome', () => {
+  const resume = sourceBetween('async function resumeTask(task) {', '\nfunction latestResumableTask(');
+  const manifest = sourceBetween('function initializeManifestProviderHandlers(provider, actions, fields) {', '\nfunction sandboxPluginHtml(');
+  const regular = sourceBetween('async function handleExport(toolId) {', '\n// Handle stop');
+
+  for (const source of [resume, manifest, regular]) {
+    const sponsorIndex = source.indexOf('appendExportSuccessSponsorLogs');
+    const detailIndex = source.indexOf('JSON.stringify(result.data', sponsorIndex);
+    const progressIndex = source.indexOf('finishProgressForTaskResult', detailIndex);
+    const outcomeIndex = source.indexOf('logTaskResultCompletion', progressIndex);
+    assert.notEqual(sponsorIndex, -1);
+    assert.ok(detailIndex > sponsorIndex);
+    assert.ok(progressIndex > detailIndex);
+    assert.ok(outcomeIndex > progressIndex);
+  }
+});
+
+test('sponsor content is a dedicated notice category instead of a footer on every document', () => {
+  const noticePage = sourceBetween('function renderNoticeCenterPage() {', '\nfunction renderProviderModeSwitcher(');
+  const sponsor = noticeManifest.items.find((item) => item.id === 'fluxion-ai-sponsor');
+
+  assert.ok(noticePage.indexOf("renderNoticeListSection('赞助商', groups.sponsors") > noticePage.indexOf("renderNoticeListSection('公告', groups.announcements"));
+  assert.ok(noticePage.indexOf("renderNoticeListSection('教程', groups.tutorials") > noticePage.indexOf("renderNoticeListSection('赞助商', groups.sponsors"));
+  assert.doesNotMatch(noticePage, /renderFluxionSponsor/);
+  assert.doesNotMatch(appSource, /function renderFluxionSponsor/);
+  assert.doesNotMatch(stylesSource, /\.notice-sponsor\s*\{/);
+  assert.equal(sponsor?.type, 'sponsor');
+  assert.equal(sponsor?.path, 'docs/announcements/fluxion-ai-sponsor.md');
+  assert.match(sponsorArticle, /Fluxion AI · 为 AI 辅助学习提供支持/);
+  assert.match(sponsorArticle, /fluxion-ai-sponsor-banner\.png/);
+  assert.match(sponsorArticle, /WANNENGDAO/);
+  assert.match(appSource, /presentation === 'fluxion-register'/);
+  assert.match(appSource, /presentation === 'fluxion-redeem'/);
+  assert.match(appSource, /presentation === 'fluxion-export-success'/);
+  assert.match(stylesSource, /\.log-entry \.log-external-link\s*\{/);
+});
+
+test('sponsor logs stay out of copied developer error reports', () => {
+  const copyStart = appSource.indexOf('async function copyDeveloperReport');
+  const copyEnd = appSource.indexOf('function taskHistoryPath', copyStart);
+  assert.notEqual(copyStart, -1);
+  assert.notEqual(copyEnd, -1);
+  const copyReport = appSource.slice(copyStart, copyEnd);
+  assert.match(appSource, /function isSponsorLogEntry\(entry\)/);
+  assert.match(copyReport, /userLogEntries\s*\.filter\(\(entry\) => !isSponsorLogEntry\(entry\)\)/);
+  assert.doesNotMatch(copyReport, /userLogEntries\.map\(/);
+});

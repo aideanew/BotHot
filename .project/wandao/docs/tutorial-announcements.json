@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "updatedAt": "2026-08-30",
+  "repository": "https://github.com/tllovesxs/wandao",
+  "items": [
+    {
+      "id": "provider-co-creation-invite",
+      "type": "announcement",
+      "pinned": true,
+      "title": "万能导共创邀请：一起接入更多平台",
+      "summary": "万能导正在开放 Plugin v1 在线插件共创机制，欢迎从教程、脚本、失败排查或新平台接入开始参与。",
+      "date": "2026-07-08",
+      "badge": "置顶",
+      "tags": [
+        "公告",
+        "共创",
+        "Plugin v1"
+      ],
+      "path": "docs/announcements/provider-co-creation-invite.md"
+    },
+    {
+      "id": "project-learning-ai-prompt",
+      "type": "announcement",
+      "title": "AI 辅助学习：项目学习导师提示词",
+      "summary": "把导出的教学文档和源码放在一起，让 AI 像项目学习导师一样带你理解业务流程、核心代码和技术取舍。",
+      "date": "2026-07-28",
+      "badge": "AI 学习",
+      "tags": [
+        "公告",
+        "AI",
+        "项目学习",
+        "提示词"
+      ],
+      "path": "prompts/项目学习导师提示词.md"
+    },
+    {
+      "id": "fluxion-ai-sponsor",
+      "type": "sponsor",
+      "title": "Fluxion AI · 为 AI 辅助学习提供支持",
+      "summary": "统一 API 接入和管理全球主流 AI 模型，支持多线路调度、用量与费用集中管理。",
+      "date": "2026-08-30",
+      "badge": "赞助商",
+      "tags": [
+        "赞助商",
+        "AI 辅助学习",
+        "API"
+      ],
+      "path": "docs/announcements/fluxion-ai-sponsor.md"
+    },
+    {
+      "id": "wandao-ai-project-learning",
+      "type": "tutorial",
+      "title": "用万能导 + Codex 辅助学习代码项目",
+      "summary": "用万能导把课程文档导出为 Markdown，与源码放进同一个 Codex 项目，通过项目学习导师提示词理解业务流程、核心代码和技术取舍。",
+      "date": "2026-08-29",
+      "badge": "AI 学习",
+      "tags": [
+        "教程",
+        "AI 辅助学习",
+        "Codex",
+        "API Key",
+        "Markdown"
+      ],
+      "path": "docs/tutorials/wandao-ai-project-learning.md"
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+{
+  "$schema": "../provider.schema.json",
+  "schemaVersion": 1,
+  "id": "your-import-provider",
+  "name": "你的导入平台",
+  "title": "你的导入平台 Markdown 导入",
+  "navLabel": "你的导入平台",
+  "description": "使用标准 UI 接入一个本地 Markdown 导入平台。",
+  "type": "hybrid",
+  "group": "import",
+  "trustLevel": "community",
+  "status": "experimental",
+  "guide": "README.md",
+  "homepage": "",
+  "tags": ["标准 UI", "导入模板", "社区共创"],
+  "capabilities": {
+    "export": false,
+    "import": true,
+    "guide": true,
+    "scanToc": true,
+    "images": true,
+    "attachments": true,
+    "tree": true,
+    "batch": true,
+    "retryFailures": false
+  },
+  "requirements": {
+    "python": [],
+    "system": [],
+    "notes": [
+      "复制本目录后，把模拟复制逻辑替换为目标平台真实导入 API。",
+      "如果平台支持只重试失败项，请设置 capabilities.retryFailures=true 并声明 retryFailures.arg。"
+    ]
+  },
+  "toc": {
+    "itemsPath": "nodes",
+    "idKey": "nodeId",
+    "exportIdKey": "exportId",
+    "titleKey": "title",
+    "parentIdKey": "parentNodeId",
+    "selectableKey": "selectable",
+    "selectionArg": "--doc-id",
+    "note": "扫描本地 Markdown 后，可以勾选要导入的文件。"
+  },
+  "fields": [
+    {
+      "name": "usage_notice",
+      "label": "接入说明",
+      "type": "notice",
+      "markdown": "这是标准导入模板：扫描本地 Markdown，执行导入动作，并生成统一报告。复制后请把 actions.py 中的本地复制逻辑替换为目标平台 API。"
+    },
+    {
+      "name": "source_dir",
+      "label": "Markdown 源目录",
+      "type": "directory",
+      "history": "path",
+      "arg": "--source-dir",
+      "required": true
+    },
+    {
+      "name": "output",
+      "label": "模拟导入目标目录",
+      "type": "directory",
+      "history": "path",
+      "arg": "--output",
+      "required": false
+    },
+    {
+      "name": "copy_resources",
+      "label": "复制相对图片和附件",
+      "type": "checkbox",
+      "arg": "--copy-resources",
+      "default": true
+    },
+    {
+      "name": "incremental",
+      "label": "目标已存在时跳过",
+      "type": "checkbox",
+      "arg": "--incremental",
+      "default": false,
+      "advanced": true
+    }
+  ],
+  "actions": [
+    {
+      "id": "scan",
+      "kind": "scan",
+      "label": "扫描目录",
+      "script": "actions.py",
+      "args": ["--scan-source"],
+      "includeSelection": false,
+      "actionName": "扫描目录",
+      "progressTitle": "扫描 Markdown 目录",
+      "progressDetail": "正在扫描本地 Markdown 文件..."
+    },
+    {
+      "id": "import",
+      "label": "开始导入",
+      "script": "actions.py",
+      "args": ["--import"],
+      "actionName": "导入",
+      "progressTitle": "Markdown 导入",
+      "progressDetail": "正在导入 Markdown 和资源..."
+    }
+  ]
+}

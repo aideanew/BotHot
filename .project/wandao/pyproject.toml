@@ -1,0 +1,50 @@
+[project]
+name = "wandao"
+version = "1.4.7"
+description = "万能导：多平台知识库 Markdown 导出与互转工具"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "AGPL-3.0-only" }
+authors = [{ name = "tllovesxs" }]
+dependencies = [
+  "evernote-backup==1.13.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/tllovesxs/wandao"
+
+[project.scripts]
+wandao = "wandao:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = [
+  "wandao",
+  "export_aliyun_thoughts",
+  "export_yuque",
+  "export_feishu",
+  "export_zsxq",
+  "export_yinxiang",
+  "export_youdao",
+  "export_onenote",
+  "export_wiz",
+  "import_feishu",
+  "import_yuque",
+  "import_yinxiang",
+  "ima_knowledge",
+  "gui_utils",
+  "wandao_logging",
+  "wandao_report",
+  "wandao_checkpoint",
+  "wandao_cli",
+  "wandao_credentials",
+]
+
+[tool.setuptools.packages.find]
+include = ["plugins*", "wandao_core*"]
+
+[tool.setuptools.package-data]
+"*" = ["plugin.json", "providers/*/provider.json", "providers/*/README.md"]

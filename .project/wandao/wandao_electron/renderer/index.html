@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'self'">
+  <title>万能导 Wandao</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="brand">
+        <img class="brand-logo" src="assets/icon.png" alt="万能导 Wandao Logo">
+        <div class="brand-copy">
+          <h1>万能导 Wandao</h1>
+          <p class="subtitle">让知识没有壁垒，多平台文档互转</p>
+        </div>
+      </div>
+      <button class="star-support" id="btn-star-project" type="button" title="在 GitHub 为万能导点 Star">
+        开源免费 · 点个 Star 支持
+      </button>
+      <div class="header-actions">
+        <button class="header-button" id="btn-check-update" type="button">检查更新</button>
+        <button class="header-button" id="btn-theme-toggle" type="button">夜间模式</button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar" id="provider-sidebar" aria-label="主导航"></aside>
+
+      <main class="app-main" id="main-content" tabindex="-1">
+        <section class="update-banner" id="update-banner" hidden>
+          <div>
+            <strong id="update-title">发现新版本</strong>
+            <p id="update-detail">可以前往 GitHub Releases 下载最新版。</p>
+          </div>
+          <div class="update-actions">
+            <button class="btn-primary" id="btn-install-update" type="button" hidden>下载并安装</button>
+            <button class="btn-secondary" id="btn-open-release" type="button">打开下载页</button>
+            <button class="btn-text" id="btn-dismiss-update" type="button">忽略</button>
+          </div>
+        </section>
+
+        <section class="tool-heading" aria-labelledby="tool-title">
+          <span class="tool-heading-label">工作台</span>
+          <h2 id="tool-title">首页</h2>
+          <p id="tool-description">选择平台，或查看最近任务。</p>
+        </section>
+
+        <section class="progress-section" id="progress-section" aria-labelledby="progress-title" hidden>
+          <div class="progress-header">
+            <span id="progress-title">准备中</span>
+            <span id="progress-percent">0%</span>
+            <button class="btn-danger" id="btn-global-stop" type="button" disabled>停止任务</button>
+          </div>
+          <div class="progress-track" role="progressbar" aria-label="任务进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <div class="progress-detail-row">
+            <div class="progress-detail" id="progress-detail" role="status" aria-live="polite" aria-atomic="true">等待任务开始</div>
+            <span class="progress-elapsed" id="progress-elapsed" aria-label="任务已用时">已用时 0 秒</span>
+          </div>
+          <div class="sr-only" id="task-announcements" role="status" aria-live="polite" aria-atomic="true"></div>
+        </section>
+
+        <div id="content-area"></div>
+
+        <section class="task-history-section" hidden>
+          <div class="task-history-header">
+            <div>
+              <h3>任务历史</h3>
+              <p>按最近任务排序；可按关键词、状态或平台缩小范围。</p>
+            </div>
+            <div class="task-history-actions">
+              <button class="btn-text" id="btn-history-refresh" type="button">刷新</button>
+              <button class="btn-text" id="btn-history-resume-last" type="button">继续上次任务</button>
+            </div>
+          </div>
+          <div class="task-history-filters" role="search" aria-label="筛选任务历史">
+            <div class="task-history-filter task-history-filter-search">
+              <label for="task-history-search">搜索任务</label>
+              <input id="task-history-search" type="search" placeholder="名称、平台、操作或错误信息" autocomplete="off" aria-describedby="task-history-filter-summary">
+            </div>
+            <div class="task-history-filter">
+              <label for="task-history-status">状态</label>
+              <select id="task-history-status">
+                <option value="all">全部状态</option>
+                <option value="running">进行中</option>
+                <option value="stopping">正在停止</option>
+                <option value="interrupted">已中断</option>
+                <option value="completed">已完成</option>
+                <option value="partial">部分完成</option>
+                <option value="failed">失败</option>
+                <option value="stopped">已停止</option>
+              </select>
+            </div>
+            <div class="task-history-filter">
+              <label for="task-history-provider">平台</label>
+              <select id="task-history-provider">
+                <option value="all">全部平台</option>
+              </select>
+            </div>
+            <button class="btn-text task-history-clear" id="btn-history-clear-filters" type="button" disabled>清除筛选</button>
+          </div>
+          <p class="task-history-filter-summary" id="task-history-filter-summary" aria-live="polite"></p>
+          <div class="task-history-list" id="task-history-list" aria-live="polite">
+            <div class="task-history-empty">暂无任务历史。</div>
+          </div>
+        </section>
+
+        <section class="log-section is-collapsed" id="log-section" aria-labelledby="log-title">
+          <div class="log-header">
+            <div class="log-heading">
+              <span class="log-status-dot" aria-hidden="true"></span>
+              <h3 id="log-title">用户日志</h3>
+            </div>
+            <div class="log-actions">
+              <button class="btn-text" id="btn-toggle-log" type="button" aria-expanded="false">展开日志</button>
+              <button class="btn-text" id="btn-settings" type="button">详细日志</button>
+              <button class="btn-text" id="btn-about">关于</button>
+              <button class="btn-text" id="btn-copy-error-report">提交错误报告给开发者</button>
+              <button class="btn-text" id="btn-clear-log">清空</button>
+            </div>
+          </div>
+          <div class="log-content" id="log-content" aria-live="polite" aria-atomic="false"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <aside class="task-status-orb" id="task-status-orb" aria-label="最近任务状态" hidden></aside>
+
+  <div class="onboarding-backdrop" id="onboarding-backdrop" hidden>
+    <section class="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" aria-describedby="onboarding-description">
+      <p class="onboarding-kicker">开始使用</p>
+      <h2 id="onboarding-title">第一次使用万能导？</h2>
+      <p id="onboarding-description">建议先查看快速教程，了解登录、导入、导出和图片处理方式。</p>
+      <label class="onboarding-option"><input id="onboarding-dismiss-forever" type="checkbox"> 不再提示</label>
+      <div class="onboarding-actions">
+        <button class="btn-secondary" id="btn-onboarding-dismiss" type="button">先自己看看</button>
+        <button class="btn-primary" id="btn-onboarding-tutorial" type="button">查看快速教程</button>
+      </div>
+    </section>
+  </div>
+
+  <template id="template-zsxq-group">
+    <div class="tool-panel">
+      <section class="form-section">
+        <div class="form-group">
+          <label for="zsxq-group-url">知识星球 Group URL <span class="required">*</span></label>
+          <input type="url" id="zsxq-group-url" data-history-kind="url" data-history-key="entry_url" data-history-label="知识星球 Group URL" placeholder="https://wx.zsxq.com/group/...">
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="zsxq-group-limit">导出最近多少条</label>
+            <input type="number" id="zsxq-group-limit" value="50" min="1" step="1">
+          </div>
+          <div class="form-group flex-1">
+            <label for="zsxq-group-group-scope">帖子范围</label>
+            <select id="zsxq-group-group-scope">
+              <option value="all">全部主题</option>
+              <option value="digests">精华主题</option>
+              <option value="by_owner">只看星主</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="zsxq-group-output">输出目录</label>
+          <div class="input-with-button">
+            <input type="text" id="zsxq-group-output" data-history-kind="path" data-history-key="output" data-history-label="输出目录" placeholder="留空使用默认 exports/zsxq-group">
+            <button class="btn-secondary" id="zsxq-group-browse-output">浏览</button>
+          </div>
+        </div>
+        <details class="advanced-section">
+          <summary>导出选项</summary>
+          <div class="advanced-content">
+            <p class="helper-note">每个帖子会自动从预览升级为它自己的完整正文；默认不会递归导出正文中引用的其他帖子，避免把 Group 帖子流扩展成高频全站爬取。</p>
+            <label class="checkbox-label">
+              <input type="checkbox" id="zsxq-group-follow-related-links">
+              <span>额外导出正文引用的关联帖子（可能显著增加请求并触发风控）</span>
+            </label>
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="zsxq-group-follow-link-scope">关联帖子跟进范围</label>
+                <select id="zsxq-group-follow-link-scope">
+                  <option value="articles" selected>只跟进文章页（推荐）</option>
+                  <option value="all">跟进全部知识星球链接</option>
+                  <option value="none">不跟进正文 URL</option>
+                </select>
+              </div>
+              <div class="form-group flex-1">
+                <label for="zsxq-group-max-depth">关联帖子跟进深度</label>
+                <input type="number" id="zsxq-group-max-depth" value="1" min="0">
+              </div>
+              <div class="form-group flex-1">
+                <label for="zsxq-group-delay">请求延迟秒</label>
+                <input type="number" id="zsxq-group-delay" value="3" min="1" step="0.1">
+              </div>
+              <div class="form-group flex-1">
+                <label for="zsxq-group-jitter">随机浮动秒</label>
+                <input type="number" id="zsxq-group-jitter" value="1" min="0" step="0.1">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="zsxq-group-long-sleep-after">长休眠起始翻页数（0 关闭）</label>
+                <input type="number" id="zsxq-group-long-sleep-after" value="12" min="0" step="1">
+              </div>
+              <div class="form-group flex-1">
+                <label for="zsxq-group-long-sleep-every">长休眠翻页间隔（0 关闭）</label>
+                <input type="number" id="zsxq-group-long-sleep-every" value="12" min="0" step="1">
+              </div>
+              <div class="form-group flex-1">
+                <label for="zsxq-group-long-sleep-min">长休眠最短秒数</label>
+                <input type="number" id="zsxq-group-long-sleep-min" value="180" min="0" step="1">
+              </div>
+              <div class="form-group flex-1">
+                <label for="zsxq-group-long-sleep-max">长休眠最长秒数</label>
+                <input type="number" id="zsxq-group-long-sleep-max" value="240" min="0" step="1">
+              </div>
+            </div>
+            <label class="checkbox-label">
+              <input type="checkbox" id="zsxq-group-incremental" checked>
+              <span>增量导出</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="zsxq-group-include-comments">
+              <span>导出帖子自带评论区</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="zsxq-group-download-files">
+              <span>下载帖子附件到本地</span>
+            </label>
+            <p class="helper-note">Group 是帖子流，不读取完整星球。导出时会按批次读取：默认每批 20 条，导完一批再读取下一批；遇到连续频率限制会安全暂停并保留断点；附件默认只保留原链接，勾选后才下载；视频帖会跳过并记录。</p>
+          </div>
+        </details>
+      </section>
+      <section class="action-section">
+        <button class="btn-primary" id="zsxq-group-login">登录并保存凭证</button>
+        <button class="btn-secondary login-done-button" id="zsxq-group-login-done" hidden>我已完成登录，保存凭证</button>
+        <button class="btn-primary" id="zsxq-group-export">开始导出</button>
+        <button class="btn-danger" id="zsxq-group-stop" disabled>停止</button>
+        <button class="btn-secondary" id="zsxq-group-open-dir">打开目录</button>
+      </section>
+    </div>
+  </template>
+
+  <template id="template-zsxq-column">
+    <div class="tool-panel">
+      <section class="form-section">
+        <div class="form-group">
+          <label for="zsxq-column-url">知识星球专栏 URL <span class="required">*</span></label>
+          <input type="url" id="zsxq-column-url" data-history-kind="url" data-history-key="entry_url" data-history-label="知识星球专栏 URL" placeholder="https://wx.zsxq.com/columns/...">
+        </div>
+        <div class="form-group">
+          <label for="zsxq-column-output">输出目录</label>
+          <div class="input-with-button">
+            <input type="text" id="zsxq-column-output" data-history-kind="path" data-history-key="output" data-history-label="输出目录" placeholder="留空使用默认 exports/zsxq-column">
+            <button class="btn-secondary" id="zsxq-column-browse-output">浏览</button>
+          </div>
+        </div>
+        <details class="advanced-section">
+          <summary>导出选项</summary>
+          <div class="advanced-content">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="zsxq-column-follow-link-scope">正文 URL 跟进范围</label>
+                <select id="zsxq-column-follow-link-scope">
+                  <option value="articles" selected>只跟进文章页（推荐）</option>
+                  <option value="all">跟进全部知识星球链接</option>
+                  <option value="none">不跟进正文 URL</option>
+                </select>
+              </div>
+              <div class="form-group flex-1">
+                <label for="zsxq-column-max-depth">URL 跟进深度</label>
+                <input type="number" id="zsxq-column-max-depth" value="2" min="0">
+              </div>
+              <div class="form-group flex-1">
+                <label for="zsxq-column-delay">请求延迟秒</label>
+                <input type="number" id="zsxq-column-delay" value="2.5" min="1" step="0.1">
+              </div>
+              <div class="form-group flex-1">
+                <label for="zsxq-column-jitter">随机浮动秒</label>
+                <input type="number" id="zsxq-column-jitter" value="2.5" min="1" step="0.1">
+              </div>
+            </div>
+            <label class="checkbox-label">
+              <input type="checkbox" id="zsxq-column-incremental" checked>
+              <span>增量导出</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="zsxq-column-include-comments">
+              <span>导出帖子自带评论区</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="zsxq-column-download-files">
+              <span>下载帖子附件到本地</span>
+            </label>
+            <p class="helper-note">专栏有章节目录。先点击“读取目录”后可勾选章节；评论默认只使用帖子数据里自带的可见评论，附件默认只保留原链接，勾选后才下载；视频帖会跳过并记录。</p>
+          </div>
+        </details>
+      </section>
+      <section class="action-section">
+        <button class="btn-primary" id="zsxq-column-login">登录并保存凭证</button>
+        <button class="btn-secondary login-done-button" id="zsxq-column-login-done" hidden>我已完成登录，保存凭证</button>
+        <button class="btn-primary" id="zsxq-column-export">开始导出</button>
+        <button class="btn-danger" id="zsxq-column-stop" disabled>停止</button>
+        <button class="btn-secondary" id="zsxq-column-open-dir">打开目录</button>
+      </section>
+    </div>
+  </template>
+
+  <template id="template-yuque">
+    <div class="tool-panel">
+      <section class="form-section">
+        <div class="form-group">
+          <label for="yuque-url">语雀知识库 URL <span class="required">*</span></label>
+          <input type="url" id="yuque-url" data-history-kind="url" data-history-key="book_url" data-history-label="语雀知识库 URL" placeholder="https://www.yuque.com/<namespace>/<book>">
+        </div>
+        <div class="form-group">
+          <label for="yuque-output">输出目录</label>
+          <div class="input-with-button">
+            <input type="text" id="yuque-output" data-history-kind="path" data-history-key="output" data-history-label="输出目录" placeholder="留空使用默认 exports/yuque">
+            <button class="btn-secondary" id="yuque-browse-output">浏览</button>
+          </div>
+        </div>
+        <details class="advanced-section">
+          <summary>导出选项</summary>
+          <div class="advanced-content">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="yuque-delay">请求延迟秒</label>
+                <input type="number" id="yuque-delay" value="0.8" min="0" step="0.1">
+              </div>
+              <div class="form-group flex-1">
+                <label for="yuque-jitter">随机浮动秒</label>
+                <input type="number" id="yuque-jitter" value="0.4" min="0" step="0.1">
+              </div>
+            </div>
+            <label class="checkbox-label">
+              <input type="checkbox" id="yuque-incremental" checked>
+              <span>增量导出</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="yuque-download-attachments" checked>
+              <span>同时下载附件</span>
+            </label>
+          </div>
+        </details>
+      </section>
+      <section class="action-section">
+        <button class="btn-primary" id="yuque-login">登录并保存凭证</button>
+        <button class="btn-secondary login-done-button" id="yuque-login-done" hidden>我已完成登录，保存凭证</button>
+        <button class="btn-primary" id="yuque-export">开始导出</button>
+        <button class="btn-danger" id="yuque-stop" disabled>停止</button>
+        <button class="btn-secondary" id="yuque-open-dir">打开目录</button>
+      </section>
+    </div>
+  </template>
+
+  <template id="template-yuque-import">
+    <div class="tool-panel">
+      <section class="form-section">
+        <div class="form-group">
+          <label for="yuque-import-url">目标语雀知识库 URL <span class="required">*</span></label>
+          <input type="url" id="yuque-import-url" data-history-kind="url" data-history-key="target_book_url" data-history-label="目标语雀知识库 URL" placeholder="https://www.yuque.com/<namespace>/<book>">
+        </div>
+        <div class="form-group">
+          <label for="yuque-import-output">Markdown 目录 <span class="required">*</span></label>
+          <div class="input-with-button">
+            <input type="text" id="yuque-import-output" data-history-kind="path" data-history-key="source_dir" data-history-label="Markdown 目录" placeholder="选择要导入的本地 Markdown 目录">
+            <button class="btn-secondary" id="yuque-import-browse-output">浏览</button>
+          </div>
+        </div>
+        <details class="advanced-section" open>
+          <summary>导入选项</summary>
+          <div class="advanced-content">
+            <label class="checkbox-label">
+              <input type="checkbox" id="yuque-import-update-existing" checked>
+              <span>已存在文档则更新</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="yuque-import-retry-failures">
+              <span>只重试上次失败的文档</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="yuque-import-keep-remote-images">
+              <span>保留远程图片原样（不推荐，403 图片可能导致导入失败）</span>
+            </label>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="yuque-import-request-timeout">接口超时秒</label>
+                <input type="number" id="yuque-import-request-timeout" value="90" min="10" step="10">
+              </div>
+              <div class="form-group">
+                <label for="yuque-import-upload-timeout">图片上传超时秒</label>
+                <input type="number" id="yuque-import-upload-timeout" value="180" min="30" step="10">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="yuque-import-retry-attempts">失败重试次数</label>
+                <input type="number" id="yuque-import-retry-attempts" value="3" min="1" max="6" step="1">
+              </div>
+              <div class="form-group">
+                <label for="yuque-import-retry-delay">重试等待秒</label>
+                <input type="number" id="yuque-import-retry-delay" value="1.2" min="0" step="0.1">
+              </div>
+              <div class="form-group">
+                <label for="yuque-import-upload-concurrency">资源上传并发</label>
+                <input type="number" id="yuque-import-upload-concurrency" value="2" min="1" max="4" step="1">
+              </div>
+            </div>
+          </div>
+        </details>
+        <p class="helper-note">导入会按本地文件夹创建语雀目录，并上传 Markdown 中的本地图片和附件。凭证文件保存的是登录 Cookie，不保存密码。</p>
+      </section>
+      <section class="action-section">
+        <button class="btn-primary" id="yuque-import-login" type="button">登录并保存凭证</button>
+        <button class="btn-secondary login-done-button" id="yuque-import-login-done" hidden>我已完成登录，保存凭证</button>
+        <button class="btn-secondary" id="yuque-import-save-config" type="button">保存配置</button>
+        <button class="btn-primary" id="yuque-import-plan" type="button">生成计划</button>
+        <button class="btn-primary" id="yuque-import-one" type="button">单篇导入测试</button>
+        <button class="btn-primary" id="yuque-import-export">批量导入</button>
+        <button class="btn-secondary" id="yuque-import-retry-failed" type="button">重试失败</button>
+        <button class="btn-danger" id="yuque-import-stop" disabled>停止</button>
+        <button class="btn-secondary" id="yuque-import-open-dir">打开目录</button>
+        <button class="btn-secondary" id="yuque-import-open-report" type="button">打开报告</button>
+      </section>
+    </div>
+  </template>
+
+  <template id="template-feishu-export">
+    <div class="tool-panel">
+      <section class="form-section">
+        <div class="form-group">
+          <label for="feishu-export-url">飞书 Wiki/云文档/文件夹 URL <span class="required">*</span></label>
+          <input type="url" id="feishu-export-url" data-history-kind="url" data-history-key="wiki_url" data-history-label="飞书文档 URL" placeholder="https://<tenant>.feishu.cn/wiki/<token>、/docx/<token> 或 /drive/folder/<token>">
+        </div>
+        <div class="form-group">
+          <label for="feishu-export-output">输出目录</label>
+          <div class="input-with-button">
+            <input type="text" id="feishu-export-output" data-history-kind="path" data-history-key="output" data-history-label="输出目录" placeholder="留空使用默认 exports/feishu">
+            <button class="btn-secondary" id="feishu-export-browse-output">浏览</button>
+          </div>
+        </div>
+        <details class="advanced-section">
+          <summary>导出选项</summary>
+          <div class="advanced-content">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="feishu-export-delay">请求延迟秒</label>
+                <input type="number" id="feishu-export-delay" value="0.8" min="0" step="0.1">
+              </div>
+              <div class="form-group flex-1">
+                <label for="feishu-export-jitter">随机浮动秒</label>
+                <input type="number" id="feishu-export-jitter" value="0.4" min="0" step="0.1">
+              </div>
+            </div>
+            <label class="checkbox-label">
+              <input type="checkbox" id="feishu-export-incremental" checked>
+              <span>增量导出</span>
+            </label>
+          </div>
+        </details>
+      </section>
+      <section class="action-section">
+        <button class="btn-primary" id="feishu-export-login">登录并保存凭证</button>
+        <button class="btn-secondary login-done-button" id="feishu-export-login-done" hidden>我已完成登录，保存凭证</button>
+        <button class="btn-primary" id="feishu-export-export">开始导出</button>
+        <button class="btn-danger" id="feishu-export-stop" disabled>停止</button>
+        <button class="btn-secondary" id="feishu-export-open-dir">打开目录</button>
+      </section>
+    </div>
+  </template>
+
+  <template id="template-aliyun">
+    <div class="tool-panel">
+      <section class="form-section">
+        <div class="form-group">
+          <label for="aliyun-url">阿里云 Thoughts 工作区 URL <span class="required">*</span></label>
+          <input type="url" id="aliyun-url" data-history-kind="url" data-history-key="workspace_url" data-history-label="Thoughts 工作区 URL" placeholder="https://thoughts.aliyun.com/workspaces/<id>/overview">
+        </div>
+        <div class="form-group">
+          <label for="aliyun-output">输出目录</label>
+          <div class="input-with-button">
+            <input type="text" id="aliyun-output" data-history-kind="path" data-history-key="output" data-history-label="输出目录" placeholder="留空使用默认 exports/aliyun-thoughts">
+            <button class="btn-secondary" id="aliyun-browse-output">浏览</button>
+          </div>
+        </div>
+        <details class="advanced-section">
+          <summary>导出选项</summary>
+          <div class="advanced-content">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="aliyun-delay">请求延迟秒</label>
+                <input type="number" id="aliyun-delay" value="0.8" min="0" step="0.1">
+              </div>
+              <div class="form-group flex-1">
+                <label for="aliyun-jitter">随机浮动秒</label>
+                <input type="number" id="aliyun-jitter" value="0.4" min="0" step="0.1">
+              </div>
+            </div>
+            <label class="checkbox-label">
+              <input type="checkbox" id="aliyun-incremental" checked>
+              <span>增量导出</span>
+            </label>
+          </div>
+        </details>
+      </section>
+      <section class="action-section">
+        <button class="btn-primary" id="aliyun-login">登录并保存凭证</button>
+        <button class="btn-secondary login-done-button" id="aliyun-login-done" hidden>我已完成登录，保存凭证</button>
+        <button class="btn-primary" id="aliyun-export">开始导出</button>
+        <button class="btn-danger" id="aliyun-stop" disabled>停止</button>
+        <button class="btn-secondary" id="aliyun-open-dir">打开目录</button>
+      </section>
+    </div>
+  </template>
+
+  <template id="template-yinxiang">
+    <div class="tool-panel">
+      <section class="form-section">
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="yinxiang-username">印象笔记账号 <span class="required">*</span></label>
+            <input type="text" id="yinxiang-username" placeholder="手机号 / 邮箱 / 用户名">
+          </div>
+          <div class="form-group flex-1">
+            <label for="yinxiang-password">印象笔记密码 <span class="required">*</span></label>
+            <input type="password" id="yinxiang-password" placeholder="仅用于本地初始化凭证">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="yinxiang-output">输出目录</label>
+          <div class="input-with-button">
+            <input type="text" id="yinxiang-output" data-history-kind="path" data-history-key="output" data-history-label="输出目录" placeholder="留空使用默认 exports/yinxiang">
+            <button class="btn-secondary" id="yinxiang-browse-output">浏览</button>
+          </div>
+        </div>
+        <details class="advanced-section">
+          <summary>导出选项</summary>
+          <div class="advanced-content">
+            <label class="checkbox-label">
+              <input type="checkbox" id="yinxiang-incremental" checked>
+              <span>增量导出</span>
+            </label>
+            <p class="helper-note">首次点击“登录并同步”会把印象笔记同步到本地，之后可读取目录并选择要导出的笔记。</p>
+          </div>
+        </details>
+      </section>
+      <section class="action-section">
+        <button class="btn-primary" id="yinxiang-login">登录并同步</button>
+        <button class="btn-primary" id="yinxiang-export">开始导出</button>
+        <button class="btn-danger" id="yinxiang-stop" disabled>停止</button>
+        <button class="btn-secondary" id="yinxiang-open-dir">打开目录</button>
+      </section>
+    </div>
+  </template>
+
+  <template id="template-yinxiang-import">
+    <div class="tool-panel">
+      <section class="form-section">
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="yinxiang-import-username">印象笔记账号</label>
+            <input type="text" id="yinxiang-import-username" placeholder="首次使用时填写">
+          </div>
+          <div class="form-group flex-1">
+            <label for="yinxiang-import-password">印象笔记密码</label>
+            <input type="password" id="yinxiang-import-password" placeholder="仅用于本地初始化凭证">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="yinxiang-import-source">Markdown 目录 <span class="required">*</span></label>
+          <div class="input-with-button">
+            <input type="text" id="yinxiang-import-source" data-history-kind="path" data-history-key="source_dir" data-history-label="Markdown 目录" placeholder="选择包含 Markdown 文件的目录">
+            <button class="btn-secondary" id="yinxiang-import-browse-source">浏览</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="yinxiang-import-source-file">单篇测试文件（可选）</label>
+          <div class="input-with-button">
+            <input type="text" id="yinxiang-import-source-file" data-history-kind="path" data-history-key="source_file" data-history-label="单篇测试文件" placeholder="留空则使用目录内第一篇">
+            <button class="btn-secondary" id="yinxiang-import-browse-file">浏览</button>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="yinxiang-import-notebook">默认目标笔记本</label>
+            <input type="text" id="yinxiang-import-notebook" data-history-kind="text" data-history-key="notebook" data-history-label="目标笔记本" data-history-default-value="万能导导入" value="万能导导入">
+          </div>
+          <div class="form-group flex-1">
+            <label for="yinxiang-import-stack">默认笔记本组</label>
+            <input type="text" id="yinxiang-import-stack" data-history-kind="text" data-history-key="stack" data-history-label="目标笔记本组" placeholder="可留空">
+          </div>
+        </div>
+        <details class="advanced-section">
+          <summary>导入选项</summary>
+          <div class="advanced-content">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="yinxiang-import-delay">请求延迟秒</label>
+                <input type="number" id="yinxiang-import-delay" value="0.3" min="0" step="0.1">
+              </div>
+              <div class="form-group flex-1">
+                <label for="yinxiang-import-max">最多导入数量</label>
+                <input type="number" id="yinxiang-import-max" value="0" min="0">
+              </div>
+            </div>
+            <label class="checkbox-label">
+              <input type="checkbox" id="yinxiang-import-preserve-folders" checked>
+              <span>按本地目录创建笔记本组/笔记本</span>
+            </label>
+          </div>
+        </details>
+        <p class="helper-note">第一次使用先点击“登录并同步凭证”。导入会把 Markdown 正文、本地图片和附件写入印象笔记。</p>
+      </section>
+      <section class="action-section">
+        <button class="btn-primary" id="yinxiang-import-login">登录并同步凭证</button>
+        <button class="btn-primary" id="yinxiang-import-plan">扫描目录</button>
+        <button class="btn-primary" id="yinxiang-import-one">单篇导入测试</button>
+        <button class="btn-primary" id="yinxiang-import-export">批量导入</button>
+        <button class="btn-danger" id="yinxiang-import-stop" disabled>停止</button>
+        <button class="btn-secondary" id="yinxiang-import-open-dir">打开目录</button>
+      </section>
+    </div>
+  </template>
+
+  <template id="template-ima-export">
+    <div class="tool-panel">
+      <section class="form-section">
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="ima-export-client-id">ima Client ID <span class="required">*</span></label>
+            <input type="text" id="ima-export-client-id" data-draft="false" placeholder="从 ima API Key 页面获取">
+          </div>
+          <div class="form-group flex-1">
+            <label for="ima-export-api-key">ima API Key <span class="required">*</span></label>
+            <input type="password" id="ima-export-api-key" data-draft="false" placeholder="只保存到本机配置">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="ima-export-output">输出目录</label>
+          <div class="input-with-button">
+            <input type="text" id="ima-export-output" data-history-kind="path" data-history-key="output" data-history-label="输出目录" placeholder="留空使用默认 exports/ima">
+            <button class="btn-secondary" id="ima-export-browse-output">浏览</button>
+          </div>
+        </div>
+        <details class="advanced-section">
+          <summary>导出选项</summary>
+          <div class="advanced-content">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="ima-export-kb-id">指定知识库 ID（可选）</label>
+                <input type="text" id="ima-export-kb-id" data-draft="false" placeholder="留空读取全部可访问知识库">
+              </div>
+              <div class="form-group flex-1">
+                <label for="ima-export-delay">请求延迟秒</label>
+                <input type="number" id="ima-export-delay" value="0.2" min="0" step="0.1">
+              </div>
+              <div class="form-group flex-1">
+                <label for="ima-export-jitter">随机浮动秒</label>
+                <input type="number" id="ima-export-jitter" value="0.2" min="0" step="0.1">
+              </div>
+            </div>
+          </div>
+        </details>
+        <p class="helper-note">先读取目录后可按知识库、文件夹或单个文件勾选导出。普通文件会尽量按原文件保存；ima 笔记类内容受官方 API 限制，会尽量导出为 Markdown 文本。</p>
+      </section>
+      <section class="action-section">
+        <button class="btn-secondary" id="ima-export-save-config">保存 API 配置</button>
+        <button class="btn-primary" id="ima-export-export">开始导出</button>
+        <button class="btn-danger" id="ima-export-stop" disabled>停止</button>
+        <button class="btn-secondary" id="ima-export-open-dir">打开目录</button>
+      </section>
+    </div>
+  </template>
+
+  <template id="template-ima-import">
+    <div class="tool-panel">
+      <section class="form-section">
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="ima-import-client-id">ima Client ID <span class="required">*</span></label>
+            <input type="text" id="ima-import-client-id" data-draft="false" placeholder="从 ima API Key 页面获取">
+          </div>
+          <div class="form-group flex-1">
+            <label for="ima-import-api-key">ima API Key <span class="required">*</span></label>
+            <input type="password" id="ima-import-api-key" data-draft="false" placeholder="只保存到本机配置">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="ima-import-source">本地文件目录 <span class="required">*</span></label>
+          <div class="input-with-button">
+            <input type="text" id="ima-import-source" data-history-kind="path" data-history-key="source_dir" data-history-label="本地文件目录" placeholder="选择要导入 ima 知识库的本地目录">
+            <button class="btn-secondary" id="ima-import-browse-source">浏览</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="ima-import-source-file">单文件测试（可选）</label>
+          <div class="input-with-button">
+            <input type="text" id="ima-import-source-file" data-history-kind="path" data-history-key="source_file" data-history-label="单文件测试" placeholder="留空则使用目录内第一个支持文件">
+            <button class="btn-secondary" id="ima-import-browse-file">浏览</button>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="ima-import-kb-select">目标知识库 <span class="required">*</span></label>
+            <select id="ima-import-kb-select" data-draft="false">
+              <option value="">先点击“读取知识库”</option>
+            </select>
+          </div>
+          <div class="form-group flex-1">
+            <label for="ima-import-folder-id">目标文件夹</label>
+            <div class="input-with-button">
+              <select id="ima-import-folder-id" data-draft="false">
+                <option value="">知识库根目录</option>
+              </select>
+              <button class="btn-secondary" id="ima-import-list-folders" type="button" disabled aria-disabled="true" title="请先读取并选择目标知识库">读取文件夹</button>
+            </div>
+          </div>
+        </div>
+        <div class="ima-kb-guidance" id="ima-import-kb-guidance" role="status" aria-live="polite">
+          <p>下一步：读取可写知识库，然后选择本次导入的目标。</p>
+          <button class="btn-secondary" id="ima-import-read-kbs-inline" type="button">读取可写知识库</button>
+        </div>
+        <details class="advanced-section">
+          <summary>导入选项</summary>
+          <div class="advanced-content">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="ima-import-delay">请求延迟秒</label>
+                <input type="number" id="ima-import-delay" value="0.2" min="0" step="0.1">
+              </div>
+              <div class="form-group flex-1">
+                <label for="ima-import-jitter">随机浮动秒</label>
+                <input type="number" id="ima-import-jitter" value="0.2" min="0" step="0.1">
+              </div>
+              <div class="form-group flex-1">
+                <label for="ima-import-max">最多导入数量</label>
+                <input type="number" id="ima-import-max" value="0" min="0">
+              </div>
+            </div>
+            <label class="checkbox-label">
+              <input type="checkbox" id="ima-import-skip-existing" checked>
+              <span>目标已有同名文件时跳过</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="ima-import-preserve-folders" checked>
+              <span>保留本地文件夹层级（自动创建 ima 子文件夹）</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="ima-import-include-assets">
+              <span>将 Markdown 引用的本地图片/附件也作为独立文件上传</span>
+            </label>
+          </div>
+        </details>
+        <p class="helper-note">使用 ima 知识库 OpenAPI 上传文件，支持 Markdown、PDF、Word、PPT、Excel、图片、TXT、Xmind、音频等文件。默认保留本地文件夹层级，Markdown 引用的本地配图会内嵌而不会重复作为独立图片导入。</p>
+      </section>
+      <section class="action-section">
+        <button class="btn-secondary" id="ima-import-save-config">保存 API 配置</button>
+        <button class="btn-primary" id="ima-import-list-kbs">读取知识库</button>
+        <button class="btn-primary" id="ima-import-plan">扫描目录</button>
+        <button class="btn-primary" id="ima-import-one" disabled aria-disabled="true" title="请先读取并选择目标知识库">单文件导入测试</button>
+        <button class="btn-primary" id="ima-import-export" disabled aria-disabled="true" title="请先读取并选择目标知识库">批量导入</button>
+        <button class="btn-danger" id="ima-import-stop" disabled>停止</button>
+        <button class="btn-secondary" id="ima-import-open-dir">打开目录</button>
+      </section>
+    </div>
+  </template>
+
+  <script src="tauri_bridge.js"></script>
+  <script src="error_protocol.js"></script>
+  <script src="feedback.js"></script>
+  <script src="providers.js"></script>
+  <script src="provider_runtime.js"></script>
+  <script src="structured_logs.js"></script>
+  <script src="time_format.js"></script>
+  <script src="task_resume.js"></script>
+  <script src="toc_tree.js"></script>
+  <script src="task_report.js"></script>
+  <script src="task_history.js"></script>
+  <script src="form_drafts.js"></script>
+  <script src="recent_inputs.js"></script>
+  <script src="plugin_update_state.js"></script>
+  <script src="vendor/markdown-it.umd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

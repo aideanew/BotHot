@@ -1,0 +1,35 @@
+
+### T8a OPTIONS 预检 Origin=evil
+$ curl -s -i -X OPTIONS -H Origin: http://evil.example -H Access-Control-Request-Method: POST -H Access-Control-Request-Headers: content-type http://localhost:3333/api/v1/spaces
+HTTP/1.1 405 Method Not Allowed
+date: Sun, 13 Sep 2026 06:23:21 GMT
+server: uvicorn
+allow: GET
+content-length: 31
+content-type: application/json
+x-request-id: 6491f757-5b92-42d9-9d95-4f4247a9dda3
+connection: close
+Vary: Accept-Encoding
+
+{"detail":"Method Not Allowed"}
+
+### T8b GET 带Origin
+$ curl -s -i -H Origin: http://evil.example http://localhost:3333/api/v1/spaces
+HTTP/1.1 401 Unauthorized
+date: Sun, 13 Sep 2026 06:23:21 GMT
+server: uvicorn
+content-length: 108
+content-type: application/json
+x-request-id: a60535d2-f54c-402c-8be6-b00bf0d6300b
+connection: close
+Vary: Accept-Encoding
+
+{"code":10001,"message":"缺少会话凭据","data":null,"requestId":"a60535d2-f54c-402c-8be6-b00bf0d6300b"}
+
+### T9 伪造cookie变体-empty
+$ curl -s http://localhost:3333/api/v1/auth/me -H Cookie: aideanbot_session=
+{"code":10001,"message":"未登录","data":null,"requestId":"59a31885-c30c-43af-9e9f-a297d0dd8d4f"}
+
+### T9b 伪造cookie-越权空间
+$ curl -s http://localhost:3333/api/v1/spaces/1 -H Cookie: aideanbot_session=admin
+{"code":10001,"message":"会话不存在或已过期","data":null,"requestId":"018ece4b-e46d-487a-9a2b-fb70f2297d93"}

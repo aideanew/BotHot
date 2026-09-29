@@ -1,0 +1,31 @@
+name: 教程 / 文档建议
+description: 补充教程、排障说明或修正文档
+title: "[Docs] "
+labels: ["documentation", "status:needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请简单写清楚希望新增、修改或纠正什么。
+
+        如果想认领，请在 Issue 评论区回复“认领”。请先脱敏，不要提交账号凭证或私人内容。
+  - type: checkboxes
+    id: precheck
+    attributes:
+      label: 提交前确认（可选）
+      options:
+        - label: 我已经搜索过已有 Issue 和 PR。
+        - label: 内容和截图中没有敏感信息。
+  - type: textarea
+    id: description
+    attributes:
+      label: 文档建议
+      description: 请说明问题所在，以及希望读者最终能看懂或完成什么。
+      placeholder: 例如：补充 macOS 首次打开应用时的排障步骤。
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: 参考资料或截图（可选）
+      description: 可直接拖入截图，或粘贴公开链接、示例内容。

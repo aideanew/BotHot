@@ -1,0 +1,23 @@
+
+### GET /auth/callback?code=abc&state=xyz (伪造)
+$ curl -s -i http://localhost:3333/api/v1/auth/callback?code=abc&state=xyz
+HTTP/1.1 400 Bad Request
+date: Sun, 13 Sep 2026 06:20:19 GMT
+server: uvicorn
+content-length: 126
+content-type: application/json
+x-request-id: 9e6e534b-32a7-4b01-8fd9-c69c0639358c
+connection: close
+Vary: Accept-Encoding
+
+{"code":10002,"message":"state 缺失、已过期或不匹配","data":null,"requestId":"9e6e534b-32a7-4b01-8fd9-c69c0639358c"}
+### GET /auth/login
+$ curl -s -i http://localhost:3333/api/v1/auth/login
+HTTP/1.1 302 Found
+date: Sun, 13 Sep 2026 06:20:19 GMT
+server: uvicorn
+content-length: 0
+location: http://localhost:3000/oauth/authorize?response_type=code&client_id=wechat-rag&redirect_uri=http%3A%2F%2Flocalhost%3A3333%2Fauth%2Faidean%2Fcallback&scope=openid+profile+wallet%3Aread&state=D0sru1Tna3OgEBufvquSf2aDHFm0h0Amisu3l5WM7Q8
+x-request-id: 4a0af8f7-ccfa-4379-9b3a-583665ac8382
+connection: close
+

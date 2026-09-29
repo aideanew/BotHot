@@ -1,0 +1,102 @@
+{
+  "$schema": "../provider.schema.json",
+  "schemaVersion": 1,
+  "id": "your-custom-provider",
+  "name": "你的复杂平台",
+  "title": "你的复杂平台接入",
+  "navLabel": "你的复杂平台",
+  "description": "适合多步骤登录、复杂权限检测、特殊导入导出流程的平台接入模板。",
+  "type": "hybrid",
+  "group": "export",
+  "trustLevel": "community",
+  "status": "experimental",
+  "guide": "README.md",
+  "homepage": "",
+  "tags": ["复杂流程", "社区共创"],
+  "templateMode": "custom",
+  "capabilities": {
+    "export": true,
+    "import": false,
+    "guide": true,
+    "scanToc": true,
+    "images": true,
+    "attachments": true,
+    "tree": true,
+    "batch": true,
+    "retryFailures": false
+  },
+  "requirements": {
+    "python": [],
+    "system": ["Chrome 或 Edge"],
+    "notes": [
+      "复杂平台建议先提交可运行的 Python 核心能力，再由维护者评估是否需要接入专属 UI。",
+      "请在 README.md 写清楚每个步骤、登录方式、权限要求和失败处理。"
+    ]
+  },
+  "toc": {
+    "itemsPath": "nodes",
+    "idKey": "nodeId",
+    "exportIdKey": "exportId",
+    "titleKey": "title",
+    "parentIdKey": "parentNodeId",
+    "selectableKey": "selectable",
+    "selectionArg": "--doc-id"
+  },
+  "fields": [
+    {
+      "name": "custom_notice",
+      "label": "复杂平台说明",
+      "type": "notice",
+      "markdown": "如果标准字段无法表达你的平台流程，请先把流程拆成多个动作，并在 README.md 中说明需要的专属 UI。当前文件型 provider 不直接注入任意 HTML，以免影响桌面端安全和稳定性。"
+    },
+    {
+      "name": "workspace_url",
+      "label": "平台入口 URL",
+      "type": "text",
+      "history": "url",
+      "arg": "--workspace-url",
+      "required": true,
+      "placeholder": "https://example.com/workspace"
+    },
+    {
+      "name": "output",
+      "label": "输出目录",
+      "type": "directory",
+      "history": "path",
+      "arg": "--output",
+      "required": true
+    }
+  ],
+  "actions": [
+    {
+      "id": "login",
+      "label": "登录 / 保存凭证",
+      "script": "actions.py",
+      "args": ["--login"],
+      "includeSelection": false,
+      "actionName": "登录",
+      "progressTitle": "平台登录",
+      "progressDetail": "正在打开浏览器或检查登录状态..."
+    },
+    {
+      "id": "scan",
+      "kind": "scan",
+      "label": "读取目录",
+      "script": "actions.py",
+      "args": ["--scan-toc"],
+      "includeSelection": false,
+      "actionName": "读取目录",
+      "progressTitle": "读取平台目录",
+      "progressDetail": "正在读取目录结构..."
+    },
+    {
+      "id": "export",
+      "label": "开始导出",
+      "script": "actions.py",
+      "args": ["--export"],
+      "actionName": "导出",
+      "progressTitle": "平台导出",
+      "progressDetail": "正在导出 Markdown..."
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "$schema": "../provider.schema.json",
+  "schemaVersion": 1,
+  "id": "demo-local-export",
+  "name": "本地 Markdown 示例",
+  "title": "本地 Markdown 示例导出",
+  "navLabel": "本地 Markdown 示例",
+  "description": "开发者示例：扫描本地 Markdown 目录，保留目录结构并复制相对图片和附件。",
+  "type": "hybrid",
+  "group": "export",
+  "trustLevel": "official",
+  "status": "stable",
+  "guide": "README.md",
+  "tags": ["示例", "标准 UI", "本地 Markdown"],
+  "capabilities": {
+    "export": true,
+    "import": false,
+    "guide": true,
+    "scanToc": true,
+    "images": true,
+    "attachments": true,
+    "tree": true,
+    "batch": true,
+    "retryFailures": false
+  },
+  "requirements": {
+    "python": [],
+    "system": [],
+    "notes": ["只使用 Python 标准库。复制本目录并去掉下划线前缀后，万能导会加载它。"]
+  },
+  "toc": {
+    "itemsPath": "nodes",
+    "idKey": "nodeId",
+    "exportIdKey": "exportId",
+    "titleKey": "title",
+    "parentIdKey": "parentNodeId",
+    "selectableKey": "selectable",
+    "selectionArg": "--doc-id",
+    "note": "读取目录后，可以勾选要复制的 Markdown 文件。"
+  },
+  "fields": [
+    {
+      "name": "source_dir",
+      "label": "Markdown 源目录",
+      "type": "directory",
+      "history": "path",
+      "arg": "--source-dir",
+      "required": true
+    },
+    {
+      "name": "output",
+      "label": "输出目录",
+      "type": "directory",
+      "history": "path",
+      "arg": "--output",
+      "required": true
+    },
+    {
+      "name": "copy_resources",
+      "label": "复制相对图片和附件",
+      "type": "checkbox",
+      "arg": "--copy-resources",
+      "default": true
+    },
+    {
+      "name": "incremental",
+      "label": "跳过已存在文件",
+      "type": "checkbox",
+      "arg": "--incremental",
+      "default": false,
+      "advanced": true
+    }
+  ],
+  "actions": [
+    {
+      "id": "scan",
+      "kind": "scan",
+      "label": "读取目录",
+      "script": "actions.py",
+      "args": ["--scan-toc"],
+      "includeSelection": false,
+      "actionName": "读取目录",
+      "progressTitle": "读取本地 Markdown 目录",
+      "progressDetail": "正在扫描 Markdown 文件..."
+    },
+    {
+      "id": "export",
+      "label": "开始导出",
+      "script": "actions.py",
+      "args": ["--export"],
+      "actionName": "导出",
+      "progressTitle": "本地 Markdown 示例导出",
+      "progressDetail": "正在复制 Markdown、图片和附件..."
+    }
+  ]
+}

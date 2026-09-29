@@ -1,0 +1,113 @@
+
+### T5a 超大payload-100KB-name(未登录)
+$ curl -s -i --max-time 20 -w \n[HTTP=%{http_code} time=%{time_total}s dl=%{size_download}B] http://localhost:3333/api/v1/spaces -X POST --data-binary @big_name.json (100KB payload)
+HTTP/1.1 401 Unauthorized
+date: Sun, 13 Sep 2026 06:22:17 GMT
+server: uvicorn
+content-length: 108
+content-type: application/json
+x-request-id: da18e65a-f0d6-4818-a056-8d796088f859
+connection: close
+Vary: Accept-Encoding
+
+{"code":10001,"message":"缺少会话凭据","data":null,"requestId":"da18e65a-f0d6-4818-a056-8d796088f859"}
+[HTTP=401 time=0.005603s dl=108B]
+
+### T5b 超大payload-100KB-url(resolve)
+$ curl -s -i --max-time 20 -w \n[HTTP=%{http_code} time=%{time_total}s dl=%{size_download}B] http://localhost:3333/api/v1/resolve -X POST --data-binary @big_url.json (100KB payload)
+HTTP/1.1 401 Unauthorized
+date: Sun, 13 Sep 2026 06:22:17 GMT
+server: uvicorn
+content-length: 108
+content-type: application/json
+x-request-id: 445180f7-0fb0-4ac3-b6fa-b6a2e4020132
+connection: close
+Vary: Accept-Encoding
+
+{"code":10001,"message":"缺少会话凭据","data":null,"requestId":"445180f7-0fb0-4ac3-b6fa-b6a2e4020132"}
+[HTTP=401 time=0.004374s dl=108B]
+
+### T4a 路径穿越-spaceid(字面)
+$ curl -s -i --max-time 20 -w \n[HTTP=%{http_code} time=%{time_total}s dl=%{size_download}B] http://localhost:3333/api/v1/spaces/../../etc/passwd
+HTTP/1.1 404 Not Found
+Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate
+Vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch, Accept-Encoding
+X-Powered-By: Next.js
+Content-Type: text/html; charset=utf-8
+Date: Sun, 13 Sep 2026 06:22:17 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+Transfer-Encoding: chunked
+
+<!DOCTYPE html><html lang="zh-CN"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="/_next/static/css/51c7fa3f09ef270d.css" data-precedence="next"/><link rel="preload" as="script" fetchPriority="low" href="/_next/static/chunks/webpack-2393a3a10ab2477a.js"/><script src="/_next/static/chunks/c39a5622-c901a70582ccb25c.js" async=""></script><script src="/_next/static/chunks/374-14ef94331a84c512.js" async=""></script><script src="/_next/static/chunks/main-app-0b6e6d6f8d2e12aa.js" async=
+...[truncated, total 8989 chars]
+
+### T4b 路径穿越-百分号编码
+$ curl -s -i --max-time 20 -w \n[HTTP=%{http_code} time=%{time_total}s dl=%{size_download}B] http://localhost:3333/api/v1/spaces/%2e%2e%2f%2e%2e%2f..%2fetc%2fpasswd
+HTTP/1.1 404 Not Found
+date: Sun, 13 Sep 2026 06:22:17 GMT
+server: uvicorn
+content-length: 22
+content-type: application/json
+x-request-id: db9de8e6-f846-4151-ae3f-bfdaa90658bb
+connection: close
+Vary: Accept-Encoding
+
+{"detail":"Not Found"}
+[HTTP=404 time=0.004321s dl=22B]
+
+### T4c 路径穿越-绝对路径参数
+$ curl -s -i --max-time 20 -w \n[HTTP=%{http_code} time=%{time_total}s dl=%{size_download}B] http://localhost:3333/api/v1/spaces/%2F..%2F..%2Fetc%2Fpasswd
+HTTP/1.1 404 Not Found
+date: Sun, 13 Sep 2026 06:22:17 GMT
+server: uvicorn
+content-length: 22
+content-type: application/json
+x-request-id: 5f77d16f-b8aa-4b2e-93d6-55ec0fd46f9f
+connection: close
+Vary: Accept-Encoding
+
+{"detail":"Not Found"}
+[HTTP=404 time=0.004221s dl=22B]
+
+### T6a 非法类型name=123
+$ curl -s -i --max-time 20 -w \n[HTTP=%{http_code} time=%{time_total}s dl=%{size_download}B] http://localhost:3333/api/v1/spaces -d '{"name":123}'
+HTTP/1.1 401 Unauthorized
+date: Sun, 13 Sep 2026 06:22:17 GMT
+server: uvicorn
+content-length: 108
+content-type: application/json
+x-request-id: 9faa73e4-9bef-4d73-87fd-181b53b262e9
+connection: close
+Vary: Accept-Encoding
+
+{"code":10001,"message":"缺少会话凭据","data":null,"requestId":"9faa73e4-9bef-4d73-87fd-181b53b262e9"}
+[HTTP=401 time=0.004743s dl=108B]
+
+### T6b 缺字段{}
+$ curl -s -i --max-time 20 -w \n[HTTP=%{http_code} time=%{time_total}s dl=%{size_download}B] http://localhost:3333/api/v1/spaces -d '{}'
+HTTP/1.1 401 Unauthorized
+date: Sun, 13 Sep 2026 06:22:17 GMT
+server: uvicorn
+content-length: 108
+content-type: application/json
+x-request-id: 391afd3e-03ff-419b-8cac-c825dfdb9f01
+connection: close
+Vary: Accept-Encoding
+
+{"code":10001,"message":"缺少会话凭据","data":null,"requestId":"391afd3e-03ff-419b-8cac-c825dfdb9f01"}
+[HTTP=401 time=0.005323s dl=108B]
+
+### T6c XSS昵称字段(未登录,记录输入面)
+$ curl -s -i --max-time 20 -w \n[HTTP=%{http_code} time=%{time_total}s dl=%{size_download}B] http://localhost:3333/api/v1/spaces -d '{"name":"<script>alert(1)</script>"}'
+HTTP/1.1 401 Unauthorized
+date: Sun, 13 Sep 2026 06:22:17 GMT
+server: uvicorn
+content-length: 108
+content-type: application/json
+x-request-id: 40f69bb7-b77e-44eb-acb0-6406483b27e2
+connection: close
+Vary: Accept-Encoding
+
+{"code":10001,"message":"缺少会话凭据","data":null,"requestId":"40f69bb7-b77e-44eb-acb0-6406483b27e2"}
+[HTTP=401 time=0.004723s dl=108B]

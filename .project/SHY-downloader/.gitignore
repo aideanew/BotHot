@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+dist/
+build/
+.DS_Store
+*.part
+.venv/
+downloads/
+*aigit/wx_channels_download*

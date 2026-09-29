@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AideanBot 剩余需求复核与再设计 · 第八批</title>
+<style>
+  :root{
+    --bg:#f7f5f1;
+    --paper:#fcfbf8;
+    --ink:#1b1a18;
+    --body:#3a3733;
+    --muted:#6f6a62;
+    --faint:#a49d92;
+    --line:#e2dcd1;
+    --line-strong:#cfc7b9;
+    --accent:#8a5a2b;
+    --ok:#3f6b4d;
+    --warn:#8a6d1f;
+    --bad:#9a4a3a;
+    --mono:ui-monospace,"SFMono-Regular","Cascadia Mono",Consolas,"Liberation Mono",monospace;
+    --serif:"Iowan Old Style","Palatino Linotype","Songti SC",Georgia,"Times New Roman",serif;
+    --sans:"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC","Helvetica Neue",Helvetica,Arial,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--body);font-family:var(--sans);font-size:16px;line-height:1.75;-webkit-font-smoothing:antialiased}
+  .page{max-width:1320px;margin:0 auto;padding:0 48px 96px}
+  a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line-strong)}
+  a:hover{border-bottom-color:var(--accent);color:var(--accent)}
+  code,.mono{font-family:var(--mono);font-size:.86em;color:var(--ink)}
+  strong{font-weight:600;color:var(--ink)}
+  .masthead{padding:96px 0 40px;position:relative;border-bottom:2px solid var(--ink)}
+  .kicker{font-size:12px;letter-spacing:.22em;color:var(--muted);text-transform:uppercase;margin-bottom:28px}
+  .masthead h1{font-size:46px;line-height:1.12;font-weight:300;letter-spacing:-.01em;color:var(--ink);max-width:30ch}
+  .ghost{position:absolute;top:44px;right:0;font-size:220px;line-height:1;font-weight:200;color:transparent;-webkit-text-stroke:1px var(--line-strong);user-select:none;pointer-events:none}
+  .subtitle{margin-top:16px;font-size:17px;color:var(--muted);font-weight:400}
+  .meta{display:flex;flex-wrap:wrap;gap:12px 44px;margin-top:36px}
+  .meta div{display:flex;gap:10px;align-items:baseline}
+  .meta dt{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+  .meta dd{font-size:13.5px;color:var(--body)}
+  .lede{margin:56px 0 0;max-width:72ch;font-size:18.5px;line-height:1.9;color:var(--body)}
+  .lede strong{font-weight:600}
+  .metrics{display:flex;flex-wrap:wrap;gap:0;margin:44px 0 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .metric{flex:1 1 150px;padding:20px 22px 18px;border-right:1px solid var(--line)}
+  .metric:last-child{border-right:none}
+  .metric .v{font-size:30px;font-weight:300;color:var(--ink);letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+  .metric .k{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:6px}
+  .shell{display:grid;grid-template-columns:196px 1fr;gap:64px;margin-top:72px}
+  .toc{position:sticky;top:40px;align-self:start;font-size:13px}
+  .toc .t{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);margin-bottom:14px}
+  .toc a{display:block;padding:7px 0;border-bottom:none;color:var(--muted);border-left:2px solid transparent;padding-left:12px}
+  .toc a:hover{color:var(--ink)}
+  .toc a.on{color:var(--ink);border-left-color:var(--accent)}
+  main{min-width:0}
+  section{margin-bottom:88px;scroll-margin-top:32px}
+  .sec-head{display:flex;align-items:baseline;gap:18px;border-bottom:1px solid var(--ink);padding-bottom:14px;margin-bottom:32px}
+  .sec-no{font-size:13px;font-weight:300;color:var(--accent);font-variant-numeric:tabular-nums;letter-spacing:.08em}
+  .sec-head h2{font-size:24px;font-weight:500;color:var(--ink);letter-spacing:.01em}
+  .sec-head .en{margin-left:auto;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
+  p{margin:0 0 18px;max-width:74ch}
+  .dim{color:var(--muted)}
+  .rule{width:44px;height:1px;background:var(--line-strong);margin:30px 0}
+  table{width:100%;border-collapse:collapse;font-size:14px;line-height:1.6}
+  caption{caption-side:top;text-align:left;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding-bottom:10px}
+  th{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;text-align:left;padding:9px 12px 9px 0;border-bottom:1px solid var(--line-strong);white-space:nowrap}
+  td{padding:11px 12px 11px 0;border-bottom:1px solid var(--line);vertical-align:top;color:var(--body)}
+  td:first-child{padding-left:0}
+  tr td:first-child{white-space:nowrap}
+  .mono-cell{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .st{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;font-size:12.5px;font-weight:600;letter-spacing:.02em}
+  .st::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+  .ok{color:var(--ok)} .part{color:var(--warn)} .no{color:var(--bad)} .neutral{color:var(--muted)}
+  .blocks{display:grid;gap:0;border-top:1px solid var(--line)}
+  .block{padding:26px 0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:150px 1fr;gap:24px}
+  .block .bt{font-size:13px;font-weight:600;color:var(--ink);letter-spacing:.02em}
+  .block .bt .n{display:block;font-weight:300;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:6px}
+  .block p{margin-bottom:8px;font-size:14.5px}
+  .tag{display:inline-block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line-strong);padding:2px 8px;margin-right:8px;white-space:nowrap}
+  .wave{display:grid;grid-template-columns:120px 1fr;gap:24px;border-bottom:1px solid var(--line);padding:22px 0}
+  .wave .wn{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);padding-top:3px}
+  .wave .wt{font-size:15px;color:var(--ink);font-weight:600;margin-bottom:6px}
+  .wave .wd{font-size:14px;color:var(--body)}
+  .tracks{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);margin:8px 0 0}
+  .track{background:var(--paper);padding:18px 20px}
+  .track .th{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .track .tid{font-family:var(--mono);font-size:12px;color:var(--accent)}
+  .track .tn{font-size:14.5px;font-weight:600;color:var(--ink)}
+  .track .ts{font-size:11px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+  .track p{font-size:13px;color:var(--muted);margin:0;max-width:52ch}
+  .limits{counter-reset:lim;border-top:1px solid var(--line);margin-top:8px}
+  .limits li{list-style:none;counter-increment:lim;display:grid;grid-template-columns:34px 1fr;gap:14px;padding:14px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+  .limits li::before{content:counter(lim,decimal-leading-zero);font-family:var(--mono);font-size:12px;color:var(--faint);padding-top:3px}
+  .colophon{margin-top:96px;border-top:2px solid var(--ink);padding-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:40px;font-size:12.5px;color:var(--muted)}
+  .colophon .ct{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin-bottom:10px}
+  .colophon li{list-style:none;padding:4px 0;border-bottom:1px solid var(--line)}
+  .colophon .mono{font-size:11.5px}
+  @media (max-width:1120px){
+    .page{padding:0 26px 64px}
+    .shell{grid-template-columns:1fr;gap:40px}
+    .toc{position:static;display:flex;flex-wrap:wrap;gap:4px 18px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 0}
+    .toc .t{width:100%}
+    .toc a{padding:4px 0;border-left:none;padding-left:0}
+    .ghost{display:none}
+    .masthead h1{font-size:34px}
+    .tracks{grid-template-columns:1fr}
+    .block{grid-template-columns:1fr;gap:8px}
+    .wave{grid-template-columns:1fr;gap:8px}
+    .colophon{grid-template-columns:1fr}
+  }
+  @media print{
+    .toc,.ghost{display:none}
+    .page{max-width:none;padding:0}
+    body{background:#fff}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="masthead">
+  <div class="kicker">AIDEANBOT · REMAINING-WORK REVIEW</div>
+  <div class="ghost" aria-hidden="true">08</div>
+  <h1>剩余需求复核与再设计</h1>
+  <p class="subtitle">5W1H 发散 · 苏格拉底双向钢人 · 原子化重构 —— 第八批交付</p>
+  <div class="meta">
+    <div><dt>日期</dt><dd>2026-09-22（下午批次）</dd></div>
+    <div><dt>基线</dt><dd>HEAD 5b17da2 · origin/master 同步</dd></div>
+    <div><dt>范围</dt><dd>18 问判定 + 8 轨道大纲复核</dd></div>
+    <div><dt>产物</dt><dd>本页 · 大纲 v1.2 §六 · 台账 §二十</dd></div>
+  </div>
+</header>
+
+<p class="lede">
+经五轮判定复核（第一批至第七轮）之后，本批按管理者指定方法做第八轮<strong>深度推理复核</strong>：
+第一轮 5W1H 六问穷尽发散，第二轮对每个承重节点做<strong>致命追问 + 双向钢人论证</strong>，
+第三轮以幸存结论重构。净结果：18 问判定<strong>零翻案</strong>，新增<strong>六处口径校准（C1~C6）</strong>与
+<strong>三个原子任务候选（T1.2.5 / T2.6 / T2.7）</strong>，并已同步至大纲 v1.2 与台账 §二十。
+剩余开发不是"修坏的东西"，而是"补没建的东西"——其中大部分可在零外部依赖下立即开工。
+</p>
+
+<div class="metrics">
+  <div class="metric"><div class="v">26</div><div class="k">后端端点 / 9 文件</div></div>
+  <div class="metric"><div class="v">205</div><div class="k">后端测试（物理计数）</div></div>
+  <div class="metric"><div class="v">89</div><div class="k">前端用例 · 全绿</div></div>
+  <div class="metric"><div class="v">6</div><div class="k">口径校准 C1~C6</div></div>
+  <div class="metric"><div class="v">3</div><div class="k">新增原子任务</div></div>
+  <div class="metric"><div class="v">8</div><div class="k">轨道 · 三波施工序</div></div>
+</div>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <div class="t">目录</div>
+    <a href="#s1">01 · 结论速览</a>
+    <a href="#s2">02 · 18 问判定</a>
+    <a href="#s3">03 · 本批校准 C1~C6</a>
+    <a href="#s4">04 · 新增原子任务</a>
+    <a href="#s5">05 · 总览与施工序</a>
+    <a href="#s6">06 · 依赖锁矩阵</a>
+    <a href="#s7">07 · 验证与门禁</a>
+    <a href="#s8">08 · 前提与局限</a>
+  </nav>
+
+  <main>
+
+  <section id="s1">
+    <div class="sec-head"><span class="sec-no">01</span><h2>结论速览</h2><span class="en">Verdict</span></div>
+    <p>产品按"单篇采集问答 MVP"成立且经真实活体验证（ingest 202 → 5 秒 READY → SSE 带真实引用）；
+    按《需求文档》目标 2（整库 / 单篇二选一）与目标 3（主动推送）仍欠半壁。四个硬缺口经拷问后判定全数维持：</p>
+    <div class="blocks">
+      <div class="block">
+        <div class="bt"><span class="n">已成立</span>单篇 MVP 主链</div>
+        <div>
+          <p>单篇采集 → 入库 → 检索 → 问答全链闭环，SSO 免二次注册、幂等五层、脱机门禁全绿。
+          <span class="dim">证据：09-13 活体终验（202→5s READY→SSE 帧序 meta/citations/delta×12/done）；pytest 定向 53 passed、vitest 9 文件 89 用例。</span></p>
+        </div>
+      </div>
+      <div class="block">
+        <div class="bt"><span class="n">壳在待通</span>四大硬缺口</div>
+        <div>
+          <p>① 整号采集闭环——端点在、执行链断（无 worker / scheduler），且被 RedFox 积分 0.0 卡住活体；
+          ② 后台管理——零 admin 端点、users 表无 role 列（M3 全量已裁，待 SPEC）；
+          ③ 外部知识库绑定——仅 builtin 引擎可用，Coze / Dify / FastGPT 共 12 方法未实接；
+          ④ 分类体系——零字段、零 UI。</p>
+        </div>
+      </div>
+      <div class="block">
+        <div class="bt"><span class="n">待补强</span>三类质量项</div>
+        <div>
+          <p>前端两壳页（/engines、/public 各 36 行，加载不渲染）与全局兜底页缺失；组件化欠账
+          （巨石组件 651 行、api.ts 1213 行、loading/error 多份重复）；图片仅存外链、防盗链未实测（D4 先验证后改码）。</p>
+        </div>
+      </div>
+    </div>
+    <div class="rule"></div>
+    <p><strong>立即开工窗口</strong>（零外部依赖）：T1 全轨道（前端收口 / 组件化 / 公共库一期 / 技术债）+ T3（检索质量续 + 分类）。
+    其余轨道按"脱机施工半程 → 解锁后活体"推进，依赖锁见 §06。</p>
+  </section>
+
+  <section id="s2">
+    <div class="sec-head"><span class="sec-no">02</span><h2>18 问判定（第八轮 · 零翻案）</h2><span class="en">18 Questions</span></div>
+    <p class="dim">标记：<span class="st ok">已验证</span> ｜ <span class="st part">部分 / 壳在</span> ｜ <span class="st no">不可用</span>。每条附现场实测证据锚。</p>
+
+    <table>
+      <caption>核心六问</caption>
+      <thead><tr><th style="width:34px">#</th><th style="width:150px">问题</th><th style="width:110px">判定</th><th>依据（本批实测）</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>有哪些采集方式</td><td><span class="st part">3 通 1 断</span></td><td>单篇 <code>spaces.py:147</code> ✅、批量粘贴（前端串行 <code>AddArticlePanel.tsx:199</code>）🔶、公共库引入 <code>spaces.py:55</code> ✅、整号订阅执行链断（<code>client.py:63</code> 零生产调用方、无 worker / scheduler）</td></tr>
+        <tr><td>2</td><td>用户切换采集方式</td><td><span class="st part">分入口</span></td><td>四入口各就其位（详情页 / 订阅页 / 引入面板 / onboarding 三来源卡 <code>page.tsx:256-280</code>）；统一形态＝详情页"订阅此号"快捷入口 + TopBar 导航收口（不做四方式 Tab，属既裁口径）</td></tr>
+        <tr><td>3</td><td>采集整号全部文章</td><td><span class="st no">不可用</span></td><td>执行链四环全断 + RedFox 账户积分 0.0（09-19 活体对照：Key 有效、3201 余额不足）</td></tr>
+        <tr><td>4</td><td>只采集一篇文章</td><td><span class="st ok">已验证</span></td><td>全链活体验证：202 → 5s READY → SSE 引用带真实文章标题（09-13）</td></tr>
+        <tr><td>5</td><td>绑定主流知识库（ima / 飞书 / 扣子 / Notion）</td><td><span class="st no">不可用</span></td><td>仅 builtin 真实可用（<code>engine_port.py:210-216</code>）；Ragflow 6 + SaaS 6 共 12 方法 NotImplementedError；D1=A 已裁（引擎语义）、D10 为唯一残锁；Notion＝CMS 挂起留档</td></tr>
+        <tr><td>6a</td><td>公众号文章分类</td><td><span class="st no">不可用</span></td><td>models 全域 grep category / topic / tags = 0 命中；迁移链 4 版本无相关列；排 T3.2</td></tr>
+        <tr><td>6b</td><td>免费的公共信息输出</td><td><span class="st part">站内先行</span></td><td>站内公共库读 / 拷贝链在（<code>spaces.py:39/55</code>）；is_public 写端点补建中（T1.4.1 在途）；对外渠道暂缓（D5 已裁）</td></tr>
+      </tbody>
+    </table>
+
+    <div class="rule"></div>
+
+    <table>
+      <caption>前端三问</caption>
+      <thead><tr><th style="width:34px">#</th><th style="width:150px">问题</th><th style="width:110px">判定</th><th>依据（本批实测）</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>前端是否完成</td><td><span class="st part">7 / 9</span></td><td>9 路由 7 实 2 壳（/engines、/public 各 36 物理行）；not-found / error / global-error 全缺</td></tr>
+        <tr><td>2</td><td>交互正常 · 是否测试</td><td><span class="st part">主链已验证</span></td><td>主链活体绿 + vitest 9 文件 89 用例 + e2e 单文件 9 用例；缺口＝真实态 e2e 自动化（N13）、整号链无真实数据流</td></tr>
+        <tr><td>3</td><td>组件化 · 复用度</td><td><span class="st part">基座 6</span></td><td>6 个共享组件（AuthContext 复用最广 7 页）；巨石：AddArticlePanel 651 行、api.ts 1213 行；loading / error 模式多份手写 → T1.2 / T1.2.5</td></tr>
+      </tbody>
+    </table>
+
+    <div class="rule"></div>
+
+    <table>
+      <caption>后端五问</caption>
+      <thead><tr><th style="width:34px">#</th><th style="width:150px">问题</th><th style="width:110px">判定</th><th>依据（本批实测）</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>后端是否正常</td><td><span class="st ok">门禁绿</span></td><td>脱机 161 passed + 68 skipped；本批定向四文件 53 passed / 0.91s；连栈复验待栈恢复后执行（D6）</td></tr>
+        <tr><td>2</td><td>后台管理系统</td><td><span class="st no">不存在</span></td><td>26 端点零 admin；users 表无 role / is_admin 列（<code>entities.py:16-25</code>）</td></tr>
+        <tr><td>3</td><td>管理板块齐全</td><td><span class="st no">无板块</span></td><td>M3 全量已裁（D2），启动须先过 M3 SPEC（含 role 列迁移，D9=a 终底）</td></tr>
+        <tr><td>4</td><td>板块增删改查</td><td><span class="st part">属主级残缺</span></td><td>缺：空间 PATCH、文档删除 / 详情 / 更新、订阅退订 / 修改、source 删除、GET /jobs 列表（服务层 <code>list_jobs</code> 已在、仅缺路由）</td></tr>
+        <tr><td>5</td><td>批量修改等扩展</td><td><span class="st no">唯一 batch</span></td><td>唯一批量为公共库 links 拷贝；批量采集随 T2.6（批量粘贴 Job 化）上桌；后台批量操作随 M3（N9）</td></tr>
+      </tbody>
+    </table>
+
+    <div class="rule"></div>
+
+    <table>
+      <caption>数据四问</caption>
+      <thead><tr><th style="width:34px">#</th><th style="width:150px">问题</th><th style="width:110px">判定</th><th>依据（本批实测）</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>主平台 Aidean 登录注册</td><td><span class="st ok">已验证</span></td><td>OIDC 双 issuer 闭环；09-13 活体：注册 / 登录 → 302 / 307 签码 → callback 兑换 → /me → 建空间全绿</td></tr>
+        <tr><td>2</td><td>是否测试</td><td><span class="st ok">双档 + 双轮</span></td><td>test_auth 12 例；SSO 测试方案 + 联调方案两份在档；09-11 管理者终验 + 09-13 活体终验</td></tr>
+        <tr><td>3</td><td>图文采集测试</td><td><span class="st part">文本强 / 图片弱</span></td><td>抽取 / 清洗 / 质量分 24 例单测 + 活体 READY；图片仅存 mmbiz.qpic.cn 外链（<code>extractor.py:42/179</code>），防盗链未实测</td></tr>
+        <tr><td>4</td><td>是否重复采集</td><td><span class="st ok">五层幂等</span></td><td>短链映射 / READY 复用 / uq_doc_asset_space / version+1 superseded / copy skipped（<code>kb.py:179-231</code>、<code>asset.py:74-103</code>）；T2.7 仅测试加固</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="s3">
+    <div class="sec-head"><span class="sec-no">03</span><h2>本批校准 C1~C6</h2><span class="en">Calibration</span></div>
+    <p>对既有文档中六处容易误读的口径做精确化——全部为"精度校准"，不构成翻案；已同步进大纲 v1.2 §六。</p>
+    <table>
+      <thead><tr><th style="width:36px">#</th><th style="width:280px">原口径 → 校准后口径</th><th>证据锚</th></tr></thead>
+      <tbody>
+        <tr><td>C1</td><td>"订阅响应补 nextRunAt"（推定两项全缺） → <strong>nextRunAt 已透出</strong>；差量三层化：呈现（前端未展示）/ DTO（补 lastSuccessAt、consecutiveEmptySyncs 两键）/ 消费（scheduler = T2.4.1）</td><td class="mono-cell">subscription.py:119/165 · page.tsx:138 · entities.py:80-82</td></tr>
+        <tr><td>C2</td><td>"next_run_at 悬空零触发方" → <strong>已写值、零消费方</strong>；建订阅即写 <code>now()</code>，"悬空"的准确语义是无消费方而非未写值</td><td class="mono-cell">subscription.py:115-122</td></tr>
+        <tr><td>C3</td><td>"U6 预计篇数：无任何 UI / 端点承载" → <strong>承载链已通</strong>：后端 counts 已在 GET /jobs/{id}，前端订阅页已渲染进度条与"重试失败 N 篇"；余量＝Manifest 数据先到 + 入口级显式文案（可选）</td><td class="mono-cell">subscriptions.py:108-116 · api.ts:157-168 · page.tsx:239-278</td></tr>
+        <tr><td>C4</td><td>"mock e2e 9/9"（单一口径） → <strong>双组件分立</strong>：vitest ＝ tests/ 9 文件 89 用例；Playwright e2e ＝ e2e/trunk.spec.ts 单文件 9 用例</td><td class="mono-cell">目录清点 + test( 计数</td></tr>
+        <tr><td>C5</td><td>"161 passed / 68 skipped"（单一展开口径） → <strong>双口径并记</strong>：物理 def test_ ＝ 20 文件 / 205 用例；执行口径 ＝ 161 + 68（余差为 parametrize 展开）</td><td class="mono-cell">逐文件 def test_ 计数</td></tr>
+        <tr><td>C6</td><td>核验"独立第二源" → <strong>如实登记缺口</strong>：本批 3 路核验 Agent 因 LLM 请求故障全部中断（含 1 次重试），全部核验面由主线逐项补位完成、判定零翻案</td><td class="mono-cell">同台账 §十五 先例</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="s4">
+    <div class="sec-head"><span class="sec-no">04</span><h2>新增原子任务（并入既有轨道）</h2><span class="en">New Atoms</span></div>
+    <div class="blocks">
+      <div class="block">
+        <div class="bt"><span class="n">T1.2.5 · C 域 · 阶段 5.3</span>api.ts 分域拆分</div>
+        <div>
+          <p>单文件 1213 物理行 → 域模块（auth / spaces / docs / chat / engines / public / subscriptions / onboarding）+ barrel 出口；Mock 开关与信封解包抽 <code>api-core</code>。</p>
+          <p><span class="tag">验收</span>tsc 0 + vitest 89 绿 + 全站 import 零遗漏 ｜ <span class="tag">证据</span><code>lib/api.ts</code> 物理行 1213 ｜ <span class="tag">说明</span>N5 组件化的文件层延伸</p>
+        </div>
+      </div>
+      <div class="block">
+        <div class="bt"><span class="n">T2.6 · B+C 域 · 第二波</span>批量粘贴 Job 化</div>
+        <div>
+          <p>后端批量端点（<code>POST /spaces/{id}/docs:batch</code> → Job / JobItem 簇，逐篇复用 ingest 缓存链）；前端 runBatch 从串行 await 切 Job 轮询（提交即返回、进度条、刷新不丢、失败汇总重试）。</p>
+          <p><span class="tag">验收</span>50 篇批量 202 + 刷新进度不丢 + PARTIAL 重试可用 ｜ <span class="tag">证据</span><code>AddArticlePanel.tsx:199-215</code> 现为前端串行、无断点持久化</p>
+        </div>
+      </div>
+      <div class="block">
+        <div class="bt"><span class="n">T2.7 · B 域 · 第二波</span>幂等回归锁定</div>
+        <div>
+          <p>五层幂等链 + version / superseded + uq 约束簇的显式用例集 + 同 URL 并发竞态断言；属<strong>测试加固</strong>（防整号施工触区回归），不改变"数据问 4 无功能任务项"的结论。</p>
+          <p><span class="tag">验收</span><code>tests/test_idempotency_lock.py</code> 全绿并入 CI 必跑集 ｜ <span class="tag">证据</span><code>kb.py:179-231</code> · <code>asset.py:74-103</code> · <code>entities.py:47-222</code></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="s5">
+    <div class="sec-head"><span class="sec-no">05</span><h2>总览与施工序</h2><span class="en">Tracks &amp; Waves</span></div>
+    <p>8 轨道骨架与三波施工序经钢人论证全部成立；本批未改骨架编号，仅按 §03/§04 做增量。</p>
+    <div class="tracks">
+      <div class="track"><div class="th"><span class="tid">T1</span><span class="tn">零依赖并行线</span><span class="ts">立即开工</span></div><p>前端收口（壳页 / 兜底页 / citations.engine / onboarding）· 组件化 · 公共库一期（D9 已解锁）· 技术债（含 CI 补全、分页统一）。</p></div>
+      <div class="track"><div class="th"><span class="tid">T2</span><span class="tn">整号采集闭环</span><span class="ts">第二 / 三波</span></div><p>RedFox 实拉（D3）→ Manifest 同步 → Job 执行器 → 调度器；施工半程可脱机建至"待活体验证"态；新增 T2.6 / T2.7。</p></div>
+      <div class="track"><div class="th"><span class="tid">T3</span><span class="tn">检索质量 + 分类</span><span class="ts">立即开工</span></div><p>意图解析（五分类）· 分类体系迁移 + 打标 + 筛选 UI；3.1.1 / 3.2.1 已完成基线。</p></div>
+      <div class="track"><div class="th"><span class="tid">T4</span><span class="tn">引擎实接</span><span class="ts">待 D10 / Key</span></div><p>RAGFlow 实接（Key 轮换）· Coze 先行（D10）· 飞书扩槽 SPEC · ima 调研门禁；Notion＝CMS 挂起留档。</p></div>
+      <div class="track"><div class="th"><span class="tid">T5</span><span class="tn">后台 M3 全量</span><span class="ts">待 SPEC</span></div><p>任务中心 / 信息源管理 / 文章浏览 / 引擎 Key / 审核位 / 计费预留 / 批量操作；先过 M3 SPEC（含 role 列迁移）。</p></div>
+      <div class="track"><div class="th"><span class="tid">T6</span><span class="tn">微信通道 / 主动推送</span><span class="ts">第二波起</span></div><p>LangBot HTTP Bot 接线（HMAC 契约已实测）· 主动推送触发入口并 M3 · clawbot 备选。</p></div>
+      <div class="track"><div class="th"><span class="tid">T7</span><span class="tn">M2 收官</span><span class="ts">待 D6</span></div><p>真实态 SSO + 采集链 e2e 自动化（N13）· 连栈门禁全绿复跑（202+12 口径）。</p></div>
+      <div class="track"><div class="th"><span class="tid">T8</span><span class="tn">图片资产化</span><span class="ts">待 D6</span></div><p>防盗链实测 → 代理路由 / 转存二选一；验证前零代码改动（D4）。</p></div>
+    </div>
+    <div class="rule"></div>
+    <div class="wave"><div class="wn">第一波</div><div><div class="wt">立即开工 · 零外部依赖</div><div class="wd">T1 全轨道 + T3。不等任何裁决与外部动作，D9 已解锁公共库一期。</div></div></div>
+    <div class="wave"><div class="wn">第二波</div><div><div class="wt">脱机施工半程</div><div class="wd">T2.2~2.4 / T2.6 / T2.7（按合法种子先例建至"待活体验证"态）+ T5.0 SPEC 起草 + T4.3 / T4.4（零代码）+ T6.1 接线。</div></div></div>
+    <div class="wave"><div class="wn">第三波</div><div><div class="wt">解锁后活体</div><div class="wd">D3 积分 → 整号活体终验当日直跑；D6 → 连栈复验 + 图片实测 + N13；D10 → Coze；RAGFlow Key → main 实接；R7 / PAT → 安全合规。</div></div></div>
+  </section>
+
+  <section id="s6">
+    <div class="sec-head"><span class="sec-no">06</span><h2>依赖锁矩阵</h2><span class="en">Dependency Locks</span></div>
+    <table>
+      <thead><tr><th style="width:190px">锁</th><th style="width:230px">锁住什么</th><th>解锁动作</th><th style="width:90px">归属</th></tr></thead>
+      <tbody>
+        <tr><td>D3 · RedFox 积分</td><td>T2.1 / T2.5 整号活体</td><td>充值 / 领积分（单次调用 0.4 积分）</td><td>用户</td></tr>
+        <tr><td>D6 · Docker 环境</td><td>T7 / T8.1 / 连栈复验 / 真实数据流</td><td>本批已恢复可达（起栈窗口）；连栈复验随后执行</td><td>用户 / 项目</td></tr>
+        <tr><td>D10 · Coze / Dify / FastGPT 凭证</td><td>T4.2 引擎实接</td><td>确认凭证与配额（唯一残锁）</td><td>用户</td></tr>
+        <tr><td>RAGFlow Key</td><td>T4.1 main 引擎实接</td><td>轮换 + env 注入（KB_ENGINE_ALLOWLIST / MAIN_KB_API_BASE）</td><td>用户</td></tr>
+        <tr><td>R7 密钥轮换（含 git PAT）</td><td>T1.5.6 / 安全合规</td><td>MAIN_KB / OIDC / 硅基流动 / remote PAT（连续三批催办）</td><td>用户</td></tr>
+        <tr><td>LANGBOT_ADMIN_PASSWORD</td><td>2 例 langbot_real 冒烟</td><td>宿主注入后连栈口径转 202+0 skip</td><td>用户</td></tr>
+        <tr><td>ima 可行性调研</td><td>飞书 / ima 扩槽排产</td><td>调研 PASS 前不得排产（防把未知当承诺）</td><td>项目侧</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="s7">
+    <div class="sec-head"><span class="sec-no">07</span><h2>验证与门禁（本批实测）</h2><span class="en">Verification</span></div>
+    <table>
+      <thead><tr><th style="width:220px">检查</th><th style="width:250px">命令 / 方式</th><th>实测结果</th></tr></thead>
+      <tbody>
+        <tr><td>后端定向 pytest</td><td class="mono-cell">pytest redfox / extractor / normalizer / resolver</td><td><strong>53 passed / 0 failed</strong>（0.91s）</td></tr>
+        <tr><td>前端单测</td><td class="mono-cell">npx vitest run</td><td><strong>9 files / 89 passed</strong>（1.72s；exit 1 为 Vite configLoader 已知警告，非失败）</td></tr>
+        <tr><td>端点枚举</td><td class="mono-cell">按 router 变量名逐一枚举</td><td><strong>26 个 / 9 文件</strong>（含 engines PATCH、subscriptions 6、jobs 2）</td></tr>
+        <tr><td>整号断链复核</td><td class="mono-cell">grep query_work_list / worker / scheduler</td><td>生产调用方 <strong>0</strong>；无 worker / scheduler 文件；JobItem 停 PENDING</td></tr>
+        <tr><td>Docker 状态</td><td class="mono-cell">docker ps</td><td>本批恢复可达；起栈窗口实测 postgres / redis 已 Up（并行批次进行中）</td></tr>
+        <tr><td>git 状态</td><td class="mono-cell">git status / log</td><td>HEAD 5b17da2；工作树含并行在途（3 后端文件 + 1 测试 + 3 文档），本批未触碰</td></tr>
+      </tbody>
+    </table>
+    <div class="rule"></div>
+    <p class="dim">门禁口径：Machine Gate（命令退出码）为唯一 DONE 依据；本页所有结论均可按上述命令原样复跑。</p>
+  </section>
+
+  <section id="s8">
+    <div class="sec-head"><span class="sec-no">08</span><h2>前提与局限</h2><span class="en">Limits</span></div>
+    <ol class="limits">
+      <li>判定基于 HEAD <code>5b17da2</code> + 工作树实测（2026-09-22 15:0x）；若后续代码演进，以可运行代码为准回写。</li>
+      <li>连栈口径（202 passed / 2 skipped）自 09-17 未复跑；本批 Docker 起栈窗口中，连栈复验由恢复后的对应批次执行——本页不据此宣称"连栈绿"。</li>
+      <li>本批 3 路独立核验 Agent 因环境 LLM 故障全部中断（含 1 次重试）；全部核验面由主线逐项补位完成、判定零翻案，但"独立第二源"证据强度低于前几轮（C6 如实登记）。</li>
+      <li>RedFox API 响应形状以活体为准（当前以 mock 单测锁定形状）；T2.1.1 活体时如形状漂移，返工面隔离在防腐层内。</li>
+      <li>T5（M3）/ T4.3（飞书扩槽）启动须走 SPEC → APPROVE；本页不构成对并行实施批次成果的验收。</li>
+    </ol>
+  </section>
+
+  </main>
+</div>
+
+<footer class="colophon">
+  <div>
+    <div class="ct">证据与口径</div>
+    <ul>
+      <li>全文证据锚为 file:line 或现场命令，均可原样复跑；判定口径＝只信实测、不信自述。</li>
+      <li>方法：5W1H 发散 → 致命追问 + 双向钢人 → 幸存结论重构（第八批，2026-09-22）。</li>
+      <li>关联文档：需求复核与再设计（md 全量版）· 剩余任务原子化执行大纲 v1.2 §六 · 任务进度台账 §二十。</li>
+    </ul>
+  </div>
+  <div>
+    <div class="ct">版本</div>
+    <ul>
+      <li class="mono">v1.0 · 2026-09-22 · 第八批交付（AIDEANBOT REMAINING-WORK REVIEW）</li>
+      <li class="mono">基线：HEAD 5b17da2 · origin/master 同步</li>
+      <li class="mono">未推送远端（待管理者指示）；本页零业务代码改动。</li>
+    </ul>
+  </div>
+</footer>
+
+</div>
+</body>
+</html>

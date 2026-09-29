@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AideanBot 剩余开发 · 启动前讨论稿（2026-09-22 · 核验版）</title>
+<style>
+:root{
+  --bg:#0f1115; --panel:#151823; --panel2:#1a1e2c; --ink:#e8eaf0; --ink-dim:#9aa1b2; --ink-faint:#6b7284;
+  --line:rgba(255,255,255,.09); --line2:rgba(255,255,255,.16);
+  --accent:#e8a33d; --accent-dim:rgba(232,163,61,.14);
+  --ok:#5fb97a; --part:#e8a33d; --bad:#e0655f; --warn:#5b9bd5;
+  --mono:"Cascadia Mono","JetBrains Mono",Consolas,"Courier New",monospace;
+  --sans:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:48px 40px 80px}
+/* cover */
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+h1{font-size:34px;font-weight:600;letter-spacing:-.01em;margin:10px 0 6px}
+.sub{color:var(--ink-dim);font-size:14px}
+.meta-row{display:flex;flex-wrap:wrap;gap:18px;margin-top:18px;padding:14px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12px;color:var(--ink-faint)}
+.meta-row b{color:var(--ink-dim);font-weight:500}
+/* sections */
+section{margin-top:52px}
+h2{font-size:21px;font-weight:600;letter-spacing:-.005em;padding-bottom:10px;border-bottom:1px solid var(--line2);margin-bottom:20px}
+h2 .no{font-family:var(--mono);font-size:13px;color:var(--accent);margin-right:10px;letter-spacing:.08em}
+h3{font-size:16px;font-weight:600;margin:26px 0 10px}
+p{margin:10px 0;color:var(--ink)}
+p.dim{color:var(--ink-dim)}
+.note{background:var(--panel);border:1px solid var(--line);padding:14px 18px;font-size:13.5px;color:var(--ink-dim);margin:14px 0}
+.note b{color:var(--ink)}
+.verdict{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;border:1px solid var(--line2);border-radius:2px;letter-spacing:.05em;vertical-align:2px}
+.v-ok{color:var(--ok);border-color:rgba(95,185,122,.4)}
+.v-part{color:var(--part);border-color:rgba(232,163,61,.45)}
+.v-bad{color:var(--bad);border-color:rgba(224,101,95,.4)}
+.v-warn{color:var(--warn);border-color:rgba(91,155,213,.4)}
+/* headline strip */
+.strip{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line2);margin:22px 0}
+.strip>div{padding:16px 18px;border-right:1px solid var(--line)}
+.strip>div:last-child{border-right:none}
+.strip .lab{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:6px}
+.strip .val{font-size:14px;line-height:1.55}
+/* tables */
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:14px 0}
+th{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;color:var(--ink-faint);text-transform:uppercase;text-align:left;padding:8px 12px;border-bottom:1px solid var(--line2);font-weight:500}
+td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink)}
+td.mut{color:var(--ink-dim)}
+td code, p code, li code{font-family:var(--mono);font-size:12px;background:var(--accent-dim);color:var(--accent);padding:1px 5px;border-radius:2px}
+code.path{background:transparent;color:var(--ink-dim);padding:0}
+/* d-grid */
+.dgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0}
+.dcard{border:1px solid var(--line2);padding:16px 18px;background:var(--panel)}
+.dcard .dno{font-family:var(--mono);font-size:12px;color:var(--accent);letter-spacing:.08em}
+.dcard h4{font-size:14.5px;font-weight:600;margin:6px 0 8px}
+.dcard p{font-size:13px;color:var(--ink-dim);margin:4px 0}
+.dcard .rec{margin-top:10px;padding:8px 12px;background:var(--panel2);border-left:2px solid var(--accent);font-size:12.5px;color:var(--ink)}
+.dcard .rec b{color:var(--accent)}
+/* pipeline svg block */
+figure{margin:20px 0}
+figcaption{font-family:var(--mono);font-size:11.5px;color:var(--ink-faint);letter-spacing:.06em;margin-top:8px}
+/* list */
+ul{margin:8px 0 8px 20px}
+li{margin:5px 0;color:var(--ink)}
+li::marker{color:var(--ink-faint)}
+.checklist li{list-style:none;position:relative;padding-left:22px}
+.checklist li::before{content:"";position:absolute;left:0;top:9px;width:9px;height:9px;border:1px solid var(--line2)}
+.checklist li::before{background:var(--accent-dim);border-color:var(--accent)}
+.footer{margin-top:64px;padding-top:16px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11.5px;color:var(--ink-faint);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+@media (max-width:760px){.wrap{padding:28px 18px 60px}.strip{grid-template-columns:1fr}.strip>div{border-right:none;border-bottom:1px solid var(--line)}.dgrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">AideanFleet · Manager Review · 只信实测</div>
+  <h1>AideanBot 剩余开发 · 启动前讨论稿</h1>
+  <div class="sub">核心 6 问 · 前端 3 问 · 后端 5 问 · 数据 4 问 —— 逐条判定 + 剩余开发执行方案 + 待裁决决策点</div>
+  <div class="meta-row">
+    <span><b>日期</b> 2026-09-22</span>
+    <span><b>基线</b> HEAD 205c151 + 28 项在途改动</span>
+    <span><b>取证</b> 主线 30+ 命令穿透 + 独立前端核验 8/8 成立</span>
+    <span><b>标记</b> ✅已验 · ◐部分/壳在 · ❌不支持</span>
+  </div>
+</header>
+
+<section>
+  <h2><span class="no">§0</span>一句话结论</h2>
+  <div class="strip">
+    <div><div class="lab">已完成且验证</div><div class="val">单篇采集问答主链路（前后端 + SSO + 幂等五层）——<b>产品 MVP 成立</b></div></div>
+    <div><div class="lab">壳在待通</div><div class="val">整号采集（积分阻塞 + worker 未建）· 公共库运营入口 · /engines /public 两壳页 · 外部引擎实接 · 分类体系</div></div>
+    <div><div class="lab">完全缺失</div><div class="val">后台管理系统 · 外部知识库绑定 · 批量管理操作 · 图片落盘</div></div>
+  </div>
+  <p class="dim">一句话口径：剩余开发不是"修坏的东西"，而是<b>"补没建的东西"</b>。主战场 = 整号采集闭环 + 管理后台 + 前端收口；开工前需要你裁决 §六 的 D1~D8。</p>
+</section>
+
+<section>
+  <h2><span class="no">§1</span>基线快照（今日实测）</h2>
+  <table>
+    <tr><th style="width:220px">项</th><th>实测结果</th><th style="width:90px">判定</th></tr>
+    <tr><td>后端单测（脱机）</td><td>161 passed / 68 skipped / 0 failed（09-19 两轮 408s / 423s）</td><td><span class="verdict v-ok">✅ 绿</span></td></tr>
+    <tr><td>前端测试 / 类型 / 构建</td><td>vitest 89 passed · tsc 0 error · next build 12 路由</td><td><span class="verdict v-ok">✅ 绿</span></td></tr>
+    <tr><td>静态检查</td><td>ruff 全绿 · mypy 56 files 无 issue</td><td><span class="verdict v-ok">✅ 绿</span></td></tr>
+    <tr><td>连真实栈门禁</td><td>口径 202 passed / 2 skipped；<b>今日 Docker 未运行无法复验</b></td><td><span class="verdict v-warn">⚠ 遗留债</span></td></tr>
+    <tr><td>后端端点</td><td>26 个（auth4+chat1+engines2+extract1+onboarding1+resolve1+spaces9+subscriptions6+system1），全部注册于 main.py</td><td>—</td></tr>
+    <tr><td>git 工作树</td><td>28 项未提交改动（12 改 + 16 新）——开工前建议分域提交固线</td><td><span class="verdict v-warn">⚠</span></td></tr>
+    <tr><td>端口 / fleet 控制台</td><td>3000/3333/8000/5300 未监听；5000 被 PID 30956（<code class="path">http.server → E:\Demo\Test09181750</code>）占用 → 控制台不可用；fleet.db 最后业务写入 09-19</td><td><span class="verdict v-warn">⚠ 断档</span></td></tr>
+  </table>
+</section>
+
+<section>
+  <h2><span class="no">§2</span>核心六问</h2>
+
+  <h3>Q1 · 有哪些采集方式？ <span class="verdict v-part">◐ 4 条链路 3 通 1 断</span></h3>
+  <table>
+    <tr><th style="width:150px">方式</th><th style="width:80px">判定</th><th>证据</th></tr>
+    <tr><td>① 单篇链接</td><td><span class="verdict v-ok">✅</span></td><td class="mut">POST /docs(202)→READY；白名单 <code>mp.weixin.qq.com</code>（source_resolver.py:24）；活体 09-13：202 → 5s READY → SSE 带真实引用</td></tr>
+    <tr><td>② 批量粘贴</td><td><span class="verdict v-ok">✅</span></td><td class="mut">api.ts:745 换行切分 + AddArticlePanel:220 逐篇串行；后端无批量端点（纯前端循环）</td></tr>
+    <tr><td>③ 公共库引入</td><td><span class="verdict v-ok">✅</span></td><td class="mut">GET /spaces/public + POST links copy 幂等（public_library.py:61,92）</td></tr>
+    <tr><td>④ 整号订阅</td><td><span class="verdict v-part">◐ 断链</span></td><td class="mut">端点 6 个 + 模型 5 层在；但 query_work_list 零生产调用方、无 worker/scheduler（jobs.py:3 仅注释、compose 无 worker 服务）、JobItem 停 PENDING</td></tr>
+  </table>
+  <p class="dim">前端已自我声明：AddArticlePanel.tsx:344「当前仅支持单篇公众号文章链接，整号批量入库暂未开放」。</p>
+
+  <h3>Q2 · 是否支持用户切换采集方式？ <span class="verdict v-part">◐ 分入口无统一切换</span></h3>
+  <p>单篇/批量/公共库在空间详情页，整号在 /subscriptions 独立页，首次引导走 onboarding 三步三来源卡；<b>无</b>「按链接/按公众号」Tab 切换器，需求文档 U1 的「仅本篇/整库[置灰]」卡片未实现。对策：N4/N6 统一入口挂阶段 5。</p>
+
+  <h3>Q3 · 能否采集公众号全部文章？ <span class="verdict v-bad">❌</span></h3>
+  <p>四环断链：清单实拉（1.1.2）→ Manifest 同步（1.2）→ Job 执行器（1.3）→ 增量调度器（1.4）。<b>硬阻塞 = RedFox 积分 0.0</b>（09-19 活体：Key 有效、3201 余额不足、单次 0.4 积分）——用户侧充值动作（→ D3）。</p>
+
+  <h3>Q4 · 能否只采集一篇文章？ <span class="verdict v-ok">✅ 活体验证</span></h3>
+  <p>单篇 MVP 全链活体终验（09-13）：ingest 202 → 5 秒 READY → SSE 帧序 meta/citations/delta×12/done，引用带真实文章标题。幂等与质量分链路齐备。</p>
+
+  <h3>Q5 · 能否绑定主流知识库（ima / 飞书·扣子 / Notion）？ <span class="verdict v-bad">❌ 零集成 · 语义待裁决</span></h3>
+  <p>业务代码 grep <code>ima|feishu|lark|notion</code> 仅命中 1 处注释（EngineSwitcher.tsx:8），零实现。现状是 <b>RAG 引擎位</b>而非知识库绑定：5 槽中仅 builtin(LangBot) 真实可用，main(RAGFlow)/coze/dify/fastgpt 六方法全 NotImplementedError（R1 三条件口径，ENGINE_IMPLEMENTED 仅 builtin=True）。三种语义对应三套工程（A 检索引擎 / B 导出归档 / C 采集来源），须先裁决主语义（→ D1）。</p>
+
+  <h3>Q6 · 文章分类 + 免费公共信息输出？ <span class="verdict v-bad">❌ 分类</span> <span class="verdict v-part">◐ 公共库</span></h3>
+  <p><b>分类</b>：entities.py 无 category/topic/tags 任何字段，前端零分类 UI（G6 → D5）。<b>公共库</b>：读端点 + copy 引入已实现；但 <code>is_public</code> 无任何写端点（只能 SQL 置位，不可运营），/public 是 36 行壳页且零导航入口。<b>免费</b>：需求明确不做计费 → 站内天然免费；对外公共输出渠道（公开页/API/推送）不存在（→ D5）。</p>
+</section>
+
+<section>
+  <h2><span class="no">§3</span>前端三问</h2>
+
+  <h3>F1 · 前端是否完成？ <span class="verdict v-part">◐ 约 7/9</span></h3>
+  <p>7 页真实接通（工作台/onboarding/spaces/详情/chat/subscriptions/SSO 回调）；<code>/engines</code> 与 <code>/public</code> 为 <b>36 行壳页</b>（数据加载后从不渲染，全站零导航入口）。另缺 not-found / error / global-error / loading 四件套（实测 0 命中）→ 无 404 与全局错误兜底；空间列表只读（无创建/改名/删除按钮）；U1"仅本篇/整库"卡片未做。</p>
+
+  <h3>F2 · 前后端交互是否正常、是否经过测试？ <span class="verdict v-part">◐ 主链路已验证</span></h3>
+  <p>✅ 真实栈：SSO 全链 + 建空间 + ingest→READY→SSE（09-13）；/subscriptions 实调 6 个真实 api 函数。✅ 自动化门禁全绿。<b>缺口</b>：真实态 SSO 无 e2e 自动覆盖、整号链无真实数据流可测、两壳页未接、连栈口径待 Docker。</p>
+
+  <h3>F3 · 组件式开发与复用？ <span class="verdict v-part">◐ 基座好，重复中高</span></h3>
+  <p>共享组件 6 个（AuthContext 85 行 6 页复用最广 / TopBar 107 / AddArticlePanel <b>651</b> / PublicLibraryPicker 133 / EngineSwitcher 141 / DocStatusBadge 33）；lib/api.ts 1213 行统一出口设计良好。冗余实证：loading/error/骨架/确认模态在 ≥6 处各自手写（engines 与 public 两页逐行同构复制）；651 行巨石是最大复杂度风险 → N5 重构挂阶段 5。</p>
+</section>
+
+<section>
+  <h2><span class="no">§4</span>后端五问</h2>
+
+  <h3>B1 · 后端是否正常？ <span class="verdict v-ok">✅ 门禁全绿</span></h3>
+  <p>pytest 脱机 161/68/0 + ruff 全绿 + mypy 56 files 无 issue。⚠ 68 skip 多为需真实 PG/Redis/LangBot 的连栈用例；连栈口径 202/2 待 Docker（→ D6）。</p>
+
+  <h3>B2 · 是否有后台管理系统？ <span class="verdict v-bad">❌ 完全不存在</span></h3>
+  <p>26 端点零 admin；role 字段仅从主平台透传存储、无鉴权消费；前端无 admin 页。管理动作全靠人肉（Key 靠 env、公共库靠 SQL、清理靠直删 DB）。</p>
+
+  <h3>B3 · 管理板块是否齐全？ <span class="verdict v-bad">❌ 需先立项（→ D2）</span></h3>
+
+  <h3>B4 · 各板块增删改查？ <span class="verdict v-part">◐ 属主级残缺</span></h3>
+  <table>
+    <tr><th style="width:120px">资源</th><th>已有</th><th>实测缺口</th></tr>
+    <tr><td>空间</td><td class="mut">增/删/查 ✅</td><td>无 PATCH 改名</td></tr>
+    <tr><td>文档</td><td class="mut">列表/提交/状态 ✅</td><td>无删除 / 无详情 / 无更新</td></tr>
+    <tr><td>订阅</td><td class="mut">注册/订阅 ✅</td><td>无退订 / 无改同步策略</td></tr>
+    <tr><td>source</td><td class="mut">注册/列表 ✅</td><td>无删除</td></tr>
+    <tr><td>Job</td><td class="mut">单查/重试 ✅</td><td>无任务列表端点（GET /jobs）</td></tr>
+    <tr><td>公共库</td><td class="mut">列表/copy ✅</td><td>is_public 无写端点</td></tr>
+  </table>
+
+  <h3>B5 · 批量修改等拓展？ <span class="verdict v-bad">❌</span></h3>
+  <p>唯一批量 = 公共库 links copy。无批量修改/导出/导入/删除；整号执行器缺失使"批量采集"这条最核心的批量能力也未通（N9 随后台立项设计）。</p>
+</section>
+
+<section>
+  <h2><span class="no">§5</span>数据四问</h2>
+
+  <h3>D-1 · 与主平台 SSO 交互是否正常？ <span class="verdict v-ok">✅</span></h3>
+  <p>auth 4 端点；OIDC 双 issuer 09-11 闭环；余额实时聚合不落库（auth.py:150，ADR-0002 铁律）。09-13 活体：注册/登录 → 302/307 签码 → callback 兑换 → /me → 建空间全绿。</p>
+
+  <h3>D-2 · 是否经过测试？ <span class="verdict v-ok">✅</span></h3>
+  <p>test_auth 12 例 + 《SSO测试方案》《SSO联调测试方案》两份文档 + 09-11 / 09-13 两轮真实栈终验证据。</p>
+
+  <h3>D-3 · 公众号图文采集是否经过测试？ <span class="verdict v-part">◐ 文本充分、图片薄弱</span></h3>
+  <p>文本侧：24 例单测 + 活体 READY + 四码位运行时实证。图片侧：extractor 仅提取 ImageInfo 元数据（:42, :177-184），<b>不下载、不落盘</b>，正文仅存 mmbiz.qpic.cn 外链——防盗链/外链失效风险未验证未处理（→ D4 先实测再定方案）。</p>
+
+  <h3>D-4 · 是否会重复采集？ <span class="verdict v-ok">✅ 幂等五层</span></h3>
+  <table>
+    <tr><th style="width:60px">层</th><th>机制</th><th>证据</th></tr>
+    <tr><td>①</td><td class="mut">短链先查映射，零请求反解</td><td><code>kb.py:182</code></td></tr>
+    <tr><td>②</td><td class="mut">同 URL READY 资产直传缓存正文、不重抓</td><td><code>kb.py:191-215</code></td></tr>
+    <tr><td>③</td><td class="mut">同空间同 URL 不堆积文档</td><td><code>uq_doc_asset_space（entities.py:169）</code></td></tr>
+    <tr><td>④</td><td class="mut">hash 变化 → version+1，旧 doc superseded</td><td><code>kb.py:231</code></td></tr>
+    <tr><td>⑤</td><td class="mut">公共库 copy 幂等 skipped</td><td><code>public_library.py:61,92</code></td></tr>
+  </table>
+  <p class="dim">设计内允许：同一资产可存在于多个空间（每空间一个 doc，空间隔离），非缺陷。</p>
+</section>
+
+<section>
+  <h2><span class="no">§6</span>剩余开发执行方案（AideanFleet 流程体系）</h2>
+  <p>沿用三套既有纪律：<b>六步循环</b>（文档 → spec → 实现 → 测试 → 回写 → 摘要；Route 不写业务逻辑、providers 唯一防腐层）、<b>AideanFleet 契约</b>（任务状态机 DRAFT→ASSIGNED→DOING→SUBMITTED→REVIEWING→DONE/PARTIAL/REWORK/BLOCKED，REWORK×3→ESCALATED；Machine Gate 权威高于 LLM；六节完成报告；密钥只入 env ${VAR}）、<b>反造假红线</b>（无 Key/余额不造成功数据；无 transcript 不判 DONE）。</p>
+
+  <figure>
+  <svg viewBox="0 0 1000 470" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">
+    <style>
+      .st{font:600 13px "PingFang SC","Microsoft YaHei",sans-serif;fill:#e8eaf0}
+      .sd{font:400 10.5px "PingFang SC","Microsoft YaHei",sans-serif;fill:#9aa1b2}
+      .sm{font:500 10px "Cascadia Mono",Consolas,monospace;letter-spacing:.06em}
+    </style>
+    <!-- phase 0 -->
+    <rect x="20" y="20" width="180" height="58" fill="none" stroke="rgba(95,185,122,.55)" stroke-width="1"/>
+    <text x="32" y="42" class="st">阶段 0 · 基线固线</text>
+    <text x="32" y="60" class="sd">28 项在途改动分域提交</text>
+    <line x1="200" y1="49" x2="240" y2="49" stroke="rgba(255,255,255,.25)" stroke-width="1"/>
+    <!-- phase 1 -->
+    <rect x="240" y="20" width="250" height="58" fill="none" stroke="rgba(232,163,61,.6)" stroke-width="1.2"/>
+    <text x="252" y="42" class="st">阶段 1 · 整号采集闭环（主战场）</text>
+    <text x="252" y="60" class="sd">RedFox 实拉→Manifest→worker→调度器</text>
+    <text x="252" y="72" class="sd sm" fill="#e0655f">⛔ D3 积分 + D6 Docker（活体验收）</text>
+    <!-- phase 2/3 -->
+    <rect x="240" y="96" width="250" height="52" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1"/>
+    <text x="252" y="117" class="st">阶段 2 · 资产补强（并行）</text>
+    <text x="252" y="134" class="sd">版本语义 / 免重传 / raw_store / N7 图片实测 ⛔D4</text>
+    <rect x="240" y="162" width="250" height="52" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1"/>
+    <text x="252" y="183" class="st">阶段 3 · 检索质量 + 分类</text>
+    <text x="252" y="200" class="sd">3.1/3.2 已落地 ✓ · 3.3 意图解析零依赖 · 3.4 分类 ⛔D5</text>
+    <!-- phase 4 -->
+    <rect x="240" y="228" width="250" height="52" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1"/>
+    <text x="252" y="249" class="st">阶段 4 · RAGFlow 引擎实接</text>
+    <text x="252" y="266" class="sd">六方法落地 + health + compose 注入 ⛔Key 轮换</text>
+    <!-- phase 5 / 5.5 -->
+    <rect x="540" y="20" width="220" height="58" fill="none" stroke="rgba(95,185,122,.55)" stroke-width="1.2"/>
+    <text x="552" y="42" class="st">阶段 5 · 前端收口 + 组件化</text>
+    <text x="552" y="60" class="sd">两壳页真实现 / 404·error 页 / 统一 Tab</text>
+    <text x="552" y="72" class="sd sm" fill="#5fb97a">✅ 零外部依赖，可立即开工</text>
+    <rect x="540" y="96" width="220" height="52" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1"/>
+    <text x="552" y="117" class="st">阶段 5.5 · 最小运营后台（N1/N8）</text>
+    <text x="552" y="134" class="sd">4 板块 + CRUD 补齐 + N9 批量 ⛔D2 裁决</text>
+    <!-- phase 6 -->
+    <rect x="540" y="162" width="220" height="52" fill="none" stroke="rgba(95,185,122,.55)" stroke-width="1.2"/>
+    <text x="552" y="183" class="st">阶段 6 · 技术债与运维</text>
+    <text x="552" y="200" class="sd">SESSION_STORE/拆码/N+1/部署文档</text>
+    <text x="552" y="212" class="sd sm" fill="#5fb97a">✅ 零外部依赖，可立即开工</text>
+    <!-- phase 7 -->
+    <rect x="540" y="228" width="220" height="52" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1"/>
+    <text x="552" y="249" class="st">阶段 7 · M2 收官 + M3</text>
+    <text x="552" y="266" class="sd">clawbot 微信通道 / 任务中心 / compose.prod</text>
+    <!-- gates column -->
+    <line x1="810" y1="20" x2="810" y2="280" stroke="rgba(255,255,255,.14)" stroke-width="1"/>
+    <text x="826" y="42" class="sm" fill="#6b7284">MACHINE GATES</text>
+    <text x="826" y="62" class="sd">pytest 连栈 ≤2 skip</text>
+    <text x="826" y="80" class="sd">ruff · mypy</text>
+    <text x="826" y="98" class="sd">tsc · vitest · build</text>
+    <text x="826" y="116" class="sd">compose config</text>
+    <text x="826" y="140" class="sm" fill="#6b7284">RED LINES</text>
+    <text x="826" y="160" class="sd">反造假：无 Key 不假成功</text>
+    <text x="826" y="178" class="sd">密钥只入 docker/.env</text>
+    <text x="826" y="196" class="sd">端口 3000/3333/8000/5300</text>
+    <text x="826" y="214" class="sd">5433/6380 · 禁 3334</text>
+    <text x="826" y="232" class="sd">原子任务独立提交</text>
+    <!-- connector arrows -->
+    <line x1="490" y1="49" x2="540" y2="49" stroke="rgba(255,255,255,.25)" stroke-width="1"/>
+    <line x1="365" y1="78" x2="365" y2="96" stroke="rgba(255,255,255,.25)" stroke-width="1"/>
+    <line x1="365" y1="148" x2="365" y2="162" stroke="rgba(255,255,255,.25)" stroke-width="1"/>
+    <line x1="365" y1="214" x2="365" y2="228" stroke="rgba(255,255,255,.25)" stroke-width="1"/>
+    <line x1="650" y1="78" x2="650" y2="96" stroke="rgba(255,255,255,.25)" stroke-width="1"/>
+    <line x1="650" y1="148" x2="650" y2="162" stroke="rgba(255,255,255,.25)" stroke-width="1"/>
+    <line x1="650" y1="214" x2="650" y2="228" stroke="rgba(255,255,255,.25)" stroke-width="1"/>
+    <!-- legend -->
+    <rect x="20" y="320" width="940" height="130" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="1"/>
+    <text x="36" y="346" class="sm" fill="#e8a33d">整号采集四环（阶段 1 内部，严格串行）</text>
+    <text x="36" y="372" class="st">1.1 RedFox Discovery 客户端补全</text><text x="276" y="372" class="sd">→ 1.1.1 骨架已落地（12 passed）· 1.1.2 实拉 ⛔积分</text>
+    <text x="36" y="394" class="st">1.2 Manifest 同步与 Diff</text><text x="276" y="394" class="sd">→ upsert 幂等 + _populate_job_items 接通清单</text>
+    <text x="36" y="416" class="st">1.3 Job 执行器 worker</text><text x="276" y="416" class="sd">→ SKIP LOCKED 取件 + 完整复用 ingest_url 缓存链 + 限流</text>
+    <text x="36" y="438" class="st">1.4 增量调度器</text><text x="276" y="438" class="sd">→ 60s 扫 ACTIVE + 水位降频 · 验收 ≥100 篇真实活体</text>
+  </svg>
+  <figcaption>FIG.1 — 剩余开发阶段路线图与机器门禁（✅=零外部依赖可立即开工 · ⛔=待用户侧条件）</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2><span class="no">§7</span>需你裁决的 8 个决策点</h2>
+  <div class="dgrid">
+    <div class="dcard"><div class="dno">D1 · 核心语义</div><h4>「绑定主流知识库」主语义</h4>
+      <p><b>A</b> RAG 引擎位（问答时检索外部库）／<b>B</b> 导出·归档目标（文章同步进用户知识库）／<b>C</b> 采集来源（从 ima/飞书导入）。未裁决前相关方向零开发。</p>
+      <div class="rec"><b>建议 B 为主</b>：产品闭环自然延伸；Notion 先行、飞书次之（wandao 已验证 15+ 平台通路）；扣子走 A 引擎位实接（骨架已在）。</div></div>
+    <div class="dcard"><div class="dno">D2 · 后台范围</div><h4>管理系统做到多大</h4>
+      <p><b>A</b> 最小运营后台 4 板块（公共库发布/回收、空间治理、引擎 Key 管理、任务监控）+ CRUD 缺口补齐；<b>B</b> 全用户管理。</p>
+      <div class="rec"><b>建议 A</b>：账号域在主平台，勿重复建设；CRUD 缺口无论是否立项都建议补齐。</div></div>
+    <div class="dcard"><div class="dno">D3 · 外部条件</div><h4>RedFox 积分充值</h4>
+      <p>整号采集活体验收硬前置（单次调用 0.4 积分，现余额 0.0）。</p>
+      <div class="rec"><b>建议充值解锁</b>；到位前 1.2~1.4 用 mock 先行，到位后一次连栈验收。</div></div>
+    <div class="dcard"><div class="dno">D4 · 方案分支</div><h4>图片落盘策略</h4>
+      <p>先 1 次活体验证 mmbiz 外链站外是否 403 裂图（Docker 恢复后 5 分钟实验）→ <b>A</b> 图片代理路由（轻）／<b>B</b> 采集时转存 raw_store（重、一劳永逸）。</p>
+      <div class="rec"><b>建议先验证，若裂图选 B</b>；验证前不改代码。</div></div>
+    <div class="dcard"><div class="dno">D5 · 形态</div><h4>分类体系 + 免费公共输出</h4>
+      <p>分类：内部组织 vs 公共库前置；输出：<b>A</b> 站内公共库（登录可读）／<b>B</b> 对外公开页/API／<b>C</b> 推送。</p>
+      <div class="rec"><b>建议</b>：分类"公共种子+LLM 打标三档+人工修正"先服务内部筛选；输出 A 先行（补 is_public 写端点），对外二期。</div></div>
+    <div class="dcard"><div class="dno">D6 · 环境</div><h4>Docker 引擎恢复</h4>
+      <p>连栈门禁复跑（202+12 新增用例口径）、reranker 连栈复验、图片防盗链实测、整号真实数据流——全部卡在 Docker 未运行。</p>
+      <div class="rec"><b>建议你启动 Docker Desktop</b>（或授权我拉起）。</div></div>
+    <div class="dcard"><div class="dno">D7 · 流程载体</div><h4>AideanFleet 派工通道</h4>
+      <p><b>A</b> 手动六步循环驱动（本会话 + 机器门禁 + 证据落盘，09-17 以来实际运行模式）；<b>B</b> 拉起 v3 控制台（需释放 5000——现被你的演示服务 PID 30956 占用——或用 FLEET_CONSOLE_PORT 换端口）。</p>
+      <div class="rec"><b>建议 A 起步、B 可选</b>：两种模式纪律一致，控制台不阻塞施工；要可视化监督时再拉起。</div></div>
+    <div class="dcard"><div class="dno">D8 · 排程</div><h4>裁决期间先开零依赖线？</h4>
+      <p><b>A</b> 授权先开阶段 5（前端收口+组件化）与阶段 6（技术债）；<b>B</b> 等全部裁决齐再统一开工。</p>
+      <div class="rec"><b>建议 A</b>：阶段 5/6 不依赖 D1~D7 任何一项；回复裁决时附一句"5/6 先开"即可。</div></div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="no">§8</span>开工前置清单</h2>
+  <ul class="checklist">
+    <li><b>你侧</b>：D1 绑定语义 · D2 后台范围 · D3 RedFox 充值 · D6 启动 Docker ·（阶段 4 前）RAGFlow Key 轮换 + env 注入 ·（遗留）LANGBOT_ADMIN_PASSWORD 与 R7 密钥轮换</li>
+    <li><b>我侧（裁决后立即）</b>：阶段 0 把 28 项在途改动分域提交固线；若 D8 授权 → 阶段 5/6 立即开工（首批：两壳页真实现 + not-found/error 页 + CRUD 缺口端点）；D1/D2 裁决后出新 SPEC 草案（六步循环第一步）</li>
+  </ul>
+</section>
+
+<section>
+  <h2><span class="no">§9</span>前提与局限</h2>
+  <ul>
+    <li>判定基于当前工作树（HEAD 205c151 + 28 项未提交改动）；运行态证据截至 09-19，今日复验受 Docker 未运行限制。</li>
+    <li>两处口径修正以本轮实测为准：两壳页各 <b>36 行</b>（此前口径"约30行"）；AddArticlePanel <b>651 行</b>（620 口径弃用）。</li>
+    <li>后端核验路因 LLM 故障中断 → 主线逐条补位取证（无翻案项）；前端核验 8/8 条独立成立。</li>
+    <li>RedFox API 字段以活体响应实测为准（文档口径可能漂移，以响应回写）。</li>
+    <li>本稿不重复既有任务卡；N1~N10 差距清单已并入 §6 路线图。</li>
+  </ul>
+  <div class="note"><b>附录 A · 核验记录</b>：主线 30+ 条命令穿透（端点 26 枚举、零 admin、ALLOWED_HOSTS、ENGINE_IMPLEMENTED、is_public 写路径、分类字段、worker/scheduler、compose 服务与 RERANK 透传、RedFox 映射 3107→10004 / 3201→50002 / 4004→20005、幂等五层 file:line、前端路由/行数/导航/自述红线）全部与既有两份文档一致；独立前端核验 8/8 成立（壳页数据加载后从不渲染、零导航入口、错误边界四件套全缺、批量粘贴为前端串行循环）。</div>
+</section>
+
+<div class="footer">
+  <span>AideanFleet · Manager 会话 · 2026-09-22</span>
+  <span>只信实测 · 无 transcript 不判 DONE</span>
+</div>
+
+</div>
+</body>
+</html>

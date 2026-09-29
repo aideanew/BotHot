@@ -1,0 +1,60 @@
+[project]
+name = "bothot-backend"
+version = "0.1.0"
+description = "BotHot（WeChatRag）：信息源 → 知识库 → 机器人闭环的后端服务"
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "sqlalchemy[asyncio]>=2.0.40",
+    "psycopg[binary,pool]>=3.2.0",
+    "alembic>=1.15.0",
+    "redis>=5.2.0",
+    "celery[redis]>=5.4.0",
+    "httpx>=0.27.0",
+    "python-multipart>=0.0.12",
+    "structlog>=24.4.0",
+    # SPEC-M3 批次 3 / T5.4：engine_key_registrations 的 AES-256-GCM 落库加密
+    "cryptography>=43.0.0",
+]
+
+[project.optional-dependencies]
+# dev 工具链锁精确版本：CI 与本地门禁必须同源，否则上游升版会单方面把 CI 打红。
+# 实测 ruff 0.7→0.16.8 漂移后 I001 规则互斥——0.12.12 与 0.16.8 不存在共同可通过
+# 的 import 格式（一方的自动修复即为另一方的违规），故只能锁死而非改代码迁就。
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "httpx>=0.27.0",
+    "ruff==0.12.12",
+    "mypy==2.3.1",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+ignore = ["B008"]  # FastAPI Depends 习惯
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "langbot_real: 连真实 LangBot 冒烟（需 env 凭据 LANGBOT_ADMIN_PASSWORD/EMBEDDING_API_KEY）",
+]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+check_untyped_defs = true

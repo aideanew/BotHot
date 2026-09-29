@@ -1,0 +1,44 @@
+### 1. health
+HTTP/1.1 200 OK
+date: Sun, 13 Sep 2026 06:19:58 GMT
+server: uvicorn
+content-length: 137
+content-type: application/json
+x-request-id: d83fac94-6982-4c1d-a311-275b31f4210b
+connection: close
+Vary: Accept-Encoding
+
+{"code":0,"message":"ok","data":{"status":"ok","app":"AideanBot","env":"development"},"requestId":"d83fac94-6982-4c1d-a311-275b31f4210b"}
+### 2. 无cookie GET /spaces
+HTTP/1.1 401 Unauthorized
+date: Sun, 13 Sep 2026 06:19:58 GMT
+server: uvicorn
+content-length: 108
+content-type: application/json
+x-request-id: 0b065362-9063-4774-8961-77064abac024
+connection: close
+Vary: Accept-Encoding
+
+{"code":10001,"message":"缺少会话凭据","data":null,"requestId":"0b065362-9063-4774-8961-77064abac024"}
+### 3. 伪造cookie GET /spaces
+HTTP/1.1 401 Unauthorized
+date: Sun, 13 Sep 2026 06:19:58 GMT
+server: uvicorn
+content-length: 117
+content-type: application/json
+x-request-id: e3e2491e-5841-4445-84d4-ccd9aa90502a
+connection: close
+Vary: Accept-Encoding
+
+{"code":10001,"message":"会话不存在或已过期","data":null,"requestId":"e3e2491e-5841-4445-84d4-ccd9aa90502a"}
+### 4. 无cookie POST /spaces
+HTTP/1.1 401 Unauthorized
+date: Sun, 13 Sep 2026 06:19:58 GMT
+server: uvicorn
+content-length: 108
+content-type: application/json
+x-request-id: 68128f02-451b-460c-8bb9-e2ec2fa8cabf
+connection: close
+Vary: Accept-Encoding
+
+{"code":10001,"message":"缺少会话凭据","data":null,"requestId":"68128f02-451b-460c-8bb9-e2ec2fa8cabf"}

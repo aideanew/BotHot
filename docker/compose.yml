@@ -1,0 +1,357 @@
+# BotHot 本地开发全家桶（M0 实证配置沉淀）
+# 用法：cp docker/.env.example docker/.env && docker compose up -d
+# 实证要点（M0 报告 + 2026-09-04 评审修订）：
+#   1. Docker Desktop 会把宿主代理（127.0.0.1:10809，已失效）注入容器 env——必须显式覆盖
+#   2. 插件依赖镜像必须经 LANGBOT_PLUGIN_PYPI_INDEX_URL（pip -i 显式参数覆盖一切 env/conf）
+#   3. LangRAG 知识引擎为市场插件，首次需经 WebUI(:5300) 或 API 安装
+#   4. 分层网络规范（镜像为主、代理为辅）：
+#      - 依赖安装 → 国内镜像（不走代理，最快最稳）
+#      - langbot 主容器国外访问（市场插件/OpenAI 类 API）→ host.docker.internal:10808（实测双协议可用）
+#      - 国内服务（主平台/redfox/硅基流动）→ NO_PROXY 直连
+#
+# 进程拓扑（2026-09-23，U7 定时订阅闭环前置）：
+#   postgres/redis 底座 → migrate（一次性 `alembic upgrade head`，restart: no）
+#     → backend（Web 层 3300，带 healthcheck）→ scheduler / worker（常驻执行进程）
+#     → langbot / langbot_plugin_runtime（知识引擎侧）
+#   scheduler（`python -m app.services.scheduler`）与 worker（`python -m app.services.job_worker`）
+#   是**独立常驻进程**，不进 main.py 挂接——两条路径互斥，代码入口与测试均按独立进程断言。
+#   Job 队列在 Postgres（`FOR UPDATE SKIP LOCKED`），不经 Redis。
+#
+# 项目名必须固定（实证踩坑 2026-09-23）：裸 `docker compose up` 会取目录名 `docker`
+#   作项目名，与既有栈的容器名/网络冲突而报 `container name already in use`。
+#   顶层 `name:` 把项目名写死为 bothot，命令从哪个目录跑、是否加 -p 都不再影响。
+name: bothot
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bothot-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-bothot}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-bothot}
+      - POSTGRES_DB=${POSTGRES_DB:-bothot}
+      - TZ=Asia/Shanghai
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bothot}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: bothot-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redisdata:/data
+
+  langbot_plugin_runtime:
+    image: rockchin/langbot:latest
+    container_name: bothot-langbot-plugin-rt
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+      # M0 实证：显式清空宿主代理（继承自 Docker Desktop 的 127.0.0.1:10809 不可达）
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - http_proxy=
+      - https_proxy=
+      # M0 实证：插件依赖安装镜像（build_dependency_prepare_direct_args 会拼显式 -i）
+      - LANGBOT_PLUGIN_PYPI_INDEX_URL=${PIP_MIRROR:-https://mirrors.aliyun.com/pypi/simple/}
+    volumes:
+      - langbot_plugins:/app/data/plugins
+    command: ["uv", "run", "--no-sync", "-m", "langbot_plugin.cli.__init__", "rt"]
+    networks:
+      langbot_net:
+        # 2026-09-25 实测修复：langbot 侧 config.yaml 以 `langbot_plugin_runtime:5400`
+        # 连本容器，而 compose 服务名不会被 DNS 解析（只解析容器名与网络别名），
+        # 缺别名时 langbot 侧报 `Plugin runtime is not connected`，
+        # `/api/v1/knowledge/engines` 全量 500 → BotHot 入库 50002。
+        # 注意：不要给 langbot_box 加别名。box 是另一个未部署的沙箱服务（5410，
+        # 仅 --profile box/all），把别名指向本容器会让 LangBot 的 box 连接
+        # 拿到"连上但连错端口"而非明确的连接失败，掩盖问题。
+        aliases:
+          - langbot_plugin_runtime
+
+  langbot:
+    image: rockchin/langbot:latest
+    container_name: bothot-langbot
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+      # 覆盖 Docker Desktop 注入的死代理（10809 已关闭），改走宿主可用代理 10808
+      - HTTP_PROXY=${PROXY_HTTP:-http://host.docker.internal:10808}
+      - HTTPS_PROXY=${PROXY_HTTP:-http://host.docker.internal:10808}
+      - http_proxy=${PROXY_HTTP:-http://host.docker.internal:10808}
+      - https_proxy=${PROXY_HTTP:-http://host.docker.internal:10808}
+      # 国内服务直连不走代理（分层网络规范 L4；space.langbot.app 市场为国外服务走代理）
+      - NO_PROXY=localhost,127.0.0.1,postgres,redis,host.docker.internal,.siliconflow.cn,api.siliconflow.cn,redfox.hk
+      - no_proxy=localhost,127.0.0.1,postgres,redis,host.docker.internal,.siliconflow.cn,api.siliconflow.cn,redfox.hk
+    ports:
+      - "5300:5300"
+    volumes:
+      - langbot_data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - langbot_net
+
+  # migrate 服务定义在 backend 之后——它复用 backend 的 `&backend_env` 锚点，
+  # 而 compose 的 YAML 加载器要求锚点先出现再引用。服务名解析本身与顺序无关。
+
+  backend:
+    # 显式 image 名（与 compose 自动命名 bothot-<service> 完全一致）：migrate /
+    # scheduler / worker **复用这一份镜像**，不再各自 build。
+    #
+    # 为什么合并（2026-09-28）：三者此前各自 `build: context: ../backend`，即同一上下文
+    # 产出三张独立镜像，**可各自漂移**——正是本次故障的结构根因之一（三服务进 compose
+    # 晚于栈的创建 5 天，此后只有 `docker cp` + `docker restart`，从未 `up -d`）。
+    # 同一份 Dockerfile 的 `CMD` 被各服务的 `command:` 覆盖，故「一份镜像 + 不同入口」
+    # 本就是它的正确用法；拆开三份 build 只多制造漂移面，没有任何收益。
+    #
+    # 部署顺序约束：backend 必须先 build（它是唯一的 build 定义源），否则其余三者会
+    # 因镜像不存在而 pull 失败——错误显式，不会静默跑旧镜像。
+    image: bothot-backend
+    build:
+      context: ../backend
+      # 显式覆盖 Docker 客户端 config.json 注入的宿主死代理（127.0.0.1:10809）
+      # 构建期依赖安装走 PIP_INDEX_URL 国内镜像直连
+      args:
+        # 基础镜像镜像源开关：默认 docker.io；本机 docker.io 不可达时经 docker/.env 覆盖
+        BASE_IMAGE: ${BASE_IMAGE:-python:3.12-slim}
+        HTTP_PROXY: ""
+        HTTPS_PROXY: ""
+        http_proxy: ""
+        https_proxy: ""
+        NO_PROXY: "*"
+        no_proxy: "*"
+    container_name: bothot-backend
+    restart: unless-stopped
+    # &backend_env：同一份 env 复用给 migrate/scheduler/worker（三个进程读同一套 Settings，
+    # 锚点单点维护，避免三处漂移——漂移过一次就会在容器里指向宿主 127.0.0.1 的库）
+    environment: &backend_env
+      - APP_ENV=development
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-bothot}:${POSTGRES_PASSWORD:-bothot}@postgres:5432/${POSTGRES_DB:-bothot}
+      - REDIS_URL=redis://redis:6379/0
+      # T1.5.1（G9，2026-09-22）：会话/state 存储切 Redis（多实例部署与会话持久前置）；
+      # 宿主裸跑开发（无 redis_url 可达）时保持代码默认 memory，不写本键即可
+      - SESSION_STORE_BACKEND=${SESSION_STORE_BACKEND:-redis}
+      # R6.2.3 补注：生产 HTTPS 环境须 SESSION_COOKIE_SECURE=true；开发期 HTTP 默认 false
+      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-false}
+      # A-T21 裁决B实施（2026-09-11）：authorize 302（浏览器侧，需 localhost 可达）与
+      # token/userinfo/wallet（容器侧，需 host.docker.internal）拆双变量——
+      # AIDEAN_PUBLIC_URL 仅用于签发浏览器 Location，空串时 backend 回落 AIDEAN_ISSUER；
+      # AIDEAN_ISSUER 保持 host（容器内可达宿主），禁再手工注入单值 env 冒充修复。
+      - AIDEAN_ISSUER=${AIDEAN_ISSUER:-http://host.docker.internal:3000}
+      - AIDEAN_PUBLIC_URL=${AIDEAN_PUBLIC_URL:-http://localhost:3000}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-wechat-rag}
+      # A-T18: SSO redirect_uri must hit Host-DB whitelist (oidc_clients.redirect_uris[1])
+      - OIDC_REDIRECT_URI=${OIDC_REDIRECT_URI:-http://localhost:3200/auth/aidean/callback}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-change-me}
+      - LANGBOT_BASE_URL=http://langbot:5300
+      - LANGBOT_API_KEY=${LANGBOT_API_KEY:-}
+      # LangBot 管理员凭据（B-T8 防腐层 JWT 登录用；.env 提供 LANGBOT_ADMIN_PASSWORD）
+      - LANGBOT_ADMIN_USERNAME=${LANGBOT_ADMIN_USERNAME:-admin@bothot.local}
+      - LANGBOT_ADMIN_PASSWORD=${LANGBOT_ADMIN_PASSWORD:-}
+      - REDFOX_API_KEY=${REDFOX_API_KEY:-}
+      # R6.2.1：OIDC iss/aud 校验（生产守卫：APP_ENV=production 时二者为空则拒启；
+      # 开发环境默认空=跳过校验，向后兼容）
+      - OIDC_ISSUER_EXPECTED=${OIDC_ISSUER_EXPECTED:-}
+      - OIDC_AUDIENCE_EXPECTED=${OIDC_AUDIENCE_EXPECTED:-}
+      # R6.2.2：公共库发布 allowlist（逗号分隔 user_id；空=无人可发布，配置指引见错误信息）
+      - PUBLIC_ADMIN_ALLOWLIST=${PUBLIC_ADMIN_ALLOWLIST:-}
+      # 嵌入服务（API 形态，ADR-0002 增补三；国内直连不走代理）
+      - EMBEDDING_API_BASE=${EMBEDDING_API_BASE:-https://api.siliconflow.cn/v1}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-m3}
+      # 生成 LLM（B-T10R 方案 A：OpenAI 兼容直连流式；api.siliconflow.cn 已在 NO_PROXY）
+      - LLM_API_BASE=${LLM_API_BASE:-https://api.siliconflow.cn/v1}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      # 检索重排（阶段 3.2.1，可选增强；base/key 留空回落 EMBEDDING_* 同供应商口径）
+      - RERANK_ENABLED=${RERANK_ENABLED:-true}
+      - RERANK_API_BASE=${RERANK_API_BASE:-}
+      - RERANK_API_KEY=${RERANK_API_KEY:-}
+      - RERANK_MODEL=${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
+      # 运行时代理分层（与 langbot 同规范）：国外兜底走宿主 10808，国内服务 NO_PROXY 直连。
+      # 缺此段时容器会继承 Docker Desktop 注入的死代理 127.0.0.1:10809（实证踩坑 2026-09-07）
+      - HTTP_PROXY=${PROXY_HTTP:-http://host.docker.internal:10808}
+      - HTTPS_PROXY=${PROXY_HTTP:-http://host.docker.internal:10808}
+      - http_proxy=${PROXY_HTTP:-http://host.docker.internal:10808}
+      - https_proxy=${PROXY_HTTP:-http://host.docker.internal:10808}
+      # NO_PROXY 含 langbot（A-T5 容器级冒烟实证 2026-09-08）：内网别名从宿主代理
+      # (10808) 视角不可解析，漏列会让 backend→LangBot 直连被劫持进代理后断连
+      # （RemoteProtocolError）——此前真实 LangBot 测试均在宿主侧跑，未触达此路径。
+      - NO_PROXY=localhost,127.0.0.1,postgres,redis,backend,frontend,langbot,host.docker.internal,.siliconflow.cn,api.siliconflow.cn,redfox.hk
+      - no_proxy=localhost,127.0.0.1,postgres,redis,backend,frontend,langbot,host.docker.internal,.siliconflow.cn,api.siliconflow.cn,redfox.hk
+    ports:
+      - "3300:3300"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # 零门禁存活探针（`/api/v1/system/health` 无鉴权无依赖，进程活着即 200），
+    # 供 worker/scheduler 以 service_healthy 排序；镜像内无 curl，故用 python 自带 urllib
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3300/api/v1/system/health', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # A-T5 栈归一修复（2026-09-08）：backend 需同时解析 default 网（postgres/redis/frontend）
+    # 与 langbot_net 网（langbot）。此前 compose.yml 未声明，靠运行时手工挂网补丁掩盖，
+    # force-recreate 会复现 backend→langbot DNS 全断。现声明式归属两网，归一后无需补丁。
+    networks:
+      - default
+      - langbot_net
+
+  migrate:
+    # 一次性迁移（2026-09-23）：此前迁移只在部署手册里是**手工宿主步骤**
+    # （`cd backend && python -m alembic upgrade head`），全新卷 `compose up -d` 会得到
+    # 零张表、backend/scheduler/worker 三进程同时崩溃。现收口为声明式一次性服务：
+    # `alembic upgrade head` 幂等（已是最新即空跑），失败则三个下游全部不启动，错误显式可见。
+    #
+    # 纠偏（2026-09-28 实测）：本服务 2026-09-28 前**从未被创建过**，但库并不落后——
+    # `alembic_version` 当时已在 `ab1004s1a`。原因是上面的「手工宿主步骤」确实被人执行过。
+    # 所以「migrate 容器缺失」≠「结构迁移没跑」；它真正导致的是 scheduler / worker 两个
+    # 常驻进程从不存在。别把这两件事当成一个后果。
+    #
+    # 部署顺序铁律：**先 migrate、再上新 backend 代码**。`main.py:_assert_schema_current`
+    # 是只读守卫——生产环境（APP_ENV=production）下 DB 版本 ≠ head 会直接 `RuntimeError`
+    # 拒启。开发环境仅告警，所以本地能漏过去。
+    image: bothot-backend
+    container_name: bothot-migrate
+    restart: "no"
+    environment: *backend_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+
+  scheduler:
+    # 订阅调度常驻进程（`python -m app.services.scheduler`）：认领到期订阅 → Diff 新篇
+    # → 建 Job/JobItem 推水位；并兜底推进非终态文档的入库状态（见 scheduler.py
+    # make_default_doc_reconciler）。不进 main.py 挂接，独立进程。
+    #
+    # **需挂 langbot_net**：文档状态推进要读 LangBot 文件清单（`langbot:5300`），
+    # 与 backend/worker 同双网归属。此前 scheduler 是纯 PG+RedFox 进程，未声明 networks
+    # 时只落 default 网——2026-09-25 加文档推进后 `[Errno -2] Name or service not known`
+    # 在 `_login` 处复现，非终态 doc 永远停在 INDEXED。漏声明会在 force-recreate 时静默复现。
+    # 无 REDFOX_API_KEY 时会**空转**（每轮 claim 到订阅后同步失败、按基准间隔推进水位），
+    # 不报错也不采集——见部署手册「进程拓扑」告警口径。
+    image: bothot-backend
+    container_name: bothot-scheduler
+    restart: unless-stopped
+    environment: *backend_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      # 文档状态推进直连 LangBot 文件清单；同 worker 只取 service_started（langbot 无
+      # healthcheck），内部就绪交给推进路径自身的「单篇失败即跳过、下一 tick 重试」。
+      langbot:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - langbot_net
+    command: ["python", "-m", "app.services.scheduler"]
+    # 存活探针（2026-09-28）：本服务**不开任何端口**，TCP 探针无从谈起；唯一诚实的
+    # 信号是数据库里的心跳（进程每轮向 `process_heartbeats` 报到）。退出码 0=新鲜、
+    # 1=过期或缺行。
+    #
+    # 注意：unhealthy **不会**自动重启。`restart: unless-stopped` 只认容器退出码，
+    # 而「进程活着但循环卡死」时容器并未退出——所以它的作用是让 `docker ps` 的
+    # HEALTH 列直接暴露卡死，而不是替你恢复。阈值 300s > 心跳节流 30s，健康进程不会误报。
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.services.process_heartbeat", "scheduler", "--max-age", "300"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+
+  worker:
+    # Job 执行器常驻进程（`python -m app.services.job_worker`）：`FOR UPDATE SKIP LOCKED`
+    # 取件 → 逐篇走单篇 ingest 流水线 → 推 LangBot RAG。因直连 `langbot:5300` 需挂
+    # langbot_net（同 backend 的双网归属）；队列在 Postgres，不依赖 Redis。
+    image: bothot-backend
+    container_name: bothot-worker
+    restart: unless-stopped
+    environment: *backend_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      # 真实前置是 LangBot 而非 backend：worker 逐篇推 `langbot:5300`，backend 不是
+      # 它的依赖（无 HTTP 互调）。schema 就绪由 migrate 保证。langbot 无 healthcheck，
+      # 故只取 service_started（容器起来即可，内部就绪交给 worker 自身的重试退避）。
+      langbot:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - langbot_net
+    command: ["python", "-m", "app.services.job_worker"]
+    # 存活探针：与 scheduler 同一套心跳口径（见 scheduler 的 healthcheck 注释）。
+    # worker 大批量逐篇 ingest 可跑很久，故 `_drain_items` 内也按时节流报到，
+    # 不会因为「正在干活」而被误判 stale。
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.services.process_heartbeat", "worker", "--max-age", "300"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ../frontend
+      # 2026-09-09 A：构建期需经宿主代理出站，host 网络下容器可直接解析 host.docker.internal
+      network: host
+      # 显式覆盖 Docker 客户端 config.json 注入的宿主死代理（同 backend）
+      args:
+        BASE_IMAGE: ${BASE_IMAGE:-node:20-alpine}
+        # 2026-09-09 A：宿主死代理(10809)不可用、直连被拒 → 构建期改走活代理 10808（容器内经 host.docker.internal 访问宿主）
+        HTTP_PROXY: "http://host.docker.internal:10808"
+        HTTPS_PROXY: "http://host.docker.internal:10808"
+        http_proxy: "http://host.docker.internal:10808"
+        https_proxy: "http://host.docker.internal:10808"
+        NO_PROXY: "localhost,127.0.0.1"
+        no_proxy: "localhost,127.0.0.1"
+        # rewrites 代理目标：build 时烘焙进产物（Next 生产模式特性）
+        BACKEND_ORIGIN: http://backend:3300
+    container_name: bothot-frontend
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+      # C-CHG-1 容器侧：next rewrites 的代理目标（直连 backend 容器）
+      - BACKEND_ORIGIN=http://backend:3300
+    ports:
+      # 端口准则（AGENTS.md）：3000 归主平台，frontend 宿主侧统一 3200（容器内仍 3000）
+      - "3200:3000"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  redisdata:
+  langbot_data:
+  langbot_plugins:
+
+networks:
+  langbot_net:
+    driver: bridge

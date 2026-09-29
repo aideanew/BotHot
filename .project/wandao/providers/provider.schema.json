@@ -1,0 +1,293 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tllovesxs/wandao/providers/provider.schema.json",
+  "title": "Wandao Provider Manifest v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "title",
+    "description",
+    "type",
+    "group",
+    "trustLevel",
+    "status",
+    "capabilities"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{1,63}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "navLabel": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "enum": ["automation", "guide", "hybrid"]
+    },
+    "group": {
+      "enum": ["export", "import", "guide"]
+    },
+    "trustLevel": {
+      "enum": ["official", "community", "local", "experimental", "guide"]
+    },
+    "status": {
+      "enum": ["stable", "beta", "experimental"]
+    },
+    "guide": {
+      "type": "string"
+    },
+    "guidePath": {
+      "type": "string"
+    },
+    "guideAssets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mime", "bytes", "sha256"],
+        "properties": {
+          "mime": {
+            "enum": ["image/png"]
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3145728
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        }
+      }
+    },
+    "homepage": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "properties": {
+        "export": { "type": "boolean" },
+        "import": { "type": "boolean" },
+        "guide": { "type": "boolean" },
+        "login": { "type": "boolean" },
+        "scanToc": { "type": "boolean" },
+        "images": { "type": "boolean" },
+        "attachments": { "type": "boolean" },
+        "tree": { "type": "boolean" },
+        "batch": { "type": "boolean" },
+        "retryFailures": { "type": "boolean" }
+      }
+    },
+    "retryFailures": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["arg"],
+      "properties": {
+        "arg": {
+          "type": "string",
+          "pattern": "^--"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "python": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "system": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "toc": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "itemsPath": { "type": "string" },
+        "idKey": { "type": "string" },
+        "exportIdKey": { "type": "string" },
+        "titleKey": { "type": "string" },
+        "parentIdKey": { "type": "string" },
+        "selectableKey": { "type": "string" },
+        "typeKey": { "type": "string" },
+        "selectableTypes": {
+          "type": "array",
+          "items": { "type": ["string", "number"] }
+        },
+        "selectionArg": { "type": "string" },
+        "note": { "type": "string" }
+      }
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/field"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/action"
+      }
+    }
+  },
+  "$defs": {
+    "field": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+        },
+        "label": {
+          "type": "string"
+        },
+        "type": {
+          "enum": ["text", "password", "directory", "file", "checkbox", "select", "number", "textarea", "notice"]
+        },
+        "arg": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "default": {},
+        "advanced": {
+          "type": "boolean"
+        },
+        "history": {
+          "enum": ["url", "path", "text"]
+        },
+        "sensitive": {
+          "type": "boolean"
+        },
+        "actions": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "includeActions": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "excludeActions": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "skipActions": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "placeholder": {
+          "type": "string"
+        },
+        "markdown": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array"
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "label", "script"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+        },
+        "kind": {
+          "enum": ["login", "scan", "export", "import", "plan", "check", "custom"]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "script": {
+          "type": "string"
+        },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "includeSelection": {
+          "type": "boolean"
+        },
+        "actionName": {
+          "type": "string"
+        },
+        "progressTitle": {
+          "type": "string"
+        },
+        "progressDetail": {
+          "type": "string"
+        },
+        "secondary": {
+          "type": "boolean"
+        },
+        "danger": {
+          "type": "boolean"
+        },
+        "confirm": {
+          "type": "string"
+        },
+        "updates": {
+          "type": "array"
+        }
+      }
+    }
+  }
+}

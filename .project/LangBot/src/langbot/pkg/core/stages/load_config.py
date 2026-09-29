@@ -1,0 +1,356 @@
+from __future__ import annotations
+
+import os
+import copy
+from typing import Any
+from langbot.pkg.utils import bounded_executor, constants
+import yaml
+import importlib.resources as resources
+import uuid
+import time
+
+from .. import stage, app
+from ..bootutils import config
+
+
+_RUNTIME_POLICY_DEFAULTS = {
+    'cloud': {
+        'directory': {
+            'max_active_workspaces': 1000,
+            'max_snapshot_workspaces': 1000,
+            'max_snapshot_memberships': 20000,
+            'max_response_bytes': 33554432,
+        }
+    },
+    'database': {
+        'postgresql': {
+            'pool_size': 10,
+            'max_overflow': 10,
+            'pool_timeout_seconds': 30,
+            'pool_recycle_seconds': 1800,
+            'statement_timeout_ms': 60000,
+            'lock_timeout_ms': 5000,
+            'idle_in_transaction_session_timeout_ms': 60000,
+        }
+    },
+    'system': {
+        'blocking_executor': {
+            'max_workers': bounded_executor.DEFAULT_MAX_WORKERS,
+            'max_pending': bounded_executor.DEFAULT_MAX_PENDING,
+            'max_inflight_per_scope': (bounded_executor.DEFAULT_MAX_INFLIGHT_PER_SCOPE),
+        }
+    },
+    'plugin': {
+        'connect_timeout_seconds': 180.0,
+        'worker': {
+            'max_cpus': 1.0,
+            'max_memory_mb': 512,
+            'max_pids': 128,
+            'max_open_files': 256,
+            'max_file_size_mb': 512,
+            'max_workers': 16,
+            'max_total_cpus': 8.0,
+            'max_total_memory_mb': 8192,
+            'max_installations': 10000,
+            'max_concurrent_restarts': 1,
+            'restart_failure_threshold': 8,
+            'restart_failure_window_seconds': 30.0,
+            'restart_circuit_open_seconds': 60.0,
+            'require_hard_limits': False,
+        },
+    },
+    'mcp': {'stdio': {'enabled': True}},
+    'monitoring': {
+        'query_limits': {
+            'page_rows': 1000,
+            'export_rows': 10000,
+            'detail_rows': 2000,
+            'timeseries_buckets': 1000,
+            'max_offset': 1000000,
+        },
+        'auto_cleanup': {'max_batches_per_table_per_run': 4},
+    },
+    'storage': {
+        'max_object_read_bytes': 10485760,
+        'cleanup': {'max_files_per_run': 1000},
+    },
+    'webhooks': {
+        'max_per_workspace': 16,
+        'max_inflight_requests': 16,
+    },
+    'box': {
+        'limits': {
+            'max_workspace_entries': 100000,
+        }
+    },
+}
+
+
+def _complete_runtime_policy_defaults(cfg: dict) -> dict:
+    """Backfill typed security-policy leaves before applying env overrides.
+
+    The historic config loader intentionally does not deep-complete the whole
+    template.  These fields are different: their native env overrides must
+    retain boolean/numeric types on upgraded instances, so their defaults must
+    exist before ``CLOUD__...``, ``PLUGIN__...`` and ``MCP__...`` are parsed.
+    """
+
+    def merge(target: dict, defaults: dict, path: tuple[str, ...] = ()) -> None:
+        for key, default in defaults.items():
+            if key not in target:
+                target[key] = copy.deepcopy(default)
+                continue
+            if isinstance(default, dict):
+                if not isinstance(target[key], dict):
+                    dotted_path = '.'.join((*path, key))
+                    raise ValueError(f'{dotted_path} must be a mapping')
+                merge(target[key], default, (*path, key))
+
+    merge(cfg, _RUNTIME_POLICY_DEFAULTS)
+    return cfg
+
+
+def _apply_env_overrides_to_config(cfg: dict) -> dict:
+    """Apply environment variable overrides to data/config.yaml
+
+    Environment variables should be uppercase and use __ (double underscore)
+    to represent nested keys. For example:
+    - CONCURRENCY__PIPELINE overrides concurrency.pipeline
+    - PLUGIN__RUNTIME_WS_URL overrides plugin.runtime_ws_url
+
+    Arrays and dict types are ignored.
+
+    Args:
+        cfg: Configuration dictionary
+
+    Returns:
+        Updated configuration dictionary
+    """
+
+    def convert_value(value: str, original_value: Any) -> Any:
+        """Convert string value to appropriate type based on original value
+
+        Args:
+            value: String value from environment variable
+            original_value: Original value to infer type from
+
+        Returns:
+            Converted value (falls back to string if conversion fails)
+        """
+        if isinstance(original_value, bool):
+            return value.lower() in ('true', '1', 'yes', 'on')
+        elif isinstance(original_value, int):
+            try:
+                return int(value)
+            except ValueError:
+                # If conversion fails, keep as string (user error, but non-breaking)
+                return value
+        elif isinstance(original_value, float):
+            try:
+                return float(value)
+            except ValueError:
+                # If conversion fails, keep as string (user error, but non-breaking)
+                return value
+        else:
+            return value
+
+    # Process environment variables
+    for env_key, env_value in os.environ.items():
+        # Check if the environment variable is uppercase and contains __
+        if not env_key.isupper():
+            continue
+        if '__' not in env_key:
+            continue
+
+        # Convert environment variable name to config path
+        # e.g., CONCURRENCY__PIPELINE -> ['concurrency', 'pipeline']
+        keys = [key.lower() for key in env_key.split('__')]
+        # macOS and some launchers expose variables such as
+        # ``__CF_USER_TEXT_ENCODING``. They are not LangBot config paths and
+        # must not create an empty top-level YAML key when config is dumped.
+        if any(not key for key in keys):
+            continue
+
+        # Values may contain database passwords, runtime control tokens, or
+        # provider credentials. Keep the useful audit breadcrumb without ever
+        # copying the secret into startup logs.
+        print(f'apply env override to config: env_key: {env_key}')
+
+        # Navigate to the target value and validate the path
+        current = cfg
+
+        for i, key in enumerate(keys):
+            if not isinstance(current, dict):
+                break
+
+            if i == len(keys) - 1:
+                # At the final key
+                if key in current:
+                    if isinstance(current[key], list):
+                        # Convert comma-separated values while preserving the
+                        # element type declared by a non-empty config default.
+                        items = [item.strip() for item in env_value.split(',') if item.strip()]
+                        if current[key]:
+                            exemplar = current[key][0]
+                            current[key] = [convert_value(item, exemplar) for item in items]
+                        else:
+                            current[key] = items
+                    elif isinstance(current[key], dict):
+                        # Skip dict types
+                        pass
+                    else:
+                        # Valid scalar value - convert and set it
+                        converted_value = convert_value(env_value, current[key])
+                        current[key] = converted_value
+                else:
+                    # Key doesn't exist yet - create it as string
+                    current[key] = env_value
+            else:
+                # Navigate deeper - create intermediate dict if needed
+                if key not in current:
+                    current[key] = {}
+                current = current[key]
+
+    return cfg
+
+
+@stage.stage_class('LoadConfigStage')
+class LoadConfigStage(stage.BootingStage):
+    """Load config file stage"""
+
+    async def run(self, ap: app.Application):
+        """Load config file"""
+
+        # # ======= deprecated =======
+        # if os.path.exists('data/config/command.json'):
+        #     ap.command_cfg = await config.load_json_config(
+        #         'data/config/command.json',
+        #         'templates/legacy/command.json',
+        #         completion=False,
+        #     )
+
+        # if os.path.exists('data/config/pipeline.json'):
+        #     ap.pipeline_cfg = await config.load_json_config(
+        #         'data/config/pipeline.json',
+        #         'templates/legacy/pipeline.json',
+        #         completion=False,
+        #     )
+
+        # if os.path.exists('data/config/platform.json'):
+        #     ap.platform_cfg = await config.load_json_config(
+        #         'data/config/platform.json',
+        #         'templates/legacy/platform.json',
+        #         completion=False,
+        #     )
+
+        # if os.path.exists('data/config/provider.json'):
+        #     ap.provider_cfg = await config.load_json_config(
+        #         'data/config/provider.json',
+        #         'templates/legacy/provider.json',
+        #         completion=False,
+        #     )
+
+        # if os.path.exists('data/config/system.json'):
+        #     ap.system_cfg = await config.load_json_config(
+        #         'data/config/system.json',
+        #         'templates/legacy/system.json',
+        #         completion=False,
+        #     )
+
+        # # ======= deprecated =======
+
+        ap.instance_config = await config.load_yaml_config('data/config.yaml', 'config.yaml', completion=False)
+
+        # Deep-complete only typed execution-policy fields. This keeps native
+        # env coercion reliable for existing data/config.yaml files.
+        ap.instance_config.data = _complete_runtime_policy_defaults(ap.instance_config.data)
+
+        # Apply environment variable overrides to data/config.yaml
+        ap.instance_config.data = _apply_env_overrides_to_config(ap.instance_config.data)
+
+        blocking_config = ap.instance_config.data['system']['blocking_executor']
+        ap.blocking_executor = bounded_executor.configure_bounded_default_executor(
+            ap.event_loop,
+            max_workers=blocking_config['max_workers'],
+            max_pending=blocking_config['max_pending'],
+            max_inflight_per_scope=blocking_config['max_inflight_per_scope'],
+        )
+
+        await ap.instance_config.dump_config()
+
+        # load or generate instance id
+        # Priority:
+        # 1. system.instance_id from config.yaml (can be set via SYSTEM__INSTANCE_ID env var)
+        # 2. data/labels/instance_id.json (if file exists)
+        # 3. Generate new and save to file
+        config_instance_id = ap.instance_config.data.get('system', {}).get('instance_id', '')
+
+        if config_instance_id:
+            # Use the instance_id from config.yaml
+            constants.instance_id = config_instance_id
+            # Still load/create the file for backward compat, but don't use its value
+            ap.instance_id = await config.load_json_config(
+                'data/labels/instance_id.json',
+                template_data={
+                    'instance_id': f'instance_{str(uuid.uuid4())}',
+                    'instance_create_ts': int(time.time()),
+                },
+                completion=False,
+            )
+        else:
+            # Try loading file-based instance id
+            instance_id_path = os.path.join('data', 'labels', 'instance_id.json')
+            if os.path.exists(instance_id_path):
+                # File exists, read it
+                ap.instance_id = await config.load_json_config(
+                    'data/labels/instance_id.json',
+                    template_data={
+                        'instance_id': '',
+                        'instance_create_ts': 0,
+                    },
+                    completion=False,
+                )
+                constants.instance_id = ap.instance_id.data['instance_id']
+            else:
+                # Neither config nor file, generate new and save to file
+                new_id = f'instance_{str(uuid.uuid4())}'
+                ap.instance_id = await config.load_json_config(
+                    'data/labels/instance_id.json',
+                    template_data={
+                        'instance_id': new_id,
+                        'instance_create_ts': int(time.time()),
+                    },
+                    completion=False,
+                )
+                constants.instance_id = new_id
+        constants.edition = ap.instance_config.data.get('system', {}).get('edition', 'community')
+
+        # Instance creation timestamp: sourced from data/labels/instance_id.json.
+        # Instances created before this field existed (or supplied via
+        # system.instance_id) won't have it, so backfill with the current time
+        # and persist it via the dump below — from then on it stays stable.
+        instance_create_ts = ap.instance_id.data.get('instance_create_ts', 0)
+        if not isinstance(instance_create_ts, int) or instance_create_ts <= 0:
+            instance_create_ts = int(time.time())
+            ap.instance_id.data['instance_create_ts'] = instance_create_ts
+        constants.instance_create_ts = instance_create_ts
+
+        print(f'LangBot instance id: {constants.instance_id}')
+        print(f'LangBot edition: {constants.edition}')
+
+        await ap.instance_id.dump_config()
+
+        ap.sensitive_meta = await config.load_json_config(
+            'data/metadata/sensitive-words.json',
+            'metadata/sensitive-words.json',
+        )
+        await ap.sensitive_meta.dump_config()
+
+        async def load_resource_yaml_template_data(resource_name: str) -> dict:
+            with resources.files('langbot.templates').joinpath(resource_name).open('r', encoding='utf-8') as f:
+                return yaml.load(f, Loader=yaml.FullLoader)
+
+        ap.pipeline_config_meta_trigger = await load_resource_yaml_template_data('metadata/pipeline/trigger.yaml')
+        ap.pipeline_config_meta_safety = await load_resource_yaml_template_data('metadata/pipeline/safety.yaml')
+        ap.pipeline_config_meta_ai = await load_resource_yaml_template_data('metadata/pipeline/ai.yaml')
+        ap.pipeline_config_meta_output = await load_resource_yaml_template_data('metadata/pipeline/output.yaml')

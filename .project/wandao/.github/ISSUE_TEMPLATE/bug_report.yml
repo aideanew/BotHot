@@ -1,0 +1,44 @@
+name: Bug 反馈
+description: 导入、导出、安装、界面或插件出现异常
+title: "[Bug] "
+labels: ["bug", "status:needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请尽量提供下面三项：问题描述、错误日志、截图。
+
+        如果想认领这个问题，请直接在 Issue 评论区回复“认领”，不需要在表单中填写认领计划。
+
+        请不要上传 Cookie、账号密码、App Secret、Token、API Key 或私人知识库内容。
+  - type: checkboxes
+    id: precheck
+    attributes:
+      label: 提交前确认（可选）
+      options:
+        - label: 我已经搜索过已有 Issue 和 PR，暂时没有找到相同问题。
+        - label: 我已经确认日志和截图中没有敏感信息。
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 请简单说明发生了什么；可以顺便写平台、万能导版本、系统和复现步骤。
+      placeholder: 例如：飞书导出时有两张图片没有保存，系统为 Windows 11，万能导 v1.4.4。
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: 错误日志
+      description: 建议粘贴软件里的错误报告或运行日志。日志较长时可以直接把 .log、.txt、.json、.csv 或 .zip 文件拖入这里，GitHub 会生成附件链接；没有日志请填写“无”。
+      placeholder: 粘贴日志，或将日志文件拖到这里。
+    validations:
+      required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: 截图
+      description: 可以直接拖拽截图到这里；没有截图可以填写“无”。
+      placeholder: 拖入截图，或填写“无”。
+    validations:
+      required: true

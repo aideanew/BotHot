@@ -1,0 +1,15 @@
+# 依赖与构建产物
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Playwright e2e 产物（C-T5）
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# 环境与日志
+*.log
+.env*.local

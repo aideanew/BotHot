@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "zsxq-group",
+  "platform": "zsxq",
+  "name": "知识星球",
+  "title": "知识星球 Group 帖子导出",
+  "navLabel": "知识星球 Group 导出",
+  "description": "按数量导出 Group 中的最新、精华或星主帖子，并可保留评论和附件。",
+  "type": "automation",
+  "group": "export",
+  "trustLevel": "official",
+  "status": "stable",
+  "templateId": "template-zsxq-group",
+  "urlParam": "--entry-url",
+  "noUrl": false,
+  "defaults": { "output": "exports/zsxq-group" },
+  "capabilities": { "export": true, "import": false, "guide": false, "login": true, "scanToc": false, "images": true, "attachments": true, "tree": false, "batch": true, "retryFailures": true },
+  "checkpoint": { "supported": true, "strategy": "cursor", "resourceTracking": true },
+  "retryFailures": { "arg": "--retry-failed", "label": "只重试失败项" },
+  "fields": [
+    { "name": "entry_url", "label": "知识星球 Group URL", "type": "text", "arg": "--entry-url", "required": true, "history": "url", "actions": ["login", "export"] },
+    { "name": "output", "label": "输出目录", "type": "directory", "arg": "--output", "required": true, "history": "path", "actions": ["export"] },
+    { "name": "group_scope", "label": "帖子范围", "type": "select", "arg": "--group-scope", "default": "auto", "options": [{ "value": "auto", "label": "自动" }, { "value": "all", "label": "全部" }, { "value": "digests", "label": "精华" }, { "value": "by_owner", "label": "星主" }], "advanced": true, "actions": ["export"] },
+    { "name": "limit", "label": "最多导出篇数（0 为全部）", "type": "number", "arg": "--limit", "default": 0, "min": 0, "advanced": true, "actions": ["export"] },
+    { "name": "incremental", "label": "增量导出", "type": "checkbox", "arg": "--incremental", "default": true, "advanced": true, "actions": ["export"] },
+    { "name": "retry_failed", "label": "只重试失败项", "type": "checkbox", "arg": "--retry-failed", "default": false, "advanced": true, "actions": ["export"] },
+    { "name": "follow_group_links", "label": "继续导出帖子正文内关联内容（较易触发风控）", "type": "checkbox", "arg": "--follow-group-links", "default": false, "advanced": true, "actions": ["export"] },
+    { "name": "request_delay", "label": "请求延迟秒", "type": "number", "arg": "--request-delay", "default": 3, "min": 1, "step": 0.1, "advanced": true, "actions": ["export"] },
+    { "name": "request_jitter", "label": "随机浮动秒", "type": "number", "arg": "--request-jitter", "default": 1, "min": 0, "step": 0.1, "advanced": true, "actions": ["export"] },
+    { "name": "long_sleep_after", "label": "长休眠起始翻页数（0 为关闭）", "type": "number", "arg": "--long-sleep-after", "default": 12, "min": 0, "advanced": true, "actions": ["export"] },
+    { "name": "long_sleep_every", "label": "长休眠翻页间隔（0 为关闭）", "type": "number", "arg": "--long-sleep-every", "default": 12, "min": 0, "advanced": true, "actions": ["export"] },
+    { "name": "long_sleep_min", "label": "长休眠最短秒数", "type": "number", "arg": "--long-sleep-min", "default": 180, "min": 0, "advanced": true, "actions": ["export"] },
+    { "name": "long_sleep_max", "label": "长休眠最长秒数", "type": "number", "arg": "--long-sleep-max", "default": 240, "min": 0, "advanced": true, "actions": ["export"] },
+    { "name": "include_comments", "label": "导出可见评论（快速）", "type": "checkbox", "arg": "--include-comments", "default": false, "advanced": true, "actions": ["export"] },
+    { "name": "fetch_full_comments", "label": "完整导出评论（较慢，可能触发风控）", "type": "checkbox", "arg": "--fetch-full-comments", "default": false, "advanced": true, "actions": ["export"] },
+    { "name": "download_files", "label": "下载附件", "type": "checkbox", "arg": "--download-files", "default": false, "advanced": true, "actions": ["export"] }
+  ],
+  "actions": [
+    { "id": "login", "kind": "login", "label": "登录并保存凭证", "script": "../../backend/export_zsxq.py", "args": ["--login"], "track": false, "secondary": true },
+    { "id": "export", "kind": "export", "label": "开始导出", "script": "../../backend/export_zsxq.py", "args": ["--resume"], "progressTitle": "知识星球 Group 导出", "progressDetail": "正在读取帖子、正文和资源..." }
+  ]
+}

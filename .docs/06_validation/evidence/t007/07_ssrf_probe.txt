@@ -1,0 +1,12 @@
+$ curl -s -i -X POST -d '{"url":"http://127.0.0.1:3333/api/v1/system/health"}' http://localhost:3333/api/v1/extract
+
+HTTP/1.1 401 Unauthorized
+date: Sun, 13 Sep 2026 06:23:47 GMT
+server: uvicorn
+content-length: 108
+content-type: application/json
+x-request-id: abe6da9b-f267-46d9-be97-b36fefd2539e
+connection: close
+Vary: Accept-Encoding
+
+{"code":10001,"message":"缺少会话凭据","data":null,"requestId":"abe6da9b-f267-46d9-be97-b36fefd2539e"}

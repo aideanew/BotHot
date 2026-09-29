@@ -1,0 +1,100 @@
+{
+  "$schema": "../provider.schema.json",
+  "schemaVersion": 1,
+  "id": "your-provider",
+  "name": "你的平台",
+  "title": "你的平台 Markdown 导出",
+  "navLabel": "你的平台",
+  "description": "使用万能导标准 UI 接入一个新的导入或导出平台。",
+  "type": "hybrid",
+  "group": "export",
+  "trustLevel": "community",
+  "status": "experimental",
+  "guide": "README.md",
+  "homepage": "",
+  "tags": ["标准 UI", "社区共创"],
+  "capabilities": {
+    "export": true,
+    "import": false,
+    "guide": true,
+    "scanToc": true,
+    "images": true,
+    "attachments": false,
+    "tree": true,
+    "batch": true,
+    "retryFailures": false
+  },
+  "requirements": {
+    "python": [],
+    "system": [],
+    "notes": [
+      "请在 README.md 中说明登录方式、权限要求、平台限制和测试情况。",
+      "如果需要 requests、beautifulsoup4 等依赖，请写到这里和 README.md 中。"
+    ]
+  },
+  "toc": {
+    "itemsPath": "nodes",
+    "idKey": "nodeId",
+    "exportIdKey": "exportId",
+    "titleKey": "title",
+    "parentIdKey": "parentNodeId",
+    "selectableKey": "selectable",
+    "selectionArg": "--doc-id",
+    "note": "读取目录后，可以勾选要处理的文档；后续动作会自动携带已选中的 --doc-id。"
+  },
+  "fields": [
+    {
+      "name": "usage_notice",
+      "label": "接入说明",
+      "type": "notice",
+      "markdown": "复制本目录后，请把 provider.json 中的 id、name、title、description、capabilities、fields 和 actions 改成你的平台信息。"
+    },
+    {
+      "name": "source_dir",
+      "label": "源目录或缓存目录",
+      "type": "directory",
+      "history": "path",
+      "arg": "--source-dir",
+      "required": true,
+      "placeholder": "选择要读取的目录，或改成你的平台入口 URL 字段"
+    },
+    {
+      "name": "output",
+      "label": "输出目录",
+      "type": "directory",
+      "history": "path",
+      "arg": "--output",
+      "required": true
+    },
+    {
+      "name": "incremental",
+      "label": "跳过已存在文件",
+      "type": "checkbox",
+      "arg": "--incremental",
+      "default": false,
+      "advanced": true
+    }
+  ],
+  "actions": [
+    {
+      "id": "scan",
+      "kind": "scan",
+      "label": "读取目录",
+      "script": "actions.py",
+      "args": ["--scan-toc"],
+      "includeSelection": false,
+      "actionName": "读取目录",
+      "progressTitle": "读取平台目录",
+      "progressDetail": "正在读取目录结构..."
+    },
+    {
+      "id": "export",
+      "label": "开始导出",
+      "script": "actions.py",
+      "args": ["--export"],
+      "actionName": "导出",
+      "progressTitle": "平台导出",
+      "progressDetail": "正在导出 Markdown..."
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+
+### T1a GET /docs
+$ curl -s -i --max-time 15 http://localhost:3333/docs
+HTTP/1.1 404 Not Found
+Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate
+Vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch, Accept-Encoding
+X-Powered-By: Next.js
+Content-Type: text/html; charset=utf-8
+Date: Sun, 13 Sep 2026 06:21:20 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+Transfer-Encoding: chunked
+
+<!DOCTYPE html><html lang="zh-CN"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="/_next/static/css/51c7fa3f09ef270d.css" data-precedence="next"/><link rel="preload" as="script" fetchPriority="low" href="/_next/static/chunks/webpack-2393a3a10ab2477a.js"/><script src="/_next/static/chunks/c39a5622-c901a70582ccb25c.js" async=""></script><script src="/_next/static/chunks/374-14ef94331a84c512.js" async=""></script><script src="/_next/static/chunks/main-app-0b6e6d6f8d2e12aa.js" async=""></script><script src="/_next/static/chunks/193-d9a2e54fcdffcd3b.js" async=""></script><script src
+...[truncated, total 8936 chars]
+
+
+### T1b GET /openapi.json
+$ curl -s -i --max-time 15 http://localhost:3333/openapi.json
+HTTP/1.1 404 Not Found
+Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate
+Vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch, Accept-Encoding
+X-Powered-By: Next.js
+Content-Type: text/html; charset=utf-8
+Date: Sun, 13 Sep 2026 06:21:20 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+Transfer-Encoding: chunked
+
+<!DOCTYPE html><html lang="zh-CN"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="/_next/static/css/51c7fa3f09ef270d.css" data-precedence="next"/><link rel="preload" as="script" fetchPriority="low" href="/_next/static/chunks/webpack-2393a3a10ab2477a.js"/><script src="/_next/static/chunks/c39a5622-c901a70582ccb25c.js" async=""></script><script src="/_next/static/chunks/374-14ef94331a84c512.js" async=""></script><script src="/_next/static/chunks/main-app-0b6e6d6f8d2e12aa.js" async=""></script><script src="/_next/static/chunks/193-d9a2e54fcdffcd3b.js" async=""></script><script src
+...[truncated, total 8944 chars]
+
+
+### T1 docs via IPv6
+$ curl -s -i --max-time 15 -6 ... /docs
+HTTP/1.1 404 Not Found
+Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate
+Vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch, Accept-Encoding
+X-Powered-By: Next.js
+Content-Type: text/html; charset=utf-8
+Date: Sun, 13 Sep 2026 06:21:35 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+Transfer-Encoding: chunked
+
+<!DOCTYPE html><html lang="zh-CN"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="/_next/static/css/51c7fa3f09ef270d.css" data-precedence="next"/><link rel="preload" as="script" fetchPriority="low" href="/_next/static/chunks/webpack-2393a3a10ab2477a.js"/><script src="/_next/static/chunks/c39a5622-c901a70582ccb25c.js" async=""></script><script src="/_next/static/chunks/374-14ef94331a84c512.js" async=""></script><script src="/_next/static/chunks/main-app-0b6e6d6f8d2e12aa.js" async=
+...[truncated 8936 chars]
+
+### T1 openapi via IPv6
+$ curl -s -i --max-time 15 -6 ... /openapi.json
+HTTP/1.1 404 Not Found
+Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate
+Vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch, Accept-Encoding
+X-Powered-By: Next.js
+Content-Type: text/html; charset=utf-8
+Date: Sun, 13 Sep 2026 06:21:35 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+Transfer-Encoding: chunked
+
+<!DOCTYPE html><html lang="zh-CN"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="/_next/static/css/51c7fa3f09ef270d.css" data-precedence="next"/><link rel="preload" as="script" fetchPriority="low" href="/_next/static/chunks/webpack-2393a3a10ab2477a.js"/><script src="/_next/static/chunks/c39a5622-c901a70582ccb25c.js" async=""></script><script src="/_next/static/chunks/374-14ef94331a84c512.js" async=""></script><script src="/_next/static/chunks/main-app-0b6e6d6f8d2e12aa.js" async=
+...[truncated 8944 chars]
+
+### T2 API via IPv4
+$ curl -s -i --max-time 15 -4 ... /api/v1/system/health
+HTTP/1.1 200 OK
+date: Sun, 13 Sep 2026 06:21:35 GMT
+server: uvicorn
+content-length: 137
+content-type: application/json
+x-request-id: e6a45dc9-0e0d-4d0c-b231-8eb03de6fa4e
+connection: close
+Vary: Accept-Encoding
+
+{"code":0,"message":"ok","data":{"status":"ok","app":"AideanBot","env":"development"},"requestId":"e6a45dc9-0e0d-4d0c-b231-8eb03de6fa4e"}
+
+### T2 API via IPv6
+$ curl -s -i --max-time 15 -6 ... /api/v1/system/health
+HTTP/1.1 200 OK
+date: Sun, 13 Sep 2026 06:21:35 GMT
+server: uvicorn
+content-length: 137
+content-type: application/json
+x-request-id: 17dd5f0d-4809-46f6-b7fe-ee366636af8e
+connection: close
+Vary: Accept-Encoding
+
+{"code":0,"message":"ok","data":{"status":"ok","app":"AideanBot","env":"development"},"requestId":"17dd5f0d-4809-46f6-b7fe-ee366636af8e"}

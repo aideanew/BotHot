@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev]"
+      # §六十一：工具链指纹落盘。backend 的 ruff/mypy 在 pyproject 的 dev extras 里
+      # 钉死精确版本（实测 ruff 0.12.x 与 0.16.x 的 I001 规则互斥，一方的自动修复
+      # 即为另一方的违规），指纹让「CI 实际装到了什么版本」在失败时可追溯，
+      # 与 frontend 的 parity assert 对称
+      - name: Tool fingerprint
+        run: |
+          echo "python=$(python -V 2>&1) ruff=$(ruff --version) mypy=$(mypy --version)"
+      - name: Lint (ruff)
+        run: ruff check app tests
+      # N12（T1.5.4，2026-09-22）：补 mypy 静态门禁——此前 CI 是本地门禁脱机子集（本地口径
+      # mypy 56 files 全绿，CI 却零机检）；PG 连库用例在 CI 无 PG 时按既有口径自动 skip
+      - name: Type check (mypy)
+        run: mypy app
+      - name: Tests (pytest)
+        run: pytest tests/ -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      # N12：包管理器锁一 pnpm（仓库纪律为 pnpm-lock.yaml；此前 npm install 与
+      # package-lock.json 双轨漂移，2026-09-22 收敛单轨）
+      # N12b（2026-09-28）：Node 20 → 24。依据：vitest@5.0.0 声明
+      # `^22.12.0 || ^24.0.0 || >=26.0.0`、jsdom 声明 `^22.22.2 || ^24.15.0 || >=26.0.0`，
+      # Node 20 全不满足——CI 长期在「声明不支持」的运行时上跑测试，是同类问题
+      # 反复出现的机制性根源。锁精确补丁号，杜绝大版本浮标漂移。
+      #
+      # §六十一（N12d）**此处两次更正，顺序与解析方式都改过，保留痕迹**：
+      # 更正一（已作废）：N12b 原写「pnpm 版本改为读 frontend/package.json 的
+      #   packageManager，此处不再传 version」——从未生效：`defaults.run.working-directory`
+      #   只作用于 `run:` 步骤、**不作用于 `uses:` action**，`pnpm/action-setup` 在仓库根执行
+      #   而根目录没有 package.json（monorepo）→ "No pnpm version is specified"。
+      #   当时改为「setup-node 在前 + node 解析 + 显式 version」，方向对但**顺序错**。
+      # 更正二（现行）：`actions/setup-node` 的 `cache: pnpm` 会 shell out 找 pnpm，
+      #   pnpm 未装时直接报 "Unable to locate executable file: pnpm"。故
+      #   **pnpm/action-setup 必须在 setup-node 之前**——pnpm 二进制先落盘，
+      #   node 紧随其后，任何 `pnpm` 调用都排在两者之后（见下方 parity assert 的位置）。
+      #   代价：解析版本时 node 未必已在 PATH，故用 sed 而非 node 解析；
+      #   并统一用 `$GITHUB_WORKSPACE` 锚定路径（本事故的教训就是 cwd 假设失效）。
+      - name: Resolve pnpm version from packageManager
+        id: pnpm
+        shell: bash
+        run: |
+          pm=$(grep -m1 '"packageManager"' "$GITHUB_WORKSPACE/frontend/package.json" \
+            | sed -E 's/.*"packageManager"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' || true)
+          case "$pm" in
+            pnpm@[0-9]*\.[0-9]*\.[0-9]*)
+              echo "packageManager=$pm"
+              echo "version=${pm#pnpm@}" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "❌ packageManager 必须写成 pnpm@<精确版本>，实际：'${pm:-<缺失>}'"
+              echo "   隐式/范围/别名版本会让 pnpm/action-setup 静默漂移，先修再提交"
+              exit 1
+              ;;
+          esac
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ steps.pnpm.outputs.version }}
+          # 显式 false：安装由下方 `pnpm install --frozen-lockfile` 负责，
+          # 不让 action 自带 install 绕过 frozen-lockfile
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      # §六十一：运行时指纹从「打印」升级为「断言」——声明值与实际值不一致时以可读错误
+      # 立即失败，而不是把含糊错误留给付下游 action（本次故障的报错即如此）。
+      # 位置刻意排在两个 setup action 之后：它同时调 node 与 pnpm，两者须都已就位
+      - name: Runtime fingerprint & parity assert
+        shell: bash
+        run: |
+          echo "node=$(node -v) pnpm=$(pnpm -v) tz=$(date +%Z) os=$(uname -sr)"
+          exp_node=$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/frontend/.nvmrc")
+          act_node=$(node -v | sed 's/^v//')
+          exp_pnpm=${{ steps.pnpm.outputs.version }}
+          act_pnpm=$(pnpm -v)
+          [ "$act_node" = "$exp_node" ] || {
+            echo "❌ node 版本漂移：.nvmrc=$exp_node 实际=$act_node"; exit 1; }
+          [ "$act_pnpm" = "$exp_pnpm" ] || {
+            echo "❌ pnpm 版本漂移：packageManager=$exp_pnpm 实际=$act_pnpm"; exit 1; }
+          echo "✅ 运行时与声明一致：node=$act_node pnpm=$act_pnpm"
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Type check
+        run: pnpm run typecheck
+      # N12：补 vitest 单测门禁——此前 89 用例仅本地机检
+      # N12b（2026-09-28）：加 --retry=2。t0263 的 findBy* 后立即断言 mock 调用存在
+      # 微任务竞态（详见 frontend/tests/t0263 注释）；重试兜底，同时该测试已改为
+      # waitFor 断言以消除竞态——重试只是第二道防线，不是唯一防线。
+      - name: Unit tests (vitest)
+        run: pnpm run test:unit -- --retry=2
+      # N12b：失败时把单测原始日志留档，避免再出现「只有摘要、无原始输出」的取证困境
+      - name: Upload vitest diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-logs
+          path: frontend/vitest-report/
+          if-no-files-found: ignore
+      - name: Build
+        run: pnpm run build
+        env:
+          NEXT_PUBLIC_API_MOCK: "false"
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose config
+        run: docker compose -f docker/compose.yml config --quiet
