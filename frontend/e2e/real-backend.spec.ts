@@ -11,7 +11,7 @@ import { test, expect } from "@playwright/test";
  *   npx playwright test --config=playwright.config.ts e2e/real-backend.spec.ts
  *
  * 注意：本套件与 trunk.spec.ts 不可同时运行——trunk.spec.ts 用 MOCK=true（3456），
- * 本套件用 MOCK=false（3333）。两套 base URL 不同，CI 需分 job 执行。
+ * 本套件用 MOCK=false（3200）。两套 base URL 不同，CI 需分 job 执行。
  *
  * 登录路径：SSO OIDC code flow（主平台 aidean_issuer），非 mock 本地登录。
  * 需主平台 OIDC 白名单已配置 bothot redirect_uri，否则 SSO 回调失败。

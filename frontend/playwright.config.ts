@@ -6,15 +6,15 @@ import { defineConfig, devices } from "@playwright/test";
  * 双口径约定（验收/CI 统一按此执行）：
  * ① MOCK 态（默认回归）：`NEXT_PUBLIC_API_MOCK=true` 烘焙构建产物，`PORT=3456` 隔离跑
  *    `NEXT_PUBLIC_API_MOCK=true PORT=3456 pnpm test:e2e` → 期望 9/9 绿。
- *    3456 是 e2e 专用隔离口，与业务铁律端口（3000/3333）无冲突。
+ *    3456 是 e2e 专用隔离口，与业务铁律端口（3000/3200）无冲突。
  * ② 真实态（活体链路）：复用 `http://localhost:3200` 常驻容器（烘焙 MOCK=false），
  *    `PORT=3200` 直接对容器执行（webServer reuseExistingServer 复用，不起新服务）。
  *    严禁把 mock 用例跑在 MOCK=false 容器上（A-T17.1 八红根因：SSO 502 假红非回归）。
  *
- * baseURL 走 PORT 环境变量（默认 3333），禁止硬编码 3000；
+ * baseURL 走 PORT 环境变量（默认 3200），禁止硬编码 3000；
  * webServer 自动起服（复用已构建产物），测试结束自动回收进程。
  */
-const PORT = Number(process.env.PORT || 3333);
+const PORT = Number(process.env.PORT || 3200);
 
 export default defineConfig({
   testDir: "./e2e",

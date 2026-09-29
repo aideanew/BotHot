@@ -6,18 +6,22 @@ BotHot 是从 AideanBot 全面升级而来的多渠道机器人推送与知识�
 
 ## 核心能力
 
-### 1. 多渠道机器人推送（新增）
+### 1. 多渠道机器人推送
 - **六种渠道**：飞书、钉钉、企业微信、微信 ClawBot、通用 Webhook、站内通知
 - **定时推送**：Cron 表达式驱动，支持每天定时、周期推送
 - **事件触发**：新文章入库、热点更新等事件自动触发推送
 - **测试推送**：管理端一键测试渠道连通性
 - **推送日志**：完整投递记录，成功/失败/响应摘要
 
+> ✅ **当前实现状态**：渠道管理 API、推送任务模型、推送日志模型已建成。六种渠道的 PushProvider 均已实现真实投递（飞书/钉钉/企微/Webhook/站内通知已通，微信 ClawBot 需部署 ClawBot 服务后可用）。PushScheduler 以 60s 间隔在 backend 进程内运行（FastAPI lifespan）。详见 [待办清单](docs/04_engineering/backlog.md)。
+
 ### 2. 热点聚簇与日报（融合 AIHOT）
 - **热点聚簇**：多篇文章按主题聚簇为事件，按热度排序
 - **热度评分**：48h 内独立来源数加权，24h 减半
 - **Feed 流**：信息流首页，支持类型/分类筛选
 - **每日日报**：自动取 TOP 10 热点生成 Markdown 日报
+
+> ⚠️ **当前实现状态**：数据模型已建（HotTopic, DailyReport, FeedItem），聚簇/评分/日报逻辑待 v0.5 落地。
 
 ### 3. 知识库管理（继承 AideanBot）
 - 公众号链接解析入库（RedFox + Wandao）
@@ -48,6 +52,20 @@ Frontend (Next.js 14 / Node 22)  →  port 3200
 | Redis     | 6380    | 6379    |
 
 > 端口 3000 归主平台，BotHot 前端统一使用 3200。
+
+## 项目文档
+
+所有文档在 `docs/` 目录，入口导航见 [docs/00_governance/project-map.md](docs/00_governance/project-map.md)。
+
+| 文档 | 说明 |
+|---|---|
+| [产品愿景](docs/01_product/product-vision.md) | BotHot 要解决什么问题 |
+| [功能需求基线](docs/02_requirements/product-requirements.md) | 9 个后端业务域 + 10 个前端功能域 |
+| [系统架构设计](docs/03_solution/architecture.md) | 进程拓扑、数据模型、推送架构、SSO 流程 |
+| [项目目录架构设计](docs/03_solution/project-structure-design.md) | apps/ monorepo 目标结构 + 迁移策略 |
+| [工程规范](docs/04_engineering/conventions.md) | 端口、命名、Git、测试、安全规范 |
+| [路线图](docs/04_engineering/roadmap.md) | v0.3 → v1.0 路线图 |
+| [待办清单](docs/04_engineering/backlog.md) | 按优先级排列的待办任务 |
 
 ## 快速开始
 
@@ -106,64 +124,32 @@ pnpm dev  # 自动在 3200 端口启动
 - `POST   /api/v1/hot/daily/generate`    — 生成日报
 - `GET    /api/v1/hot/feed`              — Feed 流
 
-## 渠道配置指南
-
-### 飞书机器人
-1. 在飞书群中添加自定义机器人
-2. 复制 Webhook URL（`https://open.feishu.cn/open-apis/bot/v2/hook/xxx`）
-3. （可选）启用加签模式，复制密钥
-4. 在 BotHot 管理端创建渠道，填入 Webhook URL 和密钥
-
-### 钉钉机器人
-1. 在钉钉群中添加自定义机器人
-2. 复制 Webhook URL（`https://oapi.dingtalk.com/robot/send?access_token=xxx`）
-3. （可选）启用加签模式
-4. 在 BotHot 管理端创建渠道
-
-### 企业微信群机器人
-1. 在企业微信群中添加群机器人
-2. 复制 Webhook URL
-3. 在 BotHot 管理端创建渠道
-
-## 项目结构
+## 项目结构（当前）
 
 ```
 BotHot/
 ├── backend/
 │   ├── app/
-│   │   ├── api/v1/
-│   │   │   ├── bots.py          # 机器人渠道管理 API
-│   │   │   ├── hot.py           # 热点聚簇与日报 API
-│   │   │   └── ...
-│   │   ├── models/
-│   │   │   ├── bothot_entities.py  # BotHot 扩展模型
-│   │   │   └── ...
-│   │   ├── providers/push/
-│   │   │   ├── feishu.py        # 飞书推送 Provider
-│   │   │   ├── dingtalk.py      # 钉钉推送 Provider
-│   │   │   ├── wechat_work.py   # 企业微信推送 Provider
-│   │   │   ├── webhook.py       # 通用 Webhook Provider
-│   │   │   ├── wechat_clawbot.py # 微信 ClawBot Provider
-│   │   │   └── web.py           # 站内通知 Provider
-│   │   ├── services/
-│   │   │   ├── push_scheduler.py # 推送任务调度器
-│   │   │   └── ...
-│   │   └── ...
-│   └── alembic/versions/
-│       └── ab1004bh01_bothot_extensions.py  # BotHot 扩展表迁移
+│   │   ├── api/v1/                    # API 路由（9 个业务域）
+│   │   ├── models/                    # 数据模型
+│   │   ├── services/                  # 业务服务
+│   │   ├── providers/                 # 外部服务适配器
+│   │   └── core/                      # 横切关注点
+│   └── alembic/                       # 数据库迁移
 ├── frontend/
-│   ├── app/
-│   │   ├── bots/                # 机器人渠道管理页
-│   │   ├── hot/                 # 热点中心
-│   │   ├── hot/daily/           # 每日日报
-│   │   └── ...
-│   └── lib/api/
-│       ├── bots.ts              # 机器人 API 模块
-│       └── hot.ts               # 热点 API 模块
-└── docker/
-    ├── compose.yml              # Docker Compose 编排
-    └── .env.example             # 环境变量模板
+│   ├── app/                           # Next.js App Router 页面
+│   ├── components/                    # React 组件
+│   └── lib/api/                       # API 调用模块
+├── docker/
+│   ├── compose.yml                    # Docker Compose 编排
+│   └── .env.example                   # 环境变量模板
+├── docs/                              # 项目文档（00_governance ~ 09_archive）
+├── scripts/                           # 自动化脚本
+├── AGENTS.md                          # AI 协作规范
+└── README.md                          # 本文件
 ```
+
+> 目标目录架构（apps/ monorepo）见 [项目目录架构设计](docs/03_solution/project-structure-design.md)。
 
 ## 与 AideanBot 的关系
 
@@ -171,7 +157,7 @@ BotHot 是 AideanBot 的全面升级版：
 - **保留**：公众号链接入库、LangBot RAG、知识空间管理、SSO 认证、整号订阅
 - **新增**：多渠道推送（6 种渠道）、定时推送调度、热点聚簇、每日日报、Feed 流
 - **改名**：AideanBot → BotHot（session cookie、项目名、容器名全部更新）
-- **端口**：前端 3200（原 3333）、后端 3300（原 8000 容器内同步改为 3300）
+- **端口**：前端 3200、后端 3300
 
 ## License
 
