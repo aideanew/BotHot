@@ -1,0 +1,2811 @@
+# PROJECT DOCUMENTATION SPECIFICATION
+
+**项目文档规范体系**
+
+* **文档类型**：项目级规范
+* **文档版本**：v1.1
+* **状态**：Active
+* **适用范围**：产品项目 / 软件项目 / AI 辅助开发项目 / 多人协作项目
+* **文档目的**：建立统一、可追溯、可维护、可供人和 AI 共同理解与执行的项目文档体系
+
+---
+
+# 1. 文档目的
+
+本规范用于定义项目开发过程中：
+
+* 文档如何分类
+* 文档如何组织
+* 新需求如何进入项目
+* 功能需求与非功能需求如何区分与存储
+* 需求如何形成正式基线
+* 方案与决策如何记录
+* 新需求产生的执行方案放在哪里
+* 项目完整目录结构与文档关联关系放在哪里
+* 开发计划如何产生
+* 工作如何拆解
+* 原子任务如何定义
+* 执行步骤如何描述
+* 如何验证任务完成
+* 如何保存完成证据
+* 如何记录版本与变更
+* 如何保留项目历史
+* 如何建立完整的需求到交付追溯链
+
+本规范**只规定项目文档体系，不规定项目实际代码目录结构**。
+
+---
+
+# 2. 核心目标
+
+项目文档体系必须使任意一个新的项目成员、人类管理者或 AI Agent，在不依赖口头说明、不依赖个人记忆、不依赖历史聊天记录的情况下，能够回答以下问题：
+
+1. 这个项目为什么存在？
+2. 项目的目标是什么？
+3. 当前有哪些正式需求？
+4. 哪些需求尚未确认？
+5. 最近新增了什么需求？
+6. 为什么接受或拒绝某个需求？
+7. 当前采用了什么方案？
+8. 为什么采用这个方案？
+9. 哪些方案已经被否决？
+10. 当前阶段准备完成什么？
+11. 当前正在执行什么？
+12. 每个任务完成的定义是什么？
+13. 任务完成的证据在哪里？
+14. 哪些任务被阻塞？
+15. 最近发生了哪些重要变化？
+16. 下一步应该执行什么？
+17. 项目的完整目录结构是什么？
+18. 各文档之间的关联关系是什么？
+
+---
+
+# 3. 核心原则
+
+## 3.1 文档不是资料堆
+
+文档体系不是为了让项目拥有尽可能多的 Markdown 文件。
+
+文档只有在服务于以下至少一个目标时才应该存在：
+
+* 定义目标
+* 定义需求
+* 记录决策
+* 描述方案
+* 制定计划
+* 驱动执行
+* 验证完成
+* 保存历史
+* 沉淀知识
+
+---
+
+## 3.2 Single Source of Truth
+
+同一种事实只能拥有一个权威来源。
+
+推荐建立以下对应关系：
+
+| 信息类型 | 权威来源 |
+| --- | --- |
+| 项目目标 | Product / Project Definition |
+| 正式需求 | Requirement |
+| 需求待办顺序 | Backlog |
+| 技术决策 | ADR |
+| 架构方案 | Architecture |
+| 需求执行方案 | Solution |
+| 当前计划 | Current Plan |
+| 任务状态 | Task |
+| 验收结果 | Validation |
+| 完成证据 | Evidence |
+| 发布事实 | Release Record / Changelog |
+| 目录结构与关联关系 | Project Map |
+
+其他文档允许引用这些信息，但不应复制并维护第二份独立事实。
+
+---
+
+## 3.3 完整不等于文件多
+
+项目必须遵循**按复杂度裁剪**原则。
+
+### 最小项目
+
+可以只有：
+
+```text
+项目定义
+需求
+计划
+任务
+决策
+验收
+变更记录
+```
+
+### 中型项目
+
+增加：
+
+```text
+风险
+架构
+设计
+方案
+测试
+发布
+知识沉淀
+```
+
+### 大型或高复杂度项目
+
+根据需要增加：
+
+```text
+安全
+数据
+接口
+部署
+运维
+合规
+质量
+供应商
+审计
+灾备
+```
+
+不允许为了"看起来完整"而机械创建大量空文档。
+
+---
+
+## 3.4 文档按信息类型组织
+
+目录应该表达：
+
+> 这是什么信息。
+
+不应该单纯表达：
+
+> 项目现在处于哪个阶段。
+
+项目实际执行通常是循环的：
+
+```text
+需求
+  ↓
+方案
+  ↓
+计划
+  ↓
+执行
+  ↓
+验证
+  ↓
+反馈
+  ↓
+需求变化
+  ↓
+再次计划
+```
+
+因此文档目录不应完全依赖瀑布式阶段。
+
+---
+
+## 3.5 文档必须可追溯
+
+正式工作尽量建立如下关系：
+
+```text
+Requirement
+    ↓
+Decision / Solution / Design
+    ↓
+Plan
+    ↓
+Work Package
+    ↓
+Task
+    ↓
+Validation
+    ↓
+Evidence
+    ↓
+Release
+```
+
+任何一个节点都应该可以向前追溯，也尽量可以向后追溯。
+
+---
+
+## 3.6 历史不能被覆盖
+
+已经产生的正式决策、正式需求和重要历史事实，不应通过直接删除或覆盖来制造"从来没有发生过"的状态。
+
+推荐使用：
+
+```text
+superseded
+rejected
+cancelled
+archived
+```
+
+而不是删除历史。
+
+---
+
+## 3.7 当前状态与历史状态分离
+
+当前状态用于回答：
+
+> 现在是什么情况？
+
+历史记录用于回答：
+
+> 为什么变成现在这样？
+
+两者都必须保留。
+
+---
+
+# 4. 推荐项目文档目录
+
+```text
+docs/
+│
+├── 00_governance/                    # 项目治理
+│   ├── README.md                     # 文档系统入口
+│   ├── document-index.md             # 文档总索引
+│   ├── project-map.md                # 项目目录结构与文档关联关系 ★
+│   ├── document-standard.md          # 文档规范
+│   ├── glossary.md                   # 术语表
+│   ├── stakeholders.md               # 角色与责任
+│   ├── risks.md                      # 风险登记
+│   ├── assumptions.md                # 假设登记
+│   └── dependencies.md               # 外部/内部依赖
+│
+├── 01_product/                       # 产品定义
+│   ├── product-vision.md             # 产品愿景
+│   ├── product-goals.md              # 产品目标
+│   ├── product-scope.md              # 产品范围
+│   └── success-metrics.md            # 成功指标
+│
+├── 02_requirements/                  # 需求系统
+│   ├── inbox/                        # 新需求原始入口 ★
+│   │   └── REQ-INBOX-YYYYMMDD-001.md
+│   ├── features/                     # 功能需求 ★
+│   │   └── REQ-F-001-xxx.md
+│   ├── non-functional/               # 非功能需求 ★
+│   │   └── REQ-NF-001-xxx.md
+│   ├── constraints/                  # 约束需求 ★
+│   │   └── REQ-C-001-xxx.md
+│   ├── product-requirements.md       # 当前需求基线
+│   ├── backlog.md                    # 需求/工作待办池
+│   └── rejected.md                   # 被拒绝/取消需求索引
+│
+├── 03_solution/                      # 方案与设计
+│   ├── architecture.md               # 架构设计
+│   ├── design/                       # 详细设计
+│   │   └── DESIGN-001-xxx.md
+│   ├── solutions/                    # 需求执行方案 ★
+│   │   └── SOL-001-xxx.md
+│   ├── technical-requirements.md     # 技术需求
+│   ├── constraints.md                # 技术/业务约束
+│   └── decisions/                    # ADR / 决策记录
+│       └── ADR-001-xxx.md
+│
+├── 04_planning/                      # 计划
+│   ├── roadmap.md                    # 长期路线
+│   ├── milestones.md                 # 里程碑
+│   ├── releases/                     # Release 计划
+│   └── current-plan.md               # 当前执行计划
+│
+├── 05_execution/                     # 执行任务
+│   ├── task-template.md              # 任务模板
+│   ├── tasks/                        # 所有任务
+│   │   └── TASK-001.md
+│   └── task-index.md                 # 当前任务索引
+│
+├── 06_validation/                    # 验证与验收
+│   ├── validation-plan.md            # 验证计划
+│   ├── acceptance/                   # 验收记录
+│   │   └── VAL-001.md
+│   ├── test-results/                 # 测试结果
+│   └── evidence/                     # 完成证据
+│       └── EVD-001/
+│
+├── 07_release/                       # 发布
+│   ├── release-notes/                # 发布说明
+│   ├── changelog.md                  # 变更日志
+│   └── release-records/              # 发布记录
+│       └── REL-001.md
+│
+├── 08_knowledge/                     # 项目知识
+│   ├── lessons-learned.md            # 经验沉淀
+│   ├── retrospectives/               # 复盘记录
+│   ├── faq.md                        # 常见问题
+│   ├── meetings/                     # 会议记录
+│   └── technical-notes/              # 技术笔记
+│
+└── 09_archive/                       # 历史归档
+    ├── superseded/                   # 被替代文档
+    ├── cancelled/                    # 已取消内容
+    └── obsolete/                     # 已废弃内容
+```
+
+---
+
+# 5. 文档分类
+
+项目文档分为以下核心类型。
+
+## 5.1 Governance
+
+用于描述：
+
+* 项目治理
+* 文档治理
+* 项目完整目录结构与文档关联关系
+* 角色责任
+* 规则
+* 风险
+* 假设
+* 依赖
+* 术语
+
+---
+
+## 5.2 Product
+
+用于描述：
+
+* 项目为什么存在
+* 用户是谁
+* 产品目标是什么
+* 产品范围是什么
+* 成功标准是什么
+
+---
+
+## 5.3 Requirement
+
+用于描述：
+
+* 要解决什么问题
+* 希望实现什么结果
+* 用户需要什么
+* 功能和非功能要求是什么
+* 什么条件下算满足需求
+
+需求按类型分为三类，分别存入不同子目录：
+
+| 类型 | 前缀 | 存储位置 | 说明 |
+| --- | --- | --- | --- |
+| 功能需求 | `REQ-F-` | `02_requirements/features/` | 系统必须具备的具体功能与行为 |
+| 非功能需求 | `REQ-NF-` | `02_requirements/non-functional/` | 性能、安全、可用性、兼容性等质量属性 |
+| 约束需求 | `REQ-C-` | `02_requirements/constraints/` | 技术、法规、预算、时间等外部约束 |
+
+所有需求**无论类型**，必须首先进入 `02_requirements/inbox/`，经分析后再归入对应子目录。
+
+---
+
+## 5.4 Solution
+
+用于描述：
+
+* 针对某个需求或一组需求，采用什么执行方案
+* 方案的具体设计思路
+* 方案的技术实现路径
+* 方案的输入与输出边界
+* 方案涉及的关键决策引用
+
+Solution 与 ADR 的区别：
+
+| 文档 | 回答的问题 |
+| --- | --- |
+| ADR | 为什么做这个决策？考虑了哪些选项？ |
+| Solution | 这个需求具体怎么实现？执行路径是什么？ |
+
+---
+
+## 5.5 Decision
+
+用于记录：
+
+* 发生过哪些重要决策
+* 为什么做出决策
+* 考虑过哪些替代方案
+* 决策带来的影响
+
+---
+
+## 5.6 Planning
+
+用于描述：
+
+* 长期方向
+* 里程碑
+* Release
+* 当前阶段目标
+* 当前准备交付什么
+
+---
+
+## 5.7 Execution
+
+用于描述：
+
+* 当前具体工作
+* 任务目标
+* 执行步骤
+* 依赖
+* 验收条件
+* 完成状态
+
+---
+
+## 5.8 Validation
+
+用于记录：
+
+* 是否完成
+* 是否满足需求
+* 如何验证
+* 验证结果
+* 验收结论
+
+---
+
+## 5.9 Evidence
+
+用于保存：
+
+* 测试结果
+* 截图
+* 日志
+* 报告
+* 输出文件
+* PR / Commit / Issue 引用
+* 其他能够证明结果的材料
+
+---
+
+## 5.10 Release
+
+用于记录：
+
+* 发布什么
+* 何时发布
+* 包含什么变化
+* 是否存在已知问题
+
+---
+
+## 5.11 Knowledge
+
+用于沉淀：
+
+* 项目经验
+* 失败经验
+* 复盘结果
+* 常见问题
+* 技术探索
+
+---
+
+# 6. 新需求管理规范
+
+## 6.1 新需求统一入口
+
+任何来源的新需求必须首先进入：
+
+```text
+02_requirements/inbox/
+```
+
+来源可以包括：
+
+* 用户
+* 产品经理
+* 客户
+* 管理者
+* 开发人员
+* 测试人员
+* AI Agent
+* 市场反馈
+* 运营反馈
+* 技术探索
+
+---
+
+## 6.2 Inbox 文档原则
+
+Inbox 保存的是：
+
+> 原始需求事实。
+
+原则上不修改原始表述，只补充必要元数据。
+
+示例：
+
+```text
+REQ-INBOX-20260922-001.md
+```
+
+建议记录：
+
+```yaml
+---
+id: REQ-INBOX-20260922-001
+type: requirement-inbox
+status: new
+source: user
+created: 2026-09-22
+---
+```
+
+正文：
+
+```markdown
+# 原始需求
+
+## 原始描述
+
+记录提出者最初提出的需求。
+
+## 背景
+
+记录需求出现的背景。
+
+## 来源
+
+记录来自哪里。
+
+## 附加上下文
+
+记录相关信息、链接、附件等。
+```
+
+---
+
+## 6.3 新增功能需求的归档路径
+
+功能需求经分析后，进入：
+
+```text
+02_requirements/features/
+```
+
+文件命名：
+
+```text
+REQ-F-001-用户邮箱登录.md
+REQ-F-002-商品搜索.md
+```
+
+功能需求的核心判断标准：
+
+> 这个需求描述的是系统**必须能做什么**，而不是系统必须满足什么质量属性。
+
+若判断为非功能需求（如性能、安全），进入：
+
+```text
+02_requirements/non-functional/REQ-NF-001-xxx.md
+```
+
+若判断为约束（如必须使用某技术栈），进入：
+
+```text
+02_requirements/constraints/REQ-C-001-xxx.md
+```
+
+---
+
+# 7. 正式需求规范
+
+经过分析后的需求进入对应子目录，以功能需求为例：
+
+```text
+02_requirements/features/REQ-F-001-user-authentication.md
+```
+
+正式需求至少包含：
+
+```markdown
+# REQ-F-001：需求名称
+
+## 1. 基本信息
+
+- ID：
+- 类型：functional / non-functional / constraint
+- 状态：
+- Owner：
+- Reviewer：
+- 创建时间：
+- 更新时间：
+- 来源 Inbox：
+
+## 2. 背景
+
+为什么需要这个需求？
+
+## 3. 目标
+
+希望通过这个需求达到什么结果？
+
+## 4. 需求描述
+
+详细描述需求。
+
+## 5. 范围
+
+### In Scope
+
+明确包含什么。
+
+### Out of Scope
+
+明确不包含什么。
+
+## 6. 约束
+
+列出限制条件。
+
+## 7. 依赖
+
+列出相关依赖。
+
+## 8. 验收条件
+
+定义什么情况下认为需求被满足。
+
+## 9. 影响分析
+
+分析对产品、方案、计划和已有工作的影响。
+
+## 10. 状态变化
+
+记录重大状态变化及原因。
+
+## 11. 关联文档
+
+- Solution：
+- Decision：
+- Design：
+- Plan：
+- Task：
+- Validation：
+- Release：
+```
+
+---
+
+# 8. Product Requirements Baseline
+
+```text
+02_requirements/product-requirements.md
+```
+
+用于保存：
+
+> 当前有效的正式需求基线。
+
+它不是所有历史需求的集合，只描述当前有效状态。
+
+历史需求应该通过：
+
+```text
+features/
+non-functional/
+constraints/
+archive/
+```
+
+保留。
+
+---
+
+# 9. Backlog 规范
+
+Backlog 用于回答：
+
+> 项目当前有哪些待处理工作，以及它们的当前状态和顺序？
+
+Backlog 不应该替代正式需求文档。
+
+示例：
+
+```markdown
+# Product Backlog
+
+| ID | 标题 | 类型 | 优先级 | 状态 | 来源 |
+|---|---|---|---|---|---|
+| REQ-F-001 | 用户登录 | Feature | High | Ready | REQ-INBOX-20260922-001 |
+| REQ-F-002 | 数据导出 | Feature | Medium | Proposed | REQ-INBOX-20260922-002 |
+| REQ-NF-001 | 接口响应 <200ms | Non-Functional | High | Backlog | REQ-INBOX-20260920-003 |
+| REQ-F-003 | 多语言 | Feature | Low | Icebox | REQ-INBOX-20260901-001 |
+```
+
+Backlog 状态定义：
+
+| 状态 | 含义 |
+| --- | --- |
+| Proposed | 已进入 Inbox，待评估 |
+| Backlog | 已评估，待排期 |
+| Ready | 已排期，条件齐全，可执行 |
+| In Progress | 正在执行 |
+| Done | 已完成并验证 |
+| Icebox | 暂缓，未来可能考虑 |
+| Rejected | 已拒绝 |
+
+Backlog 可以按照项目实际方法增加：
+
+```text
+Priority
+Order
+Status
+Estimate
+Target Release
+```
+
+但不得承载完整需求正文。
+
+---
+
+# 10. 项目目录结构与文档关联关系规范
+
+## 10.1 存储位置
+
+项目完整目录结构与文档关联关系，统一存储在：
+
+```text
+00_governance/project-map.md
+```
+
+## 10.2 Project Map 的作用
+
+Project Map 用于回答：
+
+> 这个项目的文档体系长什么样？各文档之间如何关联？
+
+它是整个项目文档体系的导航地图，与 `document-index.md` 的区别如下：
+
+| 文档 | 回答的问题 |
+| --- | --- |
+| `document-index.md` | 当前项目有哪些文档？它们在哪里？ |
+| `project-map.md` | 项目的完整目录结构是什么？各类文档之间是什么关系？ |
+
+## 10.3 Project Map 模板
+
+```markdown
+# Project Map
+
+## 1. 文档目录结构
+
+描述当前项目 docs/ 目录的完整结构，包含每个目录和关键文件的用途说明。
+
+（参考本规范第 4 节目录树格式）
+
+## 2. 文档关联关系
+
+描述主要文档类型之间的逻辑关系。
+
+### 核心追溯链
+
+\```text
+REQ-F / REQ-NF / REQ-C
+         ↓
+    SOL / ADR / DESIGN
+         ↓
+      PLAN / MILESTONE
+         ↓
+      WORK PACKAGE
+         ↓
+       ATOMIC TASK
+         ↓
+   EXECUTION STEPS
+         ↓
+      VALIDATION
+         ↓
+       EVIDENCE
+         ↓
+       RELEASE
+\```
+
+### 关键关联说明
+
+| 来源文档 | 目标文档 | 关联关系描述 |
+|---|---|---|
+| REQ-INBOX | REQ-F / REQ-NF / REQ-C | Inbox 经分析后归入对应需求类型 |
+| REQ-F | SOL | 功能需求驱动执行方案 |
+| REQ-F | ADR | 需求引发关键技术决策 |
+| SOL | TASK | 执行方案分解为原子任务 |
+| ADR | DESIGN | 决策指导详细设计 |
+| TASK | VAL | 任务完成后进入验证 |
+| VAL | EVD | 验证结果关联完成证据 |
+| REL | CHANGELOG | 每次发布更新变更日志 |
+
+## 3. 当前项目文档状态总览
+
+描述当前哪些核心文档已存在、哪些尚未创建。
+
+| 文档 | 路径 | 状态 |
+|---|---|---|
+| 产品定义 | 01_product/product-vision.md | ✅ 已创建 |
+| 需求基线 | 02_requirements/product-requirements.md | ✅ 已创建 |
+| 当前计划 | 04_planning/current-plan.md | 🚧 待创建 |
+| 架构设计 | 03_solution/architecture.md | 🚧 待创建 |
+
+## 4. 更新规则
+
+- 每次新增重要文档时，同步更新本文件第 3 节状态总览
+- 每次目录结构发生重大变化时，同步更新第 1 节
+- 不在本文件中存储任何需求、任务、决策的具体内容
+```
+
+---
+
+# 11. 新增需求后的执行方案规范
+
+## 11.1 执行方案的存储位置
+
+当一个需求被批准后，如果该需求需要分析具体的实现路径，必须在以下位置创建对应的执行方案文档：
+
+```text
+03_solution/solutions/SOL-001-xxx.md
+```
+
+文件命名示例：
+
+```text
+SOL-001-user-email-login.md
+SOL-002-data-export.md
+```
+
+## 11.2 Solution 与其他文档的关系
+
+```text
+REQ-F-001（功能需求）
+      ↓
+  需要分析实现路径？
+      ↓
+SOL-001（执行方案）        ← 描述具体怎么实现
+ADR-001（技术决策）        ← 描述为什么这样决策
+DESIGN-001（详细设计）     ← 描述具体技术设计
+      ↓
+PLAN（排入计划）
+      ↓
+TASK（拆解为原子任务）
+```
+
+## 11.3 何时需要创建 Solution 文档
+
+满足以下任一条件时，必须为需求创建独立 Solution 文档：
+
+* 需求的实现路径存在多种方案，需要对比并说明选择原因
+* 需求的实现涉及跨模块或跨系统协作
+* 需求预计分解出超过 3 个独立 Task
+* 需求被 AI Agent 执行，需要提供明确的执行上下文
+
+简单需求（如修改文案、调整样式）可以不创建 Solution，直接从 Requirement 到 Task。
+
+## 11.4 Solution 标准模板
+
+```markdown
+# SOL-001：方案名称
+
+## 1. 基本信息
+
+- ID：
+- 类型：solution
+- 状态：draft / proposed / approved / superseded
+- Owner：
+- Reviewer：
+- 创建时间：
+- 更新时间：
+
+## 2. 来源需求
+
+- Requirement：REQ-F-001
+- 需求描述摘要：
+
+## 3. 问题定义
+
+本方案要解决什么问题？
+
+## 4. 方案目标
+
+本方案完成后，应产生什么可验证的结果？
+
+## 5. 方案描述
+
+### 5.1 总体思路
+
+描述实现路径的核心逻辑。
+
+### 5.2 关键步骤
+
+描述实现的主要阶段和步骤。
+
+### 5.3 输入
+
+本方案执行需要哪些输入？
+
+### 5.4 输出
+
+本方案完成后产生哪些交付物？
+
+## 6. 技术选型与决策引用
+
+- ADR：ADR-001（引用关键技术决策）
+
+## 7. 约束与假设
+
+列出执行本方案的前提假设和限制条件。
+
+## 8. 影响范围
+
+本方案涉及哪些模块、文件、接口或外部系统？
+
+## 9. 风险
+
+列出方案执行中可能出现的问题。
+
+## 10. 验收标准
+
+定义什么情况下认为本方案已成功实现。
+
+## 11. Work Package 分解
+
+| WP ID | 名称 | 描述 |
+|---|---|---|
+| WP-001 | 身份验证模块 | 实现核心认证逻辑 |
+| WP-002 | 邮件发送模块 | 实现验证码发送能力 |
+
+## 12. 关联文档
+
+- Requirement：
+- Decision：
+- Design：
+- Plan：
+- Tasks：
+```
+
+---
+
+# 12. Roadmap 规范
+
+Roadmap 回答：
+
+> 长期准备做什么？
+
+Roadmap 应保持较高层级。
+
+示例：
+
+```markdown
+# Product Roadmap
+
+## Phase 1
+
+目标：
+
+- 完成核心流程
+- 建立基础能力
+
+## Phase 2
+
+目标：
+
+- 扩展自动化能力
+- 优化用户体验
+
+## Phase 3
+
+目标：
+
+- 扩展高级能力
+- 完成规模化支持
+```
+
+Roadmap 不应写成：
+
+```text
+修改 xxx 文件
+新增 xxx API
+修复 xxx bug
+```
+
+这些属于 Task 层。
+
+---
+
+# 13. Milestone / Release 规范
+
+Milestone / Release 用于定义：
+
+> 某个时间或阶段必须交付什么结果。
+
+示例：
+
+```markdown
+# Milestone M1
+
+## 目标
+
+完成核心用户流程。
+
+## 包含需求
+
+- REQ-F-001
+- REQ-F-002
+- REQ-NF-001
+
+## 退出条件
+
+- 核心流程完成
+- 验收通过
+- 必要证据齐全
+
+## 关联方案
+
+- SOL-001
+- SOL-002
+
+## 关联任务
+
+- TASK-001
+- TASK-002
+- TASK-003
+```
+
+---
+
+# 14. Current Plan 规范
+
+Current Plan 回答：
+
+> 当前这一轮实际准备做什么？
+
+建议结构：
+
+```markdown
+# Current Plan
+
+## 1. 当前目标
+
+本阶段必须实现的结果。
+
+## 2. 范围
+
+### Included
+
+明确本阶段包含内容。
+
+### Excluded
+
+明确本阶段不处理内容。
+
+## 3. 关联需求
+
+- REQ-F-001
+- REQ-F-002
+
+## 4. 关联方案
+
+- SOL-001
+
+## 5. 交付物
+
+- 交付物 A
+- 交付物 B
+
+## 6. Work Packages
+
+- WP-001
+- WP-002
+
+## 7. 依赖
+
+列出前置依赖。
+
+## 8. 风险
+
+列出可能影响计划的问题。
+
+## 9. 退出条件
+
+说明什么情况下本计划完成。
+
+## 10. 当前状态
+
+记录当前实际进度。
+```
+
+---
+
+# 15. Work Package 规范
+
+Work Package 用于：
+
+> 将一个较大交付目标划分为若干相对独立的工作集合。
+
+例如：
+
+```text
+WP-001：用户身份认证能力
+WP-002：数据同步能力
+WP-003：管理后台能力
+```
+
+何时需要 Work Package：
+
+* 单个交付目标预计分解出超过 5 个 Task
+* 多个 Task 共享同一个验收目标
+* 需要跨成员协作完成的交付集合
+* 需要独立里程碑节点的交付集合
+
+否则 Plan 可以直接关联 Task，不强制创建 Work Package。
+
+Work Package 不等于 Task。
+
+---
+
+# 16. WBS 使用规范
+
+WBS（Work Breakdown Structure）用于：
+
+> 对项目范围和交付成果进行结构化分解。
+
+WBS 的核心对象应该是：
+
+```text
+项目
+ ↓
+交付成果
+ ↓
+子交付成果
+ ↓
+Work Package
+```
+
+WBS 不等于：
+
+```text
+Execution Steps
+```
+
+WBS 也不等于：
+
+```text
+具体操作步骤
+```
+
+---
+
+# 17. Atomic Task 定义
+
+Atomic Task（原子任务）是：
+
+> **最小的、可以独立执行并且可以独立验证完成状态的工作单元。**
+
+一个合格的原子任务必须满足：
+
+1. 有明确目标
+2. 有明确输入
+3. 有明确输出
+4. 有明确验收条件
+5. 有明确验证方法
+6. 有明确依赖
+7. 可以判断完成与否
+8. 不应该继续拆成多个彼此独立的交付结果
+
+---
+
+# 18. Atomic Task 与 Execution Step 的区别
+
+必须严格区分：
+
+```text
+Work Package
+    ↓
+Atomic Task
+    ↓
+Execution Steps
+```
+
+例如：
+
+```text
+WP-001
+完成登录能力
+
+    ↓
+
+TASK-021
+完成邮箱验证码登录
+
+    ↓
+
+Step 1  确定验证码生命周期规则
+Step 2  实现验证码发送
+Step 3  实现验证码验证
+Step 4  处理过期和错误场景
+Step 5  执行验证
+Step 6  保存验证证据
+```
+
+因此：
+
+> Task 是"要交付什么"。
+
+> Step 是"完成它怎么做"。
+
+---
+
+# 19. Atomic Task 标准模板
+
+文件：
+
+```text
+05_execution/task-template.md
+```
+
+模板：
+
+````markdown
+# TASK-XXX：任务名称
+
+## 1. 基本信息
+
+- ID：
+- 类型：
+- 状态：
+- Owner：
+- Reviewer：
+- 创建时间：
+- 更新时间：
+
+## 2. 来源
+
+- Requirement：
+- Solution：
+- Plan：
+- Work Package：
+- Decision：
+
+## 3. 目标
+
+本任务完成后，应产生什么明确结果？
+
+## 4. 背景
+
+为什么需要这个任务？
+
+## 5. 输入
+
+### 文档输入
+
+-
+
+### 前置条件
+
+-
+
+### 已知约束
+
+-
+
+## 6. 输出
+
+任务完成后必须产生哪些交付物？
+
+## 7. Execution Steps
+
+1. [ ]
+2. [ ]
+3. [ ]
+4. [ ]
+5. [ ]
+
+## 8. Acceptance Criteria
+
+- [ ]
+- [ ]
+- [ ]
+
+## 9. Verification
+
+说明如何证明任务已经完成。
+
+## 10. Evidence
+
+完成后必须提供可检查的证据。
+
+例如：
+
+- 测试结果
+- 截图
+- 日志
+- 输出文件
+- 报告
+- PR
+- Commit
+- 其他可复现证据
+
+## 11. Dependencies
+
+### Depends On
+
+-
+
+### Blocks
+
+-
+
+## 12. Risks
+
+-
+
+## 13. Blocked Rules
+
+遇到以下情况不得自行假设：
+
+- 需求冲突
+- 核心设计冲突
+- 缺失必要输入
+- 超出任务范围
+- 无法满足验收标准
+- 关键依赖不可用
+
+此时必须：
+
+```text
+status: blocked
+```
+
+并记录：
+
+* 阻塞原因
+* 缺失信息
+* 已尝试方案
+* 需要谁处理
+
+## 14. Completion Record
+
+* 实际完成时间：
+* 实际结果：
+* 验证结果：
+* Evidence：
+````
+
+---
+
+# 20. Task 状态规范
+
+建议使用：
+
+```text
+draft
+ready
+in-progress
+blocked
+review
+verified
+completed
+cancelled
+```
+
+状态定义：
+
+| 状态 | 含义 |
+| --- | --- |
+| draft | 尚未准备执行 |
+| ready | 条件齐全，可以执行 |
+| in-progress | 正在执行 |
+| blocked | 因外部或内部原因无法继续 |
+| review | 已执行，等待复核 |
+| verified | 已完成验证 |
+| completed | 正式完成 |
+| cancelled | 已取消 |
+
+---
+
+# 21. Task 文件路径规范
+
+不建议通过频繁移动文件表达状态：
+
+```text
+active/
+done/
+blocked/
+```
+
+推荐固定路径：
+
+```text
+05_execution/tasks/
+```
+
+例如：
+
+```text
+05_execution/tasks/TASK-001.md
+05_execution/tasks/TASK-002.md
+05_execution/tasks/TASK-003.md
+```
+
+通过 Front Matter 中的：
+
+```yaml
+status: in-progress
+```
+
+表达当前状态。
+
+原因：
+
+* 文件路径稳定
+* 引用稳定
+* Git 历史稳定
+* AI 检索更容易
+* 不需要频繁修改路径
+* 更容易建立长期关联
+
+---
+
+# 22. Decision / ADR 规范
+
+任何重要且会影响后续工作的决策，都应该形成 ADR。
+
+目录：
+
+```text
+03_solution/decisions/
+```
+
+例如：
+
+```text
+ADR-001-database-selection.md
+ADR-002-authentication-strategy.md
+ADR-003-provider-switch.md
+```
+
+模板：
+
+```markdown
+# ADR-XXX：决策标题
+
+## 1. Context
+
+为什么必须做这个决策？
+
+## 2. Problem
+
+需要解决什么问题？
+
+## 3. Options
+
+### Option A
+
+描述方案 A。
+
+### Option B
+
+描述方案 B。
+
+### Option C
+
+描述方案 C。
+
+## 4. Decision
+
+最终采用什么方案？
+
+## 5. Rationale
+
+为什么？
+
+## 6. Consequences
+
+### Positive
+
+-
+
+### Negative
+
+-
+
+### Risks
+
+-
+
+## 7. Status
+
+- proposed
+- accepted
+- rejected
+- superseded
+
+## 8. Related
+
+- REQ：
+- SOL：
+- PLAN：
+- TASK：
+- Architecture：
+```
+
+---
+
+# 23. ADR 生命周期
+
+重要决策不得通过覆盖旧内容来"修改历史"。
+
+推荐：
+
+```text
+ADR-001
+   ↓
+ADR-008 取代 ADR-001
+```
+
+状态：
+
+```text
+ADR-001 = superseded
+ADR-008 = accepted
+```
+
+这样可以回答：
+
+> 为什么现在采用方案 B？
+
+以及：
+
+> 为什么以前是方案 A？
+
+---
+
+# 24. Validation 规范
+
+Task 完成不等于 Task 已验证。
+
+必须区分：
+
+```text
+Task
+ ↓
+Validation
+ ↓
+Evidence
+```
+
+Task 回答：
+
+> 做了什么？
+
+Validation 回答：
+
+> 是否真的完成并满足要求？
+
+Evidence 回答：
+
+> 用什么证明？
+
+---
+
+# 25. Validation 模板
+
+```markdown
+# VAL-XXX：验证记录
+
+## 1. 基本信息
+
+- ID：
+- Task：
+- Requirement：
+- Solution：
+- Reviewer：
+- 日期：
+
+## 2. Verification Target
+
+验证什么？
+
+## 3. Verification Method
+
+如何验证？
+
+## 4. Expected Result
+
+预期结果是什么？
+
+## 5. Actual Result
+
+实际结果是什么？
+
+## 6. Result
+
+- PASS
+- FAIL
+- PARTIAL
+- BLOCKED
+
+## 7. Evidence
+
+-
+
+## 8. Issues
+
+发现的问题：
+
+-
+
+## 9. Conclusion
+
+验证结论。
+```
+
+---
+
+# 26. Evidence 规范
+
+Evidence 必须满足：
+
+* 可检查
+* 可定位
+* 与任务/需求相关
+* 尽可能可复现
+* 不依赖个人口头解释
+
+例如：
+
+```text
+EVD-001/
+├── screenshot.png
+├── test-result.md
+├── execution-log.txt
+└── output.json
+```
+
+---
+
+# 27. Release 规范
+
+Release 用于记录正式交付。
+
+建议：
+
+```text
+07_release/
+```
+
+包括：
+
+```text
+release-notes/
+release-records/
+changelog.md
+```
+
+Release Record 示例：
+
+```markdown
+# REL-001
+
+## Release
+
+v1.0.0
+
+## Date
+
+2026-09-22
+
+## Included Requirements
+
+- REQ-F-001
+- REQ-F-002
+- REQ-NF-001
+
+## Included Solutions
+
+- SOL-001
+
+## Included Tasks
+
+- TASK-001
+- TASK-002
+
+## Validation
+
+- VAL-001
+- VAL-002
+
+## Known Issues
+
+-
+
+## Notes
+
+-
+```
+
+---
+
+# 28. Change / 变更管理
+
+任何重要变化都应该回答：
+
+```text
+发生了什么变化？
+为什么变化？
+影响什么？
+谁确认？
+后续需要改变什么？
+```
+
+建议流程：
+
+```text
+Change
+   ↓
+Impact Analysis
+   ↓
+Requirement Update
+   ↓
+Solution Update
+   ↓
+Decision Update
+   ↓
+Plan Update
+   ↓
+Task Update
+   ↓
+Validation
+```
+
+---
+
+# 29. 需求变更规则
+
+正式需求不得被无记录地直接修改。
+
+推荐：
+
+```text
+原始需求
+ ↓
+变更请求（CR-XXX.md，大型项目建议单独创建）
+ ↓
+影响分析
+ ↓
+批准 / 拒绝 / 延后
+ ↓
+更新当前需求基线
+ ↓
+更新关联 Solution
+ ↓
+更新相关计划
+ ↓
+更新任务
+```
+
+---
+
+# 30. 文档元数据规范
+
+正式文档建议统一使用 YAML Front Matter。
+
+示例：
+
+```yaml
+---
+id: REQ-F-001
+type: requirement
+title: 用户身份认证
+status: approved
+owner: product
+reviewer: manager
+created: 2026-09-22
+updated: 2026-09-22
+version: 1.0
+---
+```
+
+---
+
+# 31. 文档 Type 标准
+
+推荐使用：
+
+```text
+project
+product
+requirement
+requirement-inbox
+requirement-feature
+requirement-non-functional
+requirement-constraint
+solution
+decision
+architecture
+design
+constraint
+plan
+milestone
+release-plan
+work-package
+task
+validation
+evidence
+release
+risk
+assumption
+dependency
+project-map
+retrospective
+knowledge
+meeting
+```
+
+---
+
+# 32. 文档 ID 规范
+
+建议：
+
+```text
+PRJ-xxx         Project
+REQ-INBOX-xxx   Requirement Inbox
+REQ-F-xxx       Functional Requirement（功能需求）
+REQ-NF-xxx      Non-Functional Requirement（非功能需求）
+REQ-C-xxx       Constraint Requirement（约束需求）
+SOL-xxx         Solution（执行方案）
+ADR-xxx         Decision
+ARC-xxx         Architecture
+DES-xxx         Design
+PLAN-xxx        Plan
+MILE-xxx        Milestone
+REL-xxx         Release
+WP-xxx          Work Package
+TASK-xxx        Task
+VAL-xxx         Validation
+EVD-xxx         Evidence
+RISK-xxx        Risk
+ASM-xxx         Assumption
+DEP-xxx         Dependency
+RET-xxx         Retrospective
+CR-xxx          Change Request（大型项目）
+```
+
+ID 必须稳定，不因标题变化而改变。
+
+---
+
+# 33. 文档状态规范
+
+通用状态建议：
+
+```text
+draft
+proposed
+under-review
+approved
+active
+rejected
+cancelled
+superseded
+archived
+```
+
+状态必须表达生命周期，而不是编辑者个人意见。
+
+---
+
+# 34. 文档生命周期
+
+推荐：
+
+```text
+draft
+   ↓
+proposed
+   ↓
+under-review
+   ↓
+approved
+   ↓
+active
+   ↓
+superseded / archived
+```
+
+特殊状态：
+
+```text
+rejected
+cancelled
+```
+
+所有重大状态变化，应记录：
+
+```text
+旧状态
+新状态
+时间
+原因
+变更者
+```
+
+---
+
+# 35. Meeting Notes 规范
+
+会议记录属于辅助信息，而不是最终事实来源。
+
+会议中产生的重要内容必须沉淀到对应的正式文档。
+
+例如：
+
+```text
+会议决定采用方案 B
+        ↓
+ADR-008
+```
+
+而不是仅保留：
+
+```text
+meeting-2026-09-22.md
+```
+
+否则项目最终会产生大量：
+
+> "某次会议里说过。"
+
+这种不可追溯信息。
+
+---
+
+# 36. Archive 规范
+
+已经失效但具有历史价值的文档，不应删除。
+
+进入：
+
+```text
+09_archive/
+```
+
+主要状态：
+
+```text
+superseded
+cancelled
+obsolete
+```
+
+归档文档必须尽可能保留原 ID。
+
+---
+
+# 37. 文档索引规范
+
+建议维护：
+
+```text
+00_governance/document-index.md
+```
+
+用于描述当前项目中的重要文档。
+
+示例：
+
+```markdown
+# Document Index
+
+## Product
+
+- [Product Vision](../01_product/product-vision.md)
+- [Product Goals](../01_product/product-goals.md)
+
+## Requirements
+
+- [Product Requirements](../02_requirements/product-requirements.md)
+- [Backlog](../02_requirements/backlog.md)
+
+## Solutions
+
+- [SOL-001 用户登录方案](../03_solution/solutions/SOL-001-user-login.md)
+
+## Planning
+
+- [Roadmap](../04_planning/roadmap.md)
+- [Current Plan](../04_planning/current-plan.md)
+
+## Execution
+
+- [Task Index](../05_execution/task-index.md)
+
+## Validation
+
+- [Validation Plan](../06_validation/validation-plan.md)
+
+## Release
+
+- [Changelog](../07_release/changelog.md)
+```
+
+---
+
+# 38. 需求 → 方案 → 任务完整追溯规范
+
+正式开发工作应尽量形成完整追溯链。
+
+```text
+REQ-INBOX-20260922-001
+   ↓
+REQ-F-001
+   ↓
+SOL-001 / ADR-007
+   ↓
+PLAN-004
+   ↓
+WP-003
+   ↓
+TASK-142
+   ↓
+VAL-142
+   ↓
+EVD-142
+   ↓
+REL-012
+```
+
+任何一个节点都应该能够找到对应的上下文。
+
+---
+
+# 39. 双向追溯
+
+不仅支持：
+
+```text
+Requirement → Solution → Task
+```
+
+也应该支持：
+
+```text
+Task → Solution → Requirement
+```
+
+例如：
+
+> TASK-142 为什么存在？
+
+应能回答：
+
+```text
+TASK-142
+ ↓
+WP-003
+ ↓
+SOL-001
+ ↓
+REQ-F-001
+```
+
+反向：
+
+> REQ-F-001 是否已经完成？
+
+可以查询：
+
+```text
+REQ-F-001
+ ↓
+SOL-001
+ ↓
+TASK-142
+ ↓
+VAL-142
+ ↓
+EVD-142
+ ↓
+REL-012
+```
+
+---
+
+# 40. 完成定义
+
+任务不能仅以：
+
+```text
+代码写完
+```
+
+作为完成。
+
+建议最少满足：
+
+```text
+目标已实现
+   +
+验收条件满足
+   +
+验证已执行
+   +
+验证结果明确
+   +
+必要证据已保存
+```
+
+即：
+
+```text
+Done
+=
+Implementation
++
+Acceptance
++
+Verification
++
+Evidence
+```
+
+---
+
+# 41. Blocked 规则
+
+如果任务无法继续，不允许：
+
+* 猜测缺失需求
+* 擅自修改核心目标
+* 擅自修改关键架构决策
+* 无限扩大任务范围
+* 用"暂时完成"掩盖阻塞
+
+必须记录：
+
+```text
+Blocked Reason
+Missing Input
+Impact
+Attempted Actions
+Required Decision
+```
+
+然后：
+
+```yaml
+status: blocked
+```
+
+---
+
+# 42. Risk / Assumption / Dependency
+
+## Risk
+
+描述：
+
+> 可能发生什么问题？
+
+## Assumption
+
+描述：
+
+> 当前项目暂时认为成立、但尚未完全验证的前提是什么？
+
+## Dependency
+
+描述：
+
+> 当前工作依赖谁或什么？
+
+三者不得混淆。
+
+例如：
+
+```text
+Risk:
+第三方 API 可能限流。
+
+Assumption:
+第三方 API 当前允许项目请求量。
+
+Dependency:
+项目依赖第三方 API 正常运行。
+```
+
+---
+
+# 43. 文档更新规则
+
+## 43.1 需求发生变化
+
+更新：
+
+```text
+Requirement
+Solution（如已存在）
+Backlog
+Plan
+Task
+Validation
+```
+
+---
+
+## 43.2 方案发生变化
+
+更新：
+
+```text
+Solution
+Design
+Architecture
+ADR
+Plan
+Task
+```
+
+---
+
+## 43.3 任务完成
+
+更新：
+
+```text
+Task
+Validation
+Evidence
+```
+
+必要时更新：
+
+```text
+Release
+Changelog
+```
+
+---
+
+## 43.4 新增重要文档
+
+更新：
+
+```text
+document-index.md
+project-map.md（如目录结构有变化）
+```
+
+---
+
+# 44. 禁止事项
+
+以下做法不推荐：
+
+## 44.1 用 README 承载全部项目管理信息
+
+README 应主要负责：
+
+> 项目入口与整体概览。
+
+不应成为：
+
+```text
+PRD
+Roadmap
+Task Board
+Meeting Notes
+Release Notes
+```
+
+的混合体。
+
+---
+
+## 44.2 用 Backlog 保存完整需求正文
+
+Backlog 用于工作集合与排序。
+
+正式需求仍应进入对应 Requirement 子目录。
+
+---
+
+## 44.3 用聊天记录作为唯一决策依据
+
+聊天记录可以是决策来源之一。
+
+但正式决策应该进入 ADR，正式方案应该进入 Solution。
+
+---
+
+## 44.4 用 WBS 代替任务执行计划
+
+WBS：分解交付成果。
+
+Task：定义执行单位。
+
+Step：描述执行过程。
+
+三者不能混为一谈。
+
+---
+
+## 44.5 用 Solution 替代 ADR
+
+Solution 描述如何实现一个需求。
+
+ADR 描述为什么做出某个关键决策。
+
+两者服务不同问题，不能合并。
+
+---
+
+## 44.6 将功能需求、非功能需求、约束需求混为一类
+
+三类需求的管理方式、优先级评估方式和验收方式均不同，必须分类存储。
+
+---
+
+## 44.7 为每个概念创建独立文件
+
+不是每个概念都必须拥有一个文件。
+
+规则是：
+
+> 信息需要独立管理时才独立成文档。
+
+---
+
+# 45. 最小可行文档体系
+
+对于个人开发、AI 开发、小型产品，建议最小采用：
+
+```text
+docs/
+│
+├── README.md
+│
+├── 00_governance/
+│   ├── document-index.md
+│   ├── project-map.md
+│   └── glossary.md
+│
+├── 01_product/
+│   └── product-definition.md
+│
+├── 02_requirements/
+│   ├── inbox/
+│   ├── features/
+│   ├── product-requirements.md
+│   └── backlog.md
+│
+├── 03_solution/
+│   ├── solutions/
+│   └── decisions/
+│
+├── 04_planning/
+│   ├── roadmap.md
+│   └── current-plan.md
+│
+├── 05_execution/
+│   ├── task-template.md
+│   └── tasks/
+│
+├── 06_validation/
+│   └── evidence/
+│
+├── 07_release/
+│   └── changelog.md
+│
+└── 08_knowledge/
+    └── lessons-learned.md
+```
+
+---
+
+# 46. 标准项目工作流
+
+项目正式工作推荐遵循：
+
+```text
+新想法 / 新需求
+        ↓
+Requirement Inbox
+        ↓
+需求分析与类型判断
+        ↓
+功能需求 / 非功能需求 / 约束需求
+        ↓
+批准 / 拒绝 / 延后
+        ↓
+Backlog
+        ↓
+Roadmap / Milestone / Release
+        ↓
+Current Plan
+        ↓
+Solution（执行方案）
+        ↓
+Work Package
+        ↓
+Atomic Task
+        ↓
+Execution Steps
+        ↓
+Validation
+        ↓
+Evidence
+        ↓
+Release
+        ↓
+Changelog
+        ↓
+Retrospective
+        ↓
+Knowledge
+```
+
+---
+
+# 47. 变化驱动的工作流
+
+当项目发生重大变化时：
+
+```text
+Change
+   ↓
+Impact Analysis
+   ↓
+Requirement Update
+   ↓
+Solution Update
+   ↓
+Decision Update
+   ↓
+Plan Update
+   ↓
+Task Update
+   ↓
+Validation
+   ↓
+Evidence
+```
+
+---
+
+# 48. 项目文档核心关系图
+
+```text
+                    PROJECT GOAL
+                         │
+                         ▼
+                  PRODUCT DEFINITION
+                         │
+                         ▼
+          ┌──────────────┼──────────────┐
+          ▼              ▼              ▼
+     REQ-FEATURE    REQ-NON-FUNC   REQ-CONSTRAINT
+          │              │              │
+          └──────────────┼──────────────┘
+                         │
+              ┌──────────┴──────────┐
+              ▼                     ▼
+           SOLUTION              DECISION
+              │                     │
+              └──────────┬──────────┘
+                         ▼
+                       PLAN
+                         │
+                         ▼
+                   WORK PACKAGE
+                         │
+                         ▼
+                    ATOMIC TASK
+                         │
+                         ▼
+                 EXECUTION STEPS
+                         │
+                         ▼
+                    VALIDATION
+                         │
+                         ▼
+                      EVIDENCE
+                         │
+                         ▼
+                      RELEASE
+                         │
+                         ▼
+                   RETROSPECTIVE
+                         │
+                         ▼
+                     KNOWLEDGE
+```
+
+---
+
+# 49. 文档质量检查标准
+
+项目文档体系应定期检查以下问题：
+
+## 49.1 完整性
+
+是否存在：
+
+```text
+目标
+需求（功能 / 非功能 / 约束）
+方案
+决策
+计划
+任务
+验证
+证据
+发布
+```
+
+---
+
+## 49.2 一致性
+
+是否存在：
+
+```text
+需求 A
+方案却实现 B
+任务却做 C
+代码最终做 D
+```
+
+---
+
+## 49.3 可追溯性
+
+是否可以：
+
+```text
+需求 → 方案 → 任务 → 验证 → 证据
+```
+
+以及：
+
+```text
+任务 → 方案 → 需求 → 目标
+```
+
+---
+
+## 49.4 时效性
+
+当前状态是否真实反映项目现状？
+
+---
+
+## 49.5 唯一事实源
+
+是否存在：
+
+```text
+同一个需求
+同时在 3~5 个文档中出现不同版本？
+```
+
+---
+
+## 49.6 可验证性
+
+是否可以证明：
+
+> "这个任务真的完成了？"
+
+---
+
+## 49.7 目录结构与关联关系是否更新
+
+是否存在：
+
+```text
+project-map.md 未反映最新目录结构？
+document-index.md 未包含新增文档？
+```
+
+---
+
+# 50. 面向 AI Agent 的额外要求
+
+如果项目由 AI Agent 参与开发，建议进一步强化：
+
+## 50.1 AI 不应依赖隐含上下文
+
+任务所需关键背景必须能够从任务及关联文档获得。
+
+---
+
+## 50.2 AI 必须能够读取任务输入
+
+Task 应明确：
+
+```text
+Requirement
+Solution
+Plan
+Decision
+Dependencies
+Constraints
+```
+
+---
+
+## 50.3 AI 完成任务必须返回证据
+
+AI 不应只输出：
+
+```text
+任务完成。
+```
+
+而应该能够指出：
+
+```text
+完成了什么
+修改了什么
+验证了什么
+验证结果是什么
+证据在哪里
+```
+
+---
+
+## 50.4 AI 不得擅自改变上层事实
+
+例如：
+
+```text
+Requirement
+Solution
+Decision
+Scope
+```
+
+属于上层事实。
+
+AI 如果发现冲突，应：
+
+```text
+发现冲突
+ ↓
+记录问题
+ ↓
+Blocked / Review
+ ↓
+等待正式决策
+```
+
+而不是自行重定义项目目标或方案。
+
+---
+
+## 50.5 AI 执行前必须能够定位执行方案
+
+AI 在执行任何 Task 前，应能通过 Task 中的关联字段找到：
+
+```text
+对应的 Solution
+对应的 Requirement
+对应的 Decision
+```
+
+如果三者缺失且无法从现有文档推断，应标记为：
+
+```yaml
+status: blocked
+```
+
+---
+
+# 51. 最终设计原则
+
+本规范最终遵循以下关系：
+
+```text
+为什么做？
+    ↓
+Product / Goal
+
+做什么？
+    ↓
+Requirement（Feature / Non-Functional / Constraint）
+
+为什么这样做？
+    ↓
+Decision（ADR）
+
+具体怎么实现？
+    ↓
+Solution
+
+准备什么时候做？
+    ↓
+Plan
+
+这一大块交付什么？
+    ↓
+Work Package
+
+最小交付单位是什么？
+    ↓
+Atomic Task
+
+具体怎么执行？
+    ↓
+Execution Steps
+
+怎么证明完成？
+    ↓
+Validation
+
+证据在哪里？
+    ↓
+Evidence
+
+什么时候正式交付？
+    ↓
+Release
+
+项目结构与关联关系在哪里？
+    ↓
+Project Map
+
+过去为什么这么做？
+    ↓
+Knowledge / Retrospective
+```
+
+---
+
+# 52. 最终规范摘要
+
+项目文档体系不是为了管理文件，而是为了管理项目知识、决策、计划和结果。
+
+核心原则可以浓缩为：
+
+```text
+1.  每一种事实只有一个权威来源。
+2.  新需求首先进入 Inbox。
+3.  需求按类型分类：功能需求 / 非功能需求 / 约束需求。
+4.  功能需求存入 02_requirements/features/。
+5.  正式需求与 Backlog 分离。
+6.  新需求批准后，需要分析实现路径时，创建 Solution 文档。
+7.  Solution 存入 03_solution/solutions/。
+8.  项目完整目录结构与文档关联关系存入 project-map.md。
+9.  Roadmap 与 Current Plan 分离。
+10. WBS 与 Atomic Task 分离。
+11. Atomic Task 与 Execution Step 分离。
+12. Solution 与 Decision（ADR）分离，两者服务不同问题。
+13. Decision 必须可独立追溯。
+14. Task 完成必须能够验证。
+15. Verification 必须有 Evidence。
+16. 历史不能被覆盖，只能被替代或归档。
+17. 项目方法可以变化，文档语义不应混乱。
+18. 文档数量应该服从项目复杂度，而不是服从模板。
+19. 人和 AI 都应该能够仅依赖文档恢复项目上下文。
+20. 任何正式工作都应该尽可能形成：
+    Requirement → Solution → Plan → Task → Validation → Evidence
+    的完整链路。
+```
+
+---
+
+# 53. 核心原则一句话
+
+> **项目文档不是为了记录"我们写了什么"，而是为了持续保存"项目为什么这样做、现在相信什么、准备做什么、已经做了什么，以及如何证明它是真的"。**

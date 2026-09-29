@@ -1,0 +1,810 @@
+  任务皆由你独立完成。
+	
+  ────────────────────
+  
+  公众号文章测试链接
+	- "https://mp.weixin.qq.com/s/BCipjWS0SPSxXOC5ExSuNg"
+	- "https://mp.weixin.qq.com/s/Urs9xVJmb6IA3GhXYFncMA"
+	- "https://mp.weixin.qq.com/s/lakKP9d3MsF3VW9PNXnksw"
+	
+  公众号测试名
+	- "人民日报"
+	- "郭工AI"
+	- "甲维斯C"
+  
+  
+  ────────────────────
+  
+  项目流程
+  
+	1. 初始化。拉取指定分支仓库代码，确保当前目录代码和仓库代码完全一致，如遇冲突以最新为准。
+	2. 严格遵守`项目多方案评审标准指令.txt`核心指令，参考`项目完整文档体系.txt`、`项目开发-多方案评审标准指令.txt`等体系、流程规范。
+	3. 理解和优化项目完整目录结构（文档目录结构和代码逻辑结构）。项目完整目录结构以**高性能、高拓展、高复用**为核心。
+	4. 提取项目原始需求，逐一分解、思考、判断新设想的可行性，尽最大可能优化本流程。
+	6. 模拟用户多维度的实际使用场景，补充和拓展项目需求。
+	7. 模拟控制端的多维度实际使用场景，站在管理者的维度，补充和拓展项目需求。
+	8. 辩证的、理性的看待每一个问题，基于最新真实代码、详细分析执行逻辑、深入穿透代码底层和关联板块，完成每个要点的<三轮思考>。
+	9. 最终输出经过推敲、经得起验证，考虑完整且全面的可行方案。每个要点必须关联证据链。
+	10. 可行方案需要有** 完整的、高性能的、高拓展性的、多层级的(至少3级)、最小原子化的、层次明确且带序号的、可执行的大纲 **
+	11. 补充和建立完整的文档体系，移除过时、无用、没有任何帮助的文档和说明文件(只针对txt\md\截图等文件，不含代码及配置文件)，重点递归检查`docs/`和`.docs/`目录以及最核心的根目录。
+	12. 建立完整的开发流程规范，依次完成开发任务。
+	13. 逐一执行，每个执行步骤执行完成后必须校验并给出完整证据链。
+	14. 每次步骤结束后，重新对本项目所有文档进行整理、归类，移除过时的内容，更新当前的设计和进度。
+	15. 测试和验证所有功能，确保功能/界面/交互/数据等全部正常。
+	16. 当全部任务完成后，提交更新。推送到指定分支仓库(windows系统使用10808代理端口)。
+	17. 任务执行总结说人话：使用初中生都能理解的语句进行描述。
+
+  ────────────────────
+
+  安全铁律（AI 助手必须严格遵守）
+
+    1. 绝不在聊天输出、日志、文件名、计划、总结、scratchpad、memory 中明文展示私钥、token、密码、API key 的值；不得将该 token 抄录到他处。
+    2. 凭据文件只能写入权限 600（~/.git-pat、~/.git-credentials），克隆完成后立即清理临时凭据，不回显内容。
+    3. git remote URL 中不得残留凭据；克隆完成后必须执行 git remote set-url 清除。
+    4. 临时凭据文件用完即删，不得在磁盘上遗留。
+    5. 引用凭据时使用"内嵌 PAT"等泛化表述，不重复展示具体值。
+
+  ────────────────────
+  
+  github账号：`github.com/aideanew`
+  
+	Aidean项目端口在3000-3100；
+	AideanFleet端口在3100-3200；
+	BotHot端口在3200-3300（新项目，由aideanbot拓展而来，但不影响aideanbot）；
+	aideanbot端口在3300-3400；
+	AideanThesis端口在3400-3500；
+  
+  项目：` https://github.com/aideanew/{项目名} `
+	- (` E:\Code\Aidean `  //Aidean项目主分支 ) ["https://github.com/aideanew/Aidean"]
+	- (` E:\Code\Aidean_huaweicloud `   //Aidean项目主分支 )  ["https://github.com/aideanew/Aidean"]
+	- (` E:\Code\AideanBot ` ) ["https://github.com/aideanew/AideanBot"]
+	- (` E:\Code\AideanCompany ` ) ["https://github.com/aideanew/AideanCompany"]
+	- (` E:\Code\AideanFleet ` ) ["https://github.com/aideanew/AideanFleet"]
+	- (` E:\Code\AideanThesis ` ) ["https://github.com/aideanew/AideanThesis"]
+	- (` E:\Code\AideanBotHot ` ) ["https://github.com/aideanew/BotHot"]
+  
+	## personal-access-tokens
+	"""
+	<PAT 不入库：从本机 ~/.git-pat 读取，或向仓库所有者单独索取>
+	"""
+  
+  ────────────────────
+  
+  统一深度分析方法
+
+	在开始执行任务之前，必须先进行深度分析。
+
+	## 2.1 分析原则
+
+	请先充分理解任务目标、项目现状、代码上下文、依赖关系和验收标准，再开始修改或验收。
+
+	不要默认任务描述已经完整、准确或无歧义。
+
+	必须主动识别：
+
+	- 任务中的明确要求。
+	- 任务中的隐含要求。
+	- 未说明但执行任务所必需的前置条件。
+	- 可能产生歧义的地方。
+	- 可能造成失败的边界条件。
+	- 与其他模块或员工之间的依赖。
+	- 任务完成后可能产生的回归风险。
+	- 当前代码和任务描述之间的不一致。
+	- 当前代码、员工报告和实际运行结果之间的不一致。
+
+	禁止根据猜测补全关键事实。
+
+	如果信息不足，必须：
+
+	1. 明确指出缺少的信息。
+	2. 通过读取真实代码、配置、日志、提交记录或执行命令继续核实。
+	3. 如果仍然无法确定，标记为“待确认”。
+	4. 不得把“待确认”当成“已完成”。
+
+	---
+
+	## 2.2 第一轮：发散分析，使用 5W1H 全面拆解
+
+		必须显式回答以下问题。
+
+		### What：客观事实和现象是什么？
+
+		需要说明：
+
+		- 当前任务要求什么。
+		- 当前代码已经实现了什么。
+		- 当前代码还缺少什么。
+		- 当前出现了什么错误、异常或不一致。
+		- 哪些内容已经被真实证据证明。
+		- 哪些内容只是员工声明但尚未被证明。
+
+		### Why：深层原因和动机是什么？
+
+		需要分析：
+
+		- 为什么需要进行这项修改或验收。
+		- 当前问题的直接原因是什么。
+		- 当前问题的根本原因是什么。
+		- 是否存在设计、配置、数据流、调用链或职责划分方面的原因。
+		- 如果只修改表面代码，是否会留下更深层问题。
+		- 该修改可能解决什么问题，又可能引入什么风险。
+
+		### Where / When：边界条件和时间节点是什么？
+
+		需要说明：
+
+		- 问题出现在哪个项目、模块、文件、函数、接口或配置中。
+		- 问题在哪个执行阶段出现。
+		- 什么时候必须执行该任务。
+		- 哪些步骤必须先于其他步骤完成。
+		- 哪些验证只能在其他员工完成后执行。
+		- Aidean 是否始终使用本地 `3000` 端口。
+		- AideanBot 是否始终使用本地 `3333` 端口。
+		- 哪些环境、入口、配置或运行场景不在当前任务范围内。
+
+		### Who：涉及主体和责任方是谁？
+
+		需要说明：
+
+		- 当前执行者是谁。
+		- 负责修改的员工是谁。
+		- 负责验收的管理者是谁。
+		- 涉及哪些模块、服务、接口和配置。
+		- 哪些问题属于当前员工责任范围。
+		- 哪些问题需要其他员工配合。
+		- 哪些问题必须由管理者判断或重新分配。
+
+		### How：执行手段和实现路径是什么？
+
+		需要说明：
+
+		- 如何读取和确认最新真实代码。
+		- 如何定位问题。
+		- 如何设计修改方案。
+		- 如何实施修改。
+		- 如何验证修改。
+		- 如何验证异常和边界情况。
+		- 如何验证端口约束。
+		- 如何验证与其他模块的兼容性。
+		- 如何形成可复现的证据链。
+		- 如何判断任务是真正完成，而不是表面完成。
+
+		### What if：如果前提发生变化，结论会怎样？
+
+		至少分析以下变化：
+
+		- 如果配置缺失，会发生什么。
+		- 如果依赖服务不可用，会发生什么。
+		- 如果接口字段发生变化，会发生什么。
+		- 如果端口被占用，会发生什么。
+		- 如果员工修改的文件与当前代码不一致，会发生什么。
+		- 如果其他员工尚未完成，会发生什么。
+		- 如果测试通过但运行时失败，会发生什么。
+		- 如果运行成功但存在异常路径缺陷，会发生什么。
+		- 如果当前任务的原始前提不成立，应该如何调整方案。
+		- 如果当前代码与任务描述冲突，应以什么为准。
+
+		---
+
+		## 2.3 第二轮：收敛与苏格拉底式追问
+
+		在第一轮分析的每一个重要结论之后，必须进行至少一轮自我追问。
+
+		每个重要结论至少回答：
+
+		1. 我凭什么得出这个结论？
+		2. 证据来自哪里？
+		3. 这个证据是否来自当前最新真实代码？
+		4. 是否存在相反证据？
+		5. 是否可能把表面现象误判为根本原因？
+		6. 是否遗漏了异常路径、边界条件或依赖关系？
+		7. 这个结论在什么前提下才成立？
+		8. 如果前提不成立，结论是否仍然有效？
+		9. 是否需要通过额外命令、测试或运行验证确认？
+		10. 该结论是否足以支持“完成”“通过”或“进入下一阶段”的判断？
+
+		不得因为某个结论看起来合理，就跳过证据核实。
+
+		---
+
+		## 2.4 第三轮：双向钢人论证
+
+		对每一个关键方案、关键判断和关键验收结论，必须进行双向论证。
+
+		### 支持论证
+
+		尽可能构造最强证据，说明为什么当前判断成立：
+
+		- 当前代码如何支持该判断。
+		- 当前运行结果如何支持该判断。
+		- 测试结果如何支持该判断。
+		- 配置和调用链如何支持该判断。
+		- 员工执行记录如何与真实代码对应。
+		- 端口、接口和模块依赖是否一致。
+
+		### 反对论证
+
+		尽可能构造最强反对意见，说明当前判断为什么可能不成立：
+
+		- 是否存在未检查的调用路径。
+		- 是否存在未验证的异常场景。
+		- 是否存在测试覆盖盲区。
+		- 是否存在配置覆盖、环境差异或启动方式差异。
+		- 是否存在代码已经被后续修改的可能。
+		- 是否存在员工报告与当前代码不一致。
+		- 是否存在只在特定条件下出现的缺陷。
+		- 是否存在与其他员工修改冲突的可能。
+		- 是否存在端口配置在其他入口中不一致。
+
+		然后明确说明：
+
+		- 哪些反对意见已经被证据排除。
+		- 哪些反对意见仍然成立。
+		- 哪些反对意见需要后续任务处理。
+		- 当前结论是否足够可靠。
+
+		---
+
+		## 2.5 第四轮：重构和最终判断
+
+		只有在完成上述分析后，才可以形成最终判断。
+
+		最终判断必须包含：
+
+		1. 明确结论。
+		2. 结论依据。
+		3. 具体代码证据。
+		4. 具体命令或测试证据。
+		5. 当前结论成立的前提。
+		6. 当前结论的局限性。
+		7. 尚未验证的内容。
+		8. 可能的风险。
+		9. 下一步行动。
+		10. 是否允许进入下一阶段。
+
+		不要输出没有证据支持的绝对结论。
+
+		对于无法确认的内容，必须明确标记：
+
+		- `已确认`
+		- `部分确认`
+		- `证据不足`
+		- `待其他员工完成`
+		- `存在缺陷`
+		- `需要返工`
+		- `暂不执行`
+  
+  ────────────────────
+  
+  深度推理方式
+  
+  请开启深度推理模式。在回答之前,先不要直接给结论,也别默认我已经把问题想清楚。在每个要点开启三轮思考。
+
+	## 第一轮（发散）：运用5W1H全面拆解问题
+	显式地、穷尽地回答以下六个问题：
+	1. What（客观事实/现象是什么？）
+	2. Why（深层原因/动机是什么？）
+	3. Where/When（适用的边界条件、时间节点是什么？）
+	4. Who（涉及的主体、责任方或理论阵营是谁？）
+	5. How（执行的手段、方法或实现的路径是什么？）
+	6. What if（如果前提变了，结论会怎样？）
+
+	## 第二轮（收敛与拷问）
+	- 在第一步的每一个节点上，你必须扮演苏格拉底，对自己进行至少一轮"致命追问"。
+	- 对每个节点的问答做一次详细思考的"双向钢人论证"(two-way steelmanning)。
+
+	## 第三轮（重构）
+	- 只有当你无法再用新问题推翻自己时，基于幸存下来的论点，输出最终的、带有前提条件和局限性说明的终稿。
+	
+  ────────────────────
+  
+  可选参考手册
+  
+  
+  第一步：检测系统配置和参数
+
+  1.1 操作系统与硬件
+
+  执行以下命令，采集系统基础信息：
+
+  ```bash
+  # 操作系统
+  cat /etc/os-release | head -5
+
+  # CPU 架构与核心数
+  uname -m && nproc
+
+  # 内存
+  free -h | head -2
+
+  # 磁盘（根分区可用空间）
+  df -h / | tail -1
+
+  # 主 IP
+  hostname -I
+  ```
+
+  判定规则：
+
+   检测项      │ 阈值             │ 低于阈值时的处理
+  ─────────────┼──────────────────┼────────────────────────────────────────────────
+   CPU 架构    │ aarch64 / x86_64 │ 影响后续二进制工具下载选择，需记录
+  ─────────────┼──────────────────┼────────────────────────────────────────────────
+   可用磁盘    │ ≥ 20G            │ < 20G 时警告用户，可能无法同时安装两个项目依赖
+  ─────────────┼──────────────────┼────────────────────────────────────────────────
+   可用内存    │ ≥ 4G             │ < 4G 时警告可能影响 pnpm install 与构建
+  ─────────────┼──────────────────┼────────────────────────────────────────────────
+   Python 版本 │ ≥ 3.10           │ < 3.10 时需安装高版本（详见第三步）
+  ─────────────┼──────────────────┼────────────────────────────────────────────────
+   Node 版本   │ ≥ 20             │ < 20 时需安装高版本（详见第三步）
+
+  1.2 预装工具盘点
+
+  逐项检查并记录版本，缺失项在后续步骤中补装：
+
+  ```bash
+  # Python（AideanFleet 要求 >=3.10，实测 HCE 2.0 自带 3.9.9 可能不够）
+  python3 --version
+  pip3 --version 2>/dev/null
+
+  # Node.js（Aidean 要求 >=20，opencode CLI 也依赖）
+  node --version
+  npm --version
+
+  # Git
+  git --version
+
+  # pnpm（Aidean monorepo 需要，packageManager 字段指定 pnpm@9.0.0）
+  pnpm --version 2>/dev/null
+
+  # 容器运行时（Aidean 提供 docker-compose 部署方案）
+  docker --version 2>/dev/null
+  docker-compose --version 2>/dev/null || docker compose version 2>/dev/null
+
+  # 华为云工具（预装情况因环境而异）
+  hcloud --version 2>/dev/null
+  obsutil version 2>/dev/null
+  terraform version 2>/dev/null
+  ```
+
+  1.3 网络连通性测试
+
+  GitHub 连接稳定性是后续拉取代码的关键。实测部分环境中 github.com:443 HTTPS 超时，但 api.github.com 可正常访问：
+
+  ```bash
+  # 测试 HTTPS 直连 github.com（可能超时）
+  curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 https://github.com
+
+  # 测试 API 端点（通常可达）
+  curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 https://api.github.com
+  ```
+
+  判定逻辑：
+
+   HTTPS (github.com) │ API (api.github.com) │ 推荐处理
+  ────────────────────┼──────────────────────┼─────────────────────────────────────────────────────────
+   可达               │ 任意                 │ 使用内嵌 PAT 直接克隆
+  ────────────────────┼──────────────────────┼─────────────────────────────────────────────────────────
+   超时               │ 可达                 │ PAT + api.github.com 验证，git clone 可能需要重试或代理
+  ────────────────────┼──────────────────────┼─────────────────────────────────────────────────────────
+   超时               │ 超时                 │ 需配置代理或更换网络环境
+
+  ────────────────────
+
+  第二步：拉取 GitHub 代码
+
+  2.1 目标仓库
+
+   仓库地址                        │ 可见性 │ 本地路径          │ 说明
+  ─────────────────────────────────┼────────┼───────────────────┼─────────────────────────────────────────────
+   github.com/aideanew/AideanFleet │ 公开   │ /root/AideanFleet │ AideanCompany 通用版，控制面 + 可插拔执行体
+  ─────────────────────────────────┼────────┼───────────────────┼─────────────────────────────────────────────
+   github.com/aideanew/Aidean      │ 私有   │ /root/Aidean      │ 全栈 monorepo（Next.js + pnpm + turborepo）
+
+  2.2 唯一方式：Personal Access Token（PAT），已内嵌 token
+
+  前提条件：本文件已内嵌唯一 PAT（见下方步骤 1 的 TOKEN 值），无需用户再提供 SSH 私钥或 token。
+
+  已知坑：fine-grained PAT 仓库授权
+
+  现象：PAT 默认只授权部分仓库。Aidean 是私有仓库，如果 PAT 未明确授权该仓库，API 返回 404 Not Found，git 返回 403 Forbidden: Write access to repository not granted。
+
+  解决方案：用户需到 GitHub Settings → Developer settings → Fine-grained tokens，编辑该 token，在 Repository access 中勾选 Aidean（或选择 All repositories），保存后即时生效。
+
+  步骤 1：安全存储 token
+
+  ```bash
+  # 写入临时文件，不回显内容
+  TOKEN='<你的 PAT，勿提交到仓库；可从此文件同级说明或 ~/.git-pat 获取>'
+  echo "$TOKEN" > ~/.git-pat
+  chmod 600 ~/.git-pat
+  ```
+
+  步骤 2：验证 token 有效性
+
+  ```bash
+  TOKEN=$(cat ~/.git-pat)
+
+  # 验证 token 归属
+  curl -s -H "Authorization: Bearer $TOKEN" https://api.github.com/user \
+    | python3 -c "import sys,json; print('login:', json.load(sys.stdin).get('login'))"
+
+  # 验证目标仓库可访问
+  # AideanFleet（公开）：期望 200
+  curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" \
+    https://api.github.com/repos/aideanew/AideanFleet
+
+  # Aidean（私有）：期望 200，若 404 则 token 未授权该仓库
+  curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" \
+    https://api.github.com/repos/aideanew/Aidean
+  ```
+
+  步骤 3：克隆（token 临时用于 URL，克隆后立即清除）
+
+  ```bash
+  git clone "https://x-access-token:${TOKEN}@github.com/aideanew/Aidean.git" /root/Aidean
+  git clone "https://x-access-token:${TOKEN}@github.com/aideanew/AideanFleet.git" /root/AideanFleet
+  ```
+
+  步骤 4：清除 remote URL 中的凭据
+
+  ```bash
+  git -C /root/Aidean remote set-url origin https://github.com/aideanew/Aidean.git
+  git -C /root/AideanFleet remote set-url origin https://github.com/aideanew/AideanFleet.git
+  ```
+
+  步骤 5：配置 git credential store（后续 pull 自动认证）
+
+  ```bash
+  git config --global credential.helper store
+  printf 'https://x-access-token:%s@github.com\n' "$TOKEN" > ~/.git-credentials
+  chmod 600 ~/.git-credentials
+  ```
+
+  步骤 6：删除临时文件
+
+  ```bash
+  rm -f ~/.git-pat
+  ```
+
+  2.3 克隆后验证
+
+  ```bash
+  for repo in AideanFleet Aidean; do
+    echo "=== $repo ==="
+    git -C /root/$repo branch --show-current
+    git -C /root/$repo log -1 --oneline
+    git -C /root/$repo remote -v  # 确认 remote URL 中无凭据残留
+  done
+  ```
+
+  ────────────────────
+
+  第三步：安装和检测环境
+
+  3.1 Python 环境（AideanFleet 依赖）
+
+  AideanFleet 要求 Python >= 3.10（pyproject.toml 中 requires-python = ">=3.10" 声明）。若系统 Python 低于 3.10，需先安装高版本。
+
+  版本检查
+
+  ```bash
+  python3 --version
+  # 若 < 3.10，安装高版本：
+  #   方式一：使用系统包管理器安装（yum install python3.11 等）
+  #   方式二：pyenv 编译安装（需 gcc、make、zlib-devel、openssl-devel）
+  ```
+
+  创建虚拟环境并安装依赖
+
+  ```bash
+  cd /root/AideanFleet
+
+  # 创建虚拟环境
+  python3 -m venv .venv
+  source .venv/bin/activate
+
+  # 升级 pip
+  pip install --upgrade pip
+
+  # 安装项目（含 fleet CLI 入口点，pyproject.toml [project.scripts] 定义 fleet = fleet.launcher.cli_start:main）
+  pip install -e ".[dev]"
+
+  # 或直接安装 requirements.txt（精确版本钉定）
+  pip install -r requirements.txt
+  ```
+
+  AideanFleet 核心依赖清单
+
+  以下依赖来自 requirements.txt，版本精确钉定：
+
+   包名              │ 版本    │ 用途
+  ───────────────────┼─────────┼────────────────────────────────────────────────────────────────
+   fastapi           │ 0.141.1 │ Web 控制台服务端（fleet/console/server.py）
+  ───────────────────┼─────────┼────────────────────────────────────────────────────────────────
+   uvicorn[standard] │ 0.53.0  │ ASGI 服务器（fleet/console/server.py 的 main()）
+  ───────────────────┼─────────┼────────────────────────────────────────────────────────────────
+   websockets        │ 17.1.0  │ /ws 实时通道（uvicorn[standard] 亦携带，显式声明保证测试可用）
+  ───────────────────┼─────────┼────────────────────────────────────────────────────────────────
+   httpx             │ 0.28.1  │ FastAPI TestClient 运行时依赖（tests/core/test_server_api.py）
+  ───────────────────┼─────────┼────────────────────────────────────────────────────────────────
+   pytest            │ 9.1.1   │ 测试框架（python -m pytest tests -q）
+
+  验证安装
+
+  ```bash
+  cd /root/AideanFleet
+  source .venv/bin/activate
+
+  # 冒烟测试
+  python -m pytest tests -q
+
+  # CLI 入口点验证
+  fleet --help 2>/dev/null || python -m fleet.launcher.cli_start --help 2>/dev/null
+  ```
+
+  3.2 Node.js 环境（Aidean 依赖）
+
+  Aidean 是 pnpm + turborepo monorepo，package.json 中 engines.node 要求 >=20，packageManager 指定 pnpm@9.0.0。
+
+  版本检查与安装
+
+  ```bash
+  # 检查版本
+  node --version    # 需要 >= 20
+  pnpm --version    # 需要 9.x
+
+  # 若 pnpm 未安装或版本不符
+  npm install -g pnpm@9
+
+  # 若 Node 版本过低，使用 nvm 安装或直接下载官方二进制
+  ```
+
+  安装 Aidean 依赖
+
+  ```bash
+  cd /root/Aidean
+  pnpm install
+  ```
+
+  Aidean 项目结构
+
+  ```
+  Aidean/
+  ├── apps/
+  │   └── web/                 # Next.js 主应用
+  ├── packages/
+  │   ├── config/              # 共享配置包
+  │   ├── shared/              # 共享逻辑包
+  │   └── ui/                  # 共享 UI 组件包
+  ├── deploy/
+  │   ├── base/
+  │   ├── caddy/
+  │   ├── pgbouncer/
+  │   ├── prometheus/
+  │   ├── scripts/
+  │   ├── synapse/
+  │   ├── web/
+  │   ├── docker-compose.dev.yml
+  │   ├── docker-compose.prod.yml
+  │   ├── docker-compose.redis.yml
+  │   └── docker-compose.ubuntu.yml
+  ├── docker/
+  │   ├── nginx/
+  │   ├── postgres/
+  │   ├── redis/
+  │   ├── sql/
+  │   └── templates/
+  ├── e2e/                     # Playwright E2E 测试
+  ├── docs/
+  ├── research/
+  ├── scripts/
+  ├── tests/
+  ├── turbo.json               # Turborepo 任务配置
+  ├── pnpm-workspace.yaml      # workspace: packages: [apps/*, packages/*]
+  ├── package.json             # packageManager: pnpm@9.0.0, engines: node>=20
+  └── tsconfig.base.json
+  ```
+
+  验证安装
+
+  ```bash
+  cd /root/Aidean
+
+  # TypeScript 类型检查
+  pnpm run typecheck
+
+  # ESLint 代码检查
+  pnpm run lint
+  ```
+
+  ────────────────────
+
+  第四步：安装所需工具、Skills、CLI
+
+  4.1 AideanFleet 执行体 CLI
+
+  AideanFleet 的执行体适配器位于 fleet/executors/，通过 @register_adapter 装饰器自动注册。共支持以下 CLI：
+
+   执行体名                             │ CLI 命令                             │ 实际调用命令（节选）                 │ 适配器文件                           │ capabilities
+  ──────────────────────────────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────────────────────────
+   opencode                             │ opencode                             │ opencode run --format json --dir <工 │ fleet/executors/opencode.py          │ MCP✅、 native_skills✅、
+                                        │                                      │ 作区 >                               │                                      │ usage_reporting✅
+  ──────────────────────────────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────────────────────────
+   codex                                │ codex                                │ codex exec --json                    │ fleet/executors/codex.py             │ structured_output✅、
+                                        │                                      │ --skip-git-repo-check -s             │                                      │ usage_reporting✅
+                                        │                                      │ workspace-write -m <model>           │                                      │
+  ──────────────────────────────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────────────────────────
+   claudecode                           │ claude                               │ claude -p --output-format json       │ fleet/executors/claudecode.py        │ streaming✅、 structured_output✅、
+                                        │                                      │                                      │                                      │ MCP✅
+  ──────────────────────────────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────────────────────────
+   hermes                               │ hermes                               │ hermes -p worker run --model <model> │ fleet/executors/hermes.py            │ usage_reporting✅；另支持 hermes -p
+                                        │                                      │ <prompt>                             │                                      │ manager gateway run启动长驻网关
+  ──────────────────────────────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────────────────────────
+   fake                                 │ 无                                   │ 无（纯 Python 内存执行）             │ fleet/executors/fake.py              │ 测试替身，可注入 429/401/TIMEOUT失败
+                                        │                                      │                                      │                                      │ 模式
+
+  opencode 安装
+
+  ```bash
+  # 方式一：npm 全局安装（推荐，稳定可达）
+  npm install -g opencode-ai
+  opencode --version
+
+  # 方式二：GitHub release 官方安装脚本（可能超时，不推荐在受限网络使用）
+  # curl -fsSL https://opencode.ai/install | bash
+  ```
+
+  已知坑：GitHub 大文件下载超时
+
+  现象：该环境对 github.com 的大文件和 release 下载不稳定，官方安装脚本和 release 二进制均可能超时。
+
+  解决方案：优先使用 npm registry 安装，npm registry 通常可达。
+
+  CLI 可用性检测
+
+  ```bash
+  for c in opencode codex claude hermes; do
+    if command -v $c >/dev/null 2>&1; then
+      echo "$c: 已安装 ($(command -v $c))"
+    else
+      echo "$c: 未安装"
+    fi
+  done
+  ```
+
+  最少安装要求：opencode 必须安装（.env.example 中 data-1、be-1、be-2 三个角色绑定此适配器）。其他 CLI 按实际角色配置需要安装。
+
+  4.2 华为云 Skills（按需安装）
+
+  若新主机需要华为云操作能力，可安装相关 skill。
+
+  安装原则：
+
+    • 不自动安装，需用户确认后方可执行。
+    • 安装后必须先读取 SKILL.md 了解用法，不依靠 skill 名称猜测能力。
+    • 安装命令格式：npx skills add <git_repo_url> --skill <skill-name> -y
+
+  4.3 其他开发工具
+
+  ```bash
+  # Docker 与 docker-compose（Aidean 提供容器化部署方案）
+  docker --version 2>/dev/null || echo "Docker: 未安装（按需安装）"
+  docker compose version 2>/dev/null || echo "docker-compose: 未安装（按需安装）"
+
+  # Make（部分构建脚本可能依赖）
+  make --version 2>/dev/null || echo "Make: 未安装"
+
+  # jq（JSON 处理，配置检查常用）
+  jq --version 2>/dev/null || echo "jq: 未安装（建议安装）"
+  ```
+
+  ────────────────────
+
+  第五步：准备开发前所有工作
+
+  5.1 AideanFleet 配置初始化
+
+  生成 .env 文件
+
+  ```bash
+  cd /root/AideanFleet
+
+  # .env 文件生成逻辑：
+  # 首次运行 fleet/core/config.py 时会从 .env.example 自动复制生成 .env
+  # 也可手动复制：
+  cp .env.example .env
+  ```
+
+  .env 配置段说明
+
+  .env.example 共七段，关键配置项如下：
+
+   段         │ 配置项             │ 默认值                            │ 说明
+  ────────────┼────────────────────┼───────────────────────────────────┼────────────────────────────────────────────────────────────────────────
+   basic      │ FLEET_CONSOLE_HOST │ 127.0.0.1                         │ 控制台监听地址
+  ────────────┼────────────────────┼───────────────────────────────────┼────────────────────────────────────────────────────────────────────────
+              │ FLEET_CONSOLE_PORT │ 5000                              │ Web 控制台端口
+  ────────────┼────────────────────┼───────────────────────────────────┼────────────────────────────────────────────────────────────────────────
+              │ FLEET_MANAGER_PORT │ 9900                              │ Manager 网关端口
+  ────────────┼────────────────────┼───────────────────────────────────┼────────────────────────────────────────────────────────────────────────
+              │ FLEET_UI_PORT      │ 3333                              │ UI 端口
+  ────────────┼────────────────────┼───────────────────────────────────┼────────────────────────────────────────────────────────────────────────
+              │ FLEET_TIMEZONE     │ Asia/Shanghai                     │ 时区
+  ────────────┼────────────────────┼───────────────────────────────────┼────────────────────────────────────────────────────────────────────────
+   model_pool │ FLEET_MODEL_N_*    │ 8 个模型                          │ level 数字越小优先级越高；api_key 只写 ${VAR} 占位，真值从环境变量取
+  ────────────┼────────────────────┼───────────────────────────────────┼────────────────────────────────────────────────────────────────────────
+   roles      │ FLEET_ROLE_N_*     │ 7 个角色                          │ bind_model_name 按顺序尝试，全耗尽则 BLOCKED；adapter 对应执行体适配器
+  ────────────┼────────────────────┼───────────────────────────────────┼────────────────────────────────────────────────────────────────────────
+   executors  │ FLEET_EXECUTOR_N_* │ 4 个执行体                        │ CLI 启动命令与超时（默认 600 秒）
+  ────────────┼────────────────────┼───────────────────────────────────┼────────────────────────────────────────────────────────────────────────
+   email      │ FLEET_SMTP_*       │ ENABLED=0                         │ SMTP 通知（默认关闭），收发件人和授权码全用 ${VAR} 占位
+  ────────────┼────────────────────┼───────────────────────────────────┼────────────────────────────────────────────────────────────────────────
+   notify     │ FLEET_NOTIFY_*     │ 4 项开关                          │ 任务开始=关、任务结束=开、额度不足=开
+  ────────────┼────────────────────┼───────────────────────────────────┼────────────────────────────────────────────────────────────────────────
+   request    │ FLEET_REQUEST_*    │ 超时 600s / 重试 10 次 / 间隔 10s │ 429/超时重试，401/403 硬失败立即切换
+
+  模型池 API Key 配置（安全方式）
+
+  ```bash
+  # .env 中只写占位符 ${VAR}，真值通过环境变量注入
+  # 在 ~/.bashrc 或仓库外独立 secrets 文件中设置（不提交到 git）
+
+  export BAI_API_KEY="<实际值>"
+  export MODELSCOPE_API_KEY="<实际值>"
+  export AMD_API_KEY="<实际值>"
+  export NVIDIA_API_KEY="<实际值>"
+  export SENSNOVA_API_KEY="<实际值>"
+  export AGNES_API_KEY="<实际值>"
+  export V3_API_KEY="<实际值>"
+  export BIGMODEL_API_KEY="<实际值>"
+  ```
+
+  角色与适配器绑定关系（来自 .env.example）
+
+   角色       │ 适配器     │ 绑定模型链（按优先级）
+  ────────────┼────────────┼──────────────────────────────
+   manager    │ hermes     │ agnes → modelscope → amd
+  ────────────┼────────────┼──────────────────────────────
+   ui-1       │ claudecode │ agnes → modelscope
+  ────────────┼────────────┼──────────────────────────────
+   fe-1       │ codex      │ agnes → modelscope → amd
+  ────────────┼────────────┼──────────────────────────────
+   data-1     │ opencode   │ agnes → modelscope
+  ────────────┼────────────┼──────────────────────────────
+   be-1       │ opencode   │ agnes → modelscope → amd
+  ────────────┼────────────┼──────────────────────────────
+   be-2       │ opencode   │ modelscope → amd → sensenova
+  ────────────┼────────────┼──────────────────────────────
+   reviewer-1 │ hermes     │ agnes → modelscope
+
+  5.2 AideanFleet 启动验证
+
+  ```bash
+  cd /root/AideanFleet
+  source .venv/bin/activate
+
+  # 方式一：CLI 引导启动（交互式，推荐首次使用）
+  python -m fleet.launcher.cli_start
+
+  # 方式二：直接启动控制台
+  python -m fleet.console.server
+
+  # 方式三：uvicorn 直接启动
+  uvicorn fleet.console.server:app --host 127.0.0.1 --port 5000
+
+  # 启动后访问 http://127.0.0.1:5000 确认控制台可用
+  ```
+
+  启动流程（fleet/launcher/launch_core.py，共 9 步）
+
+   步骤 │ 名称                  │ 说明
+  ──────┼───────────────────────┼──────────────────────────────────────
+   1    │ env probe             │ 环境探测
+
+  (End of file - total 603 lines)
+  
+  ────────────────────
+  
+  
+  

@@ -1,0 +1,1684 @@
+基于搜索结果与深度分析，以下是完整的规范体系输出：
+
+---
+
+# PROJECT-STRUCTURE-SPEC.md
+
+**项目工程结构规范体系**
+
+- **文档类型**：项目级工程结构规范
+- **文档版本**：v2.0
+- **状态**：Active
+- **适用对象**：个人开发 / 团队开发 / AI CLI 辅助开发 / 多 Agent 协作开发
+- **适用范围**：目录组织 / 模块划分 / 层级职责 / 依赖方向 / 文件归属 / 生成物治理 / AI 修改边界 / 自动化边界守卫
+
+---
+
+# 第一部分：核心设计原则
+
+## 1. 规范目标
+
+### 1.1 本规范解决的问题
+
+```text
+AI CLI 只生成"可运行项目"，不生成"可持续演进的工程"。
+两者的本质差距是：
+
+可运行项目              可持续演进工程
+─────────────────────────────────────────
+能 npm run dev         有业务边界
+没有职责边界           有职责边界
+没有依赖方向           有依赖方向
+没有模块归属           有模块归属
+没有生命周期分类        有生命周期分类
+没有 AI 修改约束        有 AI 修改约束
+没有自动边界守卫        有自动边界守卫
+```
+
+### 1.2 本规范不负责定义
+
+```text
+具体编程语言语法
+具体框架 API 使用方式
+业务需求内容
+团队协作流程（见 PROJECT-DOCUMENTATION-SPEC.md）
+```
+
+### 1.3 本规范与其他规范的关系
+
+```text
+PROJECT-DOCUMENTATION-SPEC.md
+        │
+        └── 项目的"知识、需求、计划、任务、证据"如何组织
+
+PROJECT-STRUCTURE-SPEC.md（本文件）
+        │
+        └── 项目的"源码、模块、配置、测试、脚本、资产、生成物"如何组织
+
+AGENTS.md
+        │
+        └── AI Agent 读取哪些规范、如何执行、修改前检查什么
+
+ARCHITECTURE-GUARD（自动化守卫）
+        │
+        └── 将规范从"建议"变为"强制约束"的机器可验证机制
+```
+
+---
+
+## 2. 第一原则：文件生命周期分类
+
+### 2.1 五种文件类型（所有文件必须属于其中一类）
+
+```text
+┌──────────────────────┬────────────────────────────────────────┬──────────────┐
+│ 类型                  │ 含义                                    │ 进入 Git？   │
+├──────────────────────┼────────────────────────────────────────┼──────────────┤
+│ Source               │ 源码、配置源码、迁移、测试源码            │ ✅ 必须      │
+│ Specification        │ 文档、架构、需求、ADR、规范              │ ✅ 必须      │
+│ Reproducible Input   │ fixtures、seed、schema、template        │ ✅ 通常      │
+│ Generated Artifact   │ dist、build、coverage、logs、缓存       │ ❌ 默认不进  │
+│ Local / Temporary    │ 调试日志、截图、临时脚本、AI 会话产物    │ ❌ 绝不进    │
+└──────────────────────┴────────────────────────────────────────┴──────────────┘
+```
+
+### 2.2 文件创建前的归属判断流程
+
+```text
+准备创建一个新文件
+        │
+        ▼
+它属于哪种生命周期类型？
+        │
+   ┌────┴──────────────────────────────────────────┐
+   ▼           ▼            ▼           ▼           ▼
+ Source   Specification  Reproducible Generated   Temporary
+   │           │           Input         │           │
+   ▼           ▼             │           ▼           ▼
+按模块     docs/ 对应      按需归入    加入      .local/
+归属规则   子目录          对应目录   .gitignore  或删除
+   │
+   ▼
+它属于哪个业务域？
+        │
+   ┌────┴──────────┬──────────┬─────────┐
+   ▼               ▼          ▼         ▼
+ user/          order/    payment/  notification/
+   │
+   ▼
+它在业务域内属于哪一层？
+        │
+   ┌────┴───────────────────┬──────────┐
+   ▼          ▼             ▼          ▼
+domain/  application/  interfaces/  infrastructure/
+
+无法回答归属 → 不创建，先明确归属
+```
+
+---
+
+## 3. 第二原则：依赖方向（单向，不可逆）
+
+### 3.1 后端依赖方向
+
+```text
+interfaces/（HTTP、CLI、Event）
+        │
+        ▼
+application/（用例编排）
+        │
+        ▼
+domain/（业务规则，最纯净）
+
+infrastructure/（技术实现）
+        │
+        ▼
+domain / application contracts（只依赖接口，不依赖实现）
+```
+
+**绝对禁止的依赖方向：**
+
+```text
+❌ domain → database
+❌ domain → HTTP framework
+❌ domain → Redis
+❌ domain → 第三方 SDK
+❌ interfaces/controller → repository（跳过 application 层）
+❌ interfaces/controller → ORM model（直接操作数据）
+```
+
+### 3.2 前端依赖方向
+
+```text
+pages/（路由组合层）
+        │
+        ▼
+features/<domain>/（业务功能域）
+        │
+   ┌────┴─────────────────┐
+   ▼                      ▼
+components/ui/          services/
+（纯 UI，无业务）        （API 客户端）
+        │
+        ▼
+      lib/utils/
+（纯工具函数，无业务无副作用）
+```
+
+**绝对禁止的依赖方向：**
+
+```text
+❌ features/order/ → features/payment/internal/（跨域访问内部文件）
+❌ components/ui/ → features/（UI 组件依赖业务逻辑）
+❌ utils/ → features/（工具函数不能依赖业务域）
+❌ pages/ → infrastructure/（页面不直接访问数据层）
+```
+
+### 3.3 模块间通信规则
+
+```text
+✅ 允许的模块间通信
+─────────────────────────────────────
+模块 A → 模块 B 的公开 Application API
+模块 A → Domain Event → 模块 B（事件驱动）
+模块 A → 共享 contracts（跨端契约）
+
+❌ 禁止的模块间通信
+─────────────────────────────────────
+order → payment/infrastructure/internal-repo.ts
+user → order/domain/private-model.ts
+任何模块 → 另一个模块的 internal/ 路径
+```
+
+---
+
+## 4. 第三原则：按业务边界，而非技术类型组织
+
+```text
+❌ 按技术类型（错误）        ✅ 按业务边界（正确）
+────────────────────────    ────────────────────────
+src/                        src/modules/
+├── controllers/            ├── identity/
+├── services/               │   ├── domain/
+├── repositories/           │   ├── application/
+├── models/                 │   ├── interfaces/
+└── utils/                  │   └── infrastructure/
+                            ├── order/
+                            └── payment/
+
+问题：修改"订单"功能         好处：修改"订单"功能
+需要同时修改 5 个目录         只需要进入 order/ 模块
+```
+
+---
+
+# 第二部分：根目录治理规范
+
+## 5. 根目录白名单制
+
+### 5.1 允许存在于根目录的文件（完整白名单）
+
+```text
+✅ 根目录允许清单
+──────────────────────────────────────────────────
+README.md                   项目入口说明（面向人类）
+AGENTS.md                   AI 规范入口（面向 Agent）
+CHANGELOG.md                版本变更记录
+LICENSE                     开源协议
+Makefile                    统一命令入口
+docker-compose.yml          快捷启动（极简，指向 infra/）
+.gitignore                  Git 忽略规则
+.editorconfig               编辑器统一配置
+.env.example                环境变量示例（唯一，无密钥）
+package.json                Monorepo 根配置（如使用）
+pnpm-workspace.yaml         工作区配置（如使用）
+pyproject.toml              Python 根配置（如使用）
+turbo.json                  构建工具配置（如使用）
+```
+
+### 5.2 禁止出现于根目录的文件类型
+
+```text
+❌ 根目录禁止清单（永久禁止）
+──────────────────────────────────────────────────────────
+*.png / *.jpg / *.gif        截图/图片    → docs/evidence/ 或 .local/screenshots/
+*.log / *.txt（日志）        日志文件    → .local/logs/ 或 logs/（gitignore）
+test_*.py / test*.js         临时测试    → tests/ 对应目录 或 删除
+*.bak / *.backup             备份副本    → 永远不应存在，用 Git 替代
+*.tmp / *.temp               临时文件    → .local/
+config*.old / config*.new   配置副本    → 永远不应存在，用 Git 替代
+*_v2.* / *_final.* / *_copy.*  版本副本  → 永远不应存在，用 Git branch/tag
+debug*.js / debug*.py        调试脚本    → .local/scratch/ 或删除
+0922测试.py / 副本_xxx.py   随意命名    → 永远不允许
+server.log / error.log       日志文件    → .local/logs/
+backup/ / old/ / temp/ / tmp/  临时目录  → .local/
+```
+
+### 5.3 根目录新增顶层目录审批规则
+
+新增任何顶层目录，必须依次回答以下全部问题：
+
+```text
+1. 它属于哪种生命周期类型（Source/Spec/Input/Generated/Temporary）？
+2. 为什么现有顶层目录无法容纳？
+3. 它是否属于某个已有应用（→ 应进入 apps/<app>/）？
+4. 它是否属于某个已有业务模块（→ 应进入对应模块）？
+5. 它是否是生成物（→ 加入 .gitignore，进入 .local/）？
+6. 它是否是临时状态（→ 进入 .local/）？
+7. 它是否需要 Git 跟踪？
+8. 它是否具有独立的、稳定的、长期的生命周期？
+
+无法回答全部 8 个问题 → 不允许新建
+```
+
+---
+
+## 6. .gitignore 标准规范
+
+```gitignore
+# ============================================================
+# 永远不允许的文件类型（规范硬约束）
+# ============================================================
+*.bak
+*.backup
+*.tmp
+*.temp
+*副本*
+*_copy.*
+*_v2.*
+*_v3.*
+*_old.*
+*_new.*
+*_final.*
+*_final2.*
+*-backup.*
+*-copy.*
+*-old.*
+debug*.js
+debug*.py
+debug*.ts
+test2.*
+test_final*
+
+# ============================================================
+# 运行时生成文件
+# ============================================================
+logs/
+*.log
+.local/
+tmp/
+temp/
+.runtime/
+.cache/
+.tmp/
+
+# ============================================================
+# 编译输出
+# ============================================================
+dist/
+build/
+out/
+.next/
+.nuxt/
+.output/
+coverage/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+.turbo/
+
+# ============================================================
+# 环境与密钥（绝对不进 Git）
+# ============================================================
+.env
+.env.local
+.env.production
+.env.staging
+*.pem
+*.key
+*.p12
+secrets/
+credentials/
+
+# ============================================================
+# 数据库备份（不属于源码仓库）
+# ============================================================
+*.sql.bak
+*.dump
+backup*.sql
+*-backup.sql
+
+# ============================================================
+# IDE 个人配置
+# ============================================================
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+```
+
+---
+
+# 第三部分：完整项目目录结构
+
+## 7. 根目录全局结构
+
+```text
+project-root/
+│
+├── apps/                           # 第一层：可运行应用边界
+│   ├── api/                        # 后端 API 服务
+│   └── web/                        # 前端 Web 应用
+│
+├── packages/                       # 跨应用真正复用的共享包
+│   ├── contracts/                  # 前后端共享契约（Request/Response/DTO）
+│   ├── ui/                         # 共享 Design System（确有需要才创建）
+│   └── config/                     # 共享工具配置基础（确有需要才创建）
+│
+├── database/                       # 数据库生命周期资产（独立于应用）
+│   ├── migrations/                 # 迁移脚本（按版本有序）
+│   ├── seeds/                      # 种子数据（环境初始化用）
+│   └── fixtures/                   # 测试固定数据
+│
+├── tests/                          # 跨应用测试（应用内测试在各 app 下）
+│   ├── integration/                # 跨模块/跨服务集成测试
+│   └── e2e/                        # 端到端测试
+│
+├── infra/                          # 基础设施即代码（IaC）
+│   ├── docker/                     # 容器配置
+│   ├── nginx/                      # Web 服务器配置
+│   ├── ci/                         # CI/CD 流水线（或 .github/workflows/）
+│   └── deployment/                 # 部署脚本与配置
+│
+├── scripts/                        # 长期有效的自动化脚本
+│   ├── setup/                      # 环境初始化
+│   ├── database/                   # 数据库操作
+│   ├── release/                    # 发布流程
+│   └── maintenance/                # 维护脚本
+│
+├── docs/                           # 项目文档（见 PROJECT-DOCUMENTATION-SPEC）
+│
+├── .github/                        # GitHub 协作配置
+│   ├── workflows/                  # CI/CD（如使用 GitHub Actions）
+│   └── PULL_REQUEST_TEMPLATE.md
+│
+├── .local/                         # 本地临时状态（完整 gitignore）★
+│   ├── ai/                         # AI Agent 工作产物
+│   ├── logs/                       # 本地运行日志
+│   ├── screenshots/                # 临时截图
+│   ├── downloads/                  # 临时下载
+│   ├── experiments/                # 实验性脚本
+│   ├── scratch/                    # 一次性草稿
+│   └── runtime/                    # 运行时产物
+│
+├── README.md                       # 项目入口（面向人类）
+├── AGENTS.md                       # AI 规范入口（面向 Agent）★
+├── CHANGELOG.md                    # 版本变更
+├── Makefile                        # 统一命令入口
+├── docker-compose.yml              # 快捷启动
+├── .gitignore
+├── .editorconfig
+└── .env.example
+```
+
+---
+
+# 第四部分：后端（API）完整分层规范
+
+## 8. 后端分层架构
+
+### 8.1 分层模型
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│                   interfaces/                            │  第一层：外部世界入口
+│         http/ │ events/ │ cli/ │ grpc/                  │
+├─────────────────────────────────────────────────────────┤
+│                  application/                            │  第二层：用例编排
+│       commands/ │ queries/ │ services/                   │
+├─────────────────────────────────────────────────────────┤
+│                    domain/                               │  第三层：业务核心（最纯净）
+│   entities/ │ value-objects/ │ services/ │ ports/        │
+├─────────────────────────────────────────────────────────┤
+│                infrastructure/                           │  第四层：技术实现（可替换）
+│  persistence/ │ cache/ │ external/ │ messaging/          │
+├─────────────────────────────────────────────────────────┤
+│              shared/ │ core/ │ bootstrap/                │  横切层：被所有层使用
+└─────────────────────────────────────────────────────────┘
+```
+
+### 8.2 后端完整目录结构
+
+```text
+apps/api/
+│
+├── src/                                    # 所有源码在 src/ 下
+│   │
+│   ├── bootstrap/                          # ★ 启动层（只管启动）
+│   │   ├── main.py                         # 唯一启动入口
+│   │   ├── app.py                          # 应用工厂（create_app）
+│   │   └── container.py                    # 依赖注入容器
+│   │
+│   ├── modules/                            # ★★ 核心：按业务域组织
+│   │   │
+│   │   ├── identity/                       # 身份认证域
+│   │   │   ├── domain/                     # 业务规则（最纯净，无框架依赖）
+│   │   │   │   ├── entities/
+│   │   │   │   │   ├── user.py             # 用户实体
+│   │   │   │   │   └── role.py             # 角色实体
+│   │   │   │   ├── value_objects/
+│   │   │   │   │   ├── email.py            # 邮箱值对象
+│   │   │   │   │   └── password.py         # 密码值对象
+│   │   │   │   ├── services/
+│   │   │   │   │   └── auth_policy.py      # 领域服务（认证策略）
+│   │   │   │   ├── ports/                  # 对外依赖接口（抽象）
+│   │   │   │   │   ├── user_repo.py        # 用户仓储接口
+│   │   │   │   │   └── token_service.py    # Token 服务接口
+│   │   │   │   ├── events/
+│   │   │   │   │   └── user_registered.py  # 领域事件
+│   │   │   │   └── exceptions.py           # 领域异常
+│   │   │   │
+│   │   │   ├── application/                # 用例编排（调用 domain，不含业务规则）
+│   │   │   │   ├── commands/               # 写操作用例
+│   │   │   │   │   ├── register_user/
+│   │   │   │   │   │   ├── command.py      # 命令定义
+│   │   │   │   │   │   └── handler.py      # 命令处理器
+│   │   │   │   │   └── change_password/
+│   │   │   │   │       ├── command.py
+│   │   │   │   │       └── handler.py
+│   │   │   │   ├── queries/                # 读操作用例
+│   │   │   │   │   └── get_user_profile/
+│   │   │   │   │       ├── query.py
+│   │   │   │   │       └── handler.py
+│   │   │   │   └── dtos/                   # 应用层数据传输对象
+│   │   │   │       ├── user_dto.py
+│   │   │   │       └── auth_dto.py
+│   │   │   │
+│   │   │   ├── interfaces/                 # 外部接入层（HTTP/Event/CLI）
+│   │   │   │   ├── http/
+│   │   │   │   │   ├── router.py           # 路由定义
+│   │   │   │   │   ├── controller.py       # 控制器（只做路由→应用层调用→响应）
+│   │   │   │   │   ├── request_schema.py   # 请求体 Schema
+│   │   │   │   │   ├── response_schema.py  # 响应体 Schema
+│   │   │   │   │   └── presenter.py        # 数据格式化（应用层→HTTP响应）
+│   │   │   │   └── events/
+│   │   │   │       └── user_event_handler.py  # 领域事件处理
+│   │   │   │
+│   │   │   └── infrastructure/             # 技术实现（可替换）
+│   │   │       ├── persistence/
+│   │   │       │   ├── models/
+│   │   │       │   │   └── user_model.py   # ORM Model（只在此处出现）
+│   │   │       │   ├── repositories/
+│   │   │       │   │   └── user_repo_impl.py  # UserRepo 接口的具体实现
+│   │   │       │   └── mappers/
+│   │   │       │       └── user_mapper.py  # ORM Model ↔ Domain Entity 转换
+│   │   │       ├── cache/
+│   │   │       │   └── user_cache.py       # 用户缓存实现
+│   │   │       └── external/
+│   │   │           └── email_service.py    # 邮件服务实现
+│   │   │
+│   │   ├── order/                          # 订单域（结构同 identity/）
+│   │   │   ├── domain/
+│   │   │   │   ├── entities/
+│   │   │   │   │   ├── order.py
+│   │   │   │   │   └── order_item.py
+│   │   │   │   ├── value_objects/
+│   │   │   │   │   ├── money.py
+│   │   │   │   │   └── order_status.py
+│   │   │   │   ├── services/
+│   │   │   │   │   └── pricing_policy.py
+│   │   │   │   ├── ports/
+│   │   │   │   │   ├── order_repo.py
+│   │   │   │   │   └── payment_gateway.py
+│   │   │   │   └── events/
+│   │   │   │       ├── order_created.py
+│   │   │   │       └── order_cancelled.py
+│   │   │   ├── application/
+│   │   │   │   ├── commands/
+│   │   │   │   │   ├── create_order/
+│   │   │   │   │   ├── cancel_order/
+│   │   │   │   │   └── confirm_order/
+│   │   │   │   └── queries/
+│   │   │   │       ├── get_order/
+│   │   │   │       └── list_orders/
+│   │   │   ├── interfaces/
+│   │   │   │   └── http/
+│   │   │   └── infrastructure/
+│   │   │       ├── persistence/
+│   │   │       └── external/
+│   │   │
+│   │   ├── payment/                        # 支付域
+│   │   │   ├── domain/
+│   │   │   ├── application/
+│   │   │   ├── interfaces/
+│   │   │   └── infrastructure/
+│   │   │       └── external/
+│   │   │           ├── stripe_gateway.py   # Stripe 实现
+│   │   │           └── wechat_pay.py       # 微信支付实现
+│   │   │
+│   │   ├── notification/                   # 通知域
+│   │   │   ├── domain/
+│   │   │   ├── application/
+│   │   │   ├── interfaces/
+│   │   │   │   └── events/                 # 监听其他域的领域事件
+│   │   │   └── infrastructure/
+│   │   │       └── external/
+│   │   │           ├── smtp.py
+│   │   │           └── sms.py
+│   │   │
+│   │   └── system/                         # 系统管理域（仅真正的系统级能力）
+│   │       ├── domain/
+│   │       │   └── entities/
+│   │       │       ├── permission.py
+│   │       │       └── audit_log.py
+│   │       ├── application/
+│   │       │   ├── commands/
+│   │       │   └── queries/
+│   │       ├── interfaces/
+│   │       │   └── http/
+│   │       │       ├── health_router.py    # 健康检查
+│   │       │       └── admin_router.py     # 管理接口
+│   │       └── infrastructure/
+│   │
+│   ├── shared/                             # ★ 内部共享层（真正跨模块复用）
+│   │   ├── domain/                         # 共享领域原语
+│   │   │   ├── aggregate_root.py           # 聚合根基类
+│   │   │   ├── entity.py                   # 实体基类
+│   │   │   ├── value_object.py             # 值对象基类
+│   │   │   └── domain_event.py             # 领域事件基类
+│   │   ├── application/
+│   │   │   ├── command_bus.py              # 命令总线
+│   │   │   ├── query_bus.py                # 查询总线
+│   │   │   └── event_bus.py                # 事件总线
+│   │   └── utils/                          # 纯工具函数（无业务语义）
+│   │       ├── datetime_utils.py
+│   │       ├── string_utils.py
+│   │       └── pagination.py
+│   │
+│   └── core/                               # ★ 横切关注点
+│       ├── config.py                       # 配置管理（读取环境变量）
+│       ├── security.py                     # 加密 / JWT
+│       ├── logging.py                      # 日志配置
+│       ├── exceptions.py                   # 全局异常基类与处理器
+│       ├── responses.py                    # 统一响应格式
+│       └── middleware/
+│           ├── auth_middleware.py
+│           ├── logging_middleware.py
+│           └── rate_limit_middleware.py
+│
+├── tests/                                  # 测试目录（与 src/ 平级）
+│   ├── conftest.py                         # 全局 Fixture
+│   ├── factories/                          # 测试数据工厂
+│   │   ├── user_factory.py
+│   │   └── order_factory.py
+│   ├── fixtures/                           # 静态测试数据
+│   ├── unit/                               # 单元测试（不依赖外部）
+│   │   └── modules/
+│   │       ├── identity/
+│   │       │   ├── domain/
+│   │       │   │   └── test_user_entity.py
+│   │       │   └── application/
+│   │       │       └── test_register_user.py
+│   │       └── order/
+│   │           └── domain/
+│   │               └── test_pricing_policy.py
+│   ├── integration/                        # 集成测试（依赖数据库等）
+│   │   ├── conftest.py
+│   │   └── modules/
+│   │       ├── identity/
+│   │       │   └── test_user_api.py
+│   │       └── order/
+│   │           └── test_order_api.py
+│   └── e2e/                                # 端到端测试
+│       └── test_checkout_flow.py
+│
+├── scripts/
+│   ├── setup.sh
+│   ├── seed.py
+│   └── cleanup.sh
+│
+├── requirements/
+│   ├── base.txt
+│   ├── dev.txt
+│   ├── test.txt
+│   └── prod.txt
+│
+├── .env.example
+├── .env.test
+├── pyproject.toml
+├── alembic.ini
+└── Makefile
+```
+
+---
+
+## 9. 后端文件归属速查表
+
+```text
+文件类型                          正确位置                              禁止位置
+──────────────────────────────────────────────────────────────────────────────────
+HTTP 路由定义                   interfaces/http/router.py            domain/
+HTTP 请求/响应 Schema           interfaces/http/request_schema.py    domain/model
+业务规则 / 用例逻辑             application/commands|queries         interfaces/
+领域实体（无 ORM）              domain/entities/                     infrastructure/
+ORM Model                       infrastructure/persistence/models/   domain/
+SQL / 数据库查询                infrastructure/persistence/repos/    domain/service/
+Redis 操作                      infrastructure/cache/                domain/service/
+第三方 API 调用                 infrastructure/external/             domain/service/
+JWT 生成/验证                   core/security.py                     interfaces/controller
+配置读取                        core/config.py                       散落各处
+全局异常基类                    core/exceptions.py                   app.py
+跨域通用工具                    shared/utils/                        各模块内部
+数据库迁移脚本                  database/migrations/                 根目录
+测试数据工厂                    tests/factories/                     tests/unit/
+运维/管理脚本                   scripts/                             根目录
+日志文件                        .local/logs/（gitignore）            根目录
+临时截图                        .local/screenshots/（gitignore）     根目录
+配置备份文件                    ❌ 永远不应存在                      ~~~config.bak~~~
+```
+
+---
+
+# 第五部分：前端（Web）完整分层规范
+
+## 10. 前端分层架构
+
+### 10.1 分层模型
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│                    pages/                                │  路由页面层（只做组合）
+├─────────────────────────────────────────────────────────┤
+│                   features/                              │  业务功能域（内聚）
+│  ┌──────────┬────────────┬──────────┬─────────────────┐ │
+│  │components│   hooks/   │  store/  │    api/  types/  │ │
+│  └──────────┴────────────┴──────────┴─────────────────┘ │
+├─────────────────────────────────────────────────────────┤
+│           components/ui/      data-access/               │  共享 UI 与数据访问
+├─────────────────────────────────────────────────────────┤
+│         lib/utils/   stores/   hooks/   types/           │  全局工具与类型
+├─────────────────────────────────────────────────────────┤
+│              styles/   assets/   constants/              │  样式、资产、常量
+└─────────────────────────────────────────────────────────┘
+```
+
+### 10.2 前端完整目录结构
+
+```text
+apps/web/
+│
+├── src/
+│   │
+│   ├── main.tsx                            # ★ 唯一入口，只做挂载
+│   │
+│   ├── app/                                # ★ 应用级配置
+│   │   ├── App.tsx                         # 根组件
+│   │   ├── router.tsx                      # 路由配置（只引用 pages/）
+│   │   ├── providers.tsx                   # 全局 Provider 组合
+│   │   └── query-client.ts                 # React Query / SWR 配置
+│   │
+│   ├── pages/                              # ★ 路由页面层（只负责组合，不含业务逻辑）
+│   │   ├── home/
+│   │   │   ├── HomePage.tsx                # 只组合 feature 组件
+│   │   │   └── index.ts
+│   │   ├── auth/
+│   │   │   ├── LoginPage.tsx
+│   │   │   ├── RegisterPage.tsx
+│   │   │   └── index.ts
+│   │   ├── user/
+│   │   │   ├── ProfilePage.tsx
+│   │   │   ├── SettingsPage.tsx
+│   │   │   └── index.ts
+│   │   ├── order/
+│   │   │   ├── OrderListPage.tsx
+│   │   │   ├── OrderDetailPage.tsx
+│   │   │   └── index.ts
+│   │   ├── admin/
+│   │   │   ├── DashboardPage.tsx
+│   │   │   └── index.ts
+│   │   └── error/
+│   │       ├── NotFoundPage.tsx
+│   │       └── ErrorPage.tsx
+│   │
+│   ├── features/                           # ★★ 核心：按业务域内聚
+│   │   │
+│   │   ├── auth/                           # 认证功能域
+│   │   │   ├── components/                 # 本域专用组件
+│   │   │   │   ├── LoginForm.tsx
+│   │   │   │   ├── RegisterForm.tsx
+│   │   │   │   └── OAuthButtons.tsx
+│   │   │   ├── hooks/                      # 本域专用 Hook
+│   │   │   │   ├── useLogin.ts
+│   │   │   │   └── useRegister.ts
+│   │   │   ├── store/                      # 本域状态
+│   │   │   │   └── auth.store.ts
+│   │   │   ├── api/                        # 本域 API 调用封装
+│   │   │   │   └── auth.api.ts
+│   │   │   ├── types/                      # 本域类型定义
+│   │   │   │   └── auth.types.ts
+│   │   │   ├── schemas/                    # 表单 Schema（zod/yup）
+│   │   │   │   └── login.schema.ts
+│   │   │   ├── utils/                      # 本域工具（仅本域使用）
+│   │   │   │   └── token-helper.ts
+│   │   │   └── index.ts                    # ★ 只导出对外暴露的内容
+│   │   │
+│   │   ├── user/                           # 用户功能域
+│   │   │   ├── components/
+│   │   │   │   ├── UserCard.tsx
+│   │   │   │   ├── UserAvatar.tsx
+│   │   │   │   ├── UserForm.tsx
+│   │   │   │   └── UserTable.tsx           # 管理后台用
+│   │   │   ├── hooks/
+│   │   │   │   ├── useUser.ts
+│   │   │   │   └── useUserList.ts
+│   │   │   ├── store/
+│   │   │   ├── api/
+│   │   │   ├── types/
+│   │   │   └── index.ts
+│   │   │
+│   │   ├── order/                          # 订单功能域
+│   │   │   ├── components/
+│   │   │   │   ├── OrderCard.tsx
+│   │   │   │   ├── OrderList.tsx
+│   │   │   │   ├── OrderStatus.tsx
+│   │   │   │   └── OrderTimeline.tsx
+│   │   │   ├── hooks/
+│   │   │   ├── store/
+│   │   │   ├── api/
+│   │   │   ├── types/
+│   │   │   └── index.ts
+│   │   │
+│   │   └── notification/                   # 通知功能域
+│   │       ├── components/
+│   │       │   ├── NotificationBell.tsx
+│   │       │   └── NotificationList.tsx
+│   │       ├── hooks/
+│   │       ├── store/
+│   │       ├── api/
+│   │       └── index.ts
+│   │
+│   ├── components/                         # ★ 纯 UI 组件层（零业务逻辑）
+│   │   │
+│   │   ├── ui/                             # 基础 UI 原子组件
+│   │   │   ├── Button/
+│   │   │   │   ├── Button.tsx
+│   │   │   │   ├── Button.test.tsx
+│   │   │   │   ├── Button.stories.tsx      # Storybook
+│   │   │   │   └── index.ts
+│   │   │   ├── Input/
+│   │   │   ├── Select/
+│   │   │   ├── Modal/
+│   │   │   ├── Table/
+│   │   │   ├── Form/
+│   │   │   │   ├── FormItem.tsx
+│   │   │   │   ├── FormLabel.tsx
+│   │   │   │   └── index.ts
+│   │   │   ├── Feedback/                   # 反馈类
+│   │   │   │   ├── Toast.tsx
+│   │   │   │   ├── Loading.tsx
+│   │   │   │   ├── Skeleton.tsx
+│   │   │   │   ├── Empty.tsx
+│   │   │   │   └── ErrorBoundary.tsx
+│   │   │   └── Navigation/
+│   │   │       ├── Breadcrumb.tsx
+│   │   │       ├── Tabs.tsx
+│   │   │       └── Pagination.tsx
+│   │   │
+│   │   ├── layout/                         # ★ 布局组件（"设计 JS"的正确归宿之一）
+│   │   │   ├── PageLayout.tsx
+│   │   │   ├── SidebarLayout.tsx
+│   │   │   ├── AuthLayout.tsx
+│   │   │   ├── Header.tsx
+│   │   │   ├── Sidebar.tsx
+│   │   │   ├── Footer.tsx
+│   │   │   └── index.ts
+│   │   │
+│   │   └── charts/                         # 图表组件
+│   │       ├── LineChart.tsx
+│   │       └── BarChart.tsx
+│   │
+│   ├── data-access/                        # ★ 数据访问层（API 客户端与请求封装）
+│   │   ├── client.ts                       # HTTP 客户端实例（Axios/Fetch 配置）
+│   │   ├── interceptors.ts                 # 请求/响应拦截器
+│   │   ├── endpoints.ts                    # API 路径常量
+│   │   └── websocket.ts                    # WebSocket（如需要）
+│   │
+│   ├── stores/                             # ★ 全局状态（跨 feature 共享状态）
+│   │   ├── index.ts
+│   │   └── app.store.ts                    # 主题 / 语言 / 全局 UI 状态
+│   │
+│   ├── lib/                                # ★ 全局通用能力（"设计 JS"的正确归宿之二）
+│   │   ├── hooks/                          # 全局通用 Hook
+│   │   │   ├── useDebounce.ts
+│   │   │   ├── useLocalStorage.ts
+│   │   │   ├── useMediaQuery.ts
+│   │   │   ├── usePagination.ts
+│   │   │   └── useTheme.ts
+│   │   └── utils/                          # 纯工具函数（无副作用，无业务语义）
+│   │       ├── format.ts                   # 日期/金额/文件大小格式化
+│   │       ├── validate.ts                 # 通用验证
+│   │       ├── storage.ts                  # localStorage 封装
+│   │       └── url.ts                      # URL 处理
+│   │
+│   ├── types/                              # ★ 全局类型定义
+│   │   ├── api.types.ts                    # API 通用类型（分页、响应格式）
+│   │   ├── common.types.ts                 # 通用类型（ID、时间戳）
+│   │   └── env.d.ts                        # 环境变量类型声明
+│   │
+│   ├── constants/                          # ★ 全局常量
+│   │   ├── routes.ts                       # 路由路径常量
+│   │   ├── query-keys.ts                   # React Query key
+│   │   └── app.ts                          # 应用级常量
+│   │
+│   ├── styles/                             # ★ 全局样式（"设计 JS"的正确归宿之三）
+│   │   ├── globals.css
+│   │   ├── variables.css                   # CSS 变量（Design Token）
+│   │   ├── animations.css                  # 全局动画
+│   │   └── themes/
+│   │       ├── light.css
+│   │       └── dark.css
+│   │
+│   ├── i18n/                               # 国际化（如需要）
+│   │   ├── index.ts
+│   │   └── locales/
+│   │       ├── zh-CN.json
+│   │       └── en-US.json
+│   │
+│   └── assets/                             # ★ 静态资源
+│       ├── images/
+│       ├── icons/
+│       └── fonts/
+│
+├── public/                                 # 不经编译的静态文件
+├── tests/
+│   ├── setup.ts
+│   ├── unit/
+│   ├── integration/
+│   └── e2e/
+│       └── flows/
+│           ├── auth.spec.ts
+│           └── checkout.spec.ts
+│
+├── .storybook/
+├── .env.example
+├── .env.development
+├── vite.config.ts
+├── tsconfig.json
+└── Makefile
+```
+
+---
+
+## 11. 前端文件归属速查表（含"设计 JS"解答）
+
+```text
+文件类型                        正确位置                              禁止位置
+──────────────────────────────────────────────────────────────────────────────────
+路由页面组件                  pages/order/OrderListPage.tsx        components/
+业务功能组件                  features/order/components/           components/ui/
+纯 UI 原子组件                components/ui/Button/                features/
+布局组件（"设计 JS"之一）     components/layout/                   pages/ 或 app/
+主题/Design Token（"设计 JS"之二） styles/variables.css 或 packages/ui/tokens/  各组件内
+交互动画（"设计 JS"之三）    styles/animations.css               组件 JS 内混写
+业务页面交互逻辑              features/<domain>/hooks/             components/ui/
+表单逻辑（"设计 JS"之四）    features/<domain>/schemas/           components/ui/
+API 请求（"设计 JS"之五）    features/<domain>/api/ 或 data-access/ 根目录
+业务域状态                    features/<domain>/store/             stores/（全局）
+全局共享状态                  stores/app.store.ts                  features/
+业务域类型                    features/<domain>/types/             types/（全局）
+全局通用类型                  types/common.types.ts                features/
+HTTP 客户端配置               data-access/client.ts                features/
+通用工具函数                  lib/utils/format.ts                  features/xxx/utils
+业务域专用工具                features/<domain>/utils/             lib/utils/
+路由路径常量                  constants/routes.ts                  app/router.tsx 内
+图标/图片资产                 assets/icons/ 或 packages/ui/        public/ 或根目录
+```
+
+---
+
+# 第六部分：共享层与契约层规范
+
+## 12. packages/ 规范（跨应用真正复用）
+
+### 12.1 创建 package 的判断标准
+
+```text
+创建 packages/<name>/ 的必要条件（必须同时满足）：
+──────────────────────────────────────────────────
+1. 已有至少两个独立应用/模块真正使用这些代码
+2. 共享语义已经稳定（不会因单个需求频繁变更）
+3. 不属于某一个具体业务（不是 user 域的私有代码）
+4. 具有独立的版本生命周期
+5. 具有稳定的对外 API（index.ts 导出边界）
+
+不满足以上任意一条 → 不创建，保留在模块内部
+```
+
+### 12.2 packages/ 完整结构
+
+```text
+packages/
+│
+├── contracts/                          # ★ 前后端共享契约（最重要的 package）
+│   ├── src/
+│   │   ├── identity/
+│   │   │   ├── register.contract.ts    # 注册接口契约
+│   │   │   ├── login.contract.ts
+│   │   │   └── index.ts
+│   │   ├── order/
+│   │   │   ├── create-order.contract.ts
+│   │   │   └── index.ts
+│   │   ├── common/
+│   │   │   ├── pagination.types.ts     # 通用分页类型
+│   │   │   ├── response.types.ts       # 通用响应格式
+│   │   │   └── error.types.ts          # 错误契约
+│   │   └── index.ts
+│   └── package.json
+│
+├── ui/                                 # 共享 Design System（可选）
+│   ├── src/
+│   │   ├── components/                 # 跨应用共享的基础组件
+│   │   ├── tokens/                     # Design Tokens（颜色/间距/字体）
+│   │   ├── patterns/                   # 复合 UI 模式
+│   │   └── primitives/                 # 最小 UI 原语
+│   └── package.json
+│
+└── config/                             # 共享工具配置基础（可选）
+    ├── eslint-base.js
+    ├── tsconfig-base.json
+    └── package.json
+```
+
+### 12.3 contracts/ 的价值
+
+```text
+没有 contracts/：
+    Web 猜接口格式
+    API 猜前端期望
+    两端各自维护类型，各自腐化
+
+有 contracts/：
+    Web  ─────────────→ contracts/ ←───────── API
+    共同依赖同一份类型定义
+    接口变更时，TypeScript 编译时即可发现两端不一致
+```
+
+---
+
+# 第七部分：配置治理规范
+
+## 13. 三类配置的分离规则
+
+```text
+类型                   存储位置                    是否进 Git   说明
+──────────────────────────────────────────────────────────────────
+Tool Configuration    package.json / tsconfig.json   ✅          工具约定路径
+                      eslint.config.js
+                      prettier.config.js
+
+Application Config    apps/api/src/core/config.py    ✅          稳定配置
+                      apps/web/src/app/config.ts
+
+Environment Config    .env.example                   ✅（仅示例）  变量名和说明
+                      .env.development               ✅（无密钥）
+                      .env.test                      ✅（无密钥）
+                      .env.local                     ❌           本地覆盖
+                      .env                           ❌           实际值
+                      .env.production                ❌           由部署系统注入
+```
+
+## 14. 配置备份的正确替代方案
+
+```text
+❌ 错误做法（永远不允许）
+───────────────────────────────
+config.json.bak
+config_20260922.json
+config_backup.json
+config-final.json
+config-new.json
+
+✅ 正确做法（用 Git 管理历史）
+───────────────────────────────
+修改前：git add config.json && git commit -m "chore: update config"
+查看历史：git log config.json
+回滚：git checkout <hash> -- config.json
+标记重要版本：git tag v1.0.0-config
+```
+
+---
+
+# 第八部分：自动化边界守卫（Architecture Guard）
+
+**这是将规范从"建议"变为"强制约束"的关键机制。**
+
+没有工具约束时，架构意图随着成员离开而消失。有了边界约束，这些决策被编码进 lint 配置，超越任何单个贡献者而长期存在。
+
+## 15. 第一层守卫：ESLint 模块边界规则
+
+通过 `@nx/enforce-module-boundaries` ESLint 规则，可以为仓库中不同项目之间的资源访问定义严格规则，强制执行严格边界有助于防止计划外的跨域依赖。
+
+```javascript
+// eslint.config.js 或 .eslintrc.js
+{
+  rules: {
+    '@nx/enforce-module-boundaries': [
+      'error',
+      {
+        // 禁止传递依赖
+        banTransitiveDependencies: true,
+        depConstraints: [
+          // ── 按层级约束依赖方向 ──
+          {
+            sourceTag: 'layer:domain',
+            onlyDependOnLibsWithTags: ['layer:domain', 'layer:shared']
+          },
+          {
+            sourceTag: 'layer:application',
+            onlyDependOnLibsWithTags: ['layer:domain', 'layer:application', 'layer:shared']
+          },
+          {
+            sourceTag: 'layer:interfaces',
+            onlyDependOnLibsWithTags: ['layer:application', 'layer:domain', 'layer:shared']
+          },
+          {
+            sourceTag: 'layer:infrastructure',
+            onlyDependOnLibsWithTags: ['layer:domain', 'layer:shared']
+          },
+          // ── 按业务域约束跨域访问 ──
+          {
+            sourceTag: 'scope:order',
+            onlyDependOnLibsWithTags: ['scope:order', 'scope:shared', 'scope:contracts']
+          },
+          {
+            sourceTag: 'scope:payment',
+            onlyDependOnLibsWithTags: ['scope:payment', 'scope:shared', 'scope:contracts']
+          },
+          // ── 按前端组件类型约束 ──
+          {
+            sourceTag: 'type:ui',
+            onlyDependOnLibsWithTags: ['type:ui', 'type:util']
+            // UI 组件不能依赖业务 feature
+          },
+          {
+            sourceTag: 'type:util',
+            onlyDependOnLibsWithTags: ['type:util']
+            // 工具函数不能依赖任何业务代码
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+模块边界落地并在 CI 中运行后，收益会随时间复利增长。架构变得自文档化——新工程师加入团队后，通过阅读 ESLint 配置，可以在五分钟内理解整个领域结构和依赖规则。这些规则讲述的故事与架构图相同，因为它们本身就是用代码表达的架构图。
+
+## 16. 第二层守卫：依赖图分析（dependency-cruiser）
+
+```javascript
+// .dependency-cruiser.js
+module.exports = {
+  forbidden: [
+    // 规则 1：domain 层不得依赖 infrastructure
+    {
+      name: 'no-domain-to-infrastructure',
+      severity: 'error',
+      from: { path: '/domain/' },
+      to: { path: '/infrastructure/' }
+    },
+    // 规则 2：禁止循环依赖
+    {
+      name: 'no-circular',
+      severity: 'error',
+      from: {},
+      to: { circular: true }
+    },
+    // 规则 3：禁止孤儿模块
+    {
+      name: 'no-orphans',
+      severity: 'warn',
+      from: { orphan: true, pathNot: ['\\.d\\.ts$', '(^|/)AGENTS\\.md$'] },
+      to: {}
+    },
+    // 规则 4：禁止跨业务域直接访问 internal 文件
+    {
+      name: 'no-cross-domain-internal',
+      severity: 'error',
+      from: { path: '/modules/order/' },
+      to: { path: '/modules/payment/(?!index\\.)' }
+    }
+  ]
+};
+```
+
+## 17. 第三层守卫：根目录污染检查（Makefile）
+
+```makefile
+# ============================================================
+# Architecture Guard：根目录污染检查
+# ============================================================
+
+check-root-pollution:
+	@echo "[ Guard ] 检查根目录非法文件..."
+	@ILLEGAL=$$(find . -maxdepth 1 \
+	    \( -name "*.png" -o -name "*.jpg" -o -name "*.log" \
+	    -o -name "*.bak" -o -name "*.tmp" -o -name "debug*" \
+	    -o -name "test2*" -o -name "*_final*" -o -name "*_old*" \
+	    -o -name "*_copy*" -o -name "*_v2*" \) \
+	    ! -name ".gitignore" 2>/dev/null); \
+	if [ -n "$$ILLEGAL" ]; then \
+	    echo "❌ 根目录发现非法文件："; \
+	    echo "$$ILLEGAL"; \
+	    exit 1; \
+	else \
+	    echo "✅ 根目录检查通过"; \
+	fi
+
+check-forbidden-filenames:
+	@echo "[ Guard ] 检查禁止命名的文件..."
+	@FORBIDDEN=$$(find . -not -path "./.git/*" -not -path "./.local/*" \
+	    \( -name "*_final*" -o -name "*_old*" -o -name "*_new*" \
+	    -o -name "*_copy*" -o -name "*_v2*" -o -name "*.bak" \
+	    -o -name "*副本*" -o -name "debug-*" \) 2>/dev/null); \
+	if [ -n "$$FORBIDDEN" ]; then \
+	    echo "❌ 发现禁止命名的文件："; \
+	    echo "$$FORBIDDEN"; \
+	    exit 1; \
+	else \
+	    echo "✅ 文件命名检查通过"; \
+	fi
+
+check-generated-in-git:
+	@echo "[ Guard ] 检查生成物是否意外进入 Git..."
+	@GENERATED=$$(git ls-files | grep -E \
+	    "(dist/|build/|\.pyc|coverage/|\.log)" 2>/dev/null); \
+	if [ -n "$$GENERATED" ]; then \
+	    echo "❌ 生成物意外进入 Git："; \
+	    echo "$$GENERATED"; \
+	    exit 1; \
+	else \
+	    echo "✅ 生成物检查通过"; \
+	fi
+
+check-module-boundaries:
+	@echo "[ Guard ] 检查模块依赖边界..."
+	npx depcruise src --config .dependency-cruiser.js
+	@echo "✅ 模块边界检查通过"
+
+# 完整守卫（CI 中执行）
+guard: check-root-pollution check-forbidden-filenames check-generated-in-git check-module-boundaries
+	@echo "✅ 所有架构守卫检查通过"
+
+# CI 完整流水线
+ci: lint test guard build
+```
+
+## 18. 第四层守卫：CI 流水线集成
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  architecture-guard:
+    name: Architecture Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 根目录污染检查
+        run: make check-root-pollution
+
+      - name: 文件命名规范检查
+        run: make check-forbidden-filenames
+
+      - name: 生成物检查
+        run: make check-generated-in-git
+
+      - name: 模块边界检查
+        run: make check-module-boundaries
+
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    needs: architecture-guard
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint
+        run: make lint
+      - name: Test
+        run: make test
+      - name: Build
+        run: make build
+```
+
+---
+
+# 第九部分：AGENTS.md 规范
+
+## 19. AGENTS.md 的定位与作用
+
+AGENTS.md 是一种简单的开放格式，用于指导编码 Agent。把它看作面向 Agent 的 README。
+
+AGENTS.md 填补了 README 的空白。它是一个位于仓库根目录的 Markdown 文件，包含编码 Agent 有效工作所需的上下文：带有精确标志的构建命令、测试流程、与默认值不同的代码风格规则、架构约束以及 Agent 不应触碰的文件边界。
+
+AGENTS.md 规范要求：实现 Agent Rules 的 Agent 必须检查项目根目录中是否存在 AGENTS.md 文件。如果存在，其内容应被纳入 Agent 的上下文范围。文件必须被解析为自然语言指令，并用于向 AI 编码 Agent 提供指导。
+
+## 20. AGENTS.md 标准模板
+
+```markdown
+# AGENTS.md
+
+> 本文件是面向 AI Agent 的项目规范入口。
+> 人类请阅读 README.md。规范文档请阅读 docs/。
+
+---
+
+## 1. 必读规范（执行任何任务前必须加载）
+
+- 工程结构规范：`docs/00_governance/PROJECT-STRUCTURE-SPEC.md`
+- 文档规范：`docs/00_governance/PROJECT-DOCUMENTATION-SPEC.md`
+- 项目地图：`docs/00_governance/project-map.md`
+- 术语表：`docs/00_governance/glossary.md`
+
+---
+
+## 2. 项目概览
+
+- **项目名称**：<project-name>
+- **技术栈**：Python/FastAPI（后端）+ React/TypeScript（前端）
+- **包管理器**：pnpm（前端） / pip + pyproject.toml（后端）
+- **Monorepo 工具**：<Nx / Turbo / 无>
+
+---
+
+## 3. 环境与命令
+
+### 初始化
+```bash
+make setup
+```
+
+### 开发启动
+```bash
+make dev
+```
+
+### 测试
+```bash
+make test           # 全部测试
+make test-unit      # 仅单元测试
+make test-api       # 仅后端测试
+```
+
+### 代码检查
+```bash
+make lint
+make format
+```
+
+### 架构守卫（修改后必须运行）
+```bash
+make guard
+```
+
+---
+
+## 4. 目录归属规则（执行任务前必须确认）
+
+### 新建任何文件前，必须依次回答：
+1. 它属于哪种生命周期类型？
+2. 它属于哪个业务域？
+3. 它在业务域内属于哪一层？
+
+### 快速归属参考：
+```text
+业务逻辑         → apps/api/src/modules/<domain>/domain/
+用例编排         → apps/api/src/modules/<domain>/application/
+HTTP 路由        → apps/api/src/modules/<domain>/interfaces/http/
+技术实现         → apps/api/src/modules/<domain>/infrastructure/
+前端页面         → apps/web/src/pages/<domain>/
+前端业务组件     → apps/web/src/features/<domain>/
+纯 UI 组件       → apps/web/src/components/ui/
+API 客户端       → apps/web/src/data-access/
+前后端契约类型   → packages/contracts/<domain>/
+数据库迁移       → database/migrations/
+自动化脚本       → scripts/
+正式文档         → docs/
+临时文件/截图    → .local/（自动 gitignore）
+```
+
+---
+
+## 5. 依赖方向约束
+
+```text
+后端：interfaces → application → domain ← infrastructure
+前端：pages → features → components/ui（单向）
+模块间：只通过公开 API（index.ts）或 Domain Event 通信
+```
+
+---
+
+## 6. 禁止行为（AI 硬约束）
+
+```text
+❌ 在根目录创建任何非白名单文件
+❌ 创建 *.bak / *_final* / *_old* / *_copy* 文件
+❌ 将日志、截图、调试输出写入项目目录（应写入 .local/）
+❌ 绕过 application 层直接从 interfaces 访问 repository
+❌ 在 domain 层 import 任何 ORM、HTTP、Redis 相关代码
+❌ 跨业务模块直接访问另一个模块的 internal 文件
+❌ 将业务代码放入 shared/ 或 utils/（必须有至少两个真实消费者）
+❌ 新增顶层目录而不回答全部 8 个归属问题
+❌ 提前为"未来可能需要"的功能创建目录
+❌ 任务完成后声称"完成"但不提供验证证据
+```
+
+---
+
+## 7. 任务执行后的结构审计清单
+
+每个任务完成后，必须执行以下检查：
+
+```text
+[ ] 是否产生了临时文件？→ 移至 .local/ 或删除
+[ ] 是否产生了日志/截图？→ 移至 .local/ 或 docs/evidence/
+[ ] 是否新增了根目录非白名单文件？→ 删除
+[ ] 是否违反了依赖方向？→ 运行 make check-module-boundaries
+[ ] 是否产生了循环依赖？→ 运行 make check-module-boundaries
+[ ] 是否跨越了业务模块边界？→ 确认只访问了 index.ts 导出内容
+[ ] 是否更新了对应测试？→ 确认测试覆盖
+[ ] 是否需要更新文档？→ 确认 docs/ 已更新
+[ ] 是否需要更新 project-map.md？→ 如目录结构有变
+[ ] 运行 make guard 并通过所有守卫
+```
+
+---
+
+## 8. Blocked 规则
+
+遇到以下情况，必须停止执行并标记 blocked：
+
+```text
+- 无法确定文件归属
+- 需要跨越业务模块边界
+- 需要违反依赖方向约束
+- 发现需求冲突
+- 关键输入文档缺失
+```
+
+记录：
+- blocked 原因
+- 缺失信息
+- 已尝试方案
+- 需要谁做决策
+
+---
+
+## 9. 子目录 AGENTS.md
+
+各应用可以在自己目录下放置更具体的 AGENTS.md：
+
+```text
+apps/api/AGENTS.md      → 后端专属规则（Python 版本、测试命令等）
+apps/web/AGENTS.md      → 前端专属规则（组件规范、样式规则等）
+packages/AGENTS.md      → 共享包规则
+```
+```
+
+---
+
+# 第十部分：模块演进规范
+
+## 21. 按复杂度裁剪的演进路径
+
+```text
+阶段 1：MVP / 个人项目
+─────────────────────────────────────────────────────
+apps/api/src/
+├── modules/
+│   ├── user/           # 直接 domain + application 合并也可接受
+│   └── system/
+├── shared/
+└── core/
+
+apps/web/src/
+├── features/
+│   ├── auth/
+│   └── user/
+├── components/ui/
+└── lib/
+
+不需要：packages/ contracts/ 独立 worker
+        ↓
+        当出现真实跨端类型共享需求时
+
+阶段 2：小团队 / 成长期产品
+─────────────────────────────────────────────────────
++ packages/contracts/   （出现跨端类型共享）
++ database/             （迁移管理独立出来）
++ tests/integration/    （跨模块测试增加）
++ .github/workflows/    （CI 正式化）
+        ↓
+        当出现多个明显独立的业务域时
+
+阶段 3：中型项目 / 多团队
+─────────────────────────────────────────────────────
++ packages/ui/          （共享 Design System）
++ apps/worker/          （异步任务服务）
++ infra/k8s/            （容器编排）
++ 完整 Architecture Guard
+        ↓
+        当需要独立部署和团队边界时
+
+阶段 4：大型项目（按需，不强制）
+─────────────────────────────────────────────────────
+考虑：独立 libraries / 多 application / Event-Driven
+不要：因为"行业标准"而机械演进
+```
+
+## 22. 模块拆分判断规则
+
+```text
+出现以下情况之一，评估是否需要拆分模块：
+──────────────────────────────────────────────────────────
+1. 一个模块存在多个明显不同的业务能力（高于3个）
+2. 不同部分有不同的变化原因（SRP 违反）
+3. 不同部分有完全不同的外部依赖
+4. 不同部分有不同的团队归属
+5. 不同部分有不同的部署生命周期
+
+不满足以上任何一条 → 不拆分
+拆分依据：业务内聚性与变化边界，而非"文件数量"
+```
+
+---
+
+# 第十一部分：Makefile 统一命令入口规范
+
+## 23. 标准 Makefile
+
+```makefile
+# ============================================================
+# PROJECT UNIFIED COMMAND INTERFACE
+# ============================================================
+
+.PHONY: help setup dev test lint format build guard ci clean
+
+help:
+	@echo "╔══════════════════════════════════════════╗"
+	@echo "║         项目统一命令入口                  ║"
+	@echo "╠══════════════════════════════════════════╣"
+	@echo "║  make setup      初始化开发环境           ║"
+	@echo "║  make dev        启动本地开发服务          ║"
+	@echo "║  make test       运行全部测试              ║"
+	@echo "║  make test-unit  仅单元测试               ║"
+	@echo "║  make lint       代码静态检查              ║"
+	@echo "║  make format     格式化代码               ║"
+	@echo "║  make guard      架构守卫检查（必须通过）  ║"
+	@echo "║  make ci         完整 CI 流水线           ║"
+	@echo "║  make clean      清理临时文件              ║"
+	@echo "╚══════════════════════════════════════════╝"
+
+setup:
+	@echo "[ Setup ] 初始化开发环境..."
+	cp -n .env.example .env || true
+	docker compose -f infra/docker/docker-compose.yml up -d db redis
+	cd apps/api && pip install -r requirements/dev.txt
+	cd apps/web && pnpm install
+	make migrate
+	@echo "✅ 环境初始化完成"
+
+dev:
+	docker compose -f infra/docker/docker-compose.yml up -d
+	cd apps/api && uvicorn src.bootstrap.main:app --reload &
+	cd apps/web && pnpm dev
+
+test: test-api test-web
+
+test-api:
+	cd apps/api && pytest tests/ -v --cov=src --cov-report=term-missing
+
+test-web:
+	cd apps/web && pnpm test
+
+test-unit:
+	cd apps/api && pytest tests/unit/ -v
+
+lint:
+	cd apps/api && ruff check src/
+	cd apps/web && pnpm lint
+
+format:
+	cd apps/api && ruff format src/
+	cd apps/web && pnpm format
+
+migrate:
+	cd apps/api && alembic upgrade head
+
+guard: check-root-pollution check-forbidden-filenames check-generated-in-git check-module-boundaries
+	@echo "✅ 全部架构守卫检查通过"
+
+check-root-pollution:
+	@ILLEGAL=$$(find . -maxdepth 1 \
+	    \( -name "*.png" -o -name "*.log" -o -name "*.bak" \
+	    -o -name "*.tmp" -o -name "debug*" -o -name "*_final*" \
+	    -o -name "*_old*" -o -name "*_copy*" \) 2>/dev/null); \
+	if [ -n "$$ILLEGAL" ]; then echo "❌ 根目录非法文件:"; echo "$$ILLEGAL"; exit 1; fi
+	@echo "✅ 根目录检查通过"
+
+check-forbidden-filenames:
+	@FORBIDDEN=$$(find . \
+	    -not -path "./.git/*" -not -path "./.local/*" \
+	    \( -name "*_final*" -o -name "*_old*" -o -name "*.bak" \
+	    -o -name "*副本*" -o -name "*_copy*" -o -name "*_v2.*" \) 2>/dev/null); \
+	if [ -n "$$FORBIDDEN" ]; then echo "❌ 禁止命名:"; echo "$$FORBIDDEN"; exit 1; fi
+	@echo "✅ 文件命名检查通过"
+
+check-generated-in-git:
+	@GENERATED=$$(git ls-files 2>/dev/null | \
+	    grep -E "(dist/|build/|\.pyc$$|coverage/|\.log$$)" || true); \
+	if [ -n "$$GENERATED" ]; then echo "❌ 生成物进入Git:"; echo "$$GENERATED"; exit 1; fi
+	@echo "✅ 生成物检查通过"
+
+check-module-boundaries:
+	cd apps/web && pnpm lint --filter web
+	@echo "✅ 模块边界检查通过"
+
+build:
+	docker compose -f infra/docker/docker-compose.prod.yml build
+
+ci: lint test guard build
+	@echo "✅ CI 全部通过"
+
+clean:
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
+	find . -name "*.pyc" -delete 2>/dev/null || true
+	rm -rf apps/web/dist apps/api/dist .local/runtime/
+	@echo "✅ 清理完成"
+```
+
+---
+
+# 第十二部分：规范总结
+
+## 24. 最终架构模型
+
+```text
+                        PROJECT
+                           │
+           ┌───────────────┼───────────────┐
+           ▼               ▼               ▼
+         apps/          packages/      database/
+    （运行边界）       （跨端复用）    （DB资产）
+           │               │
+    ┌──────┴──────┐         │
+    ▼             ▼         ▼
+  api/           web/   contracts/
+    │             │       ui/
+    ▼             ▼
+modules/       features/
+（按业务域）    （按业务域）
+    │               │
+    ▼               ▼
+domain/         components/ui/
+application/    data-access/
+interfaces/     lib/utils/
+infrastructure/
+    │
+    ▼
+shared/ core/
+（横切关注点）
+
+tests/    infra/    scripts/    docs/    .local/
+（验证）  （基础设施）（自动化）  （知识）  （临时）
+```
+
+## 25. 核心规则浓缩（50条 → 10条）
+
+```text
+1.  按运行边界分应用（apps/），按业务边界分模块，按职责分层，
+    按复用关系抽共享（packages/），按生命周期隔离临时状态（.local/）。
+
+2.  根目录是声明区，不是工作区。白名单制，非白名单文件立即清除。
+
+3.  所有临时文件（截图、日志、调试脚本、备份）进入 .local/（完整 gitignore）。
+
+4.  配置历史用 Git 管理，永远不允许 *.bak / *_final / *_old / *_copy 存在。
+
+5.  依赖方向单向不可逆：interfaces → application → domain ← infrastructure。
+    domain 不得依赖任何框架、数据库、第三方 SDK。
+
+6.  模块间只通过公开 API（index.ts）或 Domain Event 通信，
+    不得直接访问另一个模块的 internal 文件。
+
+7.  shared/ 和 utils/ 不是垃圾桶。进入共享层必须满足：
+    已有至少两个真实消费者 + 语义稳定 + 无业务特定含义。
+
+8.  架构边界必须自动化守卫（ESLint 规则 + dependency-cruiser + CI 检查），
+    不能只靠开发者记忆和代码审查。
+
+9.  AGENTS.md 是 AI 的规范入口，与 README.md 平级但目的不同。
+    AI 执行任务前必须加载规范，完成任务后必须运行守卫检查。
+
+10. 结构不以"目录数量多"或"看起来企业级"为目标，
+    而以"一个文件有且只有一个显而易见的正确位置"为目标。
+```
+
+## 26. 一句话原则
+
+> **按运行边界分应用，按业务边界分模块，按职责边界分层，按复用关系抽共享，按生命周期隔离生成物与临时状态，用自动化守卫将文档规则变为机器约束——最终形成一个能约束人、也能约束 AI 的工程边界系统。**
