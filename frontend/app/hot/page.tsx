@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { getFeed, listHotTopics, type FeedItem, type HotTopic } from "@/lib/api/hot";
+import { usePageTitle } from "@/components/usePageTitle";
 
 const ITEM_TYPE_LABELS: Record<string, string> = {
   article: "文章",
@@ -74,6 +75,8 @@ export default function HotPage() {
   useEffect(() => {
     fetchTopics();
   }, [fetchTopics]);
+
+  usePageTitle("热点中心");
 
   return (
     <div className="mx-auto max-w-4xl p-6">

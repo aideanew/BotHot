@@ -9,11 +9,9 @@
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
-from sqlalchemy import text as sa_text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, TimestampMixin, gen_uuid
-
 
 # ── 1. 多渠道机器人配置 ──────────────────────────────────────────────
 

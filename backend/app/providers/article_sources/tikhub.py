@@ -19,18 +19,14 @@ OpenAPI 契约获取：GET /openapi.json（1050 paths，wechat_mp v2 仅 13 端�
 
 from __future__ import annotations
 
-import base64
-import json
 import logging
 from typing import Any
 
 import httpx
 
 from app.core.errors import (
-    AppError,
     DependencyUnavailableError,
     DiscoveryFailedError,
-    ForbiddenError,
 )
 from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult
 
@@ -135,7 +131,7 @@ class TikhubClient:
             }
             # create_time 是 Unix 时间戳
             create_time = comm_msg.get("create_time") or item.get("create_time")
-            if isinstance(create_time, (int, float)) and create_time > 0:
+            if isinstance(create_time, int | float) and create_time > 0:
                 row["publish_time"] = str(create_time)
             if row["url"]:
                 rows.append(row)

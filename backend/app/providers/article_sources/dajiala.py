@@ -10,7 +10,8 @@
 - article_html    ¥0.04/次  — 全 HTML + 元数据（标题/biz/gh_id/作者/发布时间）✅
 - article_detail  ¥0.045/次 — 实测缺陷（data 恒 null），禁用
 - short2long      ¥0.015/次 — 短链转长链
-- kw_search       ?/次      — 关键词搜索（⚠️ 端点存在但未实测：URL 从前端 SPA JS chunk 反解所得，单价/参数/响应形状全部未知，资费页口径约 ¥0.5/次起）
+- kw_search       ?/次      — 关键词搜索（⚠️ 端点存在但未实测：URL 从前端 SPA JS chunk 反解所得，
+                              单价/参数/响应形状全部未知，资费页口径约 ¥0.5/次起）
 
 发现策略：query_work_list 用 post_condition（按 ghid 拉最新清单），字段映射到
 manifest._map_row 的别名（url/title/digest/post_time）。
@@ -20,11 +21,9 @@ manifest._map_row 的别名（url/title/digest/post_time）。
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 
@@ -32,8 +31,6 @@ from app.core.errors import (
     AppError,
     DependencyUnavailableError,
     DiscoveryFailedError,
-    ForbiddenError,
-    RateLimitedUpstreamError,
 )
 from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult
 
@@ -107,7 +104,7 @@ class DajialaClient:
             }
             # post_time 是 Unix 时间戳（如 1790659200）
             post_time = item.get("post_time")
-            if isinstance(post_time, (int, float)) and post_time > 0:
+            if isinstance(post_time, int | float) and post_time > 0:
                 row["publish_time"] = str(post_time)
             rows.append(row)
 
@@ -144,7 +141,7 @@ class DajialaClient:
         # 解析发布时间（post_time 是 Unix 时间戳）
         publish_time: datetime | None = None
         post_time = data.get("post_time")
-        if isinstance(post_time, (int, float)) and post_time > 0:
+        if isinstance(post_time, int | float) and post_time > 0:
             try:
                 publish_time = datetime.fromtimestamp(int(post_time), tz=None)
             except (ValueError, OSError):

@@ -152,7 +152,7 @@ class WellbyteClient:
                 "digest": app_msg.get("Digest", ""),
             }
             create_time = app_msg.get("CreateTime") or base_info.get("DateTime")
-            if isinstance(create_time, (int, float)) and create_time > 0:
+            if isinstance(create_time, int | float) and create_time > 0:
                 row["publish_time"] = str(create_time)
             if row["url"]:
                 rows.append(row)
@@ -216,7 +216,7 @@ class WellbyteClient:
             # dateTime 可能是 "4分钟前" 或时间戳
             publish_time: datetime | None = None
             dt = source_info.get("dateTime", "")
-            if isinstance(dt, (int, float)) and dt > 0:
+            if isinstance(dt, int | float) and dt > 0:
                 try:
                     publish_time = datetime.fromtimestamp(int(dt), tz=None)
                 except (ValueError, OSError):
@@ -282,7 +282,7 @@ class WellbyteClient:
                 logger.warning("Wellbyte %s 被 Cloudflare 拦截（403/1010）", op)
                 return None
             raise DependencyUnavailableError(
-                f"Wellbyte 被 Cloudflare 拦截（403）：需检查 httpx TLS 指纹配置"
+                "Wellbyte 被 Cloudflare 拦截（403）：需检查 httpx TLS 指纹配置"
             )
         if resp.status_code == 422:
             # 质量门槛拒绝（article_detail_v2），不扣费

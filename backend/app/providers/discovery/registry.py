@@ -53,6 +53,55 @@ class ChannelSpec:
     verified_scope: str = ""
 
 
+# ── 文章来源平台工厂（providers/article_sources/）──────────────────
+# 4 个第三方 API 平台作为文章发现渠道，与 RedFox 共存于发现注册表。
+# 每个工厂遵循 RedFox 模式：无 Key → None（显式缺省，不造数）。
+# ArticleSourceProvider 协议与 WorkListProvider 结构兼容（同形 query_work_list + aclose）。
+
+def _make_dajiala_provider(settings: Settings) -> WorkListProvider | None:
+    if not settings.dajiala_api_key:
+        return None
+    from app.providers.article_sources.dajiala import DajialaClient
+
+    return DajialaClient(
+        api_key=settings.dajiala_api_key,
+        base_url=settings.dajiala_base_url,
+    )
+
+
+def _make_justoneapi_provider(settings: Settings) -> WorkListProvider | None:
+    if not settings.justoneapi_api_key:
+        return None
+    from app.providers.article_sources.justoneapi import JustOneApiClient
+
+    return JustOneApiClient(
+        api_key=settings.justoneapi_api_key,
+        base_url=settings.justoneapi_base_url,
+    )
+
+
+def _make_tikhub_provider(settings: Settings) -> WorkListProvider | None:
+    if not settings.tikhub_api_key:
+        return None
+    from app.providers.article_sources.tikhub import TikhubClient
+
+    return TikhubClient(
+        api_key=settings.tikhub_api_key,
+        base_url=settings.tikhub_base_url,
+    )
+
+
+def _make_wellbyte_provider(settings: Settings) -> WorkListProvider | None:
+    if not settings.wellbyte_api_key:
+        return None
+    from app.providers.article_sources.wellbyte import WellbyteClient
+
+    return WellbyteClient(
+        api_key=settings.wellbyte_api_key,
+        base_url=settings.wellbyte_base_url,
+    )
+
+
 CHANNELS: dict[str, ChannelSpec] = {
     "redfox": ChannelSpec(
         name="redfox",
@@ -278,50 +327,3 @@ def _selection_reason(settings: Settings, default: str | None) -> str:
     return "configured" if _whitelist(settings) else "registration-order"
 
 
-# ── 文章来源平台工厂（providers/article_sources/）──────────────────
-# 4 个第三方 API 平台作为文章发现渠道，与 RedFox 共存于发现注册表。
-# 每个工厂遵循 RedFox 模式：无 Key → None（显式缺省，不造数）。
-# ArticleSourceProvider 协议与 WorkListProvider 结构兼容（同形 query_work_list + aclose）。
-
-def _make_dajiala_provider(settings: Settings) -> WorkListProvider | None:
-    if not settings.dajiala_api_key:
-        return None
-    from app.providers.article_sources.dajiala import DajialaClient
-
-    return DajialaClient(
-        api_key=settings.dajiala_api_key,
-        base_url=settings.dajiala_base_url,
-    )
-
-
-def _make_justoneapi_provider(settings: Settings) -> WorkListProvider | None:
-    if not settings.justoneapi_api_key:
-        return None
-    from app.providers.article_sources.justoneapi import JustOneApiClient
-
-    return JustOneApiClient(
-        api_key=settings.justoneapi_api_key,
-        base_url=settings.justoneapi_base_url,
-    )
-
-
-def _make_tikhub_provider(settings: Settings) -> WorkListProvider | None:
-    if not settings.tikhub_api_key:
-        return None
-    from app.providers.article_sources.tikhub import TikhubClient
-
-    return TikhubClient(
-        api_key=settings.tikhub_api_key,
-        base_url=settings.tikhub_base_url,
-    )
-
-
-def _make_wellbyte_provider(settings: Settings) -> WorkListProvider | None:
-    if not settings.wellbyte_api_key:
-        return None
-    from app.providers.article_sources.wellbyte import WellbyteClient
-
-    return WellbyteClient(
-        api_key=settings.wellbyte_api_key,
-        base_url=settings.wellbyte_base_url,
-    )

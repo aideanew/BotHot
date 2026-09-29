@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.bothot_entities import BotChannel, PushLog, PushTask
@@ -39,8 +39,8 @@ def _parse_cron_next(cron_expr: str, now: datetime) -> datetime | None:
     # 格式1：HH:MM（如 "10:00"）
     if ":" in expr and "/" not in expr:
         try:
-            hh, mm = expr.split(":")
-            hh, mm = int(hh), int(mm)
+            hh_str, mm_str = expr.split(":")
+            hh, mm = int(hh_str), int(mm_str)
             next_run = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
             if next_run <= now:
                 next_run += timedelta(days=1)
@@ -89,7 +89,7 @@ class PushTaskScheduler:
         self._running = False
         if self._task:
             self._task.cancel()
-            with _suppress_cancel():
+            async with _suppress_cancel():
                 await self._task
             self._task = None
         logger.info("PushTaskScheduler stopped")
@@ -105,7 +105,7 @@ class PushTaskScheduler:
 
     async def _tick(self) -> None:
         """单轮扫描：找出到期任务并执行。"""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         async with self._session_factory() as db:
             # 查找到期的 cron 任务

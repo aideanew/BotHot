@@ -73,7 +73,12 @@ class DingtalkPushProvider:
                 # 钉钉成功响应：{"errcode":0,"errmsg":"ok"}
                 if data.get("errcode") == 0:
                     return PushResult("dingtalk", True, "", json.dumps(data, ensure_ascii=False)[:500])
-                return PushResult("dingtalk", False, f"钉钉返回错误: {data.get('errmsg','')}", json.dumps(data, ensure_ascii=False)[:500])
+                return PushResult(
+                    "dingtalk",
+                    False,
+                    f"钉钉返回错误: {data.get('errmsg','')}",
+                    json.dumps(data, ensure_ascii=False)[:500],
+                )
         except httpx.TimeoutException:
             return PushResult("dingtalk", False, "钉钉 webhook 请求超时")
         except Exception as e:

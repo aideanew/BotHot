@@ -41,7 +41,7 @@ class FeishuPushProvider:
 
         timestamp = int(time.time())
         # 构建卡片消息
-        card = {
+        card: dict = {
             "header": {
                 "title": {"tag": "plain_text", "content": message.title or "BotHot 推送通知"},
                 "template": "blue",

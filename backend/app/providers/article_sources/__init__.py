@@ -17,11 +17,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from app.core.config import Settings
 from app.core.errors import ConfigurationError
-
 from app.providers.article_sources.base import (
     ArticleDetail,
     ArticleSearchResult,

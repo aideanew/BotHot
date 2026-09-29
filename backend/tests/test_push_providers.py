@@ -7,11 +7,10 @@
 - 各渠道消息格式正确性
 """
 
-import asyncio
 import base64
 import hashlib
 import hmac
-import json
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -19,17 +18,17 @@ import pytest
 from app.providers.push import (
     PUSH_CHANNELS,
     PushMessage,
-    PushResult,
     make_push_provider,
     registered_channels,
 )
-from app.providers.push.base import PushProvider
-from app.providers.push.feishu import FeishuPushProvider, _sign as feishu_sign
-from app.providers.push.dingtalk import DingtalkPushProvider, _sign as dingtalk_sign
-from app.providers.push.wechat_work import WechatWorkPushProvider
+from app.providers.push.dingtalk import DingtalkPushProvider
+from app.providers.push.dingtalk import _sign as dingtalk_sign
+from app.providers.push.feishu import FeishuPushProvider
+from app.providers.push.feishu import _sign as feishu_sign
+from app.providers.push.web import WebPushProvider
 from app.providers.push.webhook import WebhookPushProvider
 from app.providers.push.wechat_clawbot import WechatClawbotPushProvider
-from app.providers.push.web import WebPushProvider
+from app.providers.push.wechat_work import WechatWorkPushProvider
 
 
 class TestProviderRegistry:
@@ -74,7 +73,7 @@ class TestFeishuProvider:
         secret = "test_secret_123"
         timestamp = 1700000000
         expected = base64.b64encode(
-            hmac.new(f"{timestamp}\n{secret}".encode("utf-8"), digestmod=hashlib.sha256).digest()
+            hmac.new(f"{timestamp}\n{secret}".encode(), digestmod=hashlib.sha256).digest()
         ).decode("utf-8")
         assert feishu_sign(secret, timestamp) == expected
 
@@ -208,10 +207,11 @@ class TestPushScheduler:
 
     def test_parse_cron_hh_mm(self):
         """HH:MM 格式解析。"""
-        from app.services.push_scheduler import _parse_cron_next
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        now = datetime(2026, 9, 29, 8, 0, 0, tzinfo=timezone.utc)
+        from app.services.push_scheduler import _parse_cron_next
+
+        now = datetime(2026, 9, 29, 8, 0, 0, tzinfo=UTC)
         next_run = _parse_cron_next("10:00", now)
         assert next_run is not None
         assert next_run.hour == 10
@@ -219,39 +219,43 @@ class TestPushScheduler:
 
     def test_parse_cron_every_n_hours(self):
         """*/N 小时格式解析。"""
-        from app.services.push_scheduler import _parse_cron_next
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        now = datetime(2026, 9, 29, 8, 0, 0, tzinfo=timezone.utc)
+        from app.services.push_scheduler import _parse_cron_next
+
+        now = datetime(2026, 9, 29, 8, 0, 0, tzinfo=UTC)
         next_run = _parse_cron_next("*/3", now)
         assert next_run is not None
         assert next_run.hour == 11  # 8 + 3
 
     def test_parse_cron_every_n_minutes(self):
         """纯数字 N 分钟格式解析。"""
-        from app.services.push_scheduler import _parse_cron_next
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        now = datetime(2026, 9, 29, 8, 0, 0, tzinfo=timezone.utc)
+        from app.services.push_scheduler import _parse_cron_next
+
+        now = datetime(2026, 9, 29, 8, 0, 0, tzinfo=UTC)
         next_run = _parse_cron_next("30", now)
         assert next_run is not None
         assert next_run.minute == 30
 
     def test_parse_cron_invalid_returns_none(self):
         """无效 cron 返回 None。"""
-        from app.services.push_scheduler import _parse_cron_next
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        now = datetime(2026, 9, 29, 8, 0, 0, tzinfo=timezone.utc)
+        from app.services.push_scheduler import _parse_cron_next
+
+        now = datetime(2026, 9, 29, 8, 0, 0, tzinfo=UTC)
         assert _parse_cron_next("", now) is None
         assert _parse_cron_next("invalid", now) is None
 
     def test_parse_cron_past_time_advances_to_next_day(self):
         """过去的时间点推进到次日。"""
-        from app.services.push_scheduler import _parse_cron_next
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        now = datetime(2026, 9, 29, 15, 0, 0, tzinfo=timezone.utc)
+        from app.services.push_scheduler import _parse_cron_next
+
+        now = datetime(2026, 9, 29, 15, 0, 0, tzinfo=UTC)
         next_run = _parse_cron_next("10:00", now)
         assert next_run is not None
         assert next_run.day == 30  # 次日

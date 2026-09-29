@@ -17,6 +17,7 @@ import {
   type DailyReport,
   type DailyReportDetail,
 } from "@/lib/api/hot";
+import { usePageTitle } from "@/components/usePageTitle";
 
 export default function DailyReportPage() {
   const [reports, setReports] = useState<DailyReport[]>([]);
@@ -43,6 +44,8 @@ export default function DailyReportPage() {
   useEffect(() => {
     fetchReports();
   }, [fetchReports]);
+
+  usePageTitle("每日热点日报");
 
   const handleViewReport = async (date: string) => {
     setSelectedDate(date);

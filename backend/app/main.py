@@ -6,10 +6,9 @@ R4.9.3：标注会话 cookie 安全方案（见 `app.openapi`）。此前 `compo
 """
 
 from collections.abc import Sequence
+from contextlib import asynccontextmanager
 from functools import partial
 from typing import Any
-
-from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.dependencies.models import Dependant
@@ -21,22 +20,22 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.deps import get_current_sub
 from app.api.v1.admin import router as admin_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.bots import router as bots_router
 from app.api.v1.chat import router as chat_router
 from app.api.v1.engines import engines_router, space_engine_router
 from app.api.v1.extract import router as extract_router
+from app.api.v1.hot import router as hot_router
 from app.api.v1.onboarding import router as onboarding_router
 from app.api.v1.resolve import router as resolve_router
 from app.api.v1.spaces import router as spaces_router
 from app.api.v1.subscriptions import jobs_router, sources_router, subscriptions_router
-from app.api.v1.bots import router as bots_router
-from app.api.v1.hot import router as hot_router
 from app.api.v1.system import router as system_router
-from app.db import get_session_factory
-from app.services.push_scheduler import start_push_scheduler, stop_push_scheduler
 from app.core.config import assert_production_ready, get_settings
 from app.core.errors import AppError, http_status_for
 from app.core.middleware import ErrorEnvelopeMiddleware, RequestIdMiddleware
 from app.core.response import failure
+from app.db import get_session_factory
+from app.services.push_scheduler import start_push_scheduler, stop_push_scheduler
 
 # ------------------------------------------------------------------ R4.9.3 OpenAPI 安全方案
 
@@ -245,7 +244,7 @@ def _assert_schema_current(settings) -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """应用生命周期：启动/停止推送调度器。"""
-    scheduler = await start_push_scheduler(get_session_factory())
+    await start_push_scheduler(get_session_factory())
     try:
         yield
     finally:

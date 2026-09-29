@@ -5,8 +5,6 @@ POST JSON 到任意 URL，适用于自建通知服务、IFTTT、Zapier 等。
 
 from __future__ import annotations
 
-import json
-
 import httpx
 
 from .base import PushMessage, PushResult

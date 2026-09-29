@@ -24,6 +24,7 @@ class WebPushProvider:
         # 尝试导入 Redis（延迟导入，避免在无 Redis 环境下启动失败）
         try:
             import redis.asyncio as aioredis
+
             from app.core.config import get_settings
 
             settings = get_settings()
@@ -39,7 +40,11 @@ class WebPushProvider:
             }
 
             # 发布到用户专属频道
-            channel = f"{_CHANNEL_PREFIX}:{message.external_user_id}" if message.external_user_id else f"{_CHANNEL_PREFIX}:broadcast"
+            channel = (
+                f"{_CHANNEL_PREFIX}:{message.external_user_id}"
+                if message.external_user_id
+                else f"{_CHANNEL_PREFIX}:broadcast"
+            )
 
             async with aioredis.from_url(settings.redis_url) as r:
                 await r.publish(channel, json.dumps(notification, ensure_ascii=False))

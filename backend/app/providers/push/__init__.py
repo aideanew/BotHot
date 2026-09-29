@@ -13,12 +13,12 @@
 """
 
 from .base import PushMessage, PushProvider, PushResult
-from .feishu import FeishuPushProvider
 from .dingtalk import DingtalkPushProvider
-from .wechat_work import WechatWorkPushProvider
+from .feishu import FeishuPushProvider
+from .web import WebPushProvider
 from .webhook import WebhookPushProvider
 from .wechat_clawbot import WechatClawbotPushProvider
-from .web import WebPushProvider
+from .wechat_work import WechatWorkPushProvider
 
 # 注册表：channel_type → provider 实例
 _PROVIDERS: dict[str, PushProvider] = {

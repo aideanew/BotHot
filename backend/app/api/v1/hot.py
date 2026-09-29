@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 
-from app.api.deps import get_db, require_roles
+from app.api.deps import get_current_sub, get_db, require_roles
 from app.core.errors import RequestInvalidError, ResourceNotFoundError
 from app.core.response import success
 from app.models.bothot_entities import (
@@ -26,7 +26,13 @@ from app.models.bothot_entities import (
     HotTopicArticle,
 )
 
-router = APIRouter(prefix="/api/v1/hot", tags=["hot-topics"])
+router = APIRouter(
+    prefix="/api/v1/hot",
+    tags=["hot-topics"],
+    # 全域登录门禁：热点/日报/Feed 含运营数据，无一可匿名读。router 级依赖会并入
+    # 每个 route 的 dependant，故 main._uses_session 递归即能捕获并标注 security。
+    dependencies=[Depends(get_current_sub)],
+)
 
 
 # ── 热点列表 ──────────────────────────────────────────────────────────
@@ -251,7 +257,9 @@ async def generate_daily_report(
         for i, t in enumerate(topics, 1):
             md_lines.append(f"## {i}. {t.title}")
             md_lines.append("")
-            md_lines.append(f"**热度**: {t.hot_score:.1f} | **来源数**: {t.source_count} | **文章数**: {t.article_count}")
+            md_lines.append(
+                f"**热度**: {t.hot_score:.1f} | **来源数**: {t.source_count} | **文章数**: {t.article_count}"
+            )
             md_lines.append("")
             if t.summary:
                 md_lines.append(t.summary)

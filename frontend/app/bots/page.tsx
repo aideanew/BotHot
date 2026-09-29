@@ -27,6 +27,7 @@ import {
   type ChannelType,
   type PushLog,
 } from "@/lib/api/bots";
+import { usePageTitle } from "@/components/usePageTitle";
 
 const CHANNEL_LABELS: Record<string, string> = {
   feishu: "飞书",
@@ -95,6 +96,8 @@ export default function BotsPage() {
   useEffect(() => {
     listChannelTypes().then(setChannelTypes).catch(() => {});
   }, []);
+
+  usePageTitle("机器人渠道管理");
 
   const handleCreate = () => {
     setEditingChannel(null);

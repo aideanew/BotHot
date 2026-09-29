@@ -31,7 +31,6 @@ from app.core.errors import (
     AppError,
     DependencyUnavailableError,
     DiscoveryFailedError,
-    ForbiddenError,
     RateLimitedUpstreamError,
 )
 from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult
@@ -127,7 +126,7 @@ class JustOneApiClient:
             }
             # CreateTime 是 Unix 时间戳
             create_time = app_msg.get("CreateTime") or base_info.get("DateTime")
-            if isinstance(create_time, (int, float)) and create_time > 0:
+            if isinstance(create_time, int | float) and create_time > 0:
                 row["publish_time"] = str(create_time)
             if row["url"]:
                 rows.append(row)
@@ -177,7 +176,7 @@ class JustOneApiClient:
         # 解析发布时间
         publish_time: datetime | None = None
         create_time = item.get("create_time") or item.get("public_time")
-        if isinstance(create_time, (int, float)) and create_time > 0:
+        if isinstance(create_time, int | float) and create_time > 0:
             try:
                 publish_time = datetime.fromtimestamp(int(create_time), tz=None)
             except (ValueError, OSError):

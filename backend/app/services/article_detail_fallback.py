@@ -28,16 +28,10 @@ import logging
 from typing import TYPE_CHECKING
 
 from app.core.config import Settings
-from app.core.errors import ConfigurationError
 from app.providers.article_sources.base import ArticleDetail, ArticleSourceProvider
 
 if TYPE_CHECKING:
-    from app.providers.article_sources import (
-        DajialaClient,
-        JustOneApiClient,
-        TikhubClient,
-        WellbyteClient,
-    )
+    pass
 
 logger = logging.getLogger(__name__)
 

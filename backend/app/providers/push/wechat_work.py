@@ -43,7 +43,12 @@ class WechatWorkPushProvider:
                 # 企业微信成功响应：{"errcode":0,"errmsg":"ok"}
                 if data.get("errcode") == 0:
                     return PushResult("wechat_work", True, "", json.dumps(data, ensure_ascii=False)[:500])
-                return PushResult("wechat_work", False, f"企业微信返回错误: {data.get('errmsg','')}", json.dumps(data, ensure_ascii=False)[:500])
+                return PushResult(
+                    "wechat_work",
+                    False,
+                    f"企业微信返回错误: {data.get('errmsg','')}",
+                    json.dumps(data, ensure_ascii=False)[:500],
+                )
         except httpx.TimeoutException:
             return PushResult("wechat_work", False, "企业微信 webhook 请求超时")
         except Exception as e:

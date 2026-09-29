@@ -13,13 +13,11 @@
 
 from __future__ import annotations
 
-import json
-
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, require_roles
+from app.api.deps import get_current_sub, get_db, require_roles
 from app.core.errors import (
     RequestInvalidError,
     ResourceNotFoundError,
@@ -28,7 +26,13 @@ from app.core.response import success
 from app.models.bothot_entities import BotChannel, PushLog, PushTask
 from app.providers.push import PushMessage, make_push_provider, registered_channels
 
-router = APIRouter(prefix="/api/v1/bots", tags=["bots"])
+router = APIRouter(
+    prefix="/api/v1/bots",
+    tags=["bots"],
+    # 全域登录门禁：渠道 CRUD / 测试推送 / 日志含 webhook 与密钥，绝不可匿名访问。
+    # 逐端点补 Depend 会随新端点复发，故在 router 层一次性收口。
+    dependencies=[Depends(get_current_sub)],
+)
 
 # 推送内容上限
 MAX_MESSAGE_CHARS = 2000
@@ -38,7 +42,7 @@ MAX_WEBHOOK_CHARS = 512
 
 def _validate_channel_type(channel_type: str) -> None:
     """校验渠道类型合法性。"""
-    valid = {c["channel"] for c in registered_channels()}
+    valid = {str(c["channel"]) for c in registered_channels()}
     if channel_type not in valid:
         raise RequestInvalidError(
             f"未知渠道类型: {channel_type}（合法：{', '.join(sorted(valid))}）"
@@ -444,7 +448,7 @@ async def run_push_task_now(
 
     ch = (await db.execute(select(BotChannel).where(BotChannel.id == task.bot_channel_id))).scalar_one_or_none()
     if ch is None:
-        raise ResourceNotFoundError(f"任务关联的渠道不存在")
+        raise ResourceNotFoundError("任务关联的渠道不存在")
 
     provider = make_push_provider(ch.channel_type)
     content = task.content_template or "BotHot 推送通知"
