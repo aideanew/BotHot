@@ -11,9 +11,9 @@ version: 1.0
 
 # BotHot 路线图
 
-## 当前阶段：v0.3 — 文档架构与目录结构规范化
+## 当前阶段：v0.6 — 前端管理页增强与工程加固
 
-> 完成时间：2026-09-29
+> v0.4/v0.5 已于 2026-09-30 交付；v0.6 由五路并行（WA-WB-WC-WD-WE）+ 集成审查完成
 
 **目标**：基于项目文档规范与工程结构规范，完成 BotHot 文档架构和目录架构的重新设计。
 
@@ -67,12 +67,15 @@ version: 1.0
 > 预计开始：2026-10-02
 
 **任务**：
-- [ ] Bot 渠道管理页面（CRUD + 测试推送）
-- [ ] 推送任务管理页面（创建/编辑/删除/日志）
-- [ ] 推送历史与投递状态展示
-- [ ] 热点 Feed 流页面
-- [ ] 每日日报页面
-- [ ] 前端构建与 Playwright e2e
+- [x] Bot 渠道管理页面（CRUD + 测试推送）— `frontend/app/bots/page.tsx`（W4，`d2678d7`）
+- [x] 推送任务管理页面（创建/编辑/删除/日志）— `frontend/components/PushTasksTab.tsx`（W4）
+- [x] 推送历史与投递状态展示 — 任务 Tab 日志弹窗复用 `listPushLogs`
+- [x] 热点 Feed 流页面 — `frontend/app/hot/page.tsx`（含热度条/状态过滤/聚簇触发）
+- [x] 每日日报页面 — `frontend/app/hot/daily/page.tsx`（react-markdown + 翻页）
+- [x] 前端构建与 Playwright e2e — vitest 39 文件/335 用例 + mock e2e 入 CI（WD `1bbc749`）
+- [x] 站内通知订阅侧（新增，FE-005）— 后端 SSE `system.py /notifications` + `NotificationBell`（WE）
+- [x] 事件模板变量自足 + 投递重试/退避/死信（新增，PUSH-009 主体）— WB（集成者补完）
+- [x] 热度评分接线与周期重评分（G1/G1b）— WA + 审查缝合
 
 ## v0.7 — 目录结构迁移
 

@@ -60,13 +60,13 @@ PLAN 规划 → SPEC 规格 → APPROVE 批准 → IMPLEMENT 实施 → VERIFY �
 
 ## 当前项目状态
 
-- **版本**：v0.5（v0.4 推送能力落地 + v0.5 热点融合，2026-09-30 五路并行交付集成审查通过）
+- **版本**：v0.6（v0.4 推送 + v0.5 热点融合 + v0.6 语义接通/工程加固，2026-09-30 两轮五路并行交付集成审查通过）
 - **后端**：FastAPI + SQLAlchemy 2.0 + Alembic，9 个业务域
 - **前端**：Next.js 14 App Router，10 个功能域
-- **推送**：6 渠道 Provider 真实投递（飞书/钉钉/企微/Webhook 已通；**站内通知投递侧**通——Redis pub/sub，**前端订阅侧未实现**；微信 ClawBot 需部署服务）；PushScheduler 60s 调度（SKIP LOCKED 短锁领取，多副本安全）；Cron 完整 5 段式 + 三种简写兼容（`services/cron_expr.py`，croniter）；Cron 任务创建/编辑/暂停恢复/run-now 全生命周期正确；**事件触发已实现**——PG outbox 表 `push_events`（worker 产、backend 调度器消费）+ 模板变量；渠道密钥 **AES-256-GCM 已落库**（`core/secret_crypto.py`，AAD 绑定 channel id，`PUSH_SECRET_MASTER_KEY` fail-closed，存量迁移 `ab1004w1a`）
+- **推送**：6 渠道 Provider 真实投递（**站内通知全链路已通**——Redis pub/sub 投递侧 + SSE 订阅侧 `system.py /notifications` + 前端 `NotificationBell`；微信 ClawBot 需部署服务）；PushScheduler 60s 调度（SKIP LOCKED 短锁领取 + **投递重试/指数退避/死信终态**，重试态挂 PushTask）；Cron 完整 5 段式 + 简写兼容；**事件触发已实现且 payload 自足**（emit 时查库补模板变量快照）；渠道密钥 **AES-256-GCM**（fail-closed，双主密钥已纳入生产守卫）；旧 push_port 已删除
 - **文章来源**：4 平台已接入（providers/article_sources/）—— Dajiala 极致了（发现+HTML详情）、JustOneAPI（发现+正文详情）、TikHub（发现+搜索，需充值）、Wellbyte 数井（搜索+URL驱动发现）；与 RedFox 共存于发现注册表，详情兜底协调器按成本排序
-- **热点**：已落地——聚簇（字 bigram TF-IDF 单链接凝聚，Job 队列执行，手动+每日定时）、评分（48h 独立来源加权 + 24h 半衰 + 状态机）、Feed 三类生产者（文章入库/聚簇/日报，`(item_type,ref_id)` upsert）、日报（LLM 摘要失败降级首段截断，每日 06:30 自动生成前一日）；业务日界 = Asia/Shanghai
-- **测试**：连库用例真实执行（CI 有 postgres service + skip 门禁）；全量 798 passed / 2 skipped（隔离 PG 实测 2026-09-30）
+- **热点**：全链路贯通——聚簇（TF-IDF，候选上限护栏 + 倒排剪枝）、**评分已接线**（worker 聚簇后评分 + 日报前兜底重算 + 每小时 hot_rescore 周期重评，Feed 分数同步回刷）、Feed 三类生产者、日报（LLM 摘要并行化 Semaphore(3) + 失败降级）；业务日界 = Asia/Shanghai
+- **测试**：连库用例真实执行（CI 有 postgres service + skip 门禁 + alembic 单头断言 + e2e/冒烟 job）；全量 848 passed / 2 skipped（隔离 PG 实测 2026-09-30，v0.6 集成后）
 - **目录结构**：当前 backend/ + frontend/，目标 apps/api/ + apps/web/（见 project-structure-design.md）
 
 ## 关键约束
