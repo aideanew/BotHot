@@ -8,12 +8,14 @@ BotHot 是从 AideanBot 全面升级而来的多渠道机器人推送与知识�
 
 ### 1. 多渠道机器人推送
 - **六种渠道**：飞书、钉钉、企业微信、微信 ClawBot、通用 Webhook、站内通知
-- **定时推送**：Cron 表达式驱动，支持每天定时、周期推送
-- **事件触发**：新文章入库、热点更新等事件自动触发推送（⬜ **未实现**——`push_scheduler._tick` 目前仅处理 `trigger_type=cron`）
+- **定时推送**：Cron 表达式驱动（croniter 完整 5 段式 + `HH:MM` / `*/N` / 纯数字简写兼容）
+- **事件触发**：新文章入库、热点更新、日报生成事件自动触发推送（PG outbox 表 `push_events`：worker 进程 emit → backend 调度器 claim 消费；事件延迟下限 = 60s 扫描间隔）
 - **测试推送**：管理端一键测试渠道连通性
 - **推送日志**：完整投递记录，成功/失败/响应摘要
 
-> ✅ **当前实现状态**：渠道管理 API、推送任务模型、推送日志模型已建成。六种渠道的 PushProvider 均已实现真实投递（飞书/钉钉/企微/Webhook/站内通知已通，微信 ClawBot 需部署 ClawBot 服务后可用）。PushScheduler 以 60s 间隔在 backend 进程内运行（FastAPI lifespan）。详见 [待办清单](docs/04_engineering/backlog.md)。
+> ✅ **当前实现状态**：渠道管理 API、推送任务模型、推送日志模型已建成。六种渠道的 PushProvider 均已实现真实投递（飞书/钉钉/企微/Webhook/站内通知已通，微信 ClawBot 需部署 ClawBot 服务后可用）。渠道密钥以 AES-256-GCM 落库（AAD 绑定渠道 id，`PUSH_SECRET_MASTER_KEY` fail-closed）。PushScheduler 以 60s 间隔在 backend 进程内运行（FastAPI lifespan），到期任务以 `FOR UPDATE SKIP LOCKED` 领取。
+>
+> ⚠️ **两处已知缺口**：① **站内通知仅投递侧** —— 前端尚无订阅（`frontend/` 全仓 grep `WebSocket|bothot:notifications` 零命中），通知发进无人接收的频道；② **无失败重试** —— 投递失败仅落 `PushLog(status=failed)`，无重试计数/退避。详见 [待办清单](docs/04_engineering/backlog.md) FE-005 / PUSH-009。
 
 ### 2. 热点聚簇与日报（融合 AIHOT）
 - **热点聚簇**：多篇文章按主题聚簇为事件，按热度排序
@@ -21,7 +23,7 @@ BotHot 是从 AideanBot 全面升级而来的多渠道机器人推送与知识�
 - **Feed 流**：信息流首页，支持类型/分类筛选
 - **每日日报**：自动取 TOP 10 热点生成 Markdown 日报
 
-> ⚠️ **当前实现状态**：数据模型已建（HotTopic, DailyReport, FeedItem），**读侧** API 已建（`/hot/topics`、`/hot/daily/*`、`/hot/feed`）；但**生产管道缺失**——全仓无 `HotTopic`/`FeedItem` 写入方、`hot_score` 无计算、日报生成仅字符串拼接（无 LLM 摘要）、聚簇接口为占位响应。详见 [待办清单](docs/04_engineering/backlog.md) HOT-001~004。
+> ✅ **当前实现状态（v0.5 起）**：**生产管道已打通** —— 聚簇为标题字 bigram TF-IDF 单链接凝聚（`services/hot_cluster.py`，Job type `hot_cluster`）；热度评分为 48h 独立来源加权 + 24h 半衰 + 状态机（`services/hot_scorer.py`）；Feed 三类生产者就位（文章入库落点 / 聚簇副作用 / 日报副作用，`(item_type, ref_id)` 唯一约束 upsert）；日报含 LLM 摘要且失败降级为正文首段截断（`services/llm_summary.py`，每日 06:30 自动生成前一日，业务日界 Asia/Shanghai）。详见 [待办清单](docs/04_engineering/backlog.md) HOT-001~004。
 
 ### 3. 知识库管理（继承 AideanBot）
 - 公众号链接解析入库（RedFox + 4 平台文章来源：Dajiala/JustOneAPI/TikHub/Wellbyte）
@@ -98,6 +100,73 @@ pnpm install
 pnpm dev  # 自动在 3200 端口启动
 ```
 
+## 部署指南（Docker Compose）
+
+**前置**：Docker Engine + Compose v2（`docker compose` 子命令，非旧版 `docker-compose`）。
+
+```bash
+# 1) 准备环境变量（.env 已被 gitignore，禁止入库）
+cp docker/.env.example docker/.env
+# 2) 按下方清单填写必填项（尤其两个主密钥）
+# 3) 启动全栈（compose 项目名固定为 bothot，见 docker/compose.yml 顶层 name:）
+docker compose -f docker/compose.yml up -d
+# 4) 查看状态 / 日志
+docker compose -f docker/compose.yml ps
+docker compose -f docker/compose.yml logs -f backend
+# 5) 冒烟：健康端点（信封 code==0）+ scheduler/worker 心跳新鲜度
+bash scripts/smoke.sh
+```
+
+**服务与启动顺序**（定义见 `docker/compose.yml`）：
+
+```
+postgres / redis  →  migrate（一次性 alembic upgrade head，restart: "no"）
+                  →  backend（3300，带 healthcheck）
+                  →  scheduler / worker（常驻进程，不开端口；健康信号是 process_heartbeats 心跳）
+                  →  langbot / langbot_plugin_runtime（知识引擎侧，5300）
+                  →  frontend（3200，依赖 backend）
+```
+
+> `migrate` 失败时 `backend` / `scheduler` / `worker` 三者**都不会启动**
+> （`depends_on: service_completed_successfully`）—— 这是刻意的失败可见性，不要绕过。
+
+**环境变量清单**（模板 `docker/.env.example`；`*.env` 已 gitignore）：
+
+| 变量 | 必填 | 说明 |
+|---|---|---|
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | 是 | 默认 `bothot`（仅开发可直接用默认值） |
+| `APP_SECRET_KEY` | 是 | 应用密钥 |
+| `PUSH_SECRET_MASTER_KEY` | **是** | **渠道密钥 AES-256-GCM 主密钥**。须为 **32 字节密钥的 base64**；缺失/畸形时渠道加解密 **fail-closed 全部拒绝**（`backend/app/core/secret_crypto.py`） |
+| `ENGINE_KEY_MASTER_KEY` | **是** | **引擎 Key AES-256-GCM 主密钥**，同为 32 字节 base64 口径。与上者**分属不同泄露域、不同轮换周期，禁止复用同一值**（`backend/app/core/engine_keyring.py`） |
+| `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` / `OIDC_REDIRECT_URI` | 是 | 主平台 SSO OIDC；`OIDC_REDIRECT_URI` 须命中主平台 `oidc_clients.redirect_uris` 白名单 |
+| `AIDEAN_ISSUER` / `AIDEAN_PUBLIC_URL` | 是 | 前者容器侧可达基址、后者浏览器侧 authorize 基址 —— **语义不同，不可混填** |
+| `OIDC_ISSUER_EXPECTED` / `OIDC_AUDIENCE_EXPECTED` | 生产必填 | userinfo 的 iss/aud 期望值（`APP_ENV=production` 时为空则拒启） |
+| `REDFOX_API_KEY` | 是 | RedFox 公众号发现 Provider |
+| `DAJIALA_API_KEY` / `JUSTONEAPI_API_KEY` / `TIKHUB_API_KEY` / `WELLBYTE_API_KEY` | 否 | 4 平台文章来源 Provider，缺省则该平台不可用 |
+| `EMBEDDING_API_BASE` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` | 是 | 嵌入服务（默认硅基流动 `BAAI/bge-m3`） |
+| `LLM_API_BASE` / `LLM_API_KEY` / `LLM_MODEL` | 是 | 生成 LLM（日报摘要与问答） |
+| `LANGBOT_BASE_URL` / `LANGBOT_API_KEY` | 是 | LangBot 知识引擎；`LANGBOT_ADMIN_USERNAME` / `LANGBOT_ADMIN_PASSWORD` 用于防腐层登录 |
+| `SESSION_STORE_BACKEND` | 否 | `redis`（容器部署默认）/ `memory`（宿主裸跑） |
+| `SESSION_COOKIE_SECURE` | 生产必填 | HTTPS 环境须置 `true` |
+| `BASE_IMAGE` | 否 | 基础镜像源开关（docker.io 不可达时改镜像源） |
+| `PIP_MIRROR` / `PROXY_HTTP` | 否 | 依赖安装镜像与出站代理（分层网络规范见 compose 注释） |
+
+> **安全铁律**：真实密钥禁止入库、入文档、入前端。生成 32 字节主密钥：
+> `python -c "import base64,os;print(base64.b64encode(os.urandom(32)).decode())"`
+
+**端口纪律**（强制，见 `AGENTS.md`）：
+
+| 端口 | 用途 | 约束 |
+|---|---|---|
+| 3000 | 主平台专用 | ❌ BotHot 任何服务禁止占用 |
+| 3200 | BotHot 前端宿主端口 | 容器内部 3000，宿主映射 3200 |
+| 3300 | BotHot 后端端口 | 容器内部 3300 |
+| 5300 | LangBot | — |
+| 5433 | PostgreSQL | 容器 5432 → 宿主 5433 |
+| 6380 | Redis | 容器 6379 → 宿主 6380 |
+
+> 旧端口 `3333` 已废弃：`make guard-ports` 会 fail-closed 拦截（任一命中所属检查即退出码非 0）。
+
 ## API 概览
 
 ### 机器人渠道管理
@@ -112,6 +181,7 @@ pnpm dev  # 自动在 3200 端口启动
 ### 推送任务
 - `POST   /api/v1/bots/tasks`            — 创建推送任务
 - `GET    /api/v1/bots/tasks`            — 任务列表
+- `PUT    /api/v1/bots/tasks/{id}`       — 编辑 / 暂停恢复（含 cron_expr 重算 next_run_at）
 - `POST   /api/v1/bots/tasks/{id}/run`   — 手动触发
 - `DELETE /api/v1/bots/tasks/{id}`       — 删除任务
 
@@ -155,7 +225,7 @@ BotHot/
 
 BotHot 是 AideanBot 的全面升级版：
 - **保留**：公众号链接入库、LangBot RAG、知识空间管理、SSO 认证、整号订阅
-- **新增**：多渠道推送（6 种渠道）、定时推送调度、热点中心/日报页与读侧 API（**聚簇与 Feed 写入管道待实现**）
+- **新增**：多渠道推送（6 种渠道，含事件触发 outbox）、定时推送调度、热点聚簇/评分/Feed/日报（生产管道已打通）
 - **改名**：AideanBot → BotHot（session cookie、项目名、容器名全部更新）
 - **端口**：前端 3200、后端 3300
 

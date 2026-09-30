@@ -60,15 +60,35 @@ jobs:
       # 此前迁移只在宿主按部署手册手工跑过，CI 从无 schema，这是连库用例必然 skip 的另一半前提。
       - name: Migrate schema (alembic upgrade head)
         run: python -m alembic upgrade head
+      # WD（2026-09-30）：alembic **单头**断言。
+      # 为什么必须锁：`alembic upgrade head` 在存在多个 head（分叉迁移）时行为未定义——
+      # 只会应用其中一个分支，另一支**静默不落库**，而 exit code 仍为 0。
+      # 本仓库刚经历 W1-W5 五路并行（各自新增迁移 ab1004w1a / w2a / w3a），
+      # 分叉是这类并行最典型的产物，故把「head 数 == 1」显式前置为门禁。
+      # 修复方式：`alembic merge -m "merge heads" <h1> <h2>` 后提交合并迁移。
+      - name: Assert single alembic head
+        run: |
+          heads="$(python -m alembic heads)"
+          echo "$heads"
+          count="$(printf '%s\n' "$heads" | grep -c '(head)')"
+          if [ "$count" -ne 1 ]; then
+            echo "❌ 检测到 ${count} 个 alembic head（预期 1）——存在 multi-head 分叉迁移"
+            echo "   修复：alembic merge -m \"merge heads\" <head1> <head2> 并提交"
+            exit 1
+          fi
+          echo "✅ 单一 alembic head"
       # W5：skip 门禁。解析 junitxml 的 skipped 用例，两条判据：
       #   1) 「PG 不可达」类 skip 一律判失败——直接锁死本 job 要防的那类静默回归；
       #   2) skip 总数 > 基线阈值 SKIP_BASELINE 判失败。
       # 基线口径：CI 无 Redis / LangBot / 外部 API Key，故有少量**合法** skip。
-      # 实测（2026-09-30，HEAD 干净树 + 隔离 PG + 模拟无 Redis/无 LangBot）：
-      #   `742 passed, 4 skipped`——4 条为 test_chat_sse 的真实冒烟 2 条 + 
-      #   test_session_store_redis 的 2 条（依赖缺失时按设计 skip）。
-      #   → 阈值 = 实测 4 + 2 容差 = 6。
-      # ⚠️ 首次 CI 运行后须按实际 skip 数收紧 SKIP_BASELINE（本地环境与 CI 未必逐条一致）。
+      # 实测（2026-09-30，W1-W5 合并后 / HEAD 干净树 + 隔离 PG + 模拟无 Redis/无 LangBot）：
+      #   `796 passed, 4 skipped`——4 条为 test_chat_sse 的真实冒烟 2 条 +
+      #   test_session_store_redis 的 2 条（依赖缺失时按设计 skip）；**PG 不可达类 skip = 0**。
+      # WD 复核（2026-09-30）：合并后连库用例由 742→796 增了 54 条，但 skip 数**未随之增长**——
+      #   新增用例全部真实连库执行。故 4 条 skip 与用例规模无关，只与「LangBot/Redis 不可达」同源。
+      #   → 阈值维持 6（实测 4 + 2 容差）：收紧到 4 会把「本地/CI 依赖可达性差异」误判为回归，
+      #     而该门禁的首要职责是锁死「PG 不可达导致的静默 skip」，不是追求 skip 数最小。
+      # ⚠️ 首次 CI 运行后复核：若 CI 侧 skip 数 ≠ 4，须先定位是依赖差异还是真实回归，再调阈值。
       - name: Tests (pytest) + skip gate
         env:
           SKIP_BASELINE: "6"
@@ -214,6 +234,51 @@ jobs:
         run: pnpm run build
         env:
           NEXT_PUBLIC_API_MOCK: "false"
+      # ── WD（2026-09-30）：Playwright e2e 门禁 ────────────────────────────────
+      # 两套件 base URL 与运行前提互斥（见 frontend/playwright.config.ts 的双口径约定），
+      # 故分两步、并各自注明前置。
+      #
+      # ① mock UI e2e（**阻塞门禁**）：base 3456，产物必须由 `NEXT_PUBLIC_API_MOCK=true`
+      #    烘焙——该变量在 build 期内联，运行时改 env 无效。
+      #    ⚠️ 这里**不能**用 `pnpm run build`：package.json 的 `prebuild` 钩子在
+      #    NEXT_PUBLIC_API_MOCK != "false" 时直接 exit 1（生产防误配守卫，见
+      #    frontend/package.json:11）。故走 `pnpm exec next build` 绕过 npm 生命周期钩子，
+      #    只产出 e2e 用产物；生产产物仍由上方 `Build` 步骤（MOCK=false）负责。
+      # ② 真后端 e2e（**非阻塞**）：需 ① Compose 栈（PG/Redis/LangBot 全起）
+      #    ② 主平台 OIDC 白名单已登记 bothot redirect_uri ③ 真实公众号文章 URL
+      #    —— 三者 CI 均不具备（见 frontend/e2e/real-backend.spec.ts 头部前置说明）。
+      #    故以仓库变量 `E2E_REAL_BACKEND=1` 为闸，且 `continue-on-error: true`：
+      #    前置落地后把变量置 1 即自动生效，在此之前既不空转也不阻塞主干。
+      #
+      # ⚠️ 浏览器必须先装：playwright.config.ts 用 `devices["Desktop Chrome"]`（内置 chromium），
+      #    而 `pnpm install` **不**会下载浏览器二进制，缺此步 e2e 必以
+      #    "Executable doesn't exist" 失败。`--with-deps` 同时装系统级依赖（runner 有 sudo）。
+      - name: Install Playwright browser (chromium)
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Build (mock artifact, for UI e2e)
+        run: pnpm exec next build
+        env:
+          NEXT_PUBLIC_API_MOCK: "true"
+      - name: E2E (mock UI)
+        run: pnpm run test:e2e
+        env:
+          PORT: "3456"
+      - name: E2E (real backend, non-blocking)
+        if: ${{ vars.E2E_REAL_BACKEND == '1' }}
+        continue-on-error: true
+        run: pnpm run test:e2e -- e2e/real-backend.spec.ts
+        env:
+          PORT: "3200"
+          E2E_REAL_BACKEND: "1"
+      - name: Upload Playwright diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: ignore
 
   compose:
     runs-on: ubuntu-latest
@@ -221,3 +286,53 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate compose config
         run: docker compose -f docker/compose.yml config --quiet
+
+  # WD（2026-09-30）：compose 冒烟。此前 `compose` job 只做 `config --quiet`（纯语法校验），
+  # W5 交付的 `scripts/smoke.sh` **从未被任何 CI 消费**——「整栈能不能真的起来」只靠人工。
+  # 本 job 接入它：build backend 镜像 → 起核心服务 → 跑 smoke.sh。
+  #
+  # CI 适配三处（均为**环境差异**，非功能裁剪）：
+  #  1) 只起核心服务、**排除 frontend**：frontend 的 build.args 硬编码宿主代理
+  #     `http://host.docker.internal:10808`（docker/compose.yml:342-345）。GitHub runner
+  #     上没有该代理，构建必失败；且冒烟只验后端存活与心跳，本就不需要前端。
+  #  2) **保留 langbot / langbot_plugin_runtime**：scheduler / worker 的 depends_on 指向
+  #     langbot（docker/compose.yml:277 与 :315），缺它两个常驻进程不会启动，
+  #     「心跳新鲜度」就无从验起。
+  #  3) 生成一次性测试主密钥（32 字节 base64）：`secret_crypto` / `engine_keyring` 在
+  #     PUSH_SECRET_MASTER_KEY / ENGINE_KEY_MASTER_KEY 缺失时 fail-closed，
+  #     容器内渠道加解密全部拒绝（backend/app/core/secret_crypto.py:31-49）。
+  #
+  # 判据由 scripts/smoke.sh 定义：`/api/v1/system/health` 信封 code==0
+  # + `process_heartbeats` 中 scheduler/worker 心跳 age <= 300s。
+  # up 由本 job 显式执行，故 smoke.sh 以 SKIP_UP=1 只做探活（不改其主体逻辑）。
+  #
+  # ⚠️ 需首次 Actions 运行验证（本地仅能过 `config --quiet` + YAML 解析）：
+  #    langbot 镜像拉取耗时、runner 上 3300/5433/6380 端口占用、心跳首次落库时延。
+  compose-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose config
+        run: docker compose -f docker/compose.yml config --quiet
+      - name: Generate ephemeral master keys
+        run: |
+          echo "PUSH_SECRET_MASTER_KEY=$(python3 -c 'import base64,os;print(base64.b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
+          echo "ENGINE_KEY_MASTER_KEY=$(python3 -c 'import base64,os;print(base64.b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
+      - name: Build backend image
+        run: docker compose -f docker/compose.yml build backend
+      - name: Start core services
+        run: |
+          docker compose -f docker/compose.yml up -d \
+            postgres redis langbot langbot_plugin_runtime migrate backend scheduler worker
+          docker compose -f docker/compose.yml ps
+      - name: Smoke (health + scheduler/worker heartbeat)
+        run: bash scripts/smoke.sh
+        env:
+          SKIP_UP: "1"
+          # 显式非严格：CI 无 LangBot 业务配置，/health 允许 status=degraded；
+          # 本 job 只对「HTTP 200 且信封 code==0」+ 心跳新鲜度负责。
+          SMOKE_STRICT: "0"
+      - name: Dump compose logs on failure
+        if: failure()
+        run: docker compose -f docker/compose.yml logs --no-color --tail=200

@@ -123,9 +123,13 @@ preflight: ## 运行预检脚本
 .PHONY: guard-ports
 guard-ports: ## 检查端口分配是否正确
 	@echo "检查端口分配..."
-	@grep -rn "3333" $(BACKEND_DIR)/app/ $(DOCKER_DIR)/ --include="*.py" --include="*.yml" --include="*.yaml" --include="*.sh" --include="*.env*" --include="*.example" 2>/dev/null; \
-	grep -rn "3333" $(FRONTEND_DIR)/app/ $(FRONTEND_DIR)/lib/ $(FRONTEND_DIR)/e2e/ --include="*.ts" --include="*.tsx" --include="*.json" --include="*.mjs" 2>/dev/null; \
-	if [ $$? -eq 0 ]; then echo "❌ 发现旧端口 3333，需清理"; exit 1; else echo "✅ 无旧端口 3333"; fi
+	@backend_hits="$$(grep -rn "3333" $(BACKEND_DIR)/app/ $(DOCKER_DIR)/ --include="*.py" --include="*.yml" --include="*.yaml" --include="*.sh" --include="*.env*" --include="*.example" 2>/dev/null || true)"; \
+	frontend_hits="$$(grep -rn "3333" $(FRONTEND_DIR)/app/ $(FRONTEND_DIR)/lib/ $(FRONTEND_DIR)/e2e/ --include="*.ts" --include="*.tsx" --include="*.json" --include="*.mjs" 2>/dev/null || true)"; \
+	rc=0; \
+	if [ -n "$$backend_hits" ]; then echo "❌ 后端/编排侧发现旧端口 3333："; printf '%s\n' "$$backend_hits"; rc=1; fi; \
+	if [ -n "$$frontend_hits" ]; then echo "❌ 前端侧发现旧端口 3333："; printf '%s\n' "$$frontend_hits"; rc=1; fi; \
+	if [ "$$rc" -ne 0 ]; then echo "❌ 发现旧端口 3333，需清理"; exit 1; fi; \
+	echo "✅ 无旧端口 3333"
 	@grep -r "bothot_session" $(BACKEND_DIR)/app/ 2>/dev/null && echo "✅ session cookie = bothot_session" || \
 		{ echo "❌ session cookie 名称不正确"; exit 1; }
 

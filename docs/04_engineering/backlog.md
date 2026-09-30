@@ -11,21 +11,24 @@ updated: 2026-09-30
 # BotHot 待办清单
 
 > 状态标记：✅ 已完成 | 🔧 部分完成 | ⬜ 未开始
+>
+> **回填口径（WD，2026-09-30）**：本清单每一项的状态均以 `main @ 2fa95f0` 的**代码实证**为准，
+> 逐条附 `文件:行号`。铁律：**禁止把未实现写成已完成，也禁止把已实现留作未开始**——
+> 前者是本仓库的历史病史，后者同样制造假象（把已完成项当待办重复排期）。
 
 ## ✅ 已完成（BotHot 新增能力）
 
 ### PUSH-001~006：六种渠道 PushProvider ✅
-- **状态**：全部实现真实投递（`providers/push/` 包）
+- **状态**：全部实现真实投递（`backend/app/providers/push/`，注册表见 `__init__.py:16-21`）
 - **飞书**：交互式卡片消息 + HMAC-SHA256 加签 ✅
 - **钉钉**：Markdown 消息 + HMAC-SHA256 加签 ✅
 - **企业微信**：Markdown 消息 ✅
 - **通用 Webhook**：POST JSON + HTTP 2xx 校验 ✅
 - **微信 ClawBot**：Bearer token 鉴权 + `/api/send` 调用 ✅（需部署 ClawBot 服务）
-- **站内通知**：Redis pub/sub → `bothot:notifications:{user_id}` ✅
-
-> **注意**：旧 `providers/push_port.py`（AideanBot 遗留）仍存在，仅含 web/clawbot 两个占位
-> Provider（`implemented=False`）。`services/push.py` 仍引用旧端口；`bots.py` 和
-> `push_scheduler.py` 已使用新 `providers/push/` 包。迁移 `push.py` 到新包是 TECH-001 的工作。
+- **站内通知**：Redis pub/sub → `bothot:notifications:{user_id}` ✅（**仅投递侧**）
+  - 证据：`backend/app/providers/push/web.py:16`（频道前缀）、`:50`（`r.publish`）
+  - 缺口：**前端订阅侧未实现** —— `main @ 2fa95f0` 下 `frontend/**` grep
+    `WebSocket|bothot:notifications` **零命中**，通知发进无人接收的频道（登记见 FE-005）
 
 ### ARTSRC-001~004：四平台文章来源 Provider ✅
 - **状态**：4 个第三方 API 平台已接入（`providers/article_sources/` 包）
@@ -39,105 +42,156 @@ updated: 2026-09-30
 - **测试证据**：`docs/06_validation/evidence/channeltest-20260929/`
 
 ### PUSH-007：PushScheduler 定时调度 ✅
-- **状态**：已实现，在 backend 进程内运行（FastAPI lifespan 启动/停止）
+- **状态**：已实现，在 backend 进程内运行（FastAPI lifespan 启动/停止，`backend/app/main.py:247`）
 - **调度间隔**：60s
-- **Cron 解析**：简版，支持 `HH:MM`（每天定时）和 `*/N`（每 N 小时）
-- **完整 croniter 支持**：待 TECH-002
+- **Cron 解析**：**croniter 完整 5 段式 + 三种简写兼容**（`HH:MM` / `*/N` / 纯数字分钟 ↔ 标准式互译）
+  —— `backend/app/services/cron_expr.py`（91 行）；依赖 `croniter>=0.19`（`backend/pyproject.toml:15`）
+- **并发安全**：到期任务 `FOR UPDATE SKIP LOCKED` 短锁领取（`backend/app/services/push_scheduler.py:85`）
+- **测试**：`backend/tests/test_push_providers.py`（20 例，覆盖 `cron_expr` 全分支）
+
+### PUSH-008：事件触发推送 ✅
+- **实现**：PG outbox 表 `push_events` —— `backend/app/models/bothot_entities.py:243`（表名 `:250`）
+- **迁移**：`backend/alembic/versions/ab1004w3a_push_events.py`
+- **生产侧**（worker 进程）：文章入库 / 聚簇完成 / 日报生成 → 事件落库（`backend/app/services/push_events.py`）
+- **消费侧**（backend 进程）：`push_scheduler` 扫描未消费事件，复用 `_execute_task` 投递（at-most-once）
+- **模板变量**：`{space_name}/{doc_title}/{hot_topic}/{topic_count}` —— `backend/app/services/push_template.py`
+- **测试**：`backend/tests/test_w3_push_scheduler.py`（10 例）
+- **注**：跨进程投递**不能**用进程内事件总线（ingest 在 worker 进程、调度器在 backend 进程），
+  outbox 表是本约束下的正确拓扑；代价是事件延迟下限 = 扫描间隔 60s。
+
+### TECH-001：迁移 push.py 到新 Provider 包 ✅
+- 旧 `providers/push_port.py` **已删除**（`git cat-file -e HEAD:backend/app/providers/push_port.py` → not exist）
+- `backend/app/services/push.py:20` 与 `backend/app/api/v1/admin.py:64` 均已切到 `app.providers.push`
+- 双头语义收敛：不再存在「占位 `delivered=False`」与真实投递并存
+
+### TECH-002：PushScheduler 完整 Cron 支持 ✅
+- 见 PUSH-007：`croniter` 已引入，统一收口于 `services/cron_expr.py`，存量三种简写格式行为不回归
+
+### HOT-001：热点聚簇算法 ✅
+- **实现**：`backend/app/services/hot_cluster.py`（270 行）—— 标题字 bigram TF-IDF + 单链接凝聚聚类（τ 可调）
+- **执行**：Job type=`hot_cluster` 走既有 PG Job 队列（白拿 SKIP LOCKED / 重试 / 心跳）
+- **触发**：手动 API + 每日定时入队（`backend/app/services/scheduler.py:298-334`）
+- **测试**：`backend/tests/test_w2_cluster.py`（3 例）
+
+### HOT-002：热度评分 ✅
+- **实现**：`backend/app/services/hot_scorer.py`（139 行）—— 48h 独立来源加权 + 24h 半衰时间衰减 + 状态机
+- **字段**：`backend/app/models/bothot_entities.py:141 hot_score`（已建索引）
+- **测试**：`backend/tests/test_w2_scorer.py`（7 例）
+
+### HOT-003：Feed 流 ✅
+- **读侧**：`backend/app/api/v1/hot.py`（热点列表/详情、Feed 流，支持类型/分类筛选 + 排序）
+- **生产侧**：`backend/app/services/feed_service.py`（276 行）—— 三类生产者：
+  ① 文章入库 INDEXED 落点 ② 聚簇副作用 ③ 日报副作用
+- **唯一性**：`(item_type, ref_id)` 唯一约束 —— 迁移 `ab1004w2a_feed_unique.py`（upsert 语义基础）
+- **模型**：`backend/app/models/bothot_entities.py:206 FeedItem`
+
+### HOT-004：每日日报生成 ✅
+- **实现**：`backend/app/services/llm_summary.py`（74 行）—— LLM 中文摘要，**失败降级**为中心文章首段截断
+  （日报不因 LLM 故障而缺失）
+- **自动定时**：每日 06:30（本地时区）入队 `daily_report`（生成**前一日**日报）
+  —— `backend/app/services/scheduler.py:62-63`、`:298-334`
+- **幂等**：`uq_daily_report_date` 唯一约束
+- **模型**：`backend/app/models/bothot_entities.py:176 DailyReport`
 
 ### 渠道管理 API ✅
 - `GET/POST/PUT/DELETE /api/v1/bots` — 渠道 CRUD
 - `POST /api/v1/bots/{id}/test` — 测试推送
 - `GET /api/v1/bots/{id}/logs` — 推送日志
-- `POST/GET/DELETE /api/v1/bots/tasks` — 推送任务管理
+- `POST/GET/PUT/DELETE /api/v1/bots/tasks` — 推送任务管理（**PUT 为 W1 新增**，支持编辑/暂停恢复，`api/v1/bots.py:481`）
 - `POST /api/v1/bots/tasks/{id}/run` — 手动触发
+
+### FE-001：Bot 渠道管理页面 ✅
+- `frontend/app/bots/page.tsx`：渠道列表 + 创建/编辑 + 测试推送 + 日志
+- 「待完善：推送任务管理 UI（Cron 编辑器）」已在 FE-002 落地
+
+### FE-002：推送任务管理页面 ✅
+- `frontend/app/bots/page.tsx:50`：双 Tab（channels / tasks）；`:31` 引入 `PushTasksTab`
+- 组件：`frontend/components/PushTasksTab.tsx`、`frontend/components/CronEditor.tsx`
+- 能力：列表/创建/编辑/暂停恢复/删除/立即执行/日志
+
+### FE-003：热点 Feed 页面 ✅
+- `frontend/app/hot/page.tsx`：类型 + 状态过滤（`:42`、`:109`）、聚簇触发按钮（`:124 triggerCluster`）、
+  热度可视化、状态徽章点击过滤
+
+### FE-004：每日日报页面 ✅
+- `frontend/app/hot/daily/page.tsx`：`react-markdown` 真渲染（`:13`）、翻页（`:28`、`:155-161`）
 
 ## 🔴 高优先级
 
-### PUSH-008：事件触发推送 ⬜
-- **当前状态**：模型已建（`trigger_type=event`），调度未实现
-- **目标**：新文章入库/热点更新/日报生成时自动触发推送
-- **验收**：文章 INDEXED → 自动推送到绑定的 event 类型渠道
+### FE-005：站内通知前端订阅侧 ⬜
+- **当前状态**：投递侧已通（`providers/push/web.py`，Redis pub/sub），**前端无订阅**
+  —— `main @ 2fa95f0` 下 `frontend/**` grep `WebSocket|bothot:notifications` 零命中
+- **目标**：订阅 `bothot:notifications:{user_id}`（WebSocket / SSE），顶栏未读数徽标
+- **验收**：站内通知在浏览器中实际可见、可标记已读
 
-### TECH-001：迁移 push.py 到新 Provider 包 🔧
-- **当前状态**：`services/push.py` 仍 import 旧 `providers/push_port.py`
-- **目标**：统一到 `providers/push/` 包，删除旧 `push_port.py`
-- **风险**：需确认 `push.py` 的调用方（如有）不受影响
-
-### TECH-002：PushScheduler 完整 Cron 支持 ⬜
-- **当前状态**：仅支持 `HH:MM` 和 `*/N`，不支持标准 5 段 cron
-- **目标**：引入 croniter 或实现完整 cron 解析
-- **验收**：`*/5 * * * *`（每 5 分钟）等标准表达式可正确调度
+### PUSH-009：推送失败重试机制 ⬜
+- **当前状态**：失败仅落 `PushLog(status=failed)`，**无重试计数 / 无退避**
+  （对照 `docs/04_engineering/roadmap.md:49` 的 v0.4 唯一未勾项）
+- **目标**：指数退避 + 最大重试次数 + 终态标记；与 outbox 的 at-most-once 语义边界写清
 
 ## 🟡 中优先级
 
-### HOT-001：热点聚簇算法 ⬜
-- **当前状态**：模型已建（HotTopic, HotTopicArticle），API 为占位
-- **目标**：多篇文章按主题聚簇为热点事件（LLM + 向量相似度）
-- **参考**：AIHOT 项目聚簇逻辑
-- **当前 API**：`POST /api/v1/hot/topics/cluster` 返回 stub 响应
+### TEST-003：Docker Compose 冒烟测试 🔧
+- **已有**：`scripts/smoke.sh`（W5）—— 轮询 `/api/v1/system/health`（信封 code==0）
+  + 校验 `process_heartbeats` 中 scheduler/worker 心跳新鲜度
+- **WD 变更**：新增 CI `compose-smoke` job（`.github/workflows/ci.yml`）—— build backend 镜像 →
+  起核心服务 → 跑 smoke.sh；此前该脚本**从未被任何 CI 消费**
+- **待完善**：**首次 Actions 运行验证**（langbot 镜像拉取耗时、runner 端口占用、心跳首次落库时延）
 
-### HOT-002：热度评分 ⬜
-- **当前状态**：模型有 `hot_score` 字段，计算逻辑未实现
-- **目标**：48h 独立来源数加权 + 24h 减半时间衰减
+### MIG-003：packages/contracts/ 共享契约提取 🔧
+- **已有**（W5）：骨架 + 三类通用类型冻结 —— `PageResult<T>` / `ApiResponse<T>` / `ApiErrorCode`
+- **缺口**：① 业务域 DTO 未提取；② **前端尚未消费** —— `@bothot/contracts` 在 `frontend/**` 引用数 = 0
+  （契约冻结了却无人使用，漂移面仍在）
 
-### HOT-003：Feed 流 🔧
-- **状态**：**读侧**已实现（`api/v1/hot.py:294-345` —— `GET /api/v1/hot/feed` 支持类型/分类筛选 + 置顶/score/时间三级排序）；`FeedItem` 模型已建（`models/bothot_entities.py:206`）
-- **缺口**：提交态全仓**无 `FeedItem` 写入方**——`feed_items` 仍是死表，读侧恒为空；且 `score` 依赖的 `hot_score` 无计算逻辑（见 HOT-002）
-- **前端**：`/hot` 页面骨架已建（`frontend/app/hot/page.tsx`）
-- **修复中**：并行任务 W2（热点域）正在补聚簇/评分/Feed 写入管道
+### TEST-001：后端单元测试补全 🔧
+- **现状（提交态实证，`main @ 2fa95f0`，全仓 707 个 `def test_`）**：
+  - 推送域：`test_push_providers.py`(20) / `test_r11_push.py`(11) / `test_w1_push_domain.py`(28) / `test_w3_push_scheduler.py`(10)
+  - 调度与心跳：`test_scheduler.py`(22) / `test_process_heartbeat.py`(17)
+  - 热点域：`test_w2_cluster.py`(3) / `test_w2_scorer.py`(7)
+- **缺口**：① 聚簇/评分用例偏薄（3 + 7 例），无「千篇量级」性能用例；
+  ② outbox 消费侧无端到端用例（入队→扫描→投递→消费标记）
+- **CI 侧**：连库用例此前被**静默 skip**（`ci.yml` 无 postgres service），W5 已修复并加 skip 门禁；
+  WD 复核实测 `796 passed, 4 skipped`，其中 PG 不可达类 skip = 0
 
-### HOT-004：每日日报生成 🔧
-- **状态**：**接口**已实现（`api/v1/hot.py:218-289`）——取当日 TOP 10 拼装 Markdown 落 `DailyReport`
-- **缺口**：`hot.py:253-268` 为**纯字符串拼接**，无 LLM 标题/摘要环节；内容依赖 `HotTopic.hot_score`（HOT-002 无计算，恒 0.0）；无热点时产出「今日暂无热点事件。」空日报
-- **前端**：`/hot/daily` 页面骨架已建（`frontend/app/hot/daily/page.tsx`）
-- **修复中**：并行任务 W2（热点域）正在补 LLM 摘要与热点写入管道
+### TEST-002：Playwright e2e 测试 🔧
+- **现状**：`frontend/e2e/trunk.spec.ts`（mock 主干 9 条路径）+ `frontend/e2e/real-backend.spec.ts`（4 条）
+- **WD 变更**：
+  - mock 套件**已入 CI**（`frontend` job，PORT=3456，**阻塞门禁**）
+  - real-backend 由无条件 `test.skip(true, …)`（**死断言**，套件永不可执行）改为**环境闸**
+    `E2E_REAL_BACKEND=1`，并配 `continue-on-error: true` + 仓库变量闸
+- **缺口**：real-backend 三项前置未落地 —— ① Compose 栈运行 ② 主平台 OIDC 白名单 ③ 真实文章 URL
+- **端口**：3200（禁止 3333）
 
-### FE-001：Bot 渠道管理页面 🔧
-- **当前状态**：页面已建（`/bots`），渠道列表 + 创建/编辑 + 测试推送 + 日志
-- **待完善**：推送任务管理 UI（Cron 编辑器）
+### HOT-005：聚簇算法升级（嵌入向量）⬜
+- **现状**：TF-IDF 字 bigram（日增百~千篇量级下够用）
+- **升级路径**：`ContentAsset` 加 embedding 列 + pgvector；`embedding.py` 目前**生产零调用方**（仅测试引用）
+- **定位**：**显式排除项**（非遗漏），单独立项，不阻塞当前阶段
 
-### FE-002：推送任务管理页面 ⬜
-- **当前状态**：API 已通，前端 UI 未建
-- **目标**：推送任务 CRUD + Cron 编辑 + 日志查看
-
-### FE-003：热点 Feed 页面 🔧
-- **当前状态**：页面已建（`/hot`），Feed 流展示 + 筛选
-- **待完善**：热度可视化、状态徽章交互
-
-### FE-004：每日日报页面 🔧
-- **当前状态**：页面已建（`/hot/daily`）
-- **待完善**：Markdown 渲染优化 + 历史翻页
+### TECH-003：RagflowAdapter 实接 ⬜
+- **现状**：`backend/app/providers/engine_port.py` 中 RagflowAdapter 六方法抛 `NotImplementedError`
+  （`:114-134`，ADR-0004 P2）；SaaS 适配器同类（`:161-181`，P3）
+- **说明**：`:210` 的注册表**已显式排除骨架位**，不可路由 → 不产生伪 `available`
+  —— 这是**诚实门禁，不是缺陷**
+- **已知副作用**：`backend/app/api/v1/engines.py:158` 记载 `delete_space` 走 adapter 分支会
+  抛 `NotImplementedError` 并整体回滚（空间删不掉）；修法与排期见协调请求
 
 ## 🟢 低优先级
 
 ### MIG-001：后端 apps/api/ 目录迁移 ⬜
-- **参考**：project-structure-design.md 阶段化迁移策略
-- **状态**：未开始（当前仍为 `backend/`）
+- **参考**：`project-structure-design.md` 阶段化迁移策略
+- **状态**：未开始（当前仍为 `backend/`；`apps/api/` 为 183 个 `.gitkeep` 空壳）
 
 ### MIG-002：前端 apps/web/ 目录迁移 ⬜
-- **参考**：project-structure-design.md 阶段化迁移策略
+- **参考**：`project-structure-design.md` 阶段化迁移策略
 - **状态**：未开始（当前仍为 `frontend/`）
 
-### MIG-003：packages/contracts/ 共享契约提取 ⬜
-- **状态**：未开始（`packages/contracts/` 仅有目录骨架；W5 已冻结三个通用类型，业务域契约未提取）
+### DOC-001：README 更新 🔧
+- **已有**：功能说明 + 快速开始 + 部署指南
+- **WD 变更**：补「部署指南」小节（compose 环境变量清单，含 `PUSH_SECRET_MASTER_KEY` /
+  `ENGINE_KEY_MASTER_KEY`；端口纪律表）；并修正 W1-W5 合并后的状态漂移
+  （原文「事件触发未实现」「热点生产管道缺失」「聚簇为占位响应」均已过期）
+- **待完善**：v1.0 发布前全量复核
 
-### TEST-001：后端单元测试补全 🔧
-- **当前状态（提交态实证）**：推送域已有覆盖——`test_push_providers.py`（6 Provider 注册表 + `_parse_cron_next` 全分支，:212-259）、`test_r11_push.py`（推送校验/派发/鉴权门禁）、`test_scheduler.py`（**订阅**调度器 T2.4：触发窗口/退避/原子认领）、`test_process_heartbeat.py`、`test_job_worker.py`
-- **缺口**：`push_scheduler.PushTaskScheduler._tick/_execute_task`（认领→派发→落 PushLog→推进 `next_run_at`）端到端无覆盖；热点聚簇/评分无实现故无测试；`test_r11_push` 之外无热点域测试
-- **关联**：CI 侧连库用例此前被**静默 skip**（`.github/workflows/ci.yml` 无 postgres service），W5 已修复并加 skip 门禁
-
-### TEST-002：Playwright e2e 测试 🔧
-- **当前状态（提交态实证）**：`frontend/e2e/trunk.spec.ts`（mock 主干 8 条路径）+ `frontend/e2e/real-backend.spec.ts` 已建
-- **缺口**：e2e **未纳入 CI**——`frontend` job 仅 typecheck + vitest + build（`ci.yml`），无 `pnpm run test:e2e`；推送任务（`/bots`）与热点（`/hot`）无 e2e 路径
-- **端口**：3200（禁止 3333）
-
-### TEST-003：Docker Compose 冒烟测试 ⬜
-- **目标**：docker compose up 全服务启动验证
-- **状态**：未开始（W5 已补 `scripts/smoke.sh`，但未在 CI 接线）
-
-### DOC-001：README 更新 ✅
-- **状态**：已完成功能说明 + 快速开始 + 部署指南
-
-### DOC-002：CHANGELOG.md 编写 🔧
-- **状态**：W5 已建初版（`CHANGELOG.md`，Keep-a-Changelog 格式，从 `git log` 提炼全部归入 `Unreleased`）
-- **待完善**：正式版本段（v0.3 / v0.4 …）的切分与发布日期，待发布节点确定后由维护者补齐
+### DOC-002：CHANGELOG.md 编写 ✅
+- **W5**：建初版（Keep-a-Changelog 格式，全部条目归入 `Unreleased`）
+- **WD 变更**：切分 `v0.4` / `v0.5` 版本段（均标注 2026-09-30），保留空的 `Unreleased` 承接增量
