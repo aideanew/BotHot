@@ -4,6 +4,12 @@
 # 基础镜像可注入：默认走 docker.io；网络受限时由 compose build.args 换成镜像源
 #   （同 backend/Dockerfile 的实证口径，例 docker.m.daocloud.io/library/node:24-alpine）
 # 3.4 版本锚统一：Node 基线 = .nvmrc(24.21.0)，Dockerfile FROM 对齐 node:24-alpine。
+#   注意 BASE_IMAGE 若被 compose args 覆盖，默认值必须同为 node:24（2026-09-30 实测 compose
+#   曾用 node:20-alpine 悄悄覆盖本锚点，已修；guard-versions 已扩围盯住 compose 侧）。
+#
+# 构建上下文 = **仓库根**（compose: context: .. + dockerfile: frontend/Dockerfile）。
+# 原因：前端 tsconfig paths 把 @bothot/contracts 解析到 ../packages/contracts/src，
+# next build 的期类型检查需要它；旧的 context: ../frontend 镜像内取不到 → build 必炸。
 ARG BASE_IMAGE=node:24-alpine
 
 # ---------------- builder：装依赖 + 构建产物 ----------------
@@ -31,14 +37,17 @@ WORKDIR /app
 
 # pnpm 版本锚单一源 = packageManager 字段（frontend/package.json）。corepack 按其自动解析，
 # Dockerfile 不硬编码 pnpm 版本。先 COPY package.json 再 enable，使 corepack 读到声明版本。
-COPY package.json pnpm-lock.yaml ./
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN corepack enable
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     npm_config_registry=https://registry.npmmirror.com
 
 RUN pnpm install --frozen-lockfile
 
-COPY . .
+# 契约源码放 /packages：/app(tsconfig) 的 ../packages 即 /packages
+COPY packages /packages
+
+COPY frontend/. .
 RUN pnpm run build
 
 # ---------------- runner：只带运行所需，非 root ----------------

@@ -141,8 +141,9 @@ updated: 2026-09-30
 
 ### MIG-003：packages/contracts/ 共享契约提取 🔧
 - **已有**（W5）：骨架 + 三类通用类型冻结 —— `PageResult<T>` / `ApiResponse<T>` / `ApiErrorCode`
-- **缺口**：① 业务域 DTO 未提取；② **前端尚未消费** —— `@bothot/contracts` 在 `frontend/**` 引用数 = 0
-  （契约冻结了却无人使用，漂移面仍在）
+- **已有**（W9/2026-09-30 更新）：前端已消费——`lib/api/{types,hot,bots}.ts` 引用契约类型，
+  机制为 **tsconfig paths + 纯 `import type`**（原「引用数 = 0」的缺口 ② 已闭合）
+- **缺口**：业务域 DTO 未提取（当前仅通用三型被消费）
 
 ### TEST-001：后端单元测试补全 🔧
 - **现状（提交态实证，`main @ 2fa95f0`，全仓 707 个 `def test_`）**：

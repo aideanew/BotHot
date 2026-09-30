@@ -18,7 +18,6 @@
     "ci:repro": "bash scripts/ci-repro-frontend.sh"
   },
   "dependencies": {
-    "@bothot/contracts": "workspace:*",
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",

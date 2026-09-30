@@ -1,0 +1,30 @@
+# 根构建上下文忽略清单（2026-09-30 起 frontend 镜像 context=仓库根；backend 镜像 context=backend/ 不受本文件影响）
+.git
+.workbuddy/
+.github
+
+# 前端镜像 builder 只消费 frontend/ + packages/，其余目录一律不入上下文
+backend/
+deploy/
+docker/
+docs/
+apps/
+database/
+infra/
+scripts/
+tests/
+
+# 通用产物/缓存
+**/node_modules
+**/.next
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/vitest-report
+**/playwright-report
+**/tsconfig.tsbuildinfo
+**/dist
+**/*.log
+*.env
+**/.env.local

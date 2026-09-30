@@ -11,6 +11,9 @@
 #   3. 退出码必须直接取 $?，**禁止** `cmd | tail` 形式
 #      （管道会把退出码换成 tail 的，曾产出 TEST_EXIT=0 的假绿）。
 #   4. Docker Desktop 会强制注入 127.0.0.1:10809 代理，容器内无此端口 → 必须显式清空。
+#   5. 契约源码在 frontend 之外（tsconfig paths 把 @bothot/contracts 指到 ../packages）：
+#      archive 必须带上 packages/，并把容器内 /packages 挂出来（/w 的 ../packages 即 /packages）。
+#      漏了它 typecheck / next-build 期类型检查必红——2026-09-30 首版脚本就栽在这里。
 #
 # 用法：
 #   bash scripts/ci-repro-frontend.sh          # 默认 node:24-bookworm-slim
@@ -25,7 +28,7 @@ echo "== 准备干净源码（git archive，不含 node_modules）=="
 echo "   repo : $REPO_ROOT"
 echo "   probe: $PROBE_DIR"
 mkdir -p "$PROBE_DIR/src"
-git -C "$REPO_ROOT" archive HEAD frontend | tar -x -C "$PROBE_DIR/src"
+git -C "$REPO_ROOT" archive HEAD frontend packages | tar -x -C "$PROBE_DIR/src"
 
 cat > "$PROBE_DIR/run.sh" <<'INNER'
 #!/usr/bin/env bash
@@ -65,6 +68,7 @@ INNER
 
 docker run --rm \
   -v "$PROBE_DIR/src/frontend:/w" \
+  -v "$PROBE_DIR/src/packages:/packages" \
   -v "$PROBE_DIR/run.sh:/run.sh:ro" \
   -w /w \
   -e TZ=UTC -e "NO_PROXY=*" \

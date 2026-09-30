@@ -408,12 +408,17 @@ services:
 
   frontend:
     build:
-      context: ../frontend
+      # 契约（packages/contracts）在 tsconfig paths 中被前端源码引用，next build 的类型
+      # 检查需要其可见 → context 必须为仓库根（2026-09-30：原 ../frontend 下 build 必炸）
+      context: ..
+      dockerfile: frontend/Dockerfile
       # 2026-09-09 A：构建期需经宿主代理出站，host 网络下容器可直接解析 host.docker.internal
       network: host
       # 显式覆盖 Docker 客户端 config.json 注入的宿主死代理（同 backend）
       args:
-        BASE_IMAGE: ${BASE_IMAGE:-node:20-alpine}
+        # 版本锚 = node:24（.nvmrc / Dockerfile FROM / engines 同源）；原默认 20 系锚漂移，
+        # 曾静默覆盖 Dockerfile 的 24 锚（3.4 版本锚统一），已并入 guard-versions 检查
+        BASE_IMAGE: ${BASE_IMAGE:-node:24-alpine}
         # 2026-09-09 A：宿主死代理(10809)不可用、直连被拒 → 构建期改走活代理 10808（容器内经 host.docker.internal 访问宿主）
         HTTP_PROXY: "http://host.docker.internal:10808"
         HTTPS_PROXY: "http://host.docker.internal:10808"

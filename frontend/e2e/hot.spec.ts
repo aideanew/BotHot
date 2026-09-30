@@ -9,7 +9,7 @@ import { test, expect } from "@playwright/test";
  * 3. 日报页列表 + Markdown 渲染
  * 4. 日报翻页（Pagination）
  *
- * 端口 3200（禁止 3333）；mock 态执行。
+ * 端口 3200（旧端口已废止，见 AGENTS.md 端口纪律表）；mock 态执行。
  */
 
 const MOCK_LOGIN_KEY = "bothot_mock_login";

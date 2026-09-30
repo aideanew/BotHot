@@ -152,9 +152,17 @@ backend_gate() {
 }
 
 frontend_gate() {
+  hr "FRONTEND: lockfile drift (package.json ↔ pnpm-lock.yaml，frozen 口径)"
+  # CI 以 `pnpm install --frozen-lockfile` 安装，声明漂移秒红；但 tsc/vitest 不读 lockfile，
+  # 本地全绿也拦不住（8b1b5f2 首次推送即 CI 13s 红的教训）。--lockfile-only 只做解析校验，
+  # 不下载包、不动 node_modules，漂移时以 ERR_PNPM_OUTDATED_LOCKFILE 非零退出。
+  ( cd "$ROOT/frontend" && pnpm install --frozen-lockfile --lockfile-only > "$LOG/pnpm-drift.log" 2>&1 )
+  local rc=$?
+  echo "frozen-lockfile exit=$rc"; [ $rc -ne 0 ] && { cat "$LOG/pnpm-drift.log"; FAIL=1; }
+
   hr "FRONTEND: typecheck (tsc --noEmit)"
   ( cd "$ROOT/frontend" && node node_modules/typescript/bin/tsc --noEmit > "$LOG/tsc.log" 2>&1 )
-  local rc=$?
+  rc=$?
   echo "tsc exit=$rc"; [ $rc -ne 0 ] && { cat "$LOG/tsc.log"; FAIL=1; }
 
   hr "FRONTEND: test:unit (TZ=UTC，与 CI runner 同构)"

@@ -226,7 +226,8 @@ BotHot/
 │   ├── api/          # 后端（按 9 个业务域组织）
 │   └── web/          # 前端（按 10 个功能域组织）
 ├── packages/
-│   └── contracts/    # 前后端共享契约
+│   └── contracts/    # 前后端共享契约（纯类型；前端经 tsconfig paths + import type 消费，
+│                     #   非 npm 依赖——仓库无 pnpm workspace 根，见 frontend/tsconfig.json）
 ├── database/
 │   └── migrations/   # Alembic 迁移
 ├── infra/

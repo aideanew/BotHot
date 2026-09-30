@@ -9,7 +9,7 @@ import { test, expect } from "@playwright/test";
  * 3. 任务日志弹窗
  * 4. 分页组件存在性
  *
- * 端口 3200（禁止 3333）；mock 态执行。
+ * 端口 3200（旧端口已废止，见 AGENTS.md 端口纪律表）；mock 态执行。
  */
 
 const MOCK_LOGIN_KEY = "bothot_mock_login";

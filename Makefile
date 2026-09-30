@@ -147,18 +147,23 @@ guard-versions: ## 检查版本锚点一致性（fail-closed）
 	dockerfile_node=$$(grep -E 'node:[0-9]+' $(FRONTEND_DIR)/Dockerfile 2>/dev/null | head -1 | sed -E 's/.*node:([0-9]+).*/\1/'); \
 	engines_node=$$(grep -A2 '"engines"' $(FRONTEND_DIR)/package.json 2>/dev/null | grep -oE '[0-9]+' | head -1); \
 	pm_version=$$(grep -oE 'pnpm@[0-9]+' $(FRONTEND_DIR)/package.json 2>/dev/null | head -1 | sed 's/pnpm@//'); \
+	compose_base_node=$$(sed -n '/^  frontend:/,$$p' $(DOCKER_DIR)/compose.yml 2>/dev/null | grep -m1 'BASE_IMAGE:' | grep -oE 'node:[0-9]+' | head -1 | sed 's/node://'); \
 	echo "  .nvmrc node: $$nvmrc_node"; \
 	echo "  Dockerfile node: $$dockerfile_node"; \
 	echo "  engines.node: $$engines_node"; \
 	echo "  packageManager pnpm: $$pm_version"; \
+	echo "  compose BASE_IMAGE node: $$compose_base_node"; \
 	rc=0; \
 	if [ -z "$$nvmrc_node" ]; then echo "❌ .nvmrc 为空或不存在"; rc=1; fi; \
 	if [ -z "$$dockerfile_node" ]; then echo "❌ Dockerfile 未找到 node 版本"; rc=1; fi; \
 	if [ -z "$$engines_node" ]; then echo "❌ package.json engines.node 未找到"; rc=1; fi; \
 	if [ -z "$$pm_version" ]; then echo "❌ packageManager 未找到 pnpm 版本"; rc=1; fi; \
+	if [ -z "$$compose_base_node" ]; then echo "❌ compose 前端 BASE_IMAGE 未找到 node 锚（compose 可覆盖 Dockerfile FROM，必须同锚盯防）"; rc=1; fi; \
 	if [ "$$rc" -eq 0 ]; then \
-		if [ "$$nvmrc_node" != "$$dockerfile_node" ]; then echo "❌ .nvmrc ($$nvmrc_node) != Dockerfile ($$dockerfile_node)"; rc=1; fi; \
-		if [ "$$nvmrc_node" != "$$engines_node" ]; then echo "❌ .nvmrc ($$nvmrc_node) != engines.node ($$engines_node)"; rc=1; fi; \
+		nvmrc_major=$${nvmrc_node%%.*}; \
+		if [ "$$nvmrc_major" != "$$dockerfile_node" ]; then echo "❌ .nvmrc 主版本 ($$nvmrc_major，全值 $$nvmrc_node) != Dockerfile ($$dockerfile_node)"; rc=1; fi; \
+		if [ "$$nvmrc_major" != "$$engines_node" ]; then echo "❌ .nvmrc 主版本 ($$nvmrc_major，全值 $$nvmrc_node) != engines.node ($$engines_node)"; rc=1; fi; \
+		if [ "$$nvmrc_major" != "$$compose_base_node" ]; then echo "❌ .nvmrc 主版本 ($$nvmrc_major) != compose BASE_IMAGE 默认 (node:$$compose_base_node)——compose 会静默覆盖 Dockerfile 锚（2026-09-30 实测 node:20 漂移）"; rc=1; fi; \
 	fi; \
 	if [ "$$rc" -ne 0 ]; then echo "❌ 版本锚点不一致"; exit 1; fi; \
 	echo "✅ 版本锚点一致"

@@ -47,9 +47,29 @@
 - **真实后端 e2e 由「死断言」改为环境闸（WD）**：原 `test.skip(true, …)` 为**无条件恒跳过**，
   套件永不可执行；现改为 `E2E_REAL_BACKEND=1` 时真实执行，文章 URL 可由 `E2E_ARTICLE_URL` 覆盖，
   并配 CI `continue-on-error` + 仓库变量闸 —— `frontend/e2e/real-backend.spec.ts`
+- **前端镜像构建上下文升为仓库根**：前端经 tsconfig paths 引用 `packages/contracts`，
+  `next build` 期类型检查需要其可见，旧 `context: ../frontend` 在镜像内取不到 → build 必炸。
+  现为 `context: ..` + `dockerfile: frontend/Dockerfile`，builder 将契约源放 `/packages`；
+  新增根 `.dockerignore` 控制上下文体积（仅 frontend/ + packages/ 入镜像构建）
+  —— `frontend/Dockerfile` `docker/compose.yml` `.dockerignore`
+- **compose `BASE_IMAGE` 默认值回归 node:24 锚**：原 `${BASE_IMAGE:-node:20-alpine}` 会
+  **静默覆盖** Dockerfile 的 node:24 锚（3.4 版本锚统一）；`guard-versions` 扩围新增
+  compose 侧锚比对，漂移即红 —— `docker/compose.yml` `Makefile`
+- **本地门禁补漂移拦截**：`preflight.sh` 前端段增 `pnpm install --frozen-lockfile
+  --lockfile-only`（只解析校验不装包；漂移副本实测 exit 1，报错与 CI 逐字一致）；
+  `ci-repro-frontend.sh` 的 `git archive` 补上 `packages/` 并挂载容器 `/packages`
+  （原只带 frontend，容器内契约路径缺失，复现口径本身失真）
+  —— `scripts/preflight.sh` `frontend/scripts/ci-repro-frontend.sh`
 
 ### Fixed
 
+- **CI frontend 13 秒红：`@bothot/contracts` 幽灵依赖（2026-09-30 首跑实证）**：W9 曾把
+  `workspace:*` 写入 `frontend/package.json`，但仓库**无 pnpm workspace 根**且 lockfile
+  从未收入该条目——本地 tsc/vitest 因「tsconfig paths + 纯 `import type` 擦除」假绿，
+  CI 第一步 `pnpm install --frozen-lockfile` 因 package.json ↔ lockfile 声明漂移必红。
+  修复 = 删除该从未生效的依赖声明，契约消费机制明确为 **纯 tsconfig paths 类型解析**
+  （机制本身不变，仅删幽灵声明；运行时导入若未来出现，next build 期即报错，非静默漏过）
+  —— `frontend/package.json` `frontend/tsconfig.json`
 - **`Makefile` `guard-ports` fail-open（WD）**：原实现两段 `grep` 用 `\` 续行后，
   `if [ $? -eq 0 ]` 取到的是**第二条（前端）grep** 的退出码——后端/编排侧独有 `3333`
   命中时被静默放过，守卫形同虚设。改为两段各自捕获输出、各自判据，任一命中即 `exit 1`
