@@ -60,12 +60,13 @@ PLAN 规划 → SPEC 规格 → APPROVE 批准 → IMPLEMENT 实施 → VERIFY �
 
 ## 当前项目状态
 
-- **版本**：v0.3（文档架构与目录结构规范化）
+- **版本**：v0.5（v0.4 推送能力落地 + v0.5 热点融合，2026-09-30 五路并行交付集成审查通过）
 - **后端**：FastAPI + SQLAlchemy 2.0 + Alembic，9 个业务域
 - **前端**：Next.js 14 App Router，10 个功能域
-- **推送**：6 渠道 Provider 已实现真实投递（飞书/钉钉/企微/Webhook 已通；**站内通知投递侧**通——Redis pub/sub → `bothot:notifications:{user_id}`，**前端订阅侧未实现**（全仓无 WebSocket/EventSource 订阅方）；微信 ClawBot 需部署服务）；PushScheduler 在 backend 进程内 60s 调度（`main.py:247` lifespan 启动），Cron 为简版（`HH:MM` / `*/N`）；渠道密钥加密当前为 **base64 过渡态**（AES 接入进行中，见 docs/04_engineering/conventions.md §6.1）
+- **推送**：6 渠道 Provider 真实投递（飞书/钉钉/企微/Webhook 已通；**站内通知投递侧**通——Redis pub/sub，**前端订阅侧未实现**；微信 ClawBot 需部署服务）；PushScheduler 60s 调度（SKIP LOCKED 短锁领取，多副本安全）；Cron 完整 5 段式 + 三种简写兼容（`services/cron_expr.py`，croniter）；Cron 任务创建/编辑/暂停恢复/run-now 全生命周期正确；**事件触发已实现**——PG outbox 表 `push_events`（worker 产、backend 调度器消费）+ 模板变量；渠道密钥 **AES-256-GCM 已落库**（`core/secret_crypto.py`，AAD 绑定 channel id，`PUSH_SECRET_MASTER_KEY` fail-closed，存量迁移 `ab1004w1a`）
 - **文章来源**：4 平台已接入（providers/article_sources/）—— Dajiala 极致了（发现+HTML详情）、JustOneAPI（发现+正文详情）、TikHub（发现+搜索，需充值）、Wellbyte 数井（搜索+URL驱动发现）；与 RedFox 共存于发现注册表，详情兜底协调器按成本排序
-- **热点**：数据模型已建；Feed/日报 **API 已建**（`backend/app/api/v1/hot.py`），但**生产管道缺失**——提交态全仓无 `HotTopic`/`FeedItem` 写入方、`hot_score` 无计算逻辑、日报无 LLM 摘要（修复中，另见并行任务 W2）
+- **热点**：已落地——聚簇（字 bigram TF-IDF 单链接凝聚，Job 队列执行，手动+每日定时）、评分（48h 独立来源加权 + 24h 半衰 + 状态机）、Feed 三类生产者（文章入库/聚簇/日报，`(item_type,ref_id)` upsert）、日报（LLM 摘要失败降级首段截断，每日 06:30 自动生成前一日）；业务日界 = Asia/Shanghai
+- **测试**：连库用例真实执行（CI 有 postgres service + skip 门禁）；全量 798 passed / 2 skipped（隔离 PG 实测 2026-09-30）
 - **目录结构**：当前 backend/ + frontend/，目标 apps/api/ + apps/web/（见 project-structure-design.md）
 
 ## 关键约束
