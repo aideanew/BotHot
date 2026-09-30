@@ -20,7 +20,6 @@ import {
   listChannelTypes,
   listChannels,
   listPushLogs,
-  listPushTasks,
   testPush,
   updateChannel,
   type BotChannel,
@@ -28,6 +27,8 @@ import {
   type PushLog,
 } from "@/lib/api/bots";
 import { usePageTitle } from "@/components/usePageTitle";
+import { useAuth } from "@/components/AuthContext";
+import PushTasksTab from "@/components/PushTasksTab";
 
 const CHANNEL_LABELS: Record<string, string> = {
   feishu: "飞书",
@@ -45,6 +46,9 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function BotsPage() {
+  // W4 4.1：页面拆为「推送渠道 / 推送任务」两个 Tab
+  const [activeTab, setActiveTab] = useState<"channels" | "tasks">("channels");
+  const { me } = useAuth();
   const [channels, setChannels] = useState<BotChannel[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -199,14 +203,48 @@ export default function BotsPage() {
     <div className="mx-auto max-w-5xl p-6">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">机器人渠道管理</h1>
+        {activeTab === "channels" && (
+          <button
+            onClick={handleCreate}
+            className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            + 新建渠道
+          </button>
+        )}
+      </div>
+
+      {/* Tab 切换（胶囊样式与 /hot 页类型筛选一致） */}
+      <div className="mb-6 flex gap-2" role="tablist" aria-label="机器人管理子页">
         <button
-          onClick={handleCreate}
-          className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          role="tab"
+          aria-selected={activeTab === "channels"}
+          onClick={() => setActiveTab("channels")}
+          className={`rounded px-3 py-1.5 text-sm ${
+            activeTab === "channels"
+              ? "bg-blue-600 text-white"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
         >
-          + 新建渠道
+          推送渠道
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === "tasks"}
+          onClick={() => setActiveTab("tasks")}
+          className={`rounded px-3 py-1.5 text-sm ${
+            activeTab === "tasks"
+              ? "bg-blue-600 text-white"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          推送任务
         </button>
       </div>
 
+      {activeTab === "tasks" ? (
+        <PushTasksTab userSub={me?.sub ?? ""} />
+      ) : (
+        <>
       {error && (
         <div className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">
           {error}
@@ -476,6 +514,8 @@ export default function BotsPage() {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

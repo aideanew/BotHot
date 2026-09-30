@@ -27,7 +27,9 @@ import json
 import logging
 import time
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta
 from typing import Any, Protocol
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -59,6 +61,11 @@ ITEM_STATUS_FAILED = "FAILED"
 
 PAUSED_PREFIX = "paused:rate_limited"
 _ERROR_MAX_LEN = 500
+
+# W2：无 JobItem 的单作业类型——claim 后直接跑处理函数，不走 _drain_items/_finalize
+# （后者按 JobItem counts 收敛，对无 item 的 Job 会误判 total=0 → FAILED）。
+HOT_JOB_TYPES = frozenset({"hot_cluster", "daily_report"})
+_HOT_BUSINESS_TZ = ZoneInfo("Asia/Shanghai")
 
 
 class IngestInvoker(Protocol):
@@ -212,14 +219,24 @@ class JobWorker:
     # ------------------------------------------------------------------ 主循环
 
     async def run_once(self) -> bool:
-        """取一件 QUEUED job 并消费至终态；无可取 → False。"""
+        """取一件 QUEUED job 并消费至终态；无可取 → False。
+
+        W2 起按 job.type 分流：hot_cluster/daily_report 走 `_run_hot_job`（无 JobItem，
+        单作业直接执行）；其余走既有 `_drain_items` + `_finalize`（按 JobItem counts 收敛）。
+        """
         async with self._factory() as session:
             job = await JobRepository(session).claim_next_queued()
             if job is None:
                 return False
             job_id = job.id
-            space_id = str(_parse_payload(job.payload).get("space_id", ""))
+            job_type = job.type
+            payload = _parse_payload(job.payload)
 
+        if job_type in HOT_JOB_TYPES:
+            await self._run_hot_job(job_id, job_type, payload)
+            return True
+
+        space_id = str(payload.get("space_id", ""))
         await self._drain_items(job_id, space_id)
         await self._finalize(job_id)
         return True
@@ -242,7 +259,52 @@ class JobWorker:
             if not worked:
                 await self._sleep(self._idle_sleep)
 
-    # ------------------------------------------------------------------ 内部
+    # ------------------------------------------------------------------ W2 单作业
+
+    async def _run_hot_job(self, job_id: str, job_type: str, payload: dict[str, Any]) -> None:
+        """hot_cluster / daily_report 处理分支：单作业执行，无 JobItem。
+
+        懒导入服务层避免 worker 启动期强耦合；失败记 error 并收敛到 FAILED（不抛穿，
+        与既有逐篇消费口径一致——单轮异常不得让 worker 退出）。
+        """
+        try:
+            async with self._factory() as session:
+                if job_type == "hot_cluster":
+                    from app.services.hot_cluster import run_clustering
+
+                    await run_clustering(session, days=int(payload.get("days", 1)))
+                elif job_type == "daily_report":
+                    from app.services.feed_service import build_daily_report
+
+                    report_date = str(payload.get("date", ""))
+                    if not report_date:
+                        # payload 无 date（scheduler 兜底）→ 生成前一日日报
+                        report_date = (
+                            datetime.now(_HOT_BUSINESS_TZ) - timedelta(days=1)
+                        ).strftime("%Y-%m-%d")
+                    await build_daily_report(session, report_date)
+                await session.commit()
+            await self._finalize_simple(job_id, True, "")
+        except Exception as exc:  # noqa: BLE001 单作业失败不退出 worker
+            logger.exception("hot job %s 失败 job=%s", job_type, job_id)
+            await self._finalize_simple(job_id, False, str(exc)[:_ERROR_MAX_LEN])
+
+    async def _finalize_simple(self, job_id: str, ok: bool, error: str) -> None:
+        """无 JobItem 的单作业终态收敛：RUNNING → SUCCEEDED / FAILED。"""
+        async with self._factory() as session:
+            job = await JobRepository(session).get_by_id(job_id)
+            if job is None:
+                return
+            new_status = JOB_STATUS_SUCCEEDED if ok else JOB_STATUS_FAILED
+            validate_transition("job", job.status, new_status)
+            job.status = new_status
+            job.progress = 1
+            if error:
+                job.error = error
+            await session.commit()
+            logger.info("hot job 终态 job=%s status=%s", job_id, new_status)
+
+    # ------------------------------------------------------------------ 逐篇消费
 
     async def _drain_items(self, job_id: str, space_id: str) -> None:
         """逐篇消费：取件 → ingest → SUCCEEDED / 退避重试 / FAILED；限流则暂停整批。"""

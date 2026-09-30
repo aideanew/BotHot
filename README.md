@@ -9,7 +9,7 @@ BotHot 是从 AideanBot 全面升级而来的多渠道机器人推送与知识�
 ### 1. 多渠道机器人推送
 - **六种渠道**：飞书、钉钉、企业微信、微信 ClawBot、通用 Webhook、站内通知
 - **定时推送**：Cron 表达式驱动，支持每天定时、周期推送
-- **事件触发**：新文章入库、热点更新等事件自动触发推送
+- **事件触发**：新文章入库、热点更新等事件自动触发推送（⬜ **未实现**——`push_scheduler._tick` 目前仅处理 `trigger_type=cron`）
 - **测试推送**：管理端一键测试渠道连通性
 - **推送日志**：完整投递记录，成功/失败/响应摘要
 
@@ -21,7 +21,7 @@ BotHot 是从 AideanBot 全面升级而来的多渠道机器人推送与知识�
 - **Feed 流**：信息流首页，支持类型/分类筛选
 - **每日日报**：自动取 TOP 10 热点生成 Markdown 日报
 
-> ⚠️ **当前实现状态**：数据模型已建（HotTopic, DailyReport, FeedItem），聚簇/评分/日报逻辑待 v0.5 落地。
+> ⚠️ **当前实现状态**：数据模型已建（HotTopic, DailyReport, FeedItem），**读侧** API 已建（`/hot/topics`、`/hot/daily/*`、`/hot/feed`）；但**生产管道缺失**——全仓无 `HotTopic`/`FeedItem` 写入方、`hot_score` 无计算、日报生成仅字符串拼接（无 LLM 摘要）、聚簇接口为占位响应。详见 [待办清单](docs/04_engineering/backlog.md) HOT-001~004。
 
 ### 3. 知识库管理（继承 AideanBot）
 - 公众号链接解析入库（RedFox + 4 平台文章来源：Dajiala/JustOneAPI/TikHub/Wellbyte）
@@ -38,7 +38,7 @@ Redis 7            ├─ REST API (port 3300)
                    ├─ Subscription Scheduler (订阅同步)
                    └─ Job Worker (文章入库)
 LangBot 5300  ←  知识引擎 (RAG)
-Frontend (Next.js 14 / Node 22)  →  port 3200
+Frontend (Next.js 14 / Node 24)  →  port 3200
 ```
 
 ### 端口规范
@@ -155,7 +155,7 @@ BotHot/
 
 BotHot 是 AideanBot 的全面升级版：
 - **保留**：公众号链接入库、LangBot RAG、知识空间管理、SSO 认证、整号订阅
-- **新增**：多渠道推送（6 种渠道）、定时推送调度、热点聚簇、每日日报、Feed 流
+- **新增**：多渠道推送（6 种渠道）、定时推送调度、热点中心/日报页与读侧 API（**聚簇与 Feed 写入管道待实现**）
 - **改名**：AideanBot → BotHot（session cookie、项目名、容器名全部更新）
 - **端口**：前端 3200、后端 3300
 

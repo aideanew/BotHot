@@ -1,19 +1,27 @@
 """BotHot 渠道管理与推送 API。
 
-提供完整的 CRUD + 测试推送 + 推送日志查询：
+提供完整的 CRUD + 测试推送 + 推送日志查询 + 推送任务管理：
 - POST   /api/v1/bots              创建渠道
 - GET    /api/v1/bots              列表
 - GET    /api/v1/bots/{id}         详情
 - PUT    /api/v1/bots/{id}         更新
-- DELETE /api/v1/bots/{id}         删除
+- DELETE /api/v1/bots/{id}         删除（软删除）
 - POST   /api/v1/bots/{id}/test    测试推送
 - GET    /api/v1/bots/{id}/logs    推送日志
 - GET    /api/v1/bots/channels     可用渠道类型
+- POST   /api/v1/bots/tasks        创建推送任务
+- GET    /api/v1/bots/tasks        列表
+- PUT    /api/v1/bots/tasks/{id}   编辑推送任务
+- DELETE /api/v1/bots/tasks/{id}   删除（软删除）
+- POST   /api/v1/bots/tasks/{id}/run  手动触发
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,8 +31,12 @@ from app.core.errors import (
     ResourceNotFoundError,
 )
 from app.core.response import success
+from app.core.secret_crypto import decrypt_channel_secret, encrypt_channel_secret
+from app.models.base import gen_uuid
 from app.models.bothot_entities import BotChannel, PushLog, PushTask
 from app.providers.push import PushMessage, make_push_provider, registered_channels
+from app.services.cron_expr import parse_cron_next, validate_cron
+from app.services.push_template import validate_template
 
 router = APIRouter(
     prefix="/api/v1/bots",
@@ -39,6 +51,52 @@ MAX_MESSAGE_CHARS = 2000
 MAX_NAME_CHARS = 128
 MAX_WEBHOOK_CHARS = 512
 
+# 事件类型枚举（对齐 bothot_entities.py:72 注释）
+VALID_TRIGGER_EVENTS = frozenset({"new_article", "hot_topic_update", "daily_report"})
+
+
+# ── 请求模型（JSON body）──────────────────────────────────────────────
+# 与 spaces.CreateSpaceRequest 同口径：写操作走 Pydantic body。
+# 历史上本域用标量查询参数收参，而前端（lib/api/bots.ts）一致发 JSON body——
+# body 被忽略、全按默认值处理，创建类请求恒 400、更新类静默 no-op（bots 页
+# 无真后端 e2e 覆盖故从未暴露）。2026-09-30 集成审查改为 body 模型，前端零改动。
+# Optional 字段语义：None = 不修改（区别于显式空串 = 清空）。
+
+
+class ChannelCreateRequest(BaseModel):
+    name: str
+    channel_type: str
+    webhook_url: str = ""
+    secret: str = ""
+    extra_config: str = "{}"
+
+
+class ChannelUpdateRequest(BaseModel):
+    name: str | None = None
+    webhook_url: str | None = None
+    secret: str | None = None
+    extra_config: str | None = None
+    status: str | None = None
+
+
+class PushTaskCreateRequest(BaseModel):
+    name: str
+    bot_channel_id: str
+    trigger_type: str = "manual"
+    cron_expr: str = ""
+    trigger_event: str = ""
+    content_template: str = ""
+    space_id: str = ""
+    created_by: str = ""
+
+
+class PushTaskUpdateRequest(BaseModel):
+    name: str | None = None
+    cron_expr: str | None = None
+    trigger_event: str | None = None
+    content_template: str | None = None
+    status: str | None = None
+
 
 def _validate_channel_type(channel_type: str) -> None:
     """校验渠道类型合法性。"""
@@ -47,28 +105,6 @@ def _validate_channel_type(channel_type: str) -> None:
         raise RequestInvalidError(
             f"未知渠道类型: {channel_type}（合法：{', '.join(sorted(valid))}）"
         )
-
-
-def _encrypt_secret(secret: str) -> str:
-    """加密 secret（简单 base64，生产环境应使用 AES-256-GCM）。
-
-    TODO: 接入 core.engine_keyring 的 AES-256-GCM 加密。
-    """
-    import base64
-    if not secret:
-        return ""
-    return base64.b64encode(secret.encode("utf-8")).decode("utf-8")
-
-
-def _decrypt_secret(enc: str) -> str:
-    """解密 secret。"""
-    import base64
-    if not enc:
-        return ""
-    try:
-        return base64.b64decode(enc.encode("utf-8")).decode("utf-8")
-    except Exception:
-        return ""
 
 
 def _serialize_channel(ch: BotChannel) -> dict:
@@ -102,6 +138,24 @@ def _serialize_log(log: PushLog) -> dict:
     }
 
 
+def _serialize_task(t: PushTask) -> dict:
+    return {
+        "id": t.id,
+        "name": t.name,
+        "bot_channel_id": t.bot_channel_id,
+        "trigger_type": t.trigger_type,
+        "cron_expr": t.cron_expr,
+        "trigger_event": t.trigger_event,
+        "content_template": t.content_template,
+        "space_id": t.space_id,
+        "next_run_at": t.next_run_at.isoformat() if t.next_run_at else None,
+        "last_run_at": t.last_run_at.isoformat() if t.last_run_at else None,
+        "status": t.status,
+        "created_by": t.created_by,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+    }
+
+
 # ── 渠道类型查询 ──────────────────────────────────────────────────────
 
 @router.get("/channels")
@@ -114,23 +168,19 @@ async def list_channel_types():
 
 @router.post("")
 async def create_channel(
-    name: str = "",
-    channel_type: str = "",
-    webhook_url: str = "",
-    secret: str = "",
-    extra_config: str = "{}",
+    payload: ChannelCreateRequest,
     db: AsyncSession = Depends(get_db),
     _: str = Depends(require_roles("admin", "operator")),
 ):
     """创建机器人渠道。"""
-    name = name.strip()
-    channel_type = channel_type.strip()
+    name = payload.name.strip()
+    channel_type = payload.channel_type.strip()
     if not name:
         raise RequestInvalidError("渠道名称不能为空")
     if len(name) > MAX_NAME_CHARS:
         raise RequestInvalidError(f"渠道名称过长（上限 {MAX_NAME_CHARS} 字符）")
     _validate_channel_type(channel_type)
-    if len(webhook_url) > MAX_WEBHOOK_CHARS:
+    if len(payload.webhook_url) > MAX_WEBHOOK_CHARS:
         raise RequestInvalidError(f"webhook_url 过长（上限 {MAX_WEBHOOK_CHARS} 字符）")
 
     # 检查名称唯一
@@ -138,12 +188,16 @@ async def create_channel(
     if existing:
         raise RequestInvalidError(f"渠道名称已存在: {name}")
 
+    # AAD 绑定 channel id：id 由 default=gen_uuid 在 INSERT 时才生成，而加密必须
+    # 发生在插入前——显式预生成 id，保证密文的 AAD 与读取侧 decrypt_channel_secret(ch.id) 一致。
+    channel_id = gen_uuid()
     ch = BotChannel(
+        id=channel_id,
         name=name,
         channel_type=channel_type,
-        webhook_url=webhook_url,
-        secret_enc=_encrypt_secret(secret),
-        extra_config=extra_config,
+        webhook_url=payload.webhook_url,
+        secret_enc=encrypt_channel_secret(channel_id, payload.secret) if payload.secret else "",
+        extra_config=payload.extra_config,
         status="active",
     )
     db.add(ch)
@@ -196,31 +250,34 @@ async def get_channel(channel_id: str, db: AsyncSession = Depends(get_db)):
 @router.put("/{channel_id}")
 async def update_channel(
     channel_id: str,
-    name: str = "",
-    webhook_url: str = "",
-    secret: str = "",
-    extra_config: str = "",
-    status: str = "",
+    payload: ChannelUpdateRequest,
     db: AsyncSession = Depends(get_db),
     _: str = Depends(require_roles("admin", "operator")),
 ):
-    """更新渠道配置。"""
+    """更新渠道配置。Optional 字段 None = 不修改（显式空串 = 清空）。"""
     ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
     if ch is None:
         raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
 
-    if name.strip():
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise RequestInvalidError("渠道名称不能为空")
         if len(name) > MAX_NAME_CHARS:
             raise RequestInvalidError(f"渠道名称过长（上限 {MAX_NAME_CHARS} 字符）")
-        ch.name = name.strip()
-    if webhook_url is not None:
-        ch.webhook_url = webhook_url
-    if secret:
-        ch.secret_enc = _encrypt_secret(secret)
-    if extra_config:
-        ch.extra_config = extra_config
-    if status in ("active", "disabled"):
-        ch.status = status
+        ch.name = name
+    if payload.webhook_url is not None:
+        if len(payload.webhook_url) > MAX_WEBHOOK_CHARS:
+            raise RequestInvalidError(f"webhook_url 过长（上限 {MAX_WEBHOOK_CHARS} 字符）")
+        ch.webhook_url = payload.webhook_url
+    if payload.secret:
+        ch.secret_enc = encrypt_channel_secret(ch.id, payload.secret)
+    if payload.extra_config is not None:
+        ch.extra_config = payload.extra_config
+    if payload.status is not None:
+        if payload.status not in ("active", "disabled"):
+            raise RequestInvalidError(f"状态非法: {payload.status}（合法：active, disabled）")
+        ch.status = payload.status
 
     await db.commit()
     await db.refresh(ch)
@@ -266,7 +323,7 @@ async def test_push(
         message=message,
         title=title,
         webhook_url=ch.webhook_url,
-        secret=_decrypt_secret(ch.secret_enc),
+        secret=decrypt_channel_secret(ch.id, ch.secret_enc),
         extra_config=ch.extra_config,
     )
 
@@ -329,53 +386,69 @@ async def list_push_logs(
 
 @router.post("/tasks")
 async def create_push_task(
-    name: str = "",
-    bot_channel_id: str = "",
-    trigger_type: str = "manual",
-    cron_expr: str = "",
-    trigger_event: str = "",
-    content_template: str = "",
-    space_id: str = "",
-    created_by: str = "",
+    payload: PushTaskCreateRequest,
     db: AsyncSession = Depends(get_db),
     _: str = Depends(require_roles("admin", "operator")),
 ):
     """创建推送任务（定时/事件触发/手动）。"""
-    name = name.strip()
+    name = payload.name.strip()
     if not name:
         raise RequestInvalidError("任务名称不能为空")
-    if not bot_channel_id:
+    if not payload.bot_channel_id:
         raise RequestInvalidError("目标渠道不能为空")
-    if trigger_type not in ("cron", "event", "manual"):
-        raise RequestInvalidError(f"触发类型非法: {trigger_type}")
+    if payload.trigger_type not in ("cron", "event", "manual"):
+        raise RequestInvalidError(f"触发类型非法: {payload.trigger_type}")
 
     # 验证渠道存在
-    ch = (await db.execute(select(BotChannel).where(BotChannel.id == bot_channel_id))).scalar_one_or_none()
+    ch = (await db.execute(select(BotChannel).where(BotChannel.id == payload.bot_channel_id))).scalar_one_or_none()
     if ch is None:
-        raise ResourceNotFoundError(f"渠道不存在: {bot_channel_id}")
+        raise ResourceNotFoundError(f"渠道不存在: {payload.bot_channel_id}")
+
+    # trigger_type=cron：cron_expr 必填且可解析
+    next_run_at: datetime | None = None
+    cron_expr = payload.cron_expr.strip()
+    if payload.trigger_type == "cron":
+        if not cron_expr:
+            raise RequestInvalidError("cron 触发类型必须指定 cron_expr")
+        err = validate_cron(cron_expr)
+        if err is not None:
+            raise RequestInvalidError(err)
+        next_run_at = parse_cron_next(cron_expr, datetime.now(UTC))
+
+    # trigger_type=event：trigger_event 必填且限定枚举
+    trigger_event = payload.trigger_event.strip()
+    if payload.trigger_type == "event":
+        if not trigger_event:
+            raise RequestInvalidError("event 触发类型必须指定 trigger_event")
+        if trigger_event not in VALID_TRIGGER_EVENTS:
+            raise RequestInvalidError(
+                f"事件类型非法: {trigger_event}（合法：{', '.join(sorted(VALID_TRIGGER_EVENTS))}）"
+            )
+
+    # 模板校验：未知变量创建期即拒绝，不让坏模板静默进调度
+    content_template = payload.content_template.strip()
+    if content_template:
+        template_err = validate_template(content_template)
+        if template_err is not None:
+            raise RequestInvalidError(f"content_template 非法：{template_err}")
 
     task = PushTask(
         name=name,
-        bot_channel_id=bot_channel_id,
-        trigger_type=trigger_type,
+        bot_channel_id=payload.bot_channel_id,
+        trigger_type=payload.trigger_type,
         cron_expr=cron_expr,
         trigger_event=trigger_event,
         content_template=content_template,
-        space_id=space_id or None,
-        created_by=created_by or "system",
-        status="active" if trigger_type != "manual" else "paused",
+        space_id=payload.space_id or None,
+        created_by=payload.created_by or "system",
+        status="active" if payload.trigger_type != "manual" else "paused",
+        next_run_at=next_run_at,
     )
     db.add(task)
     await db.commit()
     await db.refresh(task)
 
-    return success({
-        "id": task.id,
-        "name": task.name,
-        "bot_channel_id": task.bot_channel_id,
-        "trigger_type": task.trigger_type,
-        "status": task.status,
-    })
+    return success(_serialize_task(task))
 
 
 @router.get("/tasks")
@@ -398,28 +471,84 @@ async def list_push_tasks(
     rows = (await db.execute(q)).scalars().all()
 
     return success({
-        "items": [
-            {
-                "id": t.id,
-                "name": t.name,
-                "bot_channel_id": t.bot_channel_id,
-                "trigger_type": t.trigger_type,
-                "cron_expr": t.cron_expr,
-                "trigger_event": t.trigger_event,
-                "content_template": t.content_template,
-                "space_id": t.space_id,
-                "next_run_at": t.next_run_at.isoformat() if t.next_run_at else None,
-                "last_run_at": t.last_run_at.isoformat() if t.last_run_at else None,
-                "status": t.status,
-                "created_by": t.created_by,
-                "created_at": t.created_at.isoformat() if t.created_at else None,
-            }
-            for t in rows
-        ],
+        "items": [_serialize_task(t) for t in rows],
         "total": total,
         "page": page,
         "page_size": page_size,
     })
+
+
+@router.put("/tasks/{task_id}")
+async def update_push_task(
+    task_id: str,
+    payload: PushTaskUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_roles("admin", "operator")),
+):
+    """编辑推送任务：可修改 name/cron_expr/trigger_event/content_template/status。
+
+    Optional 字段 None = 不修改。cron_expr 变更或 status 置 active 时重算 next_run_at。
+    """
+    task = (await db.execute(select(PushTask).where(PushTask.id == task_id))).scalar_one_or_none()
+    if task is None:
+        raise ResourceNotFoundError(f"推送任务不存在: {task_id}")
+
+    need_recalc_next_run = False
+
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise RequestInvalidError("任务名称不能为空")
+        task.name = name
+
+    # cron_expr 变更：显式空串 = 清空（并清 next_run_at），非空 = 校验后更新
+    if payload.cron_expr is not None:
+        cron_expr = payload.cron_expr.strip()
+        if cron_expr:
+            err = validate_cron(cron_expr)
+            if err is not None:
+                raise RequestInvalidError(err)
+            task.cron_expr = cron_expr
+            need_recalc_next_run = True
+        else:
+            task.cron_expr = ""
+            task.next_run_at = None
+
+    # trigger_event 变更
+    if payload.trigger_event is not None:
+        trigger_event = payload.trigger_event.strip()
+        if trigger_event and trigger_event not in VALID_TRIGGER_EVENTS:
+            raise RequestInvalidError(
+                f"事件类型非法: {trigger_event}（合法：{', '.join(sorted(VALID_TRIGGER_EVENTS))}）"
+            )
+        task.trigger_event = trigger_event
+
+    # content_template 变更：显式空串 = 重置为默认文案
+    if payload.content_template is not None:
+        template = payload.content_template.strip()
+        if template:
+            template_err = validate_template(template)
+            if template_err is not None:
+                raise RequestInvalidError(f"content_template 非法：{template_err}")
+        task.content_template = template
+
+    # status 变更
+    if payload.status is not None:
+        if payload.status not in ("active", "paused"):
+            raise RequestInvalidError(f"状态非法: {payload.status}（合法：active, paused）")
+        task.status = payload.status
+        if payload.status == "active" and task.trigger_type == "cron" and task.cron_expr:
+            need_recalc_next_run = True
+        if payload.status == "paused":
+            task.next_run_at = None
+
+    # 重算 next_run_at
+    if need_recalc_next_run and task.trigger_type == "cron" and task.cron_expr:
+        task.next_run_at = parse_cron_next(task.cron_expr, datetime.now(UTC))
+
+    await db.commit()
+    await db.refresh(task)
+    return success(_serialize_task(task))
 
 
 @router.delete("/tasks/{task_id}")
@@ -428,11 +557,15 @@ async def delete_push_task(
     db: AsyncSession = Depends(get_db),
     _: str = Depends(require_roles("admin", "operator")),
 ):
-    """删除推送任务。"""
-    from sqlalchemy import delete as sa_delete
-    await db.execute(sa_delete(PushTask).where(PushTask.id == task_id))
+    """删除推送任务（软删除：status → deleted）。"""
+    task = (await db.execute(select(PushTask).where(PushTask.id == task_id))).scalar_one_or_none()
+    if task is None:
+        raise ResourceNotFoundError(f"推送任务不存在: {task_id}")
+
+    task.status = "deleted"
+    task.next_run_at = None
     await db.commit()
-    return success({"id": task_id, "deleted": True})
+    return success({"id": task_id, "status": "deleted"})
 
 
 @router.post("/tasks/{task_id}/run")
@@ -456,7 +589,7 @@ async def run_push_task_now(
         message=content,
         title=task.name,
         webhook_url=ch.webhook_url,
-        secret=_decrypt_secret(ch.secret_enc),
+        secret=decrypt_channel_secret(ch.id, ch.secret_enc),
         extra_config=ch.extra_config,
     )
 
@@ -475,7 +608,14 @@ async def run_push_task_now(
     ch.total_push_count += 1
     if result.delivered:
         ch.success_push_count += 1
-    task.last_run_at = func.now()
+
+    now = datetime.now(UTC)
+    task.last_run_at = now
+
+    # cron 任务执行后补算 next_run_at
+    if task.trigger_type == "cron" and task.cron_expr and task.status == "active":
+        task.next_run_at = parse_cron_next(task.cron_expr, now)
+
     await db.commit()
 
     return success({

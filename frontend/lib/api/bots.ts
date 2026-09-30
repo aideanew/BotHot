@@ -188,6 +188,23 @@ export async function listPushTasks(params?: {
   return request(`/api/v1/bots/tasks${query ? `?${query}` : ""}`);
 }
 
+/** W1 并行交付的 PUT 端点：局部更新（省略字段=不改；status 取 active|paused）。 */
+export async function updatePushTask(
+  id: string,
+  data: {
+    name?: string;
+    cron_expr?: string;
+    trigger_event?: string;
+    content_template?: string;
+    status?: string;
+  },
+): Promise<PushTask> {
+  return request(`/api/v1/bots/tasks/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
 export async function deletePushTask(id: string): Promise<{ id: string; deleted: boolean }> {
   return request(`/api/v1/bots/tasks/${id}`, { method: "DELETE" });
 }

@@ -5,7 +5,7 @@ title: BotHot 工程规范
 status: active
 owner: engineering
 created: 2026-09-29
-updated: 2026-09-29
+updated: 2026-09-30
 version: 1.0
 ---
 
@@ -107,7 +107,15 @@ docs(architecture): 更新系统架构设计文档
 
 ### 6.1 敏感信息
 - AK/SK：**不写入 .tf/.py 文件**，通过环境变量传入
-- 渠道密钥：AES-256-GCM 加密后落库
+- 渠道密钥：**现状（2026-09-30 代码实证）= base64 过渡态**
+  - 证据：`backend/app/services/push_scheduler.py:191-199` `_decrypt_secret()` 直接
+    `base64.b64decode` 读取存量密文（无完整性校验、无密钥管理）。
+  - **目标形态 = AES-256-GCM**：AAD 绑定 `bot_channel.id`（密文无法跨渠道搬移，
+    换渠道解密必失败）；主密钥经环境变量 `PUSH_SECRET_MASTER_KEY` 传入（32 字节原始
+    密钥的 base64，缺失/畸形一律 fail-closed，不回落明文）。
+  - 迁移路径：AES 加解密实现（`backend/app/core/secret_crypto.py`，并行任务 W1 在途、
+    尚未提交）落地后，读侧需兼容存量 base64 密文（双读），存量密钥完成重加密后删除
+    base64 过渡路径。
 - OIDC Client Secret：通过环境变量传入
 
 ### 6.2 环境变量命名

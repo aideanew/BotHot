@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -40,10 +41,11 @@ from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings, assert_production_ready, get_settings
-from app.models.entities import Source, SourceSubscription
+from app.models.entities import Source, SourceSubscription, User
 from app.providers.discovery.registry import make_default_provider, resolve_default_channel
 from app.repositories.subscription import SourceSubscriptionRepository
 from app.services.manifest import ManifestSyncService, WorkListProvider
@@ -54,6 +56,11 @@ from app.services.subscription import SourceSubscriptionService
 logger = logging.getLogger(__name__)
 
 DEFAULT_INTERVAL_MINUTES = 360  # 与 SourceSubscription.sync_interval_minutes 默认值一致
+
+# W2：每日定时入队热点/日报 Job 的时点（本地时区 06:30）。日报生成**前一日**，
+# 聚簇取近 1 日——放在 06:30 让凌晨发布的内容有窗口沉淀，不卡在 0 点边界。
+DAILY_REPORT_HOUR = 6
+DAILY_REPORT_MINUTE = 30
 
 
 class SyncRunner(Protocol):
@@ -265,6 +272,9 @@ class IncrementalScheduler:
         self._heartbeat_enabled = heartbeat_enabled
         # 心跳节流门：单实例字段，`run_once` 可并发重入但门本身是同步比较，无锁需求
         self._gate = BeaconGate(BEACON_MIN_INTERVAL_SECONDS, clock=time.monotonic)
+        # W2：每日热点/日报入队的进程内去重戳（同日已入队则不重复）。跨重启由
+        # JobService 的 idempotency_key 兜底（同日同类型 Job 重复提交返回既有）。
+        self._last_daily_date: str | None = None
 
     # ------------------------------------------------------------------ 存活上报
 
@@ -282,6 +292,61 @@ class IncrementalScheduler:
                 await _heartbeat(session, "scheduler", detail)
         except Exception:  # noqa: BLE001
             logger.debug("scheduler 心跳写入失败（不影响本轮调度）", exc_info=True)
+
+    # ------------------------------------------------------------------ W2 每日热点/日报
+
+    async def _maybe_enqueue_daily_jobs(self) -> None:
+        """每日 06:30（本地时区）入队 daily_report（前一日）+ hot_cluster（近 1 日）。
+
+        语义：日报生成**前一日**（昨日热点已成定局），聚簇取近 1 日为今日 Feed 兜底。
+        幂等：进程内 `_last_daily_date` 戳防同日重复；跨重启由 JobService 的
+        idempotency_key 兜底（同日同类型重复提交返回既有 Job）。operator 取首个
+        admin 用户（Job.user_id 非空且 FK users.id，热点/日报属运营动作归 admin）。
+        """
+        now_local = datetime.now(self._tz)
+        today = now_local.strftime("%Y-%m-%d")
+        if now_local.hour < DAILY_REPORT_HOUR or (
+            now_local.hour == DAILY_REPORT_HOUR and now_local.minute < DAILY_REPORT_MINUTE
+        ):
+            return
+        if self._last_daily_date == today:
+            return
+        try:
+            async with self._factory() as session:
+                operator_id = await self._resolve_operator_id(session)
+                if operator_id is None:
+                    logger.warning("scheduler 跳过每日热点/日报入队：无 admin 用户可作 operator")
+                    return
+                from app.repositories.job import JobRepository
+                from app.services.jobs import JobService
+
+                svc = JobService(JobRepository(session), session)
+                prev = (now_local - timedelta(days=1)).strftime("%Y-%m-%d")
+                await svc.submit(
+                    job_type="daily_report",
+                    user_id=operator_id,
+                    idempotency_key=f"daily_report:{prev}",
+                    payload_json=json.dumps({"date": prev}),
+                )
+                await svc.submit(
+                    job_type="hot_cluster",
+                    user_id=operator_id,
+                    idempotency_key=f"hot_cluster:{today}:1",
+                    payload_json=json.dumps({"date": today, "days": 1}),
+                )
+                await session.commit()
+            self._last_daily_date = today
+            logger.info("scheduler 每日入队完成：daily_report(%s) + hot_cluster(%s)", prev, today)
+        except Exception:  # noqa: BLE001 每日入队不得拖垮订阅调度
+            logger.exception("scheduler 每日热点/日报入队失败，下轮重试")
+
+    async def _resolve_operator_id(self, session: AsyncSession) -> str | None:
+        """取首个 admin 用户 id 作为系统触发 Job 的归属。无 admin → None（跳过）。"""
+        rows = await session.scalars(
+            select(User).where(User.role == "admin").limit(1)
+        )
+        u = rows.first()
+        return u.id if u is not None else None
 
     # ------------------------------------------------------------------ 纯函数（可单测）
 
@@ -343,6 +408,7 @@ class IncrementalScheduler:
         卡死期间心跳仍是上一轮的旧值，直到阈值超时才暴露，等于用阈值掩盖卡死。
         """
         await self._beacon()
+        await self._maybe_enqueue_daily_jobs()
         await self._reconcile_docs()
         processed = 0
         while processed < self._batch_limit:

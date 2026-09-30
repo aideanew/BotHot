@@ -184,6 +184,9 @@ services:
       - LLM_API_BASE=${LLM_API_BASE:-https://api.siliconflow.cn/v1}
       - LLM_API_KEY=${LLM_API_KEY:-}
       - LLM_MODEL=${LLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      # 渠道密钥 AES-256-GCM 主密钥（ab1004w1a 迁移 + secret_crypto 运行时共用；
+      # 缺失时渠道加解密 fail-closed 拒绝——backend/migrate/scheduler/worker 四服务都经 backend_env 注入）
+      - PUSH_SECRET_MASTER_KEY=${PUSH_SECRET_MASTER_KEY:-}
       # 检索重排（阶段 3.2.1，可选增强；base/key 留空回落 EMBEDDING_* 同供应商口径）
       - RERANK_ENABLED=${RERANK_ENABLED:-true}
       - RERANK_API_BASE=${RERANK_API_BASE:-}

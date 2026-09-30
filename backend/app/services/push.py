@@ -1,8 +1,7 @@
-"""SPEC-M3 批次 5 / T6.2：推送触发服务。
+"""推送触发服务：校验与分发。
 
-把「按 space/doc 推送给某通道目标」的校验与分发收敛到一处。本批为诚实占位
-（2026-09-23 管理者裁定）：**校验全部落地**（通道合法、内容合法、目标存在），
-**投递不实接**（provider 返回 delivered=False，路由转 50002 依赖不可用）。
+把「按 space/doc 推送给某通道目标」的校验与分发收敛到一处。投递使用真实
+Provider（providers/push 包），6 渠道均可实际投递。
 
 授权不在本层——路由层 require_roles("operator")（A-2 叠加口径：operator 以上
 可代用户操作，故不做归属校验，与 SpaceService.update_doc_category 同纪律）。
@@ -18,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import RequestInvalidError, ResourceNotFoundError
 from app.models.entities import KnowledgeDocument, KnowledgeSpace
-from app.providers.push_port import PushMessage, PushResult, make_push_provider
+from app.providers.push import PushMessage, PushResult, make_push_provider
 
 # 正文长度上限：推送是给人读的短消息，不是文档。
 MAX_MESSAGE_CHARS = 2000
@@ -64,7 +63,6 @@ class PushService:
 
     @staticmethod
     def _assert_channel(channel: str) -> None:
-        # 未知通道不臆造：转成 10005 而非 500。
         try:
             make_push_provider(channel)
         except ValueError as exc:

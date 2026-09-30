@@ -11,6 +11,30 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # W5（2026-09-30）CI 真实化：此前本 job 无 postgres service——backend/tests/conftest.py:36
+    # 的默认 DSN 指向 localhost:5433，:98-99 在 PG 不可达 3 秒内 skip 全部连库用例。
+    # 于是 CI 里 62 个 db_session 用例无一执行，「测试通过」是静默 skip 的假象。
+    # 补 service 后连库用例真实运行；再由下方 skip 门禁锁死回归。
+    # 端口/凭据与 conftest 默认 DSN 逐字对齐：user bothot / pass bothot / db bothot / 宿主 5433。
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: bothot
+          POSTGRES_PASSWORD: bothot
+          POSTGRES_DB: bothot
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U bothot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # 迁移目标库与测试库同一份（alembic.ini 默认 DSN 亦指向 localhost:5433/bothot）。
+      # AIDEANBOT_TEST_PG_DSN 显式设定，使 conftest 不再走「回退默认生产库 + D23 告警」路径。
+      DATABASE_URL: postgresql+psycopg://bothot:bothot@localhost:5433/bothot
+      AIDEANBOT_TEST_PG_DSN: postgresql+psycopg://bothot:bothot@localhost:5433/bothot
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -32,8 +56,71 @@ jobs:
       # mypy 56 files 全绿，CI 却零机检）；PG 连库用例在 CI 无 PG 时按既有口径自动 skip
       - name: Type check (mypy)
         run: mypy app
-      - name: Tests (pytest)
-        run: pytest tests/ -q
+      # W5：结构迁移。conftest 模块头明确「PG 夹具连真实本地 PG:5433（迁移已应用）」——
+      # 此前迁移只在宿主按部署手册手工跑过，CI 从无 schema，这是连库用例必然 skip 的另一半前提。
+      - name: Migrate schema (alembic upgrade head)
+        run: python -m alembic upgrade head
+      # W5：skip 门禁。解析 junitxml 的 skipped 用例，两条判据：
+      #   1) 「PG 不可达」类 skip 一律判失败——直接锁死本 job 要防的那类静默回归；
+      #   2) skip 总数 > 基线阈值 SKIP_BASELINE 判失败。
+      # 基线口径：CI 无 Redis / LangBot / 外部 API Key，故有少量**合法** skip。
+      # 实测（2026-09-30，HEAD 干净树 + 隔离 PG + 模拟无 Redis/无 LangBot）：
+      #   `742 passed, 4 skipped`——4 条为 test_chat_sse 的真实冒烟 2 条 + 
+      #   test_session_store_redis 的 2 条（依赖缺失时按设计 skip）。
+      #   → 阈值 = 实测 4 + 2 容差 = 6。
+      # ⚠️ 首次 CI 运行后须按实际 skip 数收紧 SKIP_BASELINE（本地环境与 CI 未必逐条一致）。
+      - name: Tests (pytest) + skip gate
+        env:
+          SKIP_BASELINE: "6"
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest tests/ -q -rs --junitxml=pytest-report.xml 2>&1 | tee pytest-output.log
+          pytest_status=${PIPESTATUS[0]}
+          python - <<'PY'
+          import os
+          import sys
+          import xml.etree.ElementTree as ET
+
+          baseline = int(os.environ.get("SKIP_BASELINE", "0"))
+          try:
+              root = ET.parse("pytest-report.xml").getroot()
+          except Exception as exc:
+              print(f"❌ skip 门禁：无法解析 pytest-report.xml（{exc}）")
+              sys.exit(2)
+
+          skips = []
+          for case in root.iter("testcase"):
+              skipped = case.find("skipped")
+              if skipped is not None:
+                  skips.append((case.get("classname", ""), skipped.get("message", "") or ""))
+
+          total = len(skips)
+          pg_skips = [s for s in skips if "PG" in s[1] and "不可达" in s[1]]
+          print(f"skip 门禁：total_skipped={total} baseline={baseline} pg_unreachable={len(pg_skips)}")
+          for classname, message in pg_skips[:20]:
+              print(f"  PG-skip [{classname}] {message}")
+
+          violations = []
+          if pg_skips:
+              violations.append(
+                  f"{len(pg_skips)} 个连库用例因 PG 不可达被 skip（service 或迁移未生效）"
+              )
+          if total > baseline:
+              violations.append(f"skip 总数 {total} 超过基线 {baseline}")
+
+          if violations:
+              for item in violations:
+                  print(f"❌ {item}")
+              sys.exit(1)
+          print("✅ skip 门禁通过：连库用例真实执行，skip 数在基线内")
+          PY
+          gate_status=$?
+          echo "pytest_status=${pytest_status} gate_status=${gate_status}"
+          if [ "$pytest_status" -ne 0 ]; then
+            exit "$pytest_status"
+          fi
+          exit "$gate_status"
 
   frontend:
     runs-on: ubuntu-latest

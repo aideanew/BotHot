@@ -2,16 +2,20 @@
 
 - GET    /api/v1/hot/topics          热点列表（分页 + 分类过滤）
 - GET    /api/v1/hot/topics/{id}     热点详情（含关联文章）
-- POST   /api/v1/hot/topics/cluster  手动触发聚簇（admin）
+- POST   /api/v1/hot/topics/cluster  手动触发聚簇（admin）——入队 Job type=hot_cluster
 - GET    /api/v1/hot/daily/reports   日报列表
 - GET    /api/v1/hot/daily/reports/{date}  指定日期日报
 - POST   /api/v1/hot/daily/generate  手动生成日报（admin）
 - GET    /api/v1/hot/feed            Feed 流（信息流首页用）
+
+时区口径（任务 2.6）：热点业务日界 = Asia/Shanghai，如改口径只动 BUSINESS_TZ。
 """
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
@@ -25,6 +29,13 @@ from app.models.bothot_entities import (
     HotTopic,
     HotTopicArticle,
 )
+from app.models.entities import User
+from app.repositories.job import JobRepository
+from app.services.feed_service import build_daily_report
+from app.services.jobs import JobService
+
+# 热点业务日界 = Asia/Shanghai；如改口径只动此常量。
+BUSINESS_TZ = ZoneInfo("Asia/Shanghai")
 
 router = APIRouter(
     prefix="/api/v1/hot",
@@ -55,9 +66,9 @@ async def list_hot_topics(
     if topic_date:
         q = q.where(HotTopic.topic_date == topic_date)
     else:
-        # 默认取最近 7 天
-        today = datetime.utcnow().strftime("%Y-%m-%d")
-        week_ago = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
+        # 默认取最近 7 天（业务日界 = Asia/Shanghai）
+        today = datetime.now(BUSINESS_TZ).strftime("%Y-%m-%d")
+        week_ago = (datetime.now(BUSINESS_TZ) - timedelta(days=7)).strftime("%Y-%m-%d")
         q = q.where(HotTopic.topic_date >= week_ago, HotTopic.topic_date <= today)
 
     q = q.order_by(HotTopic.hot_score.desc())
@@ -133,24 +144,47 @@ async def get_hot_topic(topic_id: str, db = Depends(get_db)):
 async def trigger_cluster(
     days: int = 1,
     db = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
+    user: User = Depends(require_roles("admin", "operator")),
 ):
-    """手动触发热点聚簇。
+    """手动触发热点聚簇：入队 Job type=hot_cluster，立即返回 queued 回执。
 
-    聚簇算法（融合 AIHOT）：
-    1. 取最近 N 天的 content_assets
-    2. 按标题相似度聚簇（Jaccard / TF-IDF）
-    3. 计算热度：48h 内独立来源数加权，24h 减半
-    4. 取 TOP N 生成 HotTopic 记录
+    幂等（任务 2.5c）：同日已有未完成（QUEUED/RUNNING）的 hot_cluster job 且 days
+    相同时不重复入队，返回既有 job；已终结的可重跑（聚簇落库本身整日 wipe 重建）。
+    实际聚簇由 job_worker 消费 hot_cluster Job 执行（services/job_worker.py 注册分支）。
     """
-    # TODO: 实际聚簇逻辑需要 LLM + 向量相似度
-    # 当前返回占位结果，真实实现需接入 content_assets 表
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now(BUSINESS_TZ).strftime("%Y-%m-%d")
+    repo = JobRepository(db)
+    # 幂等预检：同日未完成的 hot_cluster job 不重复入队
+    queued = await repo.list_by_user(None, status="QUEUED", job_type="hot_cluster", limit=50)
+    running = await repo.list_by_user(None, status="RUNNING", job_type="hot_cluster", limit=50)
+    for j in [*queued, *running]:
+        try:
+            payload = json.loads(j.payload or "{}")
+        except ValueError:
+            payload = {}
+        if str(payload.get("date", "")) == today and int(payload.get("days", 0)) == days:
+            return success({
+                "queued": False,
+                "job_id": j.id,
+                "topic_date": today,
+                "days": days,
+                "message": "同日聚簇任务已在执行中，未重复入队",
+            })
+
+    # idempotency_key 含短随机：已终结 job 不阻塞重跑（同日新触发建新 Job）
+    from uuid import uuid4
+
+    job, _created = await JobService(repo, db).submit(
+        job_type="hot_cluster",
+        user_id=user.id,
+        idempotency_key=f"hot_cluster:{today}:{days}:{uuid4().hex[:8]}",
+        payload_json=json.dumps({"date": today, "days": days}),
+    )
     return success({
-        "triggered": True,
+        "queued": True,
+        "job_id": job.id,
         "topic_date": today,
         "days": days,
-        "message": "聚簇任务已触发（实际聚簇逻辑需接入 LLM + 向量相似度，当前为占位响应）",
     })
 
 
@@ -219,64 +253,28 @@ async def get_daily_report(report_date: str, db = Depends(get_db)):
 async def generate_daily_report(
     report_date: str = "",
     db = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
+    _: User = Depends(require_roles("admin", "operator")),
 ):
-    """手动生成日报。
+    """手动生成日报：取当日 TOP10 热点 → LLM 摘要（失败降级正文首段）→ 落库 DailyReport。
 
-    日报生成逻辑（融合 AIHOT）：
-    1. 取指定日期的 TOP 10 热点
-    2. 用 LLM 生成中文标题和摘要
-    3. 组装 Markdown 日报
-    4. 落库 DailyReport
+    日报组装委托 services/feed_service.build_daily_report（job_worker 的 daily_report
+    Job 也复用同一函数，避免 services→api 反向依赖）。LLM 失败时降级为中心文章正文
+    首段截断 150 字——日报永不因 LLM 故障缺失（降级语义见 feed_service._topic_summary）。
     """
     if not report_date:
-        report_date = datetime.utcnow().strftime("%Y-%m-%d")
+        report_date = datetime.now(BUSINESS_TZ).strftime("%Y-%m-%d")
 
-    # 检查是否已存在
+    # 手动触发对已存在日报报 400（与历史 UX 一致）；scheduler 路径走 build_daily_report
+    # 的幂等返回（已存在则返回既有，不报错）。
     existing = (
         await db.execute(select(DailyReport).where(DailyReport.report_date == report_date))
     ).scalar_one_or_none()
     if existing:
         raise RequestInvalidError(f"{report_date} 的日报已存在（id={existing.id}）")
 
-    # 取当日热点
-    topics = (
-        await db.execute(
-            select(HotTopic)
-            .where(HotTopic.topic_date == report_date)
-            .order_by(HotTopic.hot_score.desc())
-            .limit(10)
-        )
-    ).scalars().all()
-
-    # 生成 Markdown 日报
-    md_lines = [f"# BotHot 热点日报 · {report_date}", ""]
-    if not topics:
-        md_lines.append("今日暂无热点事件。")
-    else:
-        for i, t in enumerate(topics, 1):
-            md_lines.append(f"## {i}. {t.title}")
-            md_lines.append("")
-            md_lines.append(
-                f"**热度**: {t.hot_score:.1f} | **来源数**: {t.source_count} | **文章数**: {t.article_count}"
-            )
-            md_lines.append("")
-            if t.summary:
-                md_lines.append(t.summary)
-                md_lines.append("")
-
-    content = "\n".join(md_lines)
-    title = f"BotHot 热点日报 · {report_date}"
-
-    report = DailyReport(
-        report_date=report_date,
-        title=title,
-        content_markdown=content,
-        topic_count=len(topics),
-        status="published",
-        generated_by="manual",
-    )
-    db.add(report)
+    report = await build_daily_report(db, report_date, generated_by="manual")
+    if report is None:
+        raise RequestInvalidError(f"{report_date} 日报生成失败")
     await db.commit()
     await db.refresh(report)
 
