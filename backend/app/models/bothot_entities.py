@@ -19,7 +19,7 @@ class BotChannel(TimestampMixin, Base):
     """机器人渠道配置：飞书/钉钉/微信ClawBot/企业微信/Webhook 等。
 
     一条记录 = 一个可投递的机器人入口。webhook_url 和 secret 由管理员在后台填写，
-    AES 加密落库（secret 字段），webhook_url 可明文（相当于门牌号）。
+    AES-256-GCM 加密落库（secret_enc 字段，AAD 绑定 channel id），webhook_url 可明文（相当于门牌号）。
     """
 
     __tablename__ = "bot_channels"
@@ -30,7 +30,7 @@ class BotChannel(TimestampMixin, Base):
     channel_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     # 投递目标：飞书 webhook、钉钉 webhook、企业微信 webhook、自定义 webhook URL
     webhook_url: Mapped[str] = mapped_column(String(512), default="", nullable=False)
-    # 签名密钥（飞书/钉钉加签模式）；AES-256-GCM 加密后落库
+    # 签名密钥（飞书/钉钉加签模式）；AES-256-GCM 加密后落库（b64(nonce).b64(ct+tag)）
     secret_enc: Mapped[str] = mapped_column(Text, default="", nullable=False)
     # 额外配置 JSON（如飞书 app_id/app_secret、钉钉 access_token 等）
     extra_config: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
@@ -230,3 +230,26 @@ class FeedItem(TimestampMixin, Base):
     url: Mapped[str] = mapped_column(String(512), default="", nullable=False)
     # 是否置顶
     is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # upsert 语义的基础：同类型同引用只允许一行（feed_service 按此冲突覆盖更新；
+    # 迁移 ab1004w2a 在 DB 侧同建，模型与迁移必须一致）
+    __table_args__ = (
+        UniqueConstraint("item_type", "ref_id", name="uq_feed_item_type_ref"),
+    )
+
+
+# ── 7. 事件 outbox ────────────────────────────────────────────────────
+
+class PushEvent(TimestampMixin, Base):
+    """事件 outbox 表：W2 落库，push_scheduler 轮询消费。
+
+    outbox 模式保证 at-least-once 语义：事件与业务事务同库落库，
+    调度器 claim 后标记 consumed_at，崩溃恢复后未消费事件重新投递。
+    """
+
+    __tablename__ = "push_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    payload: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)

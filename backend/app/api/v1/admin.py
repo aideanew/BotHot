@@ -61,7 +61,7 @@ from app.core.response import success
 from app.models.entities import User
 from app.providers.discovery.registry import describe_channels
 from app.providers.langbot.client import LangBotClient
-from app.providers.push_port import registered_channels
+from app.providers.push import registered_channels
 from app.services.engine_keys import EngineKeyService
 from app.services.jobs import JobService
 from app.services.process_heartbeat import DEFAULT_MAX_AGE_SECONDS, describe_liveness

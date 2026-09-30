@@ -109,6 +109,11 @@ class Settings(BaseSettings):
     main_kb_api_base: str = ""
     main_kb_api_key: str = ""
 
+    # W1：渠道密钥 AES-256-GCM 落库加密主密钥。
+    # 32 字节原始密钥的 base64（44 字符）。空串 = 未配置 → 加解密操作 50002 拒绝，
+    # **绝不回落明文**。与 engine_key_master_key 同纪律。
+    push_secret_master_key: str = ""
+
     # SPEC-M3 批次 3 / T5.4：engine_key_registrations 的 AES-256-GCM 落库加密主密钥。
     # 32 字节原始密钥的 base64（44 字符）。空串 = 未配置 → 登记/轮换操作 50002 拒绝，
     # **绝不回落明文**（回落等于把加密伪装成已生效，比明文更难发现）。
