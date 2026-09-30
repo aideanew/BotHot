@@ -5,7 +5,7 @@ title: BotHot 待办清单
 status: active
 owner: product
 created: 2026-09-29
-updated: 2026-09-29
+updated: 2026-09-30
 ---
 
 # BotHot 待办清单
@@ -80,13 +80,17 @@ updated: 2026-09-29
 - **当前状态**：模型有 `hot_score` 字段，计算逻辑未实现
 - **目标**：48h 独立来源数加权 + 24h 减半时间衰减
 
-### HOT-003：Feed 流 ✅
-- **状态**：API 已实现（`GET /api/v1/hot/feed`），支持类型/分类筛选 + 热度排序
-- **前端**：`/hot` 页面骨架已建
+### HOT-003：Feed 流 🔧
+- **状态**：**读侧**已实现（`api/v1/hot.py:294-345` —— `GET /api/v1/hot/feed` 支持类型/分类筛选 + 置顶/score/时间三级排序）；`FeedItem` 模型已建（`models/bothot_entities.py:206`）
+- **缺口**：提交态全仓**无 `FeedItem` 写入方**——`feed_items` 仍是死表，读侧恒为空；且 `score` 依赖的 `hot_score` 无计算逻辑（见 HOT-002）
+- **前端**：`/hot` 页面骨架已建（`frontend/app/hot/page.tsx`）
+- **修复中**：并行任务 W2（热点域）正在补聚簇/评分/Feed 写入管道
 
-### HOT-004：每日日报生成 ✅
-- **状态**：API 已实现（`POST /api/v1/hot/daily/generate`），TOP 10 热点 → Markdown
-- **前端**：`/hot/daily` 页面骨架已建
+### HOT-004：每日日报生成 🔧
+- **状态**：**接口**已实现（`api/v1/hot.py:218-289`）——取当日 TOP 10 拼装 Markdown 落 `DailyReport`
+- **缺口**：`hot.py:253-268` 为**纯字符串拼接**，无 LLM 标题/摘要环节；内容依赖 `HotTopic.hot_score`（HOT-002 无计算，恒 0.0）；无热点时产出「今日暂无热点事件。」空日报
+- **前端**：`/hot/daily` 页面骨架已建（`frontend/app/hot/daily/page.tsx`）
+- **修复中**：并行任务 W2（热点域）正在补 LLM 摘要与热点写入管道
 
 ### FE-001：Bot 渠道管理页面 🔧
 - **当前状态**：页面已建（`/bots`），渠道列表 + 创建/编辑 + 测试推送 + 日志
@@ -106,26 +110,34 @@ updated: 2026-09-29
 
 ## 🟢 低优先级
 
-### MIG-001：后端 apps/api/ 目录迁移
+### MIG-001：后端 apps/api/ 目录迁移 ⬜
 - **参考**：project-structure-design.md 阶段化迁移策略
+- **状态**：未开始（当前仍为 `backend/`）
 
-### MIG-002：前端 apps/web/ 目录迁移
+### MIG-002：前端 apps/web/ 目录迁移 ⬜
 - **参考**：project-structure-design.md 阶段化迁移策略
+- **状态**：未开始（当前仍为 `frontend/`）
 
-### MIG-003：packages/contracts/ 共享契约提取
+### MIG-003：packages/contracts/ 共享契约提取 ⬜
+- **状态**：未开始（`packages/contracts/` 仅有目录骨架；W5 已冻结三个通用类型，业务域契约未提取）
 
-### TEST-001：后端单元测试补全
-- **目标**：各业务域 core/application 层测试覆盖
-- **重点**：PushProvider 单测（mock httpx）、PushScheduler 调度逻辑
+### TEST-001：后端单元测试补全 🔧
+- **当前状态（提交态实证）**：推送域已有覆盖——`test_push_providers.py`（6 Provider 注册表 + `_parse_cron_next` 全分支，:212-259）、`test_r11_push.py`（推送校验/派发/鉴权门禁）、`test_scheduler.py`（**订阅**调度器 T2.4：触发窗口/退避/原子认领）、`test_process_heartbeat.py`、`test_job_worker.py`
+- **缺口**：`push_scheduler.PushTaskScheduler._tick/_execute_task`（认领→派发→落 PushLog→推进 `next_run_at`）端到端无覆盖；热点聚簇/评分无实现故无测试；`test_r11_push` 之外无热点域测试
+- **关联**：CI 侧连库用例此前被**静默 skip**（`.github/workflows/ci.yml` 无 postgres service），W5 已修复并加 skip 门禁
 
-### TEST-002：Playwright e2e 测试
-- **目标**：关键用户流程端到端验证
+### TEST-002：Playwright e2e 测试 🔧
+- **当前状态（提交态实证）**：`frontend/e2e/trunk.spec.ts`（mock 主干 8 条路径）+ `frontend/e2e/real-backend.spec.ts` 已建
+- **缺口**：e2e **未纳入 CI**——`frontend` job 仅 typecheck + vitest + build（`ci.yml`），无 `pnpm run test:e2e`；推送任务（`/bots`）与热点（`/hot`）无 e2e 路径
 - **端口**：3200（禁止 3333）
 
-### TEST-003：Docker Compose 冒烟测试
+### TEST-003：Docker Compose 冒烟测试 ⬜
 - **目标**：docker compose up 全服务启动验证
+- **状态**：未开始（W5 已补 `scripts/smoke.sh`，但未在 CI 接线）
 
 ### DOC-001：README 更新 ✅
 - **状态**：已完成功能说明 + 快速开始 + 部署指南
 
-### DOC-002：CHANGELOG.md 编写
+### DOC-002：CHANGELOG.md 编写 🔧
+- **状态**：W5 已建初版（`CHANGELOG.md`，Keep-a-Changelog 格式，从 `git log` 提炼全部归入 `Unreleased`）
+- **待完善**：正式版本段（v0.3 / v0.4 …）的切分与发布日期，待发布节点确定后由维护者补齐

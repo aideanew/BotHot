@@ -5,7 +5,7 @@ title: BotHot 路线图
 status: active
 owner: product
 created: 2026-09-29
-updated: 2026-09-29
+updated: 2026-09-30
 version: 1.0
 ---
 
@@ -30,19 +30,20 @@ version: 1.0
 ## 下一阶段：v0.4 — 推送能力落地
 
 > 预计开始：2026-09-30
+> 勾选状态同步：2026-09-30（W5 依代码实证回填；此前目标句称"已实现"，下方任务却全未勾选，自相矛盾）
 
 **目标**：多渠道推送已实现真实投递（6 渠道 Provider + PushScheduler），待完善事件触发和完整 Cron 支持。
 
 **任务**：
-- [ ] 实现飞书 Webhook Provider（真实推送）
-- [ ] 实现钉钉 Webhook Provider
-- [ ] 实现企业微信 Webhook Provider
-- [ ] 实现 微信 ClawBot Provider
-- [ ] 实现通用 Webhook Provider
-- [ ] 实现站内通知 Provider
-- [ ] PushScheduler 定时调度落地（Cron 表达式解析）
-- [ ] 事件触发推送（新文章/热点更新/日报生成）
-- [ ] 推送日志查询与重试机制
+- [x] 实现飞书 Webhook Provider（真实推送）— `providers/push/feishu.py`（交互式卡片 + HMAC-SHA256 加签）
+- [x] 实现钉钉 Webhook Provider — `providers/push/dingtalk.py`（Markdown + HMAC-SHA256 加签）
+- [x] 实现企业微信 Webhook Provider — `providers/push/wechat_work.py`（Markdown）
+- [x] 实现 微信 ClawBot Provider — `providers/push/wechat_clawbot.py`（Bearer token + `/api/send`；需部署 ClawBot 服务）
+- [x] 实现通用 Webhook Provider — `providers/push/webhook.py`（POST JSON + HTTP 2xx 校验）
+- [x] 实现站内通知 Provider — `providers/push/web.py`（Redis pub/sub → `bothot:notifications:*`；**投递侧**已完成，前端订阅侧未实现）
+- [x] PushScheduler 定时调度落地 — `services/push_scheduler.py:27`（60s 扫描）在 `main.py:247` lifespan 内启动；Cron 解析为**简版**（`HH:MM` / `*/N` / 纯数字分钟，`push_scheduler.py:30-68`），完整 croniter 支持见 TECH-002
+- [ ] 事件触发推送（新文章/热点更新/日报生成）— `_tick` 仅筛选 `trigger_type == "cron"`（`push_scheduler.py:112-119`），无 event 分支
+- [ ] 推送日志查询与重试机制 — 日志已落 `PushLog`（`push_scheduler.py:166-174`）与查询 API（`api/v1/bots.py:301,320`），**重试未实现**（无重试计数/退避）
 
 ## v0.5 — AIHOT 热点功能融合
 

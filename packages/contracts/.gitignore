@@ -1,0 +1,4 @@
+# 构建产物与本地依赖（本包为纯类型包：源码入库，dist 由 tsc 现生成）
+dist/
+node_modules/
+*.tsbuildinfo

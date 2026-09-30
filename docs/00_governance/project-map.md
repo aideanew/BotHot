@@ -5,7 +5,7 @@ title: BotHot 项目导航地图
 status: active
 owner: governance
 created: 2026-09-29
-updated: 2026-09-29
+updated: 2026-09-30
 version: 1.2
 ---
 
@@ -54,13 +54,13 @@ version: 1.2
 | [backlog.md](../04_engineering/backlog.md) | 待办清单 | active |
 | [conventions.md](../04_engineering/conventions.md) | 工程规范 | active |
 
-## 05–09 预留分类
+## 05–09 分类
 
 | 分类 | 用途 | 状态 |
 |---|---|---|
 | `04_planning/` | 发布计划 | 🔲 预留 |
 | `05_execution/` | 任务跟踪 | 🔲 预留 |
-| `06_validation/` | 验证与测试 | 🔲 预留 |
+| [06_validation/](../06_validation/) | 验证与测试 | ✅ **已启用**——已有实测证据：[`evidence/channeltest-20260929/`](../06_validation/evidence/channeltest-20260929/README.md)（4 平台文章来源活体实测，TC 编号逐条可对）+ `acceptance/`、`test-results/` |
 | `07_release/` | 发布记录 | 🔲 预留 |
 | `08_knowledge/` | 知识库 | 🔲 预留 |
 | `09_archive/` | 归档 | 🔲 预留 |
