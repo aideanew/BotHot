@@ -43,3 +43,4 @@ export * from "./batch";
 export * from "./ask";
 export * from "./bots";
 export * from "./hot";
+export * from "./notifications";

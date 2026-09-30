@@ -1,11 +1,30 @@
-"""系统路由：健康检查与公开配置。"""
+"""系统路由：健康检查（匿名）与站内通知 SSE（登录）。
 
-from fastapi import APIRouter
+- GET /api/v1/system/health          匿名功能探活（compose healthcheck 依赖，绝不加登录门禁）
+- GET /api/v1/system/notifications   站内通知 SSE（EventSource，须登录）
+"""
 
+from __future__ import annotations
+
+import contextlib
+import json
+import logging
+from collections.abc import AsyncIterator
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import get_current_sub, get_db
 from app.core.config import get_settings
 from app.core.response import success
+from app.models.entities import User
+from app.providers.push.web import _CHANNEL_PREFIX
 
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
+logger = logging.getLogger(__name__)
 
 
 async def _check_pg() -> str:
@@ -78,3 +97,136 @@ async def health() -> object:
         "env": settings.app_env,
         "deps": deps,
     })
+
+
+# ── 站内通知 SSE 订阅（WE 5.1）───────────────────────────────────────────────
+#
+# 连接生命周期：客户端 EventSource 连上本端点 → 后端订阅 Redis pub/sub
+#   bothot:notifications:{sub}（定向）+ bothot:notifications:broadcast（广播兑底，
+#   web provider 无 external_user_id 时落此频道）→ 每条消息以 `data: <原 JSON>`
+#   原样转发。心跳：空闲满 NOTIFICATION_PING_SECONDS 发一行 `: ping` 注释帧，
+#   防反向代理（Nginx/网关）按空闲超时断连。清理：客户端断开（request.is_disconnected）
+#   或流中异常 → finally 退订并关闭 pubsub/client 连接，不留悬挂订阅。
+# 优雅降级：Redis 未配置/不可达 → 转发一帧 {"type":"service_unavailable"} 后
+#   正常收尾关流（不 500、不拖垮进程），前端据此提示而非崩渲染。
+# 鉴权：Depends(get_current_sub)——未登录在流建立前即 401；/health 保持匿名，
+#   故门禁加在端点级、非 router 级。
+#
+# web 渠道验收口径：providers/push/web.py 投递侧 + 本订阅侧上线后端到端闭环打通，
+#   web 渠道验收口径由此从 5/6 升 6/6（仅改本 docstring，docs 口径归 WD）。
+
+# 与 providers/push/web.py 的 _CHANNEL_PREFIX 单一来源，杜绝频道命名漂移。
+_BROADCAST_SUFFIX = "broadcast"
+NOTIFICATION_PING_SECONDS = 25.0
+
+
+class _RedisSubscriber:
+    """Redis pub/sub 订阅者薄封装：隔离 redis.asyncio 细节，便于测试注入假对象。"""
+
+    def __init__(self, client: object, pubsub: object) -> None:
+        self._client = client
+        self._pubsub = pubsub
+
+    async def get_message(self, timeout: float) -> dict | None:
+        return await self._pubsub.get_message(  # type: ignore[attr-defined]
+            ignore_subscribe_messages=True, timeout=timeout
+        )
+
+    async def close(self) -> None:
+        with contextlib.suppress(Exception):
+            await self._pubsub.aclose()  # type: ignore[attr-defined]
+        with contextlib.suppress(Exception):
+            await self._client.aclose()  # type: ignore[attr-defined]
+
+
+async def _default_open_subscriber(redis_url: str, channels: list[str]) -> _RedisSubscriber:
+    """真实订阅者：延迟导入 redis.asyncio（无 Redis 环境不在 import 期就硬故）。"""
+    import redis.asyncio as aioredis
+
+    client = aioredis.from_url(redis_url, socket_connect_timeout=3)
+    pubsub = client.pubsub(ignore_subscribe_messages=True)
+    await pubsub.subscribe(*channels)
+    return _RedisSubscriber(client, pubsub)
+
+
+# 模块级注入点（测试换假订阅者；生产保持默认）——与 chat._llm_http_factory 同纪律。
+_open_subscriber = _default_open_subscriber
+
+
+def _notification_channels(sub: str, user_id: str | None = None) -> list[str]:
+    """订阅频道（审查缝合：双锚覆盖）。
+
+    发布侧存在两种锚：手动/服务推送用 external_user_id（调用方语义，通常为 SSO
+    sub）；渠道绑定推送（bots.py test_push 传 bot_channels.user_id）是 users.id。
+    订阅侧同时覆盖 sub 与 users.id + broadcast 兜底，任一发布锚都能到达；
+    user_id 解析失败（无对应行）只降级为 sub + broadcast，不阻断连接。
+    """
+    channels = [f"{_CHANNEL_PREFIX}:{sub}"]
+    if user_id and user_id != sub:
+        channels.append(f"{_CHANNEL_PREFIX}:{user_id}")
+    channels.append(f"{_CHANNEL_PREFIX}:{_BROADCAST_SUFFIX}")
+    return channels
+
+
+def _data_frame(payload: object) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+async def _notification_stream(request: Request, sub: str, user_id: str | None = None) -> AsyncIterator[str]:
+    """站内通知 SSE 主循环（见上方生命周期注释）。异常一律收敛为优雅关流。"""
+    settings = get_settings()
+    if not settings.redis_url:
+        yield _data_frame({"type": "service_unavailable", "message": "Redis 未配置，站内通知不可用"})
+        return
+    try:
+        subscriber = await _open_subscriber(settings.redis_url, _notification_channels(sub, user_id))
+    except Exception:  # noqa: BLE001  # Redis 不可达：降级不 500
+        logger.warning("站内通知订阅建立失败（Redis 不可达），优雅降级", exc_info=True)
+        yield _data_frame({"type": "service_unavailable", "message": "通知服务暂不可用，请稍后重试"})
+        return
+
+    yield ": connected\n\n"  # 立即 flush 响应头，令 EventSource 进入 open 态
+    try:
+        while True:
+            if await request.is_disconnected():
+                break
+            msg = await subscriber.get_message(NOTIFICATION_PING_SECONDS)
+            if msg is None:
+                yield ": ping\n\n"  # 空闲心跳，防代理超时断连
+                continue
+            if msg.get("type") != "message":
+                continue
+            raw = msg.get("data")
+            if isinstance(raw, bytes):
+                raw = raw.decode("utf-8", "replace")
+            if not raw:
+                continue
+            yield f"data: {raw}\n\n"  # 原样转发 web provider 发布的 JSON
+    except Exception:  # noqa: BLE001  # 流中异常（连接抖动）：收敛关流，不裸抛
+        logger.warning("站内通知流异常中断", exc_info=True)
+    finally:
+        await subscriber.close()
+
+
+@router.get("/notifications")
+async def notifications(
+    request: Request,
+    sub: Annotated[str, Depends(get_current_sub)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> StreamingResponse:
+    """GET /api/v1/system/notifications——站内通知 SSE（EventSource）。
+
+    须登录（get_current_sub）；订阅/心跳/降级/清理语义见上方模块内注释。
+    双锚解析（审查缝合）：sub → users.id，覆盖渠道绑定发布与 SSO 锚发布两种口径。
+    """
+    user_id: str | None = None
+    try:
+        row = await session.execute(select(User.id).where(User.sub == sub))
+        user_id = row.scalar_one_or_none()
+    except Exception:  # noqa: BLE001  # 解析失败不阻断订阅（降级 sub + broadcast）
+        logger.warning("站内通知订阅：sub→users.id 解析失败，仅订阅 sub 频道", exc_info=True)
+    return StreamingResponse(
+        _notification_stream(request, sub, user_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
