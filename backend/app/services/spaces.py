@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.errors import (
     AppError,
-    ForbiddenError,
     InternalError,
     LangbotApiError,
     RequestInvalidError,
@@ -27,7 +26,7 @@ from app.core.errors import (
     SpaceNameConflictError,
 )
 from app.models.entities import KnowledgeDocument, KnowledgeSpace, User
-from app.providers.engine_port import ENGINE_UNAVAILABLE_HINT, EngineRouter
+from app.providers.engine_port import EngineRouter
 from app.repositories.asset import AssetRepository, DocumentRepository
 from app.repositories.space import SpaceRepoProto
 from app.services.categorizer import CATEGORIES, DEFAULT_CATEGORY, UNCATEGORIZED
@@ -194,7 +193,7 @@ class SpaceService:
         user_id: str,
         space_id: str,
         kb_client: LangbotKbProto | None = None,
-    ) -> dict[str, int]:
+    ) -> dict[str, Any]:
         """删除空间（AB-T11）：先按引擎删库 → 成功才删 PG 行并提交；失败整体回滚。
 
         契约（AB-T11）：
@@ -216,7 +215,7 @@ class SpaceService:
         self,
         space_id: str,
         kb_client: LangbotKbProto | None = None,
-    ) -> dict[str, int]:
+    ) -> dict[str, Any]:
         """M3 批次 2（T5.8，A-2 叠加）：admin 跨用户删空间——不做归属校验。
 
         与 delete_space 共用 _delete_space 单一实现（引擎删库先行、失败整体回滚、
@@ -231,13 +230,20 @@ class SpaceService:
         space_id: str,
         kb_client: LangbotKbProto | None = None,
         owner: str | None = None,
-    ) -> dict[str, int]:
-        """删空间单一实现。owner=None 表示无归属约束（/admin 跨用户路径）。"""
+    ) -> dict[str, Any]:
+        """删空间单一实现。owner=None 表示无归属约束（/admin 跨用户路径）。
+
+        C.5 引擎删除闭环：非 builtin 未实接引擎（adapter 不可用 / delete_kb 降级 no-op）
+        不再整体回滚——清 engine_kb_id 本地映射，PG 级联删除继续，响应加 engineResidue=True
+        标注引擎侧残留（WC adapter 层 delete_kb 降级的 service 层闭环）。
+        builtin 走 kb_client.delete_kb（实接，失败仍整体回滚）。
+        """
         space = await self._repo.get_by_id(space_id)
         if space is None or (owner is not None and space.user_id != owner):
             raise ResourceNotFoundError(space_id)
 
         engine = str(getattr(space, "engine", "builtin") or "builtin")
+        engine_residue = False
         if engine == "builtin":
             kb_uuid = str(getattr(space, "langbot_kb_uuid", "") or "")
             if kb_uuid:
@@ -252,19 +258,25 @@ class SpaceService:
             engine_kb_id = str(getattr(space, "engine_kb_id", "") or "")
             if engine_kb_id:
                 if self._router is None:
-                    raise InternalError("删除空间缺少引擎路由装配")
-                try:
-                    adapter = self._router.adapter_for(space)  # Key 缺失 → ValueError → 10004
-                    await adapter.delete_kb(engine_kb_id)
-                except ValueError as exc:
-                    await self._rollback()
-                    raise ForbiddenError(str(exc) or ENGINE_UNAVAILABLE_HINT % engine) from exc
-                except Exception:
-                    await self._rollback()
-                    raise
+                    engine_residue = True  # 无路由装配 → 无法删引擎侧，残留
+                else:
+                    try:
+                        adapter = self._router.adapter_for(space)  # ValueError if not available
+                        await adapter.delete_kb(engine_kb_id)
+                        if not getattr(adapter, "implemented", True):
+                            engine_residue = True  # adapter 降级 no-op，引擎侧残留
+                    except ValueError:
+                        # 引擎不可用（未实接/Key 缺）→ 不阻断删除（WC 降级闭环），
+                        # 清本地映射，引擎侧残留。原实现此处 raise ForbiddenError 致空间无法删
+                        engine_residue = True
+                    except Exception:
+                        await self._rollback()
+                        raise  # 已实接引擎真实 API 故障 → 整体回滚（防 PG 删了库没删）
+                # 清本地映射（space 行即将 cascade 删除，显式置空便于事务内审计可见）
+                space.engine_kb_id = ""
         counts = await self._repo.delete_space_cascade(space_id)
         await self._commit()
-        return counts
+        return {**counts, "engineResidue": engine_residue}
 
     async def delete_doc(
         self,
@@ -629,17 +641,23 @@ class SpaceService:
 
     # ------------------------------------------------------------------ 读路径（v0.3 视图）
 
-    async def list_space_views(self, user_id: str) -> list[dict]:
+    async def list_space_views(
+        self, user_id: str, *, limit: int = 50, offset: int = 0
+    ) -> tuple[list[dict], int]:
         """GET /spaces → data.items 形状。
 
         AB-P004 P4：追加 engine/engineKbId/isPublic（ADR-0004 空间视图增量）。
         T1.5.3：doc 计数改 GROUP BY 单查询（原逐空间 count 为 N+1）。
-        R0.5.2（F-4）：description 改由实体回读（原为硬编码空串，契约声明的字段恒为空）。"""
-        spaces = await self._repo.list_by_user(user_id)
+        R0.5.2（F-4）：description 改由实体回读（原为硬编码空串，契约声明的字段恒为空）。
+        C.1：LIMIT/OFFSET 下沉到 repo SQL，返回 (items, total)。"""
+        spaces = await self._repo.list_by_user(user_id, limit=limit, offset=offset)
+        total = await self._repo.count_by_user(user_id)
         counts = await self._repo.count_docs_many([s.id for s in spaces])
-        return [self._space_view(s, counts.get(s.id, 0)) for s in spaces]
+        return [self._space_view(s, counts.get(s.id, 0)) for s in spaces], total
 
-    async def list_space_views_any(self) -> list[dict]:
+    async def list_space_views_any(
+        self, *, limit: int = 50, offset: int = 0
+    ) -> tuple[list[dict], int]:
         """GET /admin/spaces → 跨用户全量空间视图，每条带归属（批次 2 读面）。
 
         与 list_space_views 的全部差异只在归属约束：既有端点经 list_by_user 硬过滤本人，
@@ -647,10 +665,12 @@ class SpaceService:
         _space_view——engine/isPublic/description 这些增量字段在两份拷贝里各写一份会漂移
         （AB-P004 P4、R0.5.2 F-4 都是字段恒空/漏传的同类缺陷）。
         既有本人列表不带 owner 字段（owner=None 时不注入），契约零回归。
+        C.1：LIMIT/OFFSET 下沉到 repo SQL，返回 (items, total)。
         """
-        rows = await self._repo.list_with_owner()
+        rows = await self._repo.list_with_owner(limit=limit, offset=offset)
+        total = await self._repo.count_with_owner()
         counts = await self._repo.count_docs_many([s.id for s, _ in rows])
-        return [self._space_view(s, counts.get(s.id, 0), owner=u) for s, u in rows]
+        return [self._space_view(s, counts.get(s.id, 0), owner=u) for s, u in rows], total
 
     @staticmethod
     def _space_view(space: KnowledgeSpace, doc_count: int, owner: User | None = None) -> dict:

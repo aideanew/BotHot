@@ -51,11 +51,15 @@ class PublicLibraryService:
         self._session = session
         self._repo = SpaceRepository(session)
 
-    async def list_public_views(self) -> list[dict]:
+    async def list_public_views(
+        self, *, limit: int = 50, offset: int = 0
+    ) -> tuple[list[dict], int]:
         """GET /spaces/public → data.items：公共库卡（name/docCount/engine/updatedAt/isPublic）。
 
-        T1.5.3：doc 计数改 GROUP BY 单查询（原逐空间 count 为 N+1）。"""
-        spaces = await self._repo.list_public_spaces()
+        T1.5.3：doc 计数改 GROUP BY 单查询（原逐空间 count 为 N+1）。
+        C.1：LIMIT/OFFSET 下沉到 repo SQL，返回 (items, total)。"""
+        spaces = await self._repo.list_public_spaces(limit=limit, offset=offset)
+        total = await self._repo.count_public_spaces()
         counts = await self._repo.count_docs_many([s.id for s in spaces])
         items = []
         for space in spaces:
@@ -72,7 +76,7 @@ class PublicLibraryService:
                     else str(space.updated_at or ""),
                 }
             )
-        return items
+        return items, total
 
     async def get_public_space(self, space_id: str):
         """公共库空间校验（非公共/不存在 → None，不泄露存在性）。"""

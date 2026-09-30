@@ -74,8 +74,12 @@ class InMemorySpaceRepo:
                 return s
         return None
 
-    async def list_by_user(self, user_id: str) -> list[Any]:
-        return [s for s in self._spaces.values() if s.user_id == user_id]
+    async def list_by_user(self, user_id: str, *, limit: int = 50, offset: int = 0) -> list[Any]:
+        rows = [s for s in self._spaces.values() if s.user_id == user_id]
+        return rows[offset : offset + limit]
+
+    async def count_by_user(self, user_id: str) -> int:
+        return sum(1 for s in self._spaces.values() if s.user_id == user_id)
 
     async def set_langbot_kb_uuid(self, space_id: str, kb_uuid: str) -> None:
         if space_id in self._spaces:
@@ -546,7 +550,7 @@ def test_delete_space_success_calls_langbot_and_returns_ok() -> None:
     resp = client.delete(f"/api/v1/spaces/{space_id}")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["code"] == 0 and body["data"] == {"ok": True}
+    assert body["code"] == 0 and body["data"] == {"ok": True, "engineResidue": False}
     assert kb.deleted == ["kb-to-delete"]  # LangBot 删库被调用
     assert space_id not in repo._spaces
 
@@ -556,7 +560,7 @@ def test_delete_space_without_kb_skips_langbot() -> None:
     client, repo, kb = _delete_stub_app("user-1")
     space_id = repo.seed("user-1", "无库空间")
     resp = client.delete(f"/api/v1/spaces/{space_id}")
-    assert resp.status_code == 200 and resp.json()["data"] == {"ok": True}
+    assert resp.status_code == 200 and resp.json()["data"] == {"ok": True, "engineResidue": False}
     assert kb.deleted == [] and space_id not in repo._spaces
 
 

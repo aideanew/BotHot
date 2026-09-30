@@ -39,7 +39,7 @@ Sources admin 读面与删除。补齐 R4.8 仅读面而缺操作性这一缺口
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -51,9 +51,11 @@ from app.api.deps import (
     get_job_service,
     get_langbot_client,
     get_space_service,
+    limit_offset_query,
     require_roles,
 )
 from app.api.v1.spaces import BatchDocCategoryRequest, BatchDocIdsRequest, PatchSpaceRequest
+from app.core.cache import get_or_set
 from app.core.config import get_settings
 from app.core.engine_keyring import KEYABLE_ENGINES, master_key, resolve_engine_key
 from app.core.errors import DependencyUnavailableError
@@ -70,6 +72,11 @@ from app.services.spaces import SpaceService, SpaceValidationError
 from app.services.subscription import SourceSubscriptionService
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
+
+async def _wrap(value: Any) -> Any:
+    """把同步值包装为协程，供 cache.get_or_set 的 loader（同步注册表读）。"""
+    return value
 
 
 @router.patch("/spaces/{space_id}", summary="跨用户管理操作：改空间简介")
@@ -156,8 +163,7 @@ async def admin_delete_space(
 async def admin_list_spaces(
     actor: Annotated[User, Depends(require_roles("admin"))],
     svc: Annotated[SpaceService, Depends(get_space_service)],
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    paging: Annotated[tuple[int, int], Depends(limit_offset_query)],
 ) -> JSONResponse:
     """M3 批次 2（T5.2/T5.3 读面）：admin 跨用户空间清单，每条带归属。
 
@@ -166,16 +172,13 @@ async def admin_list_spaces(
     本人端点不带这三字段——admin 端点单独存在，既有契约零回归。
     归属随空间单次 JOIN 取得（逐空间查 owner 会是 N+1，doc 计数同类缺陷 T1.5.3 已修过）。
 
-    分页（3.3，limit/offset 与 admin 域 jobs/space_docs 同口径）：service 层未支持
-    limit/offset（services/ 归 WA/WB），故路由层切片提供正确响应形状与资源约束；
-    DB 全量查询待 WA/WB 给 service 加 limit/offset 后下沉到查询层。
+    C.1：LIMIT/OFFSET 下沉 service/repo SQL（路由层切片已移除）。
 
     未登录 → 10001；非 admin → 10004/403。
     """
-    items = await svc.list_space_views_any()
-    total = len(items)
-    page = items[offset : offset + limit]
-    body = success(data={"items": page, "total": total, "limit": limit, "offset": offset})
+    limit, offset = paging
+    items, total = await svc.list_space_views_any(limit=limit, offset=offset)
+    body = success(data={"items": items, "total": total, "limit": limit, "offset": offset})
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
@@ -262,9 +265,8 @@ async def admin_get_job(
 async def admin_list_subscriptions(
     actor: Annotated[User, Depends(require_roles("admin"))],
     session: Annotated[AsyncSession, Depends(get_db)],
+    paging: Annotated[tuple[int, int], Depends(limit_offset_query)],
     space_id: Annotated[str | None, Query()] = None,
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> JSONResponse:
     """R4.8（A-2 叠加）：admin 跨用户订阅清单。
 
@@ -275,17 +277,15 @@ async def admin_list_subscriptions(
     ownerId/ownerNickname 表示归属（既有端点不带归属字段，admin 端点单独存在）。
     归属信息经单次批量查询取得，不逐条 get（与 spaces 域 T1.5.3 同口径）。
 
-    分页（3.3，limit/offset 与 admin 域同口径）：路由层切片；service 层 limit/offset 待
-    WA/WB 下沉（全量查询仍在，响应形状与资源约束已正确）。
+    C.1：LIMIT/OFFSET 下沉 service/repo SQL（路由层切片已移除）。
 
     给定不存在的 space_id → 30004/404（不校验存在性会让「空间不存在」与「空间无订阅」
     无法区分）；未登录 → 10001；非 admin → 10004/403。
     """
+    limit, offset = paging
     svc = SourceSubscriptionService(session)
-    items = await svc.list_subscriptions_any(space_id=space_id)
-    total = len(items)
-    page = items[offset : offset + limit]
-    body = success(data={"items": page, "total": total, "limit": limit, "offset": offset})
+    items, total = await svc.list_subscriptions_any(space_id=space_id, limit=limit, offset=offset)
+    body = success(data={"items": items, "total": total, "limit": limit, "offset": offset})
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
@@ -458,8 +458,12 @@ async def admin_list_push_channels(
     ——同 T5.4 的 masterKeyConfigured / activeSource 显式回报纪律。
 
     未登录 → 10001；非 operator/admin → 10004/403。
+    C.4：注册表为代码静态（无写路径），走读缓存 TTL=300s（Redis 不可达直穿）。
     """
-    body = success(data={"channels": registered_channels()})
+    channels = await get_or_set(
+        "admin:push:channels", 300, lambda: _wrap(registered_channels())
+    )
+    body = success(data={"channels": channels})
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
@@ -478,8 +482,12 @@ async def admin_list_discovery_channels(
     日志同源，不必翻日志才能判断。沿用 `push/channels` 的显式回报纪律。
 
     未登录 → 10001；非 operator/admin → 10004/403。
+    C.4：注册表+配置读，走读缓存 TTL=120s（Redis 不可达直穿）。
     """
-    body = success(data=describe_channels(get_settings()))
+    channels = await get_or_set(
+        "admin:discovery:channels", 120, lambda: _wrap(describe_channels(get_settings()))
+    )
+    body = success(data=channels)
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
@@ -620,9 +628,8 @@ async def admin_cancel_subscription(
 async def admin_list_sources(
     actor: Annotated[User, Depends(require_roles("admin"))],
     session: Annotated[AsyncSession, Depends(get_db)],
+    paging: Annotated[tuple[int, int], Depends(limit_offset_query)],
     type_: Annotated[str | None, Query(alias="type")] = None,
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> JSONResponse:
     """R7.4.4：admin 信息源清单（含引用计数）。
 
@@ -631,14 +638,13 @@ async def admin_list_sources(
     subscriptionCount / assetCount / manifestCount。
 
     无归属过滤（sources 无 user_id 列，本就是全局资源）。type 过滤可选。
-    分页（3.3，limit/offset 与 admin 域同口径）：路由层切片；service 层 limit/offset
-    待 WA/WB 下沉。未登录 → 10001；非 admin → 10004/403。
+    C.1：LIMIT/OFFSET 下沉 service/repo SQL（路由层切片已移除）。
+    未登录 → 10001；非 admin → 10004/403。
     """
+    limit, offset = paging
     svc = SourceSubscriptionService(session)
-    items = await svc.list_sources_with_counts(source_type=type_)
-    total = len(items)
-    page = items[offset : offset + limit]
-    body = success(data={"items": page, "total": total, "limit": limit, "offset": offset})
+    items, total = await svc.list_sources_with_counts(source_type=type_, limit=limit, offset=offset)
+    body = success(data={"items": items, "total": total, "limit": limit, "offset": offset})
     return JSONResponse(status_code=200, content=body.model_dump())
 
 

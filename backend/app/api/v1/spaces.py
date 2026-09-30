@@ -14,7 +14,14 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_id, get_db, get_kb_service, get_langbot_client, get_space_service
+from app.api.deps import (
+    get_current_user_id,
+    get_db,
+    get_kb_service,
+    get_langbot_client,
+    get_space_service,
+    limit_offset_query,
+)
 from app.core.response import success
 from app.providers.langbot.client import LangBotClient
 from app.services.batch_ingest import BatchIngestService
@@ -59,20 +66,18 @@ class PatchSpacePublicRequest(BaseModel):
 async def list_public_spaces(
     user_id: Annotated[str, Depends(get_current_user_id)],
     session: Annotated[AsyncSession, Depends(get_db)],
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    paging: Annotated[tuple[int, int], Depends(limit_offset_query)],
 ) -> JSONResponse:
     """AB-P004 P1：公共库列表（is_public=1 系统空间）。
 
     data.items=[{id,name,description,docCount,engine,isPublic,updatedAt}]。
-    分页（3.3，limit/offset 与 knowledge 域 docs 同口径）：路由层切片；service 层
-    limit/offset 待 WA/WB 下沉。登录保护 10001；无需空间归属校验（公共库对全用户开放）。
+    C.1：LIMIT/OFFSET 下沉 service/repo SQL（路由层切片已移除）。
+    登录保护 10001；无需空间归属校验（公共库对全用户开放）。
     """
+    limit, offset = paging
     svc = PublicLibraryService(session)
-    items = await svc.list_public_views()
-    total = len(items)
-    page = items[offset : offset + limit]
-    body = success(data={"items": page, "total": total, "limit": limit, "offset": offset})
+    items, total = await svc.list_public_views(limit=limit, offset=offset)
+    body = success(data={"items": items, "total": total, "limit": limit, "offset": offset})
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
@@ -120,18 +125,15 @@ async def patch_space_public(
 async def list_spaces(
     user_id: Annotated[str, Depends(get_current_user_id)],
     svc: Annotated[SpaceService, Depends(get_space_service)],
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    paging: Annotated[tuple[int, int], Depends(limit_offset_query)],
 ) -> JSONResponse:
     """空间列表：data.items=[{id,name,description,docCount,updatedAt}]。
 
-    分页（3.3，limit/offset 与 knowledge 域 docs 同口径）：路由层切片；service 层
-    limit/offset 待 WA/WB 下沉。
+    C.1：LIMIT/OFFSET 下沉 service/repo SQL（路由层切片已移除）。
     """
-    items = await svc.list_space_views(user_id)
-    total = len(items)
-    page = items[offset : offset + limit]
-    body = success(data={"items": page, "total": total, "limit": limit, "offset": offset})
+    limit, offset = paging
+    items, total = await svc.list_space_views(user_id, limit=limit, offset=offset)
+    body = success(data={"items": items, "total": total, "limit": limit, "offset": offset})
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
@@ -190,13 +192,14 @@ async def delete_space(
     svc: Annotated[SpaceService, Depends(get_space_service)],
     kb: Annotated[LangBotClient, Depends(get_langbot_client)],
 ) -> JSONResponse:
-    """删除空间（AB-T11）：先 LangBot 删库，失败整体回滚；成功 → {ok:true}。
+    """删除空间（AB-T11）：先 LangBot 删库，失败整体回滚；成功 → {ok:true, engineResidue}。
 
     未登录 → 10001；无效 id / 他人空间 → 30004（404，不泄露存在性）；
     LangBot 删库失败 → 错误信封（30002/502 等，PG 无残留）。
+    engineResidue（C.5）：非 builtin 未实接引擎删除时，引擎侧 KB 残留（本地映射已清）。
     """
-    await svc.delete_space(user_id, space_id, kb)
-    body = success(data={"ok": True})
+    result = await svc.delete_space(user_id, space_id, kb)
+    body = success(data={"ok": True, "engineResidue": result.get("engineResidue", False)})
     return JSONResponse(status_code=200, content=body.model_dump())
 
 

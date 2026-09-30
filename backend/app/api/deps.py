@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.auth import get_auth_service
@@ -35,6 +35,18 @@ async def get_db() -> AsyncIterator[AsyncSession]:
     """
     async with get_session_factory()() as session:
         yield session
+
+
+async def limit_offset_query(
+    limit: int = Query(50, ge=1, le=100, description="分页大小（C.1：SQL 层 LIMIT）"),
+    offset: int = Query(0, ge=0, description="分页偏移（C.1：SQL 层 OFFSET）"),
+) -> tuple[int, int]:
+    """C.1 共享分页依赖：limit/offset 双口径冻结（bot/hot 用 page/page_size，其余域用本依赖）。
+
+    返回 (limit, offset)；路由解包后透传 service，service 下沉到 repo SQL LIMIT/OFFSET。
+    上限 le=100 防大页 DoS（与 admin/jobs 既有口径一致）。
+    """
+    return limit, offset
 
 
 async def get_current_sub(

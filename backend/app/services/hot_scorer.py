@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, update
+from sqlalchemy import case, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bothot_entities import FeedItem, HotTopic, HotTopicArticle
@@ -146,12 +146,16 @@ async def run_scoring(session: AsyncSession, *, now: datetime | None = None) -> 
             t.status = new_status
         updated += 1
 
-    for t in topics:
+    # Feed 分数同步：单条批量 UPDATE（C.2）——原逐话题 N 次 UPDATE 改为 1 条
+    # CASE ... WHEN ref_id THEN score 语句，WHERE item_type='hot_topic' AND ref_id IN (...)。
+    # 各话题 score 不同，故用 simple-CASE 按 ref_id 分发值；SQL 往返由 N 降 1。
+    if topics:
+        score_map = {t.id: float(t.hot_score or 0.0) for t in topics}
         await session.execute(
             update(FeedItem)
-            .where(FeedItem.item_type == "hot_topic", FeedItem.ref_id == t.id)
-            .values(score=float(t.hot_score or 0.0))
+            .where(FeedItem.item_type == "hot_topic", FeedItem.ref_id.in_(score_map))
+            .values(score=case(score_map, value=FeedItem.ref_id))
         )
 
-    logger.info("hot_scorer: 回填 %d 个话题 + Feed 分数同步", updated)
+    logger.info("hot_scorer: 回填 %d 个话题 + Feed 分数同步（批量 1 条 UPDATE）", updated)
     return updated

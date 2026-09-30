@@ -75,3 +75,30 @@ def get_engine() -> AsyncEngine:
 def get_session_factory() -> async_sessionmaker[AsyncSession]:
     """进程级会话工厂单例。"""
     return _session_factory
+
+
+# C.3：常驻进程数（web + scheduler + worker + push-scheduler = 4），可由 env 覆盖。
+# 每进程各持一份连接池（pool_size+max_overflow），总占用 = 进程数 × 单池容量。
+EXPECTED_PROCESSES = int(os.environ.get("BOTHOT_PROCESS_COUNT", "4"))
+
+
+async def assert_pool_capacity() -> None:
+    """C.3 启动断言：进程数 × (pool_size + max_overflow) ≤ PG max_connections。
+
+    超限则 raise RuntimeError 拒启（fail-fast）：4 进程 × (5+5)=40 远低于 PG 默认 100，
+    但 pool 调大或多副本时必须拦截。PG 不可达时跳过（不阻断启动——连接故障由
+    pool_pre_ping 在首查兜底，启动期断言不应比健康检查更严）。
+    """
+    from sqlalchemy import text
+
+    capacity = EXPECTED_PROCESSES * (_DB_POOL_SIZE + _DB_MAX_OVERFLOW)
+    try:
+        async with _engine.connect() as conn:
+            max_conn = (await conn.execute(text("SHOW max_connections"))).scalar()
+    except Exception:  # noqa: BLE001 PG 不可达：启动不断言失败（首查兜底）
+        return
+    if max_conn is not None and capacity > int(max_conn):
+        raise RuntimeError(
+            f"连接池容量超限：{EXPECTED_PROCESSES} 进程 × "
+            f"({_DB_POOL_SIZE}+{_DB_MAX_OVERFLOW})={capacity} > PG max_connections={max_conn}"
+        )
