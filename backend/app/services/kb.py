@@ -41,6 +41,7 @@ from app.repositories.asset import AssetRepository, DocumentRepository
 from app.repositories.space import SpaceRepository
 from app.services.categorizer import categorize
 from app.services.extractor import ExtractedContent, ExtractorService
+from app.services.feed_service import on_article_indexed
 from app.services.normalizer import normalize_extracted
 from app.services.quality import score_quality
 from app.services.resolver import SourceResolverService
@@ -417,6 +418,8 @@ class KnowledgeBaseService:
         await doc_repo.set_langbot_file_id(doc.id, file_id)
         await doc_repo.set_content_hash(doc.id, asset.content_hash)
         await doc_repo.set_status(doc.id, "INDEXED")
+        # W2：文章入库后写 FeedItem(article) + 发 new_article 事件（feed_service upsert）
+        await on_article_indexed(self._session, asset, space_id)
         self._reupload_cache_hits.append({"asset_id": asset.id, "file_id": file_id, "kb": kb_uuid})
         return doc, file_id
 
@@ -465,6 +468,8 @@ class KnowledgeBaseService:
         await doc_repo.set_langbot_file_id(doc.id, file_id)
         await doc_repo.set_content_hash(doc.id, asset.content_hash)
         await doc_repo.set_status(doc.id, "INDEXED")
+        # W2：文章入库后写 FeedItem(article) + 发 new_article 事件（feed_service upsert）
+        await on_article_indexed(self._session, asset, space_id)
         return doc
 
     async def _ensure_source(self, biz: str, extracted: ExtractedContent, url: str) -> Source:
