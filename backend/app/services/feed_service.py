@@ -20,11 +20,11 @@ upsert 语义：依赖 bothot_entities.FeedItem 的 UniqueConstraint(item_type, 
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,7 +33,7 @@ from app.models.bothot_entities import DailyReport, FeedItem, HotTopic
 from app.models.entities import ContentAsset, Source
 from app.services.llm_summary import summarize_topic
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 BUSINESS_TZ = ZoneInfo("Asia/Shanghai")
 

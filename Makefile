@@ -140,6 +140,29 @@ guard-structure: ## 检查目录结构是否完整
 	@test -d apps/web/src/features && echo "✅ apps/web/src/features/ 存在" || echo "⚠️  apps/web/src/features/ 不存在"
 	@test -d docs/00_governance && echo "✅ docs/00_governance/ 存在" || echo "⚠️  docs/ 不完整"
 
+.PHONY: guard-versions
+guard-versions: ## 检查版本锚点一致性（fail-closed）
+	@echo "检查版本锚点一致性..."
+	@nvmrc_node=$$(cat $(FRONTEND_DIR)/.nvmrc 2>/dev/null | tr -d '[:space:]'); \
+	dockerfile_node=$$(grep -E 'node:[0-9]+' $(FRONTEND_DIR)/Dockerfile 2>/dev/null | head -1 | sed -E 's/.*node:([0-9]+).*/\1/'); \
+	engines_node=$$(grep -A2 '"engines"' $(FRONTEND_DIR)/package.json 2>/dev/null | grep -oE '[0-9]+' | head -1); \
+	pm_version=$$(grep -oE 'pnpm@[0-9]+' $(FRONTEND_DIR)/package.json 2>/dev/null | head -1 | sed 's/pnpm@//'); \
+	echo "  .nvmrc node: $$nvmrc_node"; \
+	echo "  Dockerfile node: $$dockerfile_node"; \
+	echo "  engines.node: $$engines_node"; \
+	echo "  packageManager pnpm: $$pm_version"; \
+	rc=0; \
+	if [ -z "$$nvmrc_node" ]; then echo "❌ .nvmrc 为空或不存在"; rc=1; fi; \
+	if [ -z "$$dockerfile_node" ]; then echo "❌ Dockerfile 未找到 node 版本"; rc=1; fi; \
+	if [ -z "$$engines_node" ]; then echo "❌ package.json engines.node 未找到"; rc=1; fi; \
+	if [ -z "$$pm_version" ]; then echo "❌ packageManager 未找到 pnpm 版本"; rc=1; fi; \
+	if [ "$$rc" -eq 0 ]; then \
+		if [ "$$nvmrc_node" != "$$dockerfile_node" ]; then echo "❌ .nvmrc ($$nvmrc_node) != Dockerfile ($$dockerfile_node)"; rc=1; fi; \
+		if [ "$$nvmrc_node" != "$$engines_node" ]; then echo "❌ .nvmrc ($$nvmrc_node) != engines.node ($$engines_node)"; rc=1; fi; \
+	fi; \
+	if [ "$$rc" -ne 0 ]; then echo "❌ 版本锚点不一致"; exit 1; fi; \
+	echo "✅ 版本锚点一致"
+
 # ─── 清理 ───────────────────────────────────────────
 .PHONY: clean
 clean: ## 清理构建产物

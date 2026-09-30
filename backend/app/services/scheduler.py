@@ -34,13 +34,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-import logging
 import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -53,7 +53,7 @@ from app.services.process_heartbeat import BEACON_MIN_INTERVAL_SECONDS, BeaconGa
 from app.services.process_heartbeat import beacon as _heartbeat
 from app.services.subscription import SourceSubscriptionService
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 DEFAULT_INTERVAL_MINUTES = 360  # 与 SourceSubscription.sync_interval_minutes 默认值一致
 
@@ -575,7 +575,9 @@ async def _main() -> None:  # pragma: no cover - 进程入口
     compose 编排已接线（2026-09-23：`docker compose` 的 `scheduler` 服务，
     见 docker/compose.yml 进程拓扑注释）。生产配置不合格时此处拒启。
     """
-    logging.basicConfig(level=logging.INFO)
+    from app.core.logging import configure_logging
+
+    configure_logging()
     settings = get_settings()
     assert_production_ready(settings)
     from app.db import create_engine_and_session

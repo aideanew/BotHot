@@ -15,19 +15,19 @@ from __future__ import annotations
 
 import base64
 import json
-import logging
 import time
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
+import structlog
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 LOGOUT_EVENT = "http://schemas.openid.net/event/backchannel-logout"
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class InvalidLogoutToken(Exception):

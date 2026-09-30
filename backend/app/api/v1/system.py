@@ -8,23 +8,24 @@ from __future__ import annotations
 
 import contextlib
 import json
-import logging
 from collections.abc import AsyncIterator
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_sub, get_db
+from app.core import schema_guard
 from app.core.config import get_settings
 from app.core.response import success
 from app.models.entities import User
 from app.providers.push.web import _CHANNEL_PREFIX
 
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def _check_pg() -> str:
@@ -97,6 +98,55 @@ async def health() -> object:
         "env": settings.app_env,
         "deps": deps,
     })
+
+
+async def _check_schema() -> dict[str, object]:
+    """schema/code 一致性（复用 `core.schema_guard`，与启动守卫同源）。
+
+    ok=current==head；head 探测不可用视为 ok（不可判定不误伤就绪）；
+    current 取不到（库不可达/无表）时标 unreachable。"""
+    from app.db import get_engine
+
+    head = schema_guard.get_alembic_head()
+    current = await schema_guard.read_current_version_async(get_engine())
+    if head is None:
+        return {"ok": True, "state": "head_unknown", "current": current, "head": head}
+    if current is None:
+        return {"ok": False, "state": "unreachable", "current": current, "head": head}
+    return {"ok": current == head, "state": "ok" if current == head else "mismatch", "current": current, "head": head}
+
+
+@router.get("/live")
+async def live() -> object:
+    """存活探针：进程在跑即 200，不触任何依赖——供容器 HEALTHCHECK 用。
+
+    与 /health（功能探活、逐项降级可见）、/ready（就绪门禁）分层：
+    live 回答「该不该重启我」，ready 回答「能不能给我流量」。"""
+    return success(data={"status": "alive", "app": get_settings().app_name})
+
+
+@router.get("/ready")
+async def ready() -> JSONResponse:
+    """就绪探针：PG ping + Redis ping + schema 一致，任一不过返 503（带逐项明细）。
+
+    全部 ok → 200；任一失败 → 503，body 仍为标准信封，`data.checks` 点名失败项，
+    让编排器（compose/k8s readiness）在依赖未就绪时摘流量而非把故障当健康。"""
+    pg = await _check_pg()
+    redis = await _check_redis()
+    schema = await _check_schema()
+    checks = {
+        "postgres": {"ok": pg == "ok", "state": pg},
+        "redis": {"ok": redis == "ok", "state": redis},
+        "schema": schema,
+    }
+    all_ok = all(bool(c["ok"]) for c in checks.values())
+    body = success(
+        data={
+            "status": "ready" if all_ok else "not_ready",
+            "checks": checks,
+        }
+    )
+    return JSONResponse(status_code=200 if all_ok else 503, content=body.model_dump())
 
 
 # ── 站内通知 SSE 订阅（WE 5.1）───────────────────────────────────────────────

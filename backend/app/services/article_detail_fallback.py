@@ -24,8 +24,9 @@
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
+
+import structlog
 
 from app.core.config import Settings
 from app.providers.article_sources.base import ArticleDetail, ArticleSourceProvider
@@ -33,7 +34,7 @@ from app.providers.article_sources.base import ArticleDetail, ArticleSourceProvi
 if TYPE_CHECKING:
     pass
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # 按成本升序排列的详情兜底平台优先级
 # 证据级别（格级，非行级）：

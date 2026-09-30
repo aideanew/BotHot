@@ -24,10 +24,11 @@ userinfo 端点是权威身份来源，非第三方开放授权码流程。
 
 from __future__ import annotations
 
-import logging
 import secrets
 import time
 from typing import Any
+
+import structlog
 
 from app.core.config import Settings
 from app.core.errors import (
@@ -42,7 +43,7 @@ from app.services.auth.session_store import SessionRecord, SessionStore
 from app.services.auth.state_store import SsoStateStore, consume_state
 from app.services.roles import sub_has_min_rank
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class AuthService:

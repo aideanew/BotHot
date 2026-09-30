@@ -10,13 +10,12 @@
 
 from __future__ import annotations
 
-import logging
-
 import httpx
+import structlog
 
 from app.core.config import get_settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _DEFAULT_TIMEOUT = 30.0
 _MAX_BODY_CHARS = 2000  # 入 prompt 的素材正文上限，控成本

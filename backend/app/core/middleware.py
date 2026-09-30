@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 
+import structlog
 from starlette.datastructures import MutableHeaders
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -33,6 +34,10 @@ class RequestIdMiddleware:
 
         request_id = self._extract_incoming(scope) or str(uuid.uuid4())
         token = set_request_id(request_id)
+        # W6 A.1：把 requestId 也绑进 structlog contextvars，使本请求内经
+        # merge_contextvars 的**每条日志**自动带 request_id（与 X-Request-ID 头、
+        # 信封 requestId 三者一致）；finally 解绑防跨请求串扰。
+        structlog.contextvars.bind_contextvars(request_id=request_id)
 
         async def send_with_request_id(message: Message) -> None:
             if message["type"] == "http.response.start":
@@ -43,6 +48,7 @@ class RequestIdMiddleware:
         try:
             await self.app(scope, receive, send_with_request_id)
         finally:
+            structlog.contextvars.unbind_contextvars("request_id")
             reset_request_id(token)
 
     @staticmethod

@@ -42,7 +42,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev]" pytest-cov
       # §六十一：工具链指纹落盘。backend 的 ruff/mypy 在 pyproject 的 dev extras 里
       # 钉死精确版本（实测 ruff 0.12.x 与 0.16.x 的 I001 规则互斥，一方的自动修复
       # 即为另一方的违规），指纹让「CI 实际装到了什么版本」在失败时可追溯，
@@ -89,13 +89,16 @@ jobs:
       #   → 阈值维持 6（实测 4 + 2 容差）：收紧到 4 会把「本地/CI 依赖可达性差异」误判为回归，
       #     而该门禁的首要职责是锁死「PG 不可达导致的静默 skip」，不是追求 skip 数最小。
       # ⚠️ 首次 CI 运行后复核：若 CI 侧 skip 数 ≠ 4，须先定位是依赖差异还是真实回归，再调阈值。
-      - name: Tests (pytest) + skip gate
+      - name: Tests (pytest) + coverage + skip gate
         env:
           SKIP_BASELINE: "6"
+          # 覆盖率基线 = 实测值（2026-09-30 隔离 PG 全量跑 TOTAL=77%）下浮 2pt 防波动；
+          # 提升覆盖率时应同步上调此基线
+          COV_BASELINE: "75"
         shell: bash
         run: |
           set -o pipefail
-          pytest tests/ -q -rs --junitxml=pytest-report.xml 2>&1 | tee pytest-output.log
+          pytest tests/ -q -rs --junitxml=pytest-report.xml --cov=app --cov-report=term-missing --cov-fail-under=$COV_BASELINE 2>&1 | tee pytest-output.log
           pytest_status=${PIPESTATUS[0]}
           python - <<'PY'
           import os
@@ -216,6 +219,11 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Type check
         run: pnpm run typecheck
+      # W10：tsc --noEmit 严格门禁
+      # 依赖 W9 落地，若 W9 未落地则 continue-on-error
+      - name: TypeScript strict check (tsc --noEmit)
+        continue-on-error: true
+        run: pnpm exec tsc --noEmit
       # N12：补 vitest 单测门禁——此前 89 用例仅本地机检
       # N12b（2026-09-28）：加 --retry=2。t0263 的 findBy* 后立即断言 mock 调用存在
       # 微任务竞态（详见 frontend/tests/t0263 注释）；重试兜底，同时该测试已改为

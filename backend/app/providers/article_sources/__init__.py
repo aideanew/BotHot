@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-import logging
+import structlog
 
 from app.core.config import Settings
 from app.core.errors import ConfigurationError
@@ -30,7 +30,7 @@ from app.providers.article_sources.justoneapi import JustOneApiClient
 from app.providers.article_sources.tikhub import TikhubClient
 from app.providers.article_sources.wellbyte import WellbyteClient
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 __all__ = [
     "ArticleDetail",

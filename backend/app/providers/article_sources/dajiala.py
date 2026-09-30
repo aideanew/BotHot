@@ -21,11 +21,11 @@ manifest._map_row 的别名（url/title/digest/post_time）。
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime
 from typing import Any
 
 import httpx
+import structlog
 
 from app.core.errors import (
     AppError,
@@ -34,7 +34,7 @@ from app.core.errors import (
 )
 from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 DEFAULT_TIMEOUT = 15.0
 BASE_URL = "https://www.dajiala.com/fbmain/monitor/v3"
