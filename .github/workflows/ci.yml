@@ -264,7 +264,11 @@ jobs:
       - name: Install Playwright browser (chromium)
         run: pnpm exec playwright install --with-deps chromium
       - name: Build (mock artifact, for UI e2e)
-        run: pnpm exec next build
+        # 必须 rm -rf .next：上方生产 Build 已产出 MOCK=false 产物，而 Next 构建缓存
+        # 不按 NEXT_PUBLIC_* 环境变量失效（vercel/next.js 已知陷阱）——直接二次 build
+        # 会复用 false 内联，页面照常打 /api/v1 被 rewrite 代理到 :3300，mock e2e 必红
+        # （2026-09-30 CI 实证：日志满屏 Failed to proxy localhost:3300）。
+        run: rm -rf .next && pnpm exec next build
         env:
           NEXT_PUBLIC_API_MOCK: "true"
       - name: E2E (mock UI)
