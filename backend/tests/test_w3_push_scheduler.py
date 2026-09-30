@@ -17,6 +17,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import delete, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -129,7 +130,12 @@ async def test_concurrent_claim_no_duplicate():
     """
     engine, factory = _real_factory()
     try:
-        await _purge_tables(engine, PushTask, PushLog, PushEvent)
+        # 本用例不经 db_session 夹具（需要真连接并发），须自带与 conftest 同口径的
+        # 不可达 skip——否则 PG 缺席时会以丑陋报错染色门禁
+        try:
+            await _purge_tables(engine, PushTask, PushLog, PushEvent)
+        except SQLAlchemyError as exc:
+            pytest.skip(f"PG 不可达（{type(exc).__name__}），环境恢复后复跑本用例")
 
         async with factory() as seed:
             user = User(
@@ -174,10 +180,13 @@ async def test_concurrent_claim_no_duplicate():
         assert len(claimed) == 3, f"3 条到期任务必须各被领取一次，实际 {len(claimed)}"
         assert len(set(claimed)) == 3, "SKIP LOCKED 失效：同一任务被重复领取"
     finally:
-        async with engine.begin() as conn:
-            await conn.execute(delete(PushTask).where(PushTask.name.like("concurrent-%")))
-            await conn.execute(delete(BotChannel).where(BotChannel.name == "w3-concurrent-channel"))
-            await conn.execute(delete(User).where(User.sub == "w3-concurrent-user"))
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(delete(PushTask).where(PushTask.name.like("concurrent-%")))
+                await conn.execute(delete(BotChannel).where(BotChannel.name == "w3-concurrent-channel"))
+                await conn.execute(delete(User).where(User.sub == "w3-concurrent-user"))
+        except SQLAlchemyError:
+            pass  # skip 路径（engine 已 dispose / 连接不可达）：清场无意义，不遮蔽 skip
         await engine.dispose()
 
 
