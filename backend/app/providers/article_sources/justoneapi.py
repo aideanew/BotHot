@@ -33,12 +33,16 @@ from app.core.errors import (
     DiscoveryFailedError,
     RateLimitedUpstreamError,
 )
+from app.core.security import upstream_semaphore, upstream_timeout
 from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult
 
 logger = structlog.get_logger(__name__)
 
 DEFAULT_TIMEOUT = 20.0
 BASE_URL = "https://api.justoneapi.com"
+
+# W7：进程内并发闸名（`UPSTREAM_CONCURRENCY_JUSTONEAPI` 可覆盖上限）
+UPSTREAM_NAME = "justoneapi"
 
 _CODE_OK = 0
 
@@ -62,12 +66,23 @@ class JustOneApiClient:
     ) -> None:
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
-        self._http = http or httpx.AsyncClient(timeout=timeout)
+        # W7：超时拆分（connect 短 / read 长）——`timeout` 参数语义保留为读超时
+        self._http = http or httpx.AsyncClient(timeout=upstream_timeout(timeout))
         self._owns_http = http is None
 
     async def aclose(self) -> None:
         if self._owns_http:
             await self._http.aclose()
+
+    async def _post(self, url: str, **kwargs: Any) -> httpx.Response:
+        """带并发闸的 POST（W7）：限「我们对上游的并发」，不改请求/响应语义。"""
+        async with upstream_semaphore(UPSTREAM_NAME):
+            return await self._http.post(url, **kwargs)
+
+    async def _get(self, url: str, **kwargs: Any) -> httpx.Response:
+        """带并发闸的 GET（W7）：与 `_post` 同闸，故发现与详情共享同一并发预算。"""
+        async with upstream_semaphore(UPSTREAM_NAME):
+            return await self._http.get(url, **kwargs)
 
     # ── 发现 ──────────────────────────────────────────────────────────
 
@@ -90,7 +105,7 @@ class JustOneApiClient:
 
         form_data = {"token": self._api_key, "ghid": identifier}
         try:
-            resp = await self._http.post(
+            resp = await self._post(
                 f"{self._base_url}/api/weixin/get-account-history-articles/v2",
                 data=form_data,
             )
@@ -145,7 +160,7 @@ class JustOneApiClient:
 
         params = {"token": self._api_key, "articleUrl": url}
         try:
-            resp = await self._http.get(
+            resp = await self._get(
                 f"{self._base_url}/api/weixin/get-article-detail/v1",
                 params=params,
             )
@@ -223,7 +238,7 @@ class JustOneApiClient:
         # JustOneAPI 鉴权方式：URL 参数 ?token=（与 detail 接口一致）
         params = {"token": self._api_key, "keyword": keyword}
         try:
-            resp = await self._http.get(
+            resp = await self._get(
                 f"{self._base_url}/api/weixin/search-article/v1",
                 params=params,
             )

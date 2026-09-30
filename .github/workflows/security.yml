@@ -1,0 +1,557 @@
+name: Security
+
+# ── W7（2026-09-30）供应链 / 配置 / 密钥扫描 ─────────────────────────────────
+#
+# 存在理由（W7 实证）：本仓此前**没有任何安全扫描**——依赖漏洞（Python/Node）、
+# 文件系统配置缺陷、明文凭据全无门禁；`docs/07_release/` 下也没有密钥轮换规程
+# （主密钥泄露 → 无任何可执行处置路径）。本工作流补齐前者，key-rotation-sop.md 补齐后者。
+#
+# 与 ci.yml 的分工（互补，不重叠）：
+#   ci.yml       —— 代码质量与功能：ruff / mypy / pytest / 构建 / e2e。每次 push、PR 跑。
+#   本工作流     —— 外部依赖面与配置面：依赖 CVE / 配置缺陷 / 明文密钥。
+#                   除 push、PR 外**额外按周跑一次**：依赖漏洞是**时间驱动**的——
+#                   代码一行不改，CVE 也会在昨天被披露；只在 push 时扫，
+#                   「这个月没人提交」就等于「这个月没扫」，恰是最需要扫的窗口。
+#
+# 判据：统一「可行动性」策略（四扫描器同口径）
+#   🔴 阻断（BLOCK）= 当下**可行动**：有修复版本可升级 / 自身配置明确高危 / 检出明文密钥
+#   🟡 告警（WARN） = 需跟踪但**当前不可行动**：无修复版本、中低危配置项
+#
+# 为什么用「可行动性」而不是单纯 CVSS 分数作为阻断线（这是一处刻意的、被验证过的取舍）：
+#   pip-audit 的 JSON **不输出严重度字段**（实测 2.x：只有 id / fix_versions / aliases /
+#   description，无 severity / cvss）。若把「严重度」作为统一阻断线，这条线在四个扫描器里
+#   有四个不同来源，且一个根本没有来源。剩下的两条路都更差：
+#     ① 一律阻断 → 不可修复的传递依赖漏洞变成永久红灯，最终被人 `continue-on-error` 掉，
+#        门禁退化成装饰；
+#     ② 一律放行 → 等于没有门禁。
+#   「有修复版本 = 有升级动作 = 阻断」是**唯一能跨四个扫描器落地且可解释**的线：
+#   它把红灯严格限定在「你今天就能修」的项上，红灯出现即代表有人需要动手，
+#   不会因为「上游没发新版」而长期挂红。无修复版本的项仍逐条列出（🟡），
+#   由人定期复核，只是不阻断流水线。
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  schedule:
+    # 周日 18:00 UTC = 周一 02:00 UTC+8。见上「时间驱动」的理由。
+    - cron: "0 18 * * 0"
+  workflow_dispatch:
+
+# 只读仓库内容：本工作流不写仓库、不写 PR、不发评论（gitleaks-action 的 PR 评论能力
+# 被刻意不启用——见 ④ 步骤说明，避免引入 `pull-requests: write` 这一非必要权限）。
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_AUDIT_VERSION: "2.10.1"
+  TRIVY_VERSION: "0.57.1"
+  GITLEAKS_VERSION: "8.21.2"
+
+  # 已接受的风险基线：pip-audit `--ignore-vuln` 的漏洞 ID（逗号分隔，如
+  # "GHSA-xxxx-yyyy-zzzz,CVE-2024-12345"）。**空 = 零容忍**。
+  # 纪律：只登记「已评估并决定接受」的项，且必须同时在本行尾注登记理由与复核日期；
+  #       永不为了把红灯刷绿而填。这与 ci.yml 的 SKIP_BASELINE 是同一种东西——
+  #       基线必须可解释、有保质期，否则它只是把问题藏起来。
+  PIP_AUDIT_IGNORE_VULNS: ""
+
+  # 扫描排除项（单行、逗号分隔、项内无空格——trivy 的 --skip-dirs 是 StringSlice，
+  # 项前带空格会被当成另一个路径，故此处不做折行）。
+  #
+  # ⚠️ 事实校正（W7 实证，写在这里以免后人再被误导）：本仓**不存在** `langbot_plugins`
+  #    目录——它只是 `docker/compose.yml:68` 的**卷名**（卷 → 容器内 /app/data/plugins），
+  #    仓库侧没有同名路径。仓库侧的对应实体是 `.project/LangBot/`（LangBot 供应商源码，
+  #    其内部含 plugins 子树）。
+  #    为什么必须排除整个 `.project/`：全仓 5057 个 git 跟踪文件里 **4385 个（86.7%）**
+  #    在 `.project/` 下（LangBot / MediaCrawler / firecrawl / lux / reclip / wandao /
+  #    SHY-downloader 七份第三方参考源码），**不是本项目代码**。不排除的后果不是"多几条
+  #    噪音"，而是本项目自己的几十个文件被埋在 4000+ 个第三方文件里——门禁形同虚设。
+  #    `langbot_plugins` 字面仍保留在列表中以备溯源（对齐原始指令措辞）。
+  SCAN_EXCLUDES: ".project,langbot_plugins,node_modules,.next,dist,build,coverage,.git,backend/.venv,frontend/.next,frontend/vitest-report,frontend/test-results,frontend/playwright-report"
+
+jobs:
+  security:
+    name: 安全扫描（① pip-audit / ② pnpm audit / ③ trivy / ④ gitleaks）
+    runs-on: ubuntu-latest
+    # trivy 首次要拉漏洞库（~50MB），gitleaks 要遍历全历史；30 分钟是宽松上限，
+    # 目的是把「卡住」与「跑得慢」区分开——超时即失败，不会无限期占 runner。
+    timeout-minutes: 30
+    env:
+      VERDICT_DIR: ${{ runner.temp }}/security-verdicts
+      # 汇总门禁的过渡开关。默认强制（'1'）。置 '0' 只把 🔴 降级为 ⚠️ 并**不阻断**——
+      # 仅用于「首次接入、需要先摸清真实漏洞存量」这一种场景，稳定后必须删掉这一行
+      # 与仓库变量，不允许长期以 '0' 运行（否则本工作流等于 ci.yml 里的一条 echo）。
+      SECURITY_GATE_ENFORCE: ${{ vars.SECURITY_GATE_ENFORCE || '1' }}
+    steps:
+      # fetch-depth: 0 —— ④ gitleaks 走 git 模式（遍历历史）。浅克隆只有 1 个 commit，
+      # 「历史上提交过、后来删掉的密钥」会整段漏掉，而那恰是密钥扫描的主要目标。
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # pnpm 版本解析与 ci.yml 逐字同源：`defaults.run.working-directory` 不作用于
+      # `uses:` action（ci.yml §六十一 踩过的坑），故此处显式锚 $GITHUB_WORKSPACE，
+      # 且 pnpm/action-setup 必须排在 setup-node 之前（setup-node 的 cache: pnpm 会
+      # shell out 找 pnpm，pnpm 未装时直接报 "Unable to locate executable file"）。
+      - name: Resolve pnpm version from packageManager
+        id: pnpm
+        shell: bash
+        run: |
+          pm=$(grep -m1 '"packageManager"' "$GITHUB_WORKSPACE/frontend/package.json" \
+            | sed -E 's/.*"packageManager"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' || true)
+          case "$pm" in
+            pnpm@[0-9]*\.[0-9]*\.[0-9]*)
+              echo "packageManager=$pm"
+              echo "version=${pm#pnpm@}" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "❌ packageManager 必须写成 pnpm@<精确版本>，实际：'${pm:-<缺失>}'"
+              exit 1
+              ;;
+          esac
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ steps.pnpm.outputs.version }}
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Prepare verdict dir
+        shell: bash
+        run: mkdir -p "$VERDICT_DIR"
+
+      # ══════════════════════════════════════════════════════════════════════════
+      # ① pip-audit —— Python 依赖漏洞
+      # ══════════════════════════════════════════════════════════════════════════
+      # 审计的是**实际解析出来的运行环境**，而不是依赖声明文本：
+      # backend 没有 requirements.txt（依赖声明在 pyproject.toml 的
+      # [project.dependencies] / [project.optional-dependencies]），
+      # 若只解析声明文本，传递依赖整段不可见——而传递依赖恰是漏洞的主要来源
+      # （你自己声明的包通常维护活跃，被拖进来的孙子包才是长期没人管的）。
+      # 故 `pip install -e ".[dev]"` 把真实环境装出来再审计。
+      - name: "① pip-audit — Python 依赖漏洞"
+        id: pip_audit
+        # 关键：四步必须**都跑完**，裁决留给末尾的汇总门禁。
+        # 若用默认行为，① 失败会让 ②③④ 全 skip —— 一次 PR 只暴露一层问题，
+        # 修一轮等一轮 CI，四轮才能收敛。
+        continue-on-error: true
+        working-directory: backend
+        shell: bash
+        run: |
+          set -uo pipefail
+          verdict="$VERDICT_DIR/verdict-pip-audit"
+          echo "SCANNER_ERROR" > "$verdict"   # 先写最坏结果，任一步骤中断都不会留下"假绿"
+
+          if ! pip install -e ".[dev]" > install.log 2>&1; then
+            echo "❌ 依赖安装失败（见 backend/install.log 尾部）"
+            tail -30 install.log
+            exit 0
+          fi
+          if ! pip install "pip-audit==${PIP_AUDIT_VERSION}" > /dev/null 2>&1; then
+            echo "❌ pip-audit 安装失败（版本 ${PIP_AUDIT_VERSION}）"
+            exit 0
+          fi
+
+          # 接受基线展开为重复的 --ignore-vuln 参数（数组展开，避免空参数变成位置参数）
+          ignore_args=()
+          if [ -n "${PIP_AUDIT_IGNORE_VULNS:-}" ]; then
+            IFS=',' read -r -a ids <<< "$PIP_AUDIT_IGNORE_VULNS"
+            for id in "${ids[@]}"; do
+              id="$(printf '%s' "$id" | tr -d '[:space:]')"
+              [ -n "$id" ] && ignore_args+=(--ignore-vuln "$id")
+            done
+            echo "接受基线（${#ignore_args[@]} 项）已加载"
+          fi
+
+          # `|| true`：pip-audit 检出漏洞时退出码非 0，这不是"扫描失败"，
+          # 而是"扫描成功且发现漏洞"——两者必须区分，否则无法把
+          # SCANNER_ERROR（工具坏了）与 BLOCK（真有漏洞）分开上报。
+          pip-audit --format json --output pip-audit.json \
+            --progress-spinner off "${ignore_args[@]}" > pip-audit-console.log 2>&1 || true
+
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          verdict = pathlib.Path(os.environ["VERDICT_DIR"], "verdict-pip-audit")
+          report = pathlib.Path("pip-audit.json")
+          if not report.is_file():
+              print("❌ pip-audit 未产出 JSON 报告（工具异常，非漏洞）")
+              print(pathlib.Path("pip-audit-console.log").read_text(errors="replace")[-1500:])
+              verdict.write_text("SCANNER_ERROR")
+              raise SystemExit(0)
+
+          data = json.loads(report.read_text(encoding="utf-8"))
+          # pip-audit 2.x: {"dependencies": [...], "fixes": [...]}
+          # pip-audit 1.x: 裸数组。两种都收，避免钉死版本时的形状漂移炸掉门禁。
+          deps = data.get("dependencies", []) if isinstance(data, dict) else data
+
+          blocking, warn = [], []
+          for dep in deps or []:
+              for vuln in (dep.get("vulns") or []):
+                  fixes = [f for f in (vuln.get("fix_versions") or []) if f]
+                  row = (
+                      dep.get("name", "?"),
+                      dep.get("version", "?"),
+                      vuln.get("id", "?"),
+                      ",".join(fixes) or "-",
+                  )
+                  (blocking if fixes else warn).append(row)
+
+          print(f"pip-audit：🔴 阻断 {len(blocking)} 条（有修复版本） / 🟡 告警 {len(warn)} 条（无修复版本）")
+          for name, ver, vid, fixes in blocking:
+              print(f"  🔴 {name}=={ver}  {vid}  → 升级到 {fixes}")
+          for name, ver, vid, _ in warn:
+              print(f"  🟡 {name}=={ver}  {vid}  → 上游暂无修复版本，列入跟踪")
+
+          verdict.write_text("BLOCK" if blocking else "OK")
+          PY
+
+      # ══════════════════════════════════════════════════════════════════════════
+      # ② pnpm audit —— Node 依赖漏洞
+      # ══════════════════════════════════════════════════════════════════════════
+      # `--prod`：只审生产依赖。devDependencies（vitest / playwright / eslint …）不进
+      # 生产镜像，其漏洞不影响线上攻击面；把它们算进来会把真实信号稀释成噪音。
+      # `--ignore-scripts`：审计不需要跑任何 postinstall，且关掉任意脚本执行面。
+      - name: "② pnpm audit — Node 依赖漏洞"
+        id: pnpm_audit
+        continue-on-error: true
+        working-directory: frontend
+        shell: bash
+        run: |
+          set -uo pipefail
+          verdict="$VERDICT_DIR/verdict-pnpm-audit"
+          echo "SCANNER_ERROR" > "$verdict"
+
+          if ! pnpm install --frozen-lockfile --ignore-scripts > install.log 2>&1; then
+            echo "❌ pnpm 安装失败（见 frontend/install.log 尾部）"
+            tail -30 install.log
+            exit 0
+          fi
+
+          # pnpm audit 检出漏洞时退出码非 0 —— 与 ① 同理，用 `|| true` 把
+          # "发现漏洞" 与 "工具失败" 分开。
+          pnpm audit --prod --json > audit.json 2> audit-console.log || true
+
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          verdict = pathlib.Path(os.environ["VERDICT_DIR"], "verdict-pnpm-audit")
+          report = pathlib.Path("audit.json")
+          raw = report.read_text(encoding="utf-8") if report.is_file() else ""
+
+          data = None
+          if raw.strip():
+              try:
+                  data = json.loads(raw)
+              except json.JSONDecodeError:
+                  data = None
+          if not isinstance(data, dict):
+              print("❌ pnpm audit 未产出可解析的 JSON（工具异常，非漏洞）")
+              print(pathlib.Path("audit-console.log").read_text(errors="replace")[-1500:] if pathlib.Path("audit-console.log").is_file() else "")
+              verdict.write_text("SCANNER_ERROR")
+              raise SystemExit(0)
+
+          HIGH = {"critical", "high"}
+          blocking, warn = [], []
+
+          # 形状一（npm v6 / pnpm 传统）：{"advisories": {"<id>": {...}}}
+          for adv in (data.get("advisories") or {}).values():
+              row = (
+                  adv.get("module_name", "?"),
+                  adv.get("severity", "unknown"),
+                  ",".join(adv.get("cves") or []) or str(adv.get("id", "?")),
+                  str(adv.get("patched_versions", "-")),
+              )
+              (blocking if row[1] in HIGH else warn).append(row)
+
+          # 形状二（npm v7+）：{"vulnerabilities": {"<pkg>": {"severity": ...}}}
+          for name, item in (data.get("vulnerabilities") or {}).items():
+              sev = str(item.get("severity", "unknown"))
+              row = (name, sev, "via=" + ",".join(map(str, item.get("via") or [])),
+                     "fix=" + str(item.get("fixAvailable", "-")))
+              (blocking if sev in HIGH else warn).append(row)
+
+          # 形状三（只有计数、无明细）：用 metadata 汇总兜底，避免"解析不到明细就判工具坏"。
+          if not blocking and not warn:
+              meta = ((data.get("metadata") or {}).get("vulnerabilities") or {})
+              if meta:
+                  n_high = int(meta.get("critical", 0)) + int(meta.get("high", 0))
+                  n_rest = sum(int(meta.get(k, 0)) for k in ("moderate", "low", "info"))
+                  print(f"pnpm audit（汇总口径，无明细）：high/critical={n_high} moderate/low/info={n_rest}")
+                  blocking = [("<汇总>", "high", f"{n_high} 条", "-")] if n_high else []
+                  warn = [("<汇总>", "moderate", f"{n_rest} 条", "-")] if n_rest else []
+              else:
+                  print("❌ pnpm audit JSON 三种已知形状均不匹配 —— 疑似 pnpm 输出格式变更，需人工核对")
+                  print(raw[:1000])
+                  verdict.write_text("SCANNER_ERROR")
+                  raise SystemExit(0)
+
+          print(f"pnpm audit：🔴 阻断 {len(blocking)} 条（critical/high） / 🟡 告警 {len(warn)} 条（moderate/low/info）")
+          for name, sev, vid, fix in blocking:
+              print(f"  🔴 {name} [{sev}] {vid} → {fix}")
+          for name, sev, vid, fix in warn:
+              print(f"  🟡 {name} [{sev}] {vid} → {fix}")
+
+          verdict.write_text("BLOCK" if blocking else "OK")
+          PY
+
+      # ══════════════════════════════════════════════════════════════════════════
+      # ③ trivy fs —— 文件系统漏洞 / 配置缺陷 / 内嵌密钥
+      # ══════════════════════════════════════════════════════════════════════════
+      # 为什么用 release 二进制而不是 `aquasecurity/trivy-action`：
+      #   action 的输入名（skip-dirs / scanners / ignore-unfixed 等）随版本变动，
+      #   而本工作流无法在本地等价验证 action 的输入解析——写错一个输入名，
+      #   trivy 会**静默**用默认值跑（不报错），门禁就成了假绿。
+      #   钉住 release tarball 直接调 CLI，参数即文档，本地可逐字复现。
+      - name: "③ trivy — 文件系统漏洞 / 配置 / 密钥"
+        id: trivy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          verdict="$VERDICT_DIR/verdict-trivy"
+          echo "SCANNER_ERROR" > "$verdict"
+
+          if ! curl -sSfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" -o /tmp/trivy.tgz; then
+            echo "❌ trivy ${TRIVY_VERSION} 下载失败"
+            exit 0
+          fi
+          tar -xzf /tmp/trivy.tgz -C /tmp trivy
+
+          mkdir -p /tmp/trivy-cache
+          # --exit-code 0：不让 trivy 自己决定流水线命运，裁决权收归本工作流的统一策略。
+          # --skip-dirs 见文件头 SCAN_EXCLUDES 的说明。
+          # `> log 2>&1`（不接管道）：管道会把退出码换成 tail 的，且缓冲会让日志假死。
+          if ! /tmp/trivy fs \
+              --cache-dir /tmp/trivy-cache \
+              --scanners vuln,misconfig,secret \
+              --format json \
+              --output trivy.json \
+              --exit-code 0 \
+              --no-progress \
+              --skip-dirs "$SCAN_EXCLUDES" \
+              . > trivy-console.log 2>&1; then
+            echo "❌ trivy 扫描失败（见 trivy-console.log 尾部）"
+            tail -30 trivy-console.log
+            exit 0
+          fi
+
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          verdict = pathlib.Path(os.environ["VERDICT_DIR"], "verdict-trivy")
+          report = pathlib.Path("trivy.json")
+          if not report.is_file():
+              print("❌ trivy 未产出 JSON 报告（工具异常）")
+              verdict.write_text("SCANNER_ERROR")
+              raise SystemExit(0)
+
+          data = json.loads(report.read_text(encoding="utf-8"))
+          HIGH = {"CRITICAL", "HIGH"}
+          blocking, warn = [], []
+
+          for result in data.get("Results") or []:
+              target = result.get("Target", "?")
+
+              # 依赖漏洞：与 ① 同口径 —— 「有 FixedVersion」才阻断，
+              # 无修复版本的 HIGH 降为告警（否则恒红，见文件头取舍说明）。
+              for vuln in result.get("Vulnerabilities") or []:
+                  sev = str(vuln.get("Severity") or "UNKNOWN").upper()
+                  fixed = (vuln.get("FixedVersion") or "").strip()
+                  row = (target, sev, vuln.get("PkgName", "?"), f"{vuln.get('VulnerabilityID','?')} fixed={fixed or '-'}")
+                  (blocking if (sev in HIGH and fixed) else warn).append(row)
+
+              # 配置缺陷：这是**我们自己写的** Dockerfile/compose/nginx 配置，
+              # 没有"上游没发修复版本"这种借口 —— 严重度即阻断线。
+              for mis in result.get("Misconfigurations") or []:
+                  sev = str(mis.get("Severity") or "UNKNOWN").upper()
+                  row = (target, sev, mis.get("ID", "?"), mis.get("Title", ""))
+                  (blocking if sev in HIGH else warn).append(row)
+
+              # 内嵌密钥：一律阻断，无严重度可言。
+              for secret in result.get("Secrets") or []:
+                  blocking.append((target, "CRITICAL", secret.get("RuleID", "?"), secret.get("Title", "")))
+
+          print(f"trivy：🔴 阻断 {len(blocking)} 条 / 🟡 告警 {len(warn)} 条")
+          for row in blocking[:60]:
+              print("  🔴 " + " | ".join(str(x) for x in row))
+          for row in warn[:60]:
+              print("  🟡 " + " | ".join(str(x) for x in row))
+
+          verdict.write_text("BLOCK" if blocking else "OK")
+          PY
+
+      # ══════════════════════════════════════════════════════════════════════════
+      # ④ gitleaks —— 明文密钥 / 凭据（走 git 全历史）
+      # ══════════════════════════════════════════════════════════════════════════
+      # 为什么不用 `gitleaks/gitleaks-action`：
+      #   ① 该 action 的配置来源与提交范围由事件类型隐式决定，本地无法等价复现；
+      #   ② 它在 PR 上会尝试发评论，需要 `pull-requests: write`——本工作流刻意只要
+      #      `contents: read`，不为一个可由日志替代的功能扩大权限。
+      #   钉二进制直接跑，参数即文档。
+      #
+      # 扫描域配置在**运行时**生成（$RUNNER_TEMP），不入库：
+      #   本工作流的文件所有权不含 `.gitleaks.toml`（新增仓库文件会与他路工作流冲突），
+      #   而"不排除第三方源码"会让 4385 个 .project/ 文件里的示例密钥淹没本仓结论。
+      - name: "④ gitleaks — 明文密钥与凭据"
+        id: gitleaks
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          verdict="$VERDICT_DIR/verdict-gitleaks"
+          echo "SCANNER_ERROR" > "$verdict"
+
+          if ! curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tgz; then
+            echo "❌ gitleaks ${GITLEAKS_VERSION} 下载失败"
+            exit 0
+          fi
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+
+          cat > "$RUNNER_TEMP/gitleaks.toml" <<'TOML'
+          title = "BotHot gitleaks（CI 扫描域）"
+
+          [extend]
+          useDefault = true
+
+          [allowlist]
+          description = "第三方参考源码与构建产物：非本项目代码，其示例密钥（.env.example / fixture）不在本项目责任范围；不排除则本仓结论被 4385 个 .project/ 文件淹没"
+          paths = [
+            '''\.project/''',
+            '''langbot_plugins''',
+            '''node_modules/''',
+            '''\.next/''',
+            '''dist/''',
+            '''build/''',
+            '''coverage/''',
+            '''frontend/test-results/''',
+            '''frontend/playwright-report/''',
+          ]
+          TOML
+
+          set +e
+          # --redact：CI 日志与 JSON 报告中的密钥一律打码。这不只是好看——
+          # 报告会作为 artifact 长期留存，未打码等于把密钥又复制了一份。
+          # --exit-code 1：检出即 1（其余非 0 码留给"工具自身故障"，两者必须可分）。
+          /tmp/gitleaks detect \
+            --source . \
+            --config "$RUNNER_TEMP/gitleaks.toml" \
+            --report-format json \
+            --report-path gitleaks.json \
+            --exit-code 1 \
+            --no-banner \
+            --redact > gitleaks-console.log 2>&1
+          rc=$?
+          set -e
+
+          VERDICT_DIR="$VERDICT_DIR" GITLEAKS_RC="$rc" python - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          verdict = pathlib.Path(os.environ["VERDICT_DIR"], "verdict-gitleaks")
+          rc = int(os.environ["GITLEAKS_RC"])
+
+          findings = []
+          report = pathlib.Path("gitleaks.json")
+          if report.is_file():
+              try:
+                  parsed = json.loads(report.read_text(encoding="utf-8") or "[]")
+                  findings = parsed if isinstance(parsed, list) else []
+              except json.JSONDecodeError:
+                  findings = []
+
+          if rc == 0:
+              print("gitleaks：✅ 未检出明文密钥")
+              verdict.write_text("OK")
+          elif rc == 1:
+              print(f"gitleaks：🔴 检出 {len(findings)} 处明文密钥")
+              for item in findings[:40]:
+                  print(
+                      "  🔴 "
+                      f"{item.get('RuleID','?')} | {item.get('File','?')}:{item.get('StartLine','?')}"
+                      f" | commit={str(item.get('Commit','?'))[:8]}"
+                      f" | 命中已打码：{item.get('Match','(redacted)')}"
+                  )
+              verdict.write_text("BLOCK")
+          else:
+              print(f"❌ gitleaks 异常退出（rc={rc}），非「检出」语义")
+              print(pathlib.Path("gitleaks-console.log").read_text(errors="replace")[-1500:])
+              verdict.write_text("SCANNER_ERROR")
+          PY
+
+      # ══════════════════════════════════════════════════════════════════════════
+      # 汇总门禁 —— 四扫描器裁决收口
+      # ══════════════════════════════════════════════════════════════════════════
+      # 为什么裁决不放在各步骤里、而收在最后一步：
+      #   ① 四步都跑得完（任一步失败不回滚其余三步的结论），一次 PR 暴露全部问题；
+      #   ② 策略只有一处定义 —— 改"什么算阻断"不必在四个步骤里改四遍；
+      #   ③ verdict 文件缺失 = SCANNER_ERROR = 阻断（fail-closed）：
+      #      步骤被中断、安装失败、下载失败都不会留下"假绿"。
+      - name: 汇总门禁（🔴 阻断 / 🟡 告警）
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo "── 四扫描器裁决 ──────────────────────"
+          hard=0
+          soft=0
+          for name in pip-audit pnpm-audit trivy gitleaks; do
+            f="$VERDICT_DIR/verdict-$name"
+            if [ -f "$f" ]; then v="$(tr -d '[:space:]' < "$f")"; else v="SCANNER_ERROR"; fi
+            printf '  %-12s %s\n' "$name" "$v"
+            case "$v" in
+              BLOCK)        hard=$((hard + 1)) ;;
+              SCANNER_ERROR) hard=$((hard + 1)) ;;   # fail-closed：工具坏了也算红灯
+              OK|WARN)      soft=$((soft + 1)) ;;
+            esac
+          done
+          echo "──────────────────────────────────────"
+          echo "阻断 ${hard} 项 / 告警 ${soft} 项（详细清单见上方各步骤输出与 security-reports artifact）"
+
+          if [ "$hard" -gt 0 ]; then
+            if [ "${SECURITY_GATE_ENFORCE:-1}" = "0" ]; then
+              echo "⚠️ SECURITY_GATE_ENFORCE=0：本次仅告警不阻断（过渡模式，仅用于首次采集基线）"
+              exit 0
+            fi
+            echo "❌ 安全门禁未通过：存在 ${hard} 个 🔴 阻断项——修完再合并"
+            exit 1
+          fi
+          echo "✅ 安全门禁通过：无 🔴 阻断项"
+
+      # 报告留档：不管门禁过不过都上传，否则"红了但看不到明细"就又要重跑一次才能取证。
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          if-no-files-found: ignore
+          path: |
+            backend/pip-audit.json
+            backend/pip-audit-console.log
+            frontend/audit.json
+            frontend/audit-console.log
+            trivy.json
+            trivy-console.log
+            gitleaks.json
+            gitleaks-console.log

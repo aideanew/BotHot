@@ -4,6 +4,13 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# W7：非生产环境白名单（`production_guard_violations` 的唯一放行集合）。
+# 显式枚举而非黑名单——env 命名开放，黑名单永远列不全；漏一个即留一个绕过口子。
+# 新增开发/测试环境名须在此登记（登记成本可控，漏网成本是不可逆的上线事故）。
+NON_PRODUCTION_ENVS: frozenset[str] = frozenset(
+    {"development", "dev", "local", "localhost", "test", "testing", "ci"}
+)
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -171,15 +178,47 @@ class Settings(BaseSettings):
     # R0.2.5 批量文档操作（:delete / :recategorize）：单次批量条数上限
     batch_docs_max_ids: int = 50
 
+    # ── W7 入站安全与上游治理（core/security.py）────────────────────
+    # 入站限流总开关。**默认开**：限流是防护，不是可选优化；关掉需显式写 env。
+    rate_limit_enabled: bool = True
+    # 默认窗口配额（未命中敏感路径表的请求）。按 IP 与会话双维各自计数，任一超限即 429。
+    rate_limit_default_per_minute: int = 600
+    rate_limit_window_seconds: int = 60
+    # Redis 命令超时（秒）：**必须远小于业务超时**——Redis 挂掉时 fail-open 要快，
+    # 否则「限流服务不可用」会变成全站每请求 +N 秒的雪崩（比不限流更糟）。
+    rate_limit_redis_timeout_seconds: float = 1.0
+    # 是否信任 `X-Forwarded-For` 首跳作为客户端 IP。默认 False：直连部署下 XFF 是
+    # 客户端可伪造的头，信任它等于把限流维度交给攻击者（换个头就绕过）。仅当前面
+    # 确有可信反向代理（Nginx/网关）时才置 true。
+    trust_proxy_headers: bool = False
+    # 请求体上限（字节）。默认 4 MiB：现有写端点最大载荷是 50 条 URL / 批量文号，
+    # 实测 <100KB；4 MiB 留足余量同时给内存放大封顶。
+    max_request_body_bytes: int = 4 * 1024 * 1024
+    # 上游（第三方 API / LLM）单 provider 并发闸默认值（article_sources 与 redfox）。
+    # 逐 provider 可用 `UPSTREAM_CONCURRENCY_<NAME>` 覆盖（见 core/security.py）。
+    upstream_concurrency_default: int = 4
+    # 上游 httpx 超时拆分：connect 短（连不上要快速失败）、read 长（大响应允许慢）。
+    upstream_connect_timeout_seconds: float = 5.0
+    upstream_read_timeout_seconds: float = 20.0
+
 
     def production_guard_violations(self) -> list[str]:
         """生产配置守卫：返回致命项描述列表（空 = 通过）。
 
-        只在 `app_env == "production"` 时生效——开发期的占位值（`change-me` / `memory` /
-        非 secure cookie）是设计内默认，拿生产红线去卡本地开发会让本地直接起不来。
+        W7（守卫白名单化，原实现 `app_env != "production"` 精确匹配可被
+        `APP_ENV=prod-eu` / `APP_ENV=staging` 一类**非标准命名绕过**——只要不叫
+        "production"，红线就整体失效）：
+        改为**显式非生产白名单**放行，其余一律按生产守卫。判据从
+        「是否等于 production」翻转为「是否在已知非生产集合内」，未知命名 fail-closed。
+
+        为什么必须白名单而非黑名单：env 命名空间是开放的，黑名单永远列不全
+        （prod / production / prod-eu / live / prd …），漏一个就留一个上线口子。
+        白名单的代价只是「新增开发环境名需登记」，可控。
+
         返回描述而非直接抛错：调用方决定在何处 fail fast，也让守卫结果可被断言。
         """
-        if self.app_env.strip().lower() != "production":
+        env = self.app_env.strip().lower()
+        if env in NON_PRODUCTION_ENVS:
             return []
         bad: list[str] = []
         if not self.oidc_client_secret or self.oidc_client_secret == "change-me":
