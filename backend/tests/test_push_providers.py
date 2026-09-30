@@ -203,13 +203,17 @@ class TestWechatClawbotProvider:
 
 
 class TestPushScheduler:
-    """推送调度器测试。"""
+    """推送调度器测试。
+
+    W1 起 cron 解析统一收口到 app.services.cron_expr（croniter 后端，简写格式
+    兼容翻译为标准 5 段）；调度器自身不再暴露 _parse_cron_next，测试直接测解析模块。
+    """
 
     def test_parse_cron_hh_mm(self):
         """HH:MM 格式解析。"""
         from datetime import datetime
 
-        from app.services.push_scheduler import _parse_cron_next
+        from app.services.cron_expr import parse_cron_next as _parse_cron_next
 
         now = datetime(2026, 9, 29, 8, 0, 0, tzinfo=UTC)
         next_run = _parse_cron_next("10:00", now)
@@ -218,21 +222,21 @@ class TestPushScheduler:
         assert next_run.minute == 0
 
     def test_parse_cron_every_n_hours(self):
-        """*/N 小时格式解析。"""
+        """*/N 小时格式解析（croniter 语义：对齐到下一个小整点，非 now+N 小时）。"""
         from datetime import datetime
 
-        from app.services.push_scheduler import _parse_cron_next
+        from app.services.cron_expr import parse_cron_next as _parse_cron_next
 
         now = datetime(2026, 9, 29, 8, 0, 0, tzinfo=UTC)
         next_run = _parse_cron_next("*/3", now)
         assert next_run is not None
-        assert next_run.hour == 11  # 8 + 3
+        assert next_run.hour == 9  # "0 */3 * * *" 下个触发点 09:00（对齐整点）
 
     def test_parse_cron_every_n_minutes(self):
         """纯数字 N 分钟格式解析。"""
         from datetime import datetime
 
-        from app.services.push_scheduler import _parse_cron_next
+        from app.services.cron_expr import parse_cron_next as _parse_cron_next
 
         now = datetime(2026, 9, 29, 8, 0, 0, tzinfo=UTC)
         next_run = _parse_cron_next("30", now)
@@ -243,7 +247,7 @@ class TestPushScheduler:
         """无效 cron 返回 None。"""
         from datetime import datetime
 
-        from app.services.push_scheduler import _parse_cron_next
+        from app.services.cron_expr import parse_cron_next as _parse_cron_next
 
         now = datetime(2026, 9, 29, 8, 0, 0, tzinfo=UTC)
         assert _parse_cron_next("", now) is None
@@ -253,10 +257,22 @@ class TestPushScheduler:
         """过去的时间点推进到次日。"""
         from datetime import datetime
 
-        from app.services.push_scheduler import _parse_cron_next
+        from app.services.cron_expr import parse_cron_next as _parse_cron_next
 
         now = datetime(2026, 9, 29, 15, 0, 0, tzinfo=UTC)
         next_run = _parse_cron_next("10:00", now)
         assert next_run is not None
         assert next_run.day == 30  # 次日
         assert next_run.hour == 10
+
+    def test_parse_cron_standard_5_field(self):
+        """标准 5 段式直通（W1 新增能力）。"""
+        from datetime import datetime
+
+        from app.services.cron_expr import parse_cron_next as _parse_cron_next
+
+        now = datetime(2026, 9, 29, 8, 0, 0, tzinfo=UTC)
+        next_run = _parse_cron_next("30 9 * * 1-5", now)
+        assert next_run is not None
+        assert next_run.hour == 9
+        assert next_run.minute == 30
