@@ -154,9 +154,11 @@ async def patch_space_engine(
 
     校验谓词与消费侧（kb.ingest_url 前置检查）同口径——三条件 available
     （configured ∧ allowlisted ∧ ENGINE_IMPLEMENTED）。此前仅查 allowlist + configured，
-    漏查 ENGINE_IMPLEMENTED，导致空间可被切到未实接的骨架引擎：此后 ingest 全 403，
-    且 delete_space 走 adapter 分支抛 NotImplementedError 整体回滚 → 空间无法删除。
+    漏查 ENGINE_IMPLEMENTED，导致空间可被切到未实接的骨架引擎：此后 ingest 全 403。
     builtin 恒可切回（回退通道，防空间被切到不可用引擎后锁死）。
+    delete_space 降级（3.2）：未实接引擎的 delete_kb 不再抛 NotImplementedError，改为返回
+    None「本地可清」信号，上层清 engine_kb_id 映射并删 PG 行，引擎侧残留保留（无 API 可调）；
+    响应注明残留属 service 层职责（WA/WB），本端点仅保证删除不整体回滚。
 
     - 未知引擎位 → 10005；不在 allowlist → 10004（提示找管理员）；
     - 非 builtin 未配 Key（登记表与 env 皆空）→ 10004；已配 Key 但未实接 → 10004（骨架位）；

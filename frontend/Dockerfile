@@ -2,8 +2,9 @@
 # 说明：next.config.mjs 未启用 output:'standalone'（属 C 变更单），故采用单阶段 + pnpm start
 # 网络：依赖安装走 npmmirror；构建期代理由 compose build.args 注入（宿主 10808 经 host.docker.internal）
 # 基础镜像可注入：默认走 docker.io；网络受限时由 compose build.args 换成镜像源
-# （同 backend/Dockerfile 的实证口径，例 docker.m.daocloud.io/library/node:20-alpine）
-ARG BASE_IMAGE=node:20-alpine
+# （同 backend/Dockerfile 的实证口径，例 docker.m.daocloud.io/library/node:24-alpine）
+# 3.4 版本锚统一：Node 基线 = .nvmrc(24.21.0)，Dockerfile FROM 对齐 node:24-alpine。
+ARG BASE_IMAGE=node:24-alpine
 FROM ${BASE_IMAGE}
 
 ARG HTTP_PROXY=""
@@ -27,11 +28,15 @@ ENV NEXT_PUBLIC_API_MOCK=${NEXT_PUBLIC_API_MOCK}
 WORKDIR /app
 
 # C 于 2026-09-09 迁移至 pnpm（pnpm-lock.yaml），构建配置同步为 corepack/pnpm。
+# 3.4 pnpm 版本锚单一源 = packageManager 字段（frontend/package.json）。corepack 按
+# 其自动解析，Dockerfile 不再硬编码 pnpm 版本（与 CI「Resolve pnpm version from
+# packageManager」同源）。先 COPY package.json 再 enable，使 corepack 能读到声明版本。
 # --frozen-lockfile：锁文件即事实源；devDependencies 默认安装（typescript 缺失会破坏 @/* 别名）
-RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
-ENV npm_config_registry=https://registry.npmmirror.com
-
 COPY package.json pnpm-lock.yaml ./
+RUN corepack enable
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    npm_config_registry=https://registry.npmmirror.com
+
 RUN pnpm install --frozen-lockfile
 
 COPY . .

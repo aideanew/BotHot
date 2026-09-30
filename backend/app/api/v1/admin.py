@@ -156,6 +156,8 @@ async def admin_delete_space(
 async def admin_list_spaces(
     actor: Annotated[User, Depends(require_roles("admin"))],
     svc: Annotated[SpaceService, Depends(get_space_service)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> JSONResponse:
     """M3 批次 2（T5.2/T5.3 读面）：admin 跨用户空间清单，每条带归属。
 
@@ -164,10 +166,16 @@ async def admin_list_spaces(
     本人端点不带这三字段——admin 端点单独存在，既有契约零回归。
     归属随空间单次 JOIN 取得（逐空间查 owner 会是 N+1，doc 计数同类缺陷 T1.5.3 已修过）。
 
+    分页（3.3，limit/offset 与 admin 域 jobs/space_docs 同口径）：service 层未支持
+    limit/offset（services/ 归 WA/WB），故路由层切片提供正确响应形状与资源约束；
+    DB 全量查询待 WA/WB 给 service 加 limit/offset 后下沉到查询层。
+
     未登录 → 10001；非 admin → 10004/403。
     """
     items = await svc.list_space_views_any()
-    body = success(data={"items": items})
+    total = len(items)
+    page = items[offset : offset + limit]
+    body = success(data={"items": page, "total": total, "limit": limit, "offset": offset})
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
@@ -255,6 +263,8 @@ async def admin_list_subscriptions(
     actor: Annotated[User, Depends(require_roles("admin"))],
     session: Annotated[AsyncSession, Depends(get_db)],
     space_id: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> JSONResponse:
     """R4.8（A-2 叠加）：admin 跨用户订阅清单。
 
@@ -265,12 +275,17 @@ async def admin_list_subscriptions(
     ownerId/ownerNickname 表示归属（既有端点不带归属字段，admin 端点单独存在）。
     归属信息经单次批量查询取得，不逐条 get（与 spaces 域 T1.5.3 同口径）。
 
+    分页（3.3，limit/offset 与 admin 域同口径）：路由层切片；service 层 limit/offset 待
+    WA/WB 下沉（全量查询仍在，响应形状与资源约束已正确）。
+
     给定不存在的 space_id → 30004/404（不校验存在性会让「空间不存在」与「空间无订阅」
     无法区分）；未登录 → 10001；非 admin → 10004/403。
     """
     svc = SourceSubscriptionService(session)
     items = await svc.list_subscriptions_any(space_id=space_id)
-    body = success(data={"items": items})
+    total = len(items)
+    page = items[offset : offset + limit]
+    body = success(data={"items": page, "total": total, "limit": limit, "offset": offset})
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
@@ -606,6 +621,8 @@ async def admin_list_sources(
     actor: Annotated[User, Depends(require_roles("admin"))],
     session: Annotated[AsyncSession, Depends(get_db)],
     type_: Annotated[str | None, Query(alias="type")] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> JSONResponse:
     """R7.4.4：admin 信息源清单（含引用计数）。
 
@@ -614,11 +631,14 @@ async def admin_list_sources(
     subscriptionCount / assetCount / manifestCount。
 
     无归属过滤（sources 无 user_id 列，本就是全局资源）。type 过滤可选。
-    未登录 → 10001；非 admin → 10004/403。
+    分页（3.3，limit/offset 与 admin 域同口径）：路由层切片；service 层 limit/offset
+    待 WA/WB 下沉。未登录 → 10001；非 admin → 10004/403。
     """
     svc = SourceSubscriptionService(session)
     items = await svc.list_sources_with_counts(source_type=type_)
-    body = success(data={"items": items})
+    total = len(items)
+    page = items[offset : offset + limit]
+    body = success(data={"items": page, "total": total, "limit": limit, "offset": offset})
     return JSONResponse(status_code=200, content=body.model_dump())
 
 

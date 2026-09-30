@@ -3,7 +3,15 @@
 约定（高内聚）：
 - Repository 只 flush 不 commit —— 事务边界由调用方（Service/API 依赖）管理，
   测试借此用「事务回滚」做用例隔离；
-- pool_pre_ping 兜底容器重启后的失连。
+- pool_pre_ping 兜底容器重启后的失连；
+- pool_recycle=1800（30 分钟）主动回收空闲连接，避免被中间防火墙/PG idle
+  超时静默掐断后首查延迟（pool_pre_ping 是兜底，recycle 是前置）。
+
+连接池参数取舍（3.1）：pool_size/max_overflow/pool_recycle 不进 Settings
+（config.py 归 WB），改用模块常量 + 环境变量覆盖（`DB_POOL_SIZE`/`DB_MAX_OVERFLOW`
+/`DB_POOL_RECYCLE`）。理由：运维调参（容器内存/连接上限变更）无需改代码、无需
+走 WB 的 Settings 变更流程；默认值（5/5/1800）与历史行为一致，零回归。
+不改 create_engine_and_session 签名（调用方零感知）。
 """
 
 from __future__ import annotations
@@ -20,6 +28,11 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import get_settings
 
+# 连接池参数（env 覆盖，默认与历史一致）；DB_POOL_RECYCLE 秒数前置回收防 idle 断连。
+_DB_POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "5"))
+_DB_MAX_OVERFLOW = int(os.environ.get("DB_MAX_OVERFLOW", "5"))
+_DB_POOL_RECYCLE = int(os.environ.get("DB_POOL_RECYCLE", "1800"))
+
 
 def resolve_database_url(default_url: str | None = None, environ: Mapping[str, str] | None = None) -> str:
     """解析数据库连接串：`DATABASE_URL` 环境变量优先，缺省回落 `default_url` / Settings。
@@ -32,9 +45,18 @@ def resolve_database_url(default_url: str | None = None, environ: Mapping[str, s
 
 
 def create_engine_and_session(url: str | None = None) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
-    """按连接串创建引擎与会话工厂（缺省取 Settings.database_url）。"""
+    """按连接串创建引擎与会话工厂（缺省取 Settings.database_url）。
+
+    池参数取模块常量（env 可覆盖）；pool_recycle 前置回收防 idle 断连。
+    """
     database_url = url or get_settings().database_url
-    engine = create_async_engine(database_url, pool_pre_ping=True, pool_size=5, max_overflow=5)
+    engine = create_async_engine(
+        database_url,
+        pool_pre_ping=True,
+        pool_size=_DB_POOL_SIZE,
+        max_overflow=_DB_MAX_OVERFLOW,
+        pool_recycle=_DB_POOL_RECYCLE,
+    )
     factory = async_sessionmaker(engine, expire_on_commit=False)
     return engine, factory
 
