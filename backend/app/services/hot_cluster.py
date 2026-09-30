@@ -48,6 +48,8 @@ BUSINESS_TZ = ZoneInfo("Asia/Shanghai")
 # 0.35 在公众号同义改写语料上经验命中（标题 bigram 重叠约 35% 即视为同主题）。
 SIM_THRESHOLD = 0.35
 
+MAX_CANDIDATES_DEFAULT = 3000
+
 # 公众号标题常见后缀噪声（去后缀让簇标题更干净；不影响分词相似度计算）。
 _TITLE_NOISE = re.compile(r"[|｜\-—–].*$")
 
@@ -119,9 +121,14 @@ def _cosine(a: dict[str, float], b: dict[str, float]) -> float:
 
 
 def cluster(docs: Sequence[AssetDoc], *, tau: float = SIM_THRESHOLD) -> list[list[int]]:
-    """单链接凝聚聚类 = 相似度 ≥ τ 的连通分量。返回各簇的成员下标列表（含单成员簇）。"""
+    """单链接凝聚聚类 = 相似度 ≥ τ 的连通分量。返回各簇的成员下标列表（含单成员簇）。
+
+    倒排预筛优化：token 集合无交集的文档对直接跳过余弦计算（无交集则余弦必为 0，
+    结果语义不变），将 O(n²) 对比降为仅对有 token 交集的文档对计算。
+    """
     n = len(docs)
     vectors = _tfidf_vectors(docs)
+    token_sets = [set(v.keys()) for v in vectors]
     parent = list(range(n))
 
     def find(x: int) -> int:
@@ -135,10 +142,24 @@ def cluster(docs: Sequence[AssetDoc], *, tau: float = SIM_THRESHOLD) -> list[lis
         if ra != rb:
             parent[ra] = rb
 
-    for i in range(n):
-        for j in range(i + 1, n):
-            if _cosine(vectors[i], vectors[j]) >= tau:
-                union(i, j)
+    # 倒排索引：token → 持有该 token 的文档下标列表
+    inverted: dict[str, list[int]] = defaultdict(list)
+    for i, ts in enumerate(token_sets):
+        for t in ts:
+            inverted[t].append(i)
+
+    # 只对有 token 交集的文档对计算余弦
+    checked: set[tuple[int, int]] = set()
+    for indices in inverted.values():
+        for a_idx in range(len(indices)):
+            for b_idx in range(a_idx + 1, len(indices)):
+                i, j = indices[a_idx], indices[b_idx]
+                pair = (min(i, j), max(i, j))
+                if pair in checked:
+                    continue
+                checked.add(pair)
+                if _cosine(vectors[i], vectors[j]) >= tau:
+                    union(i, j)
 
     groups: dict[int, list[int]] = defaultdict(list)
     for i in range(n):
@@ -188,11 +209,15 @@ async def run_clustering(
     *,
     days: int = 1,
     now: datetime | None = None,
+    max_candidates: int = MAX_CANDIDATES_DEFAULT,
 ) -> dict[str, Any]:
     """取近 N 天 content_assets → 聚簇 → 写 HotTopic/HotTopicArticle/FeedItem。
 
     事务边界由调用方（job_worker / API）持有；本方法只 flush 不 commit。
     返回摘要供 Job 结果与日志观测。
+
+    量级边界（max_candidates）：候选文档超限时按 published_at 取最新截断，
+    防止窗口过大导致内存/计算爆炸；截断时 logger.warning 留痕。
     """
     from app.services.feed_service import add_hot_topic_feed
 
@@ -215,7 +240,18 @@ async def run_clustering(
         )
     ).scalars().all()
 
-    docs = [AssetDoc(id=a.id, title=a.title, quality_score=float(a.quality_score or 0.0)) for a in rows]
+    rows_list = list(rows)
+    if len(rows_list) > max_candidates:
+        # 审查缝合：先记原始量再截断——原实现告警打印的是截断后数量，观测失真
+        original_count = len(rows_list)
+        rows_list.sort(key=lambda a: a.published_at or a.created_at, reverse=True)
+        rows_list = rows_list[:max_candidates]
+        logger.warning(
+            "hot_cluster: 候选 %d 篇超限 %d，按 published_at 截断取最新",
+            original_count, max_candidates,
+        )
+
+    docs = [AssetDoc(id=a.id, title=a.title, quality_score=float(a.quality_score or 0.0)) for a in rows_list]
     vectors = _tfidf_vectors(docs)  # 语料级 IDF 向量，与 cluster() 同口径算 relevance
     groups = cluster(docs)
 
@@ -224,7 +260,7 @@ async def run_clustering(
     topic_date = moment.astimezone(BUSINESS_TZ).strftime("%Y-%m-%d")
     await _delete_day_topics(session, topic_date)
 
-    by_id = {a.id: a for a in rows}
+    by_id = {a.id: a for a in rows_list}
     id_to_idx = {d.id: i for i, d in enumerate(docs)}
     persisted = 0
     for group in groups:

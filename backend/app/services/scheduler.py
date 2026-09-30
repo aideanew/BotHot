@@ -62,6 +62,11 @@ DEFAULT_INTERVAL_MINUTES = 360  # 与 SourceSubscription.sync_interval_minutes �
 DAILY_REPORT_HOUR = 6
 DAILY_REPORT_MINUTE = 30
 
+HOT_CLUSTER_HOUR = 6
+HOT_CLUSTER_MINUTE = 35
+
+RESCORE_INTERVAL_HOURS = 1
+
 
 class SyncRunner(Protocol):
     """单订阅增量同步调用口：返回本轮**新增篇数**（0 = 空轮询）。
@@ -275,6 +280,11 @@ class IncrementalScheduler:
         # W2：每日热点/日报入队的进程内去重戳（同日已入队则不重复）。跨重启由
         # JobService 的 idempotency_key 兜底（同日同类型 Job 重复提交返回既有）。
         self._last_daily_date: str | None = None
+        # 审查缝合：hot_cluster 独立幂等戳（与 daily_report 分门控错峰）
+        self._last_cluster_date: str | None = None
+        # WA：每小时整点后首 tick 入队 hot_rescore 的进程内去重戳（同小时不重复）。
+        # 跨重启由 idempotency_key 兜底。
+        self._last_rescore_hour: str | None = None
 
     # ------------------------------------------------------------------ 存活上报
 
@@ -296,49 +306,100 @@ class IncrementalScheduler:
     # ------------------------------------------------------------------ W2 每日热点/日报
 
     async def _maybe_enqueue_daily_jobs(self) -> None:
-        """每日 06:30（本地时区）入队 daily_report（前一日）+ hot_cluster（近 1 日）。
+        """每日入队热点/日报 Job——两个独立门控真正错峰（审查缝合修正）。
 
-        语义：日报生成**前一日**（昨日热点已成定局），聚簇取近 1 日为今日 Feed 兜底。
-        幂等：进程内 `_last_daily_date` 戳防同日重复；跨重启由 JobService 的
-        idempotency_key 兜底（同日同类型重复提交返回既有 Job）。operator 取首个
-        admin 用户（Job.user_id 非空且 FK users.id，热点/日报属运营动作归 admin）。
+        语义：06:30 入队 daily_report（前一日），06:35 入队 hot_cluster（近 1 日）。
+        各自独立时间门与幂等戳（_last_daily_date / _last_cluster_date）——WA 初版把
+        两个 Job 放在同一门控同一事务提交，created_at 相同、取件序仍未定，"错峰"
+        名存实亡。两者无硬数据依赖（日报读前一日话题，聚簇产当日话题；评分由
+        各分支前置 run_scoring 兜底），错峰只为负载平滑与取件序确定性。
+        跨重启由 JobService 的 idempotency_key 兜底。operator 取首个 admin 用户。
         """
         now_local = datetime.now(self._tz)
         today = now_local.strftime("%Y-%m-%d")
-        if now_local.hour < DAILY_REPORT_HOUR or (
-            now_local.hour == DAILY_REPORT_HOUR and now_local.minute < DAILY_REPORT_MINUTE
-        ):
-            return
-        if self._last_daily_date == today:
+        prev = (now_local - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        def _past(hour: int, minute: int) -> bool:
+            return (now_local.hour, now_local.minute) >= (hour, minute) or now_local.hour > hour
+
+        if self._last_daily_date != today and _past(DAILY_REPORT_HOUR, DAILY_REPORT_MINUTE):
+            try:
+                async with self._factory() as session:
+                    operator_id = await self._resolve_operator_id(session)
+                    if operator_id is None:
+                        logger.warning("scheduler 跳过每日热点/日报入队：无 admin 用户可作 operator")
+                        return
+                    from app.repositories.job import JobRepository
+                    from app.services.jobs import JobService
+
+                    svc = JobService(JobRepository(session), session)
+                    await svc.submit(
+                        job_type="daily_report",
+                        user_id=operator_id,
+                        idempotency_key=f"daily_report:{prev}",
+                        payload_json=json.dumps({"date": prev}),
+                    )
+                    await session.commit()
+                self._last_daily_date = today
+                logger.info("scheduler 每日入队：daily_report(%s)", prev)
+            except Exception:  # noqa: BLE001 每日入队不得拖垮订阅调度
+                logger.exception("scheduler daily_report 入队失败，下轮重试")
+
+        if self._last_cluster_date != today and _past(HOT_CLUSTER_HOUR, HOT_CLUSTER_MINUTE):
+            try:
+                async with self._factory() as session:
+                    operator_id = await self._resolve_operator_id(session)
+                    if operator_id is None:
+                        logger.warning("scheduler 跳过 hot_cluster 入队：无 admin 用户可作 operator")
+                        return
+                    from app.repositories.job import JobRepository
+                    from app.services.jobs import JobService
+
+                    svc = JobService(JobRepository(session), session)
+                    await svc.submit(
+                        job_type="hot_cluster",
+                        user_id=operator_id,
+                        idempotency_key=f"hot_cluster:{today}:1",
+                        payload_json=json.dumps({"date": today, "days": 1}),
+                    )
+                    await session.commit()
+                self._last_cluster_date = today
+                logger.info("scheduler 每日入队：hot_cluster(%s)", today)
+            except Exception:  # noqa: BLE001
+                logger.exception("scheduler hot_cluster 入队失败，下轮重试")
+
+    async def _maybe_enqueue_rescore(self) -> None:
+        """每小时整点后首 tick 入队 hot_rescore（幂等）。
+
+        语义：刷新所有非 archived 话题的热度分数与状态机（rising→hot→cooling→archived），
+        保证 Feed 排序与状态标签始终反映最新衰减。
+        幂等：进程内 `_last_rescore_hour` 戳防同小时重复；跨重启由 idempotency_key 兜底
+        （格式 hot_rescore:yyyyMMddHH，同小时只入队一次）。
+        """
+        now_local = datetime.now(self._tz)
+        hour_key = now_local.strftime("%Y%m%d%H")
+        if self._last_rescore_hour == hour_key:
             return
         try:
             async with self._factory() as session:
                 operator_id = await self._resolve_operator_id(session)
                 if operator_id is None:
-                    logger.warning("scheduler 跳过每日热点/日报入队：无 admin 用户可作 operator")
                     return
                 from app.repositories.job import JobRepository
                 from app.services.jobs import JobService
 
                 svc = JobService(JobRepository(session), session)
-                prev = (now_local - timedelta(days=1)).strftime("%Y-%m-%d")
                 await svc.submit(
-                    job_type="daily_report",
+                    job_type="hot_rescore",
                     user_id=operator_id,
-                    idempotency_key=f"daily_report:{prev}",
-                    payload_json=json.dumps({"date": prev}),
-                )
-                await svc.submit(
-                    job_type="hot_cluster",
-                    user_id=operator_id,
-                    idempotency_key=f"hot_cluster:{today}:1",
-                    payload_json=json.dumps({"date": today, "days": 1}),
+                    idempotency_key=f"hot_rescore:{hour_key}",
+                    payload_json="{}",
                 )
                 await session.commit()
-            self._last_daily_date = today
-            logger.info("scheduler 每日入队完成：daily_report(%s) + hot_cluster(%s)", prev, today)
-        except Exception:  # noqa: BLE001 每日入队不得拖垮订阅调度
-            logger.exception("scheduler 每日热点/日报入队失败，下轮重试")
+            self._last_rescore_hour = hour_key
+            logger.info("scheduler 入队 hot_rescore（小时=%s）", hour_key)
+        except Exception:  # noqa: BLE001
+            logger.exception("scheduler hot_rescore 入队失败，下轮重试")
 
     async def _resolve_operator_id(self, session: AsyncSession) -> str | None:
         """取首个 admin 用户 id 作为系统触发 Job 的归属。无 admin → None（跳过）。"""
@@ -409,6 +470,7 @@ class IncrementalScheduler:
         """
         await self._beacon()
         await self._maybe_enqueue_daily_jobs()
+        await self._maybe_enqueue_rescore()
         await self._reconcile_docs()
         processed = 0
         while processed < self._batch_limit:
