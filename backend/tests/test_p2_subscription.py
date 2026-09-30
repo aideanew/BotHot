@@ -354,7 +354,8 @@ async def test_p2_subscription_visibility_fields(db_session) -> None:  # type: i
     svc = SourceSubscriptionService(db_session)
     await _seed_manifests(db_session, src["sourceId"], 3)
     await svc.subscribe(user.id, space.id, src["sourceId"])
-    subs = await svc.list_subscriptions(user.id, space.id)
+    subs, subs_total = await svc.list_subscriptions(user.id, space.id)
+    assert subs_total == 1
     assert len(subs) == 1
     s = subs[0]
     assert s["discoveredCount"] == 3

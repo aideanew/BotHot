@@ -388,7 +388,12 @@ class BodyLimitMiddleware:
                 message = buffered[replay_index]
                 replay_index += 1
                 return message  # type: ignore[return-value]
-            return {"type": "http.request", "body": b"", "more_body": False}  # type: ignore[return-value]
+            # 缓冲耗尽后必须透传原始 receive（审查缝合修复）：
+            # 流式响应（SSE）的 listen_for_disconnect 会持续 await receive 探测
+            # 断连——若在此永远返回空 http.request，监听协程永不完成，响应死锁
+            # （W6×W7 集成实证：chat /ask SSE 全量套件挂死）。透传后语义与
+            # 无中间件时完全一致。
+            return await receive()
 
         await self.app(scope, replay, send)
 

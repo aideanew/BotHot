@@ -450,7 +450,8 @@ async def test_space_views_against_real_pg(db_session) -> None:
     await db_session.flush()
 
     svc = SpaceService(repo)
-    items = await svc.list_space_views(user.id)
+    items, items_total = await svc.list_space_views(user.id)
+    assert items_total == 1
     assert items[0]["docCount"] == 3 and items[0]["name"] == "连库契约空间"
 
     view = await svc.get_space_view(user.id, space.id)
@@ -606,7 +607,7 @@ async def test_delete_space_real_pg_success_and_langbot_called(db_session) -> No
     kb = FakeKbClient()
     counts = await SpaceService(repo, db_session).delete_space(user.id, space.id, kb)
     assert kb.deleted == ["kb-abt11"]
-    assert counts == {"docs": 1, "assets": 1, "spaces": 1}
+    assert counts == {"docs": 1, "assets": 1, "spaces": 1, "engineResidue": False}
     from app.models.entities import KnowledgeSpace as KS
 
     assert await db_session.get(KS, space.id) is None
