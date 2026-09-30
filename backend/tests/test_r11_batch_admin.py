@@ -16,7 +16,7 @@ T5.6 计费预留按管理者裁定不建任何计费面（无表、无消费者
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -96,7 +96,7 @@ async def _seed(db_session: Any) -> dict[str, str]:
     # 钉死时间戳：CI 快钟下两条 flush 的 created_at 可并列同微秒，主键并列时
     # id tiebreaker 接管顺序 ⇒ 「created_at 序」断言随机红（2026-09-30 CI 实证，
     # test_admin_list_spaces_cross_user_with_owner 1 failed）。显式值让不变式可测。
-    _now = datetime.now(timezone.utc)
+    _now = datetime.now(UTC)
     space_a.created_at = _now - timedelta(hours=1)
     space_b.created_at = _now - timedelta(minutes=30)
     db_session.add_all([space_a, space_b])
