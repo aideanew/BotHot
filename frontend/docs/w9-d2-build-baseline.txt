@@ -1,0 +1,27 @@
+W9 D.2 Build Size Baseline (after next/dynamic + next/image)
+
+Route (app)                              Size     First Load JS
+©° ¡ð /                                    3.21 kB          99 kB
+©À ¡ð /_not-found                          138 B          87.4 kB
+©À ¡ð /admin                               6.39 kB         107 kB
+©À ¡ð /auth/aidean/callback                1.73 kB        97.5 kB
+©À ¡ð /bots                                4.75 kB         101 kB
+©À ¡ð /chat                                3.83 kB        99.7 kB
+©À ¡ð /engines                             3.33 kB        99.2 kB
+©À ¡ð /hot                                 8.84 kB         105 kB
+©À ¡ð /hot/daily                           4.57 kB        91.9 kB
+©À ¡ð /jobs                                5.45 kB         101 kB
+©À ¡ð /onboarding                          3.74 kB        99.6 kB
+©À ¡ð /public                              2.69 kB        98.5 kB
+©À ¡ð /spaces                              3.45 kB        99.3 kB
+©À ? /spaces/[id]                         9.98 kB         110 kB
+©¸ ¡ð /subscriptions                       5.59 kB         101 kB
++ First Load JS shared by all            87.3 kB
+
+Key changes:
+- react-markdown: static import ¡ú next/dynamic (ssr:false, loading skeleton)
+  /hot/daily First Load JS drops as markdown parser loads on demand
+- PushTasksTab: static import ¡ú next/dynamic (loading fallback)
+  /bots First Load JS drops as tasks tab loads on demand
+- next/image: added favicon for article items in /hot feed
+- next.config.mjs: images.remotePatterns configured

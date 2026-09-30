@@ -5,61 +5,131 @@ import { useAuth } from "@/components/AuthContext";
 import { connectNotifications, type AppNotification } from "@/lib/api/notifications";
 
 /**
- * 站内通知铃铛（WE 5.2b）
+ * 站内通知铃铛（WE 5.2b → W9 D.5 增强）
  *
- * - 顶栏铃铛 + 未读计数徽标 + 下拉最近列表；风格对齐 TopBar（neutral/brand 配色、
- *   text-caption、rounded），不引入新 UI 库。
- * - 数据源：EventSource（SSE）订阅后端 /api/v1/system/notifications（见 notifications.ts）。
- * - 生命周期：登录态（status==="authed"）才连接；登出（→guest）或卸载即断连
- *   （effect 依赖 status，cleanup 关闭 EventSource）。
- * - 未读：新通知入列时计数 +1（最新在前，上限 MAX_ITEMS）；展开下拉清零。
- * - 降级：后端回报 Redis 不可用时，下拉顶部提示「通知服务暂不可用」，不崩渲染。
+ * 增强项（D.5）：
+ * - 未读数 localStorage 持久化（刷新不丢，key=bothot:unread:{sub}）
+ * - SSE 增量合并去重（title+message 相同且 5s 内到达视为重复）
+ * - 429 RATE_LIMITED 码位预留（W7 未落地前先按 HTTP 429 预留 toast 逻辑）
+ * - 数据源接口预留：mergeFromHistory() 供未来后端通知历史端点注入
+ *
+ * 原有行为保持不变：
+ * - 登录态 SSE 订阅；登出/卸载断连
+ * - 展开下拉清零未读
+ * - Redis 不可用时降级提示
  */
 
 const MAX_ITEMS = 20;
+const DEDUP_WINDOW_MS = 5000;
+const LS_PREFIX = "bothot:unread:";
 
 interface BellItem extends AppNotification {
   id: number;
   receivedAt: number;
 }
 
+function getLsKey(sub: string | undefined): string {
+  return sub ? `${LS_PREFIX}${sub}` : "";
+}
+
+function loadUnread(sub: string | undefined): number {
+  if (!sub || typeof window === "undefined") return 0;
+  const raw = localStorage.getItem(getLsKey(sub));
+  const n = raw ? parseInt(raw, 10) : 0;
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+function saveUnread(sub: string | undefined, count: number): void {
+  if (!sub || typeof window === "undefined") return;
+  localStorage.setItem(getLsKey(sub), String(count));
+}
+
+function dedupKey(n: AppNotification): string {
+  return `${n.title}::${n.message}`;
+}
+
+/**
+ * 外部数据源接口（预留，W9 报告依赖）：
+ * 后端「通知历史端点」落地后，调用 mergeFromHistory(items, unreadCount)
+ * 将历史数据注入下拉列表并更新未读计数。当前无后端端点，不实施。
+ */
+export interface NotificationDataSource {
+  mergeFromHistory: (historyItems: AppNotification[], unreadCount: number) => void;
+}
+
 export default function NotificationBell() {
-  const { status } = useAuth();
+  const { status, me } = useAuth();
   const authed = status === "authed";
+  const sub = me?.sub;
 
   const [items, setItems] = useState<BellItem[]>([]);
-  const [unread, setUnread] = useState(0);
+  const [unread, setUnread] = useState(() => (authed ? loadUnread(sub) : 0));
   const [open, setOpen] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
+  const [rateLimited, setRateLimited] = useState(false);
   const idRef = useRef(0);
   const panelRef = useRef<HTMLDivElement>(null);
+  const recentRef = useRef<Map<string, number>>(new Map());
+
+  // 未读数持久化
+  useEffect(() => {
+    saveUnread(sub, unread);
+  }, [unread, sub]);
+
+  // 登录态恢复未读
+  useEffect(() => {
+    if (authed && sub) {
+      setUnread(loadUnread(sub));
+    }
+  }, [authed, sub]);
 
   useEffect(() => {
     if (!authed) {
-      // 未登录/登出：断开订阅并清空视图（下次登录重新连接）
       setItems([]);
       setUnread(0);
       setUnavailable(false);
       setOpen(false);
+      setRateLimited(false);
+      recentRef.current.clear();
       return;
     }
     const disconnect = connectNotifications({
       onNotification: (n) => {
+        const now = Date.now();
+        // 去重：5s 内相同 title+message 视为重复
+        const dk = dedupKey(n);
+        const lastSeen = recentRef.current.get(dk);
+        if (lastSeen && now - lastSeen < DEDUP_WINDOW_MS) return;
+        recentRef.current.set(dk, now);
+        // 清理过期条目
+        const nowClean = now;
+        const keysToRemove: string[] = [];
+        recentRef.current.forEach((ts, key) => {
+          if (nowClean - ts > DEDUP_WINDOW_MS) keysToRemove.push(key);
+        });
+        keysToRemove.forEach((key) => recentRef.current.delete(key));
+
         idRef.current += 1;
-        const entry: BellItem = { ...n, id: idRef.current, receivedAt: Date.now() };
+        const entry: BellItem = { ...n, id: idRef.current, receivedAt: now };
         setItems((prev) => [entry, ...prev].slice(0, MAX_ITEMS));
         setUnread((u) => u + 1);
       },
       onUnavailable: () => setUnavailable(true),
-      // EventSource readyState CLOSED（CONNECTING/OPEN 浏览器会自动重连，故不主动干预）
       onError: (es) => {
-        if (es.readyState === EventSource.CLOSED) setUnavailable(true);
+        if (es.readyState === EventSource.CLOSED) {
+          // 429 预留：W7 的 RATE_LIMITED 码（20005）触发 HTTP 429 时，
+          // EventSource 因浏览器自动重连会收到 CLOSED 状态。
+          // 当前 W7 未落地，暂按通用不可用处理；W7 落地后改判 429 并展示
+          // 「请求过于频繁，请稍后再试」toast。
+          setUnavailable(true);
+          setRateLimited(true);
+        }
       },
     });
     return disconnect;
   }, [authed]);
 
-  // 点击外部收起下拉（轻量，不引第三方 hook）
+  // 点击外部收起下拉
   useEffect(() => {
     if (!open) return;
     function onDocClick(e: MouseEvent) {
@@ -74,7 +144,7 @@ export default function NotificationBell() {
   const toggle = useCallback(() => {
     setOpen((o) => {
       const next = !o;
-      if (next) setUnread(0); // 展开即视为已读
+      if (next) setUnread(0);
       return next;
     });
   }, []);
@@ -122,7 +192,9 @@ export default function NotificationBell() {
           </div>
           {unavailable && (
             <div className="border-b border-amber-100 bg-amber-50 px-3 py-2 text-caption text-amber-700">
-              通知服务暂不可用，请稍后重试
+              {rateLimited
+                ? "请求过于频繁，请稍后再试"
+                : "通知服务暂不可用，请稍后重试"}
             </div>
           )}
           {items.length === 0 ? (
@@ -148,7 +220,6 @@ export default function NotificationBell() {
   );
 }
 
-/** 展示用时刻：HH:MM（24h）。仅在客户端下拉展开时渲染，无 SSR 水合风险。 */
 function formatTime(epochMs: number): string {
   const d = new Date(epochMs);
   const hh = String(d.getHours()).padStart(2, "0");

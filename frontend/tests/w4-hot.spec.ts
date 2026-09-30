@@ -198,6 +198,7 @@ describe("/hot/daily 日报页", () => {
         expect.objectContaining({ page: 2 }),
       ),
     );
-    expect(await screen.findByText("第 2 / 2 页")).toBeTruthy();
+    const page2Btn = await screen.findByRole("button", { name: "2" });
+    expect(page2Btn.getAttribute("aria-current")).toBe("page");
   });
 });

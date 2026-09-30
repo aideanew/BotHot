@@ -151,6 +151,7 @@ describe("NotificationBell", () => {
   beforeEach(() => {
     FakeEventSource.instances = [];
     vi.stubGlobal("EventSource", FakeEventSource);
+    localStorage.clear();
     h.auth.status = "authed";
     h.auth.me = {
       sub: "u-1",

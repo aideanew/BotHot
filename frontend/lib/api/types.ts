@@ -5,13 +5,9 @@
  * 原 lib/api.ts 的「类型定义（契约一一对应）」段原样迁入，公开符号零变更。
  */
 
-/** 统一响应信封 */
-export interface Envelope<T> {
-  code: number;
-  message: string;
-  data: T;
-  requestId: string;
-}
+import type { Envelope } from "@bothot/contracts";
+
+export type { Envelope };
 
 /**
  * GET /api/v1/auth/me → data（C-T7 真实态适配）。
