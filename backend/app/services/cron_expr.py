@@ -9,11 +9,12 @@
 
 from __future__ import annotations
 
-import logging
 import re
 from datetime import datetime
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 try:
     from croniter import croniter

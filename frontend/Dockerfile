@@ -1,11 +1,13 @@
-# BotHot frontend 容器化（A 所有，不触碰 C 的代码文件）
-# 说明：next.config.mjs 未启用 output:'standalone'（属 C 变更单），故采用单阶段 + pnpm start
+# BotHot frontend 容器化（W6 A.4：多阶段 + 非 root(uid1000=node) + HEALTHCHECK）
+# 说明：next.config.mjs 未启用 output:'standalone'（属 C 变更单），故 runtime 携 node_modules + .next
 # 网络：依赖安装走 npmmirror；构建期代理由 compose build.args 注入（宿主 10808 经 host.docker.internal）
 # 基础镜像可注入：默认走 docker.io；网络受限时由 compose build.args 换成镜像源
-# （同 backend/Dockerfile 的实证口径，例 docker.m.daocloud.io/library/node:24-alpine）
+#   （同 backend/Dockerfile 的实证口径，例 docker.m.daocloud.io/library/node:24-alpine）
 # 3.4 版本锚统一：Node 基线 = .nvmrc(24.21.0)，Dockerfile FROM 对齐 node:24-alpine。
 ARG BASE_IMAGE=node:24-alpine
-FROM ${BASE_IMAGE}
+
+# ---------------- builder：装依赖 + 构建产物 ----------------
+FROM ${BASE_IMAGE} AS builder
 
 ARG HTTP_PROXY=""
 ARG HTTPS_PROXY=""
@@ -27,11 +29,8 @@ ENV NEXT_PUBLIC_API_MOCK=${NEXT_PUBLIC_API_MOCK}
 
 WORKDIR /app
 
-# C 于 2026-09-09 迁移至 pnpm（pnpm-lock.yaml），构建配置同步为 corepack/pnpm。
-# 3.4 pnpm 版本锚单一源 = packageManager 字段（frontend/package.json）。corepack 按
-# 其自动解析，Dockerfile 不再硬编码 pnpm 版本（与 CI「Resolve pnpm version from
-# packageManager」同源）。先 COPY package.json 再 enable，使 corepack 能读到声明版本。
-# --frozen-lockfile：锁文件即事实源；devDependencies 默认安装（typescript 缺失会破坏 @/* 别名）
+# pnpm 版本锚单一源 = packageManager 字段（frontend/package.json）。corepack 按其自动解析，
+# Dockerfile 不硬编码 pnpm 版本。先 COPY package.json 再 enable，使 corepack 读到声明版本。
 COPY package.json pnpm-lock.yaml ./
 RUN corepack enable
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
@@ -42,6 +41,31 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm run build
 
+# ---------------- runner：只带运行所需，非 root ----------------
+FROM ${BASE_IMAGE} AS runner
+
+ENV TZ=Asia/Shanghai \
+    NODE_ENV=production
+
+WORKDIR /app
+
+# node 官方镜像自带 uid/gid=1000 的 `node` 用户；产物 --chown 给它，`next start`
+# 若需写 .next/cache 也不会因 root 属主而失败（frontend 不强制 read_only）。
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/.next ./.next
+COPY --from=builder --chown=node:node /app/public ./public
+COPY --from=builder --chown=node:node /app/package.json ./package.json
+COPY --from=builder --chown=node:node /app/next.config.mjs ./next.config.mjs
+
+# runtime 也要 corepack 解析出的 pnpm 才能 `pnpm start`
+RUN corepack enable
+
+USER node
+
 EXPOSE 3000
+
+# alpine busybox 自带 wget：探 SPA 首页返 2xx 即存活
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1
 
 CMD ["pnpm", "start"]

@@ -26,12 +26,12 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
+import structlog
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,7 +39,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.models.entities import ArticleManifest
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 MANIFEST_STATUS_DISCOVERED = "DISCOVERED"
 DEFAULT_MAX_PAGES = 20

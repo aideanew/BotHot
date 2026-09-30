@@ -14,12 +14,12 @@
 from __future__ import annotations
 
 import json
-import logging
 import re
 from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import structlog
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,7 +38,7 @@ from app.models.entities import (
 from app.repositories.job import JobItemRepository, JobRepository
 from app.repositories.space import SpaceRepository
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # 同步策略词表（R0.2.3）：调度器只认 `next_run_at` 驱动触发，`auto` 是当前唯一有定义语义的值。
 # 建订阅与改订阅共用同一白名单——此前 `sync_policy` 是无校验自由文本（只限 max_length），

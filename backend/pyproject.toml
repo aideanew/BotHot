@@ -16,6 +16,8 @@ dependencies = [
     "httpx>=0.27.0",
     "python-multipart>=0.0.12",
     "structlog>=24.4.0",
+    # W6 观测：/metrics 暴露面（HTTP/DB/Job/推送/热点指标族）
+    "prometheus-client>=0.21.0",
     # SPEC-M3 批次 3 / T5.4：engine_key_registrations 的 AES-256-GCM 落库加密
     "cryptography>=43.0.0",
 ]
@@ -27,6 +29,8 @@ dependencies = [
 dev = [
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
+    # W6 交付的前置：W10 覆盖率门禁依赖 pytest-cov（本批只装依赖，不改 CI 门禁口径）
+    "pytest-cov>=6.0",
     "httpx>=0.27.0",
     "ruff==0.12.12",
     "mypy==2.3.1",

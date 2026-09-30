@@ -36,20 +36,20 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import logging
 import sys
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import TypedDict
 
+import structlog
 from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # 模型 `ProcessHeartbeat` 在 `app/models/entities.py` 里保留（保证 autogenerate 不会把它
 # 判成「无模型即删除」）；本模块读写走单条 SQL——upsert 一次往返，读侧也直接要原始行。
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # 表名单一真源：本模块的 SQL 与 `entities.ProcessHeartbeat` 的 ORM 映射必须指向同一张表，
 # 抽成常量避免两处硬编码漂移。此处是**模块常量而非用户输入**，故 f-string 拼接不构成

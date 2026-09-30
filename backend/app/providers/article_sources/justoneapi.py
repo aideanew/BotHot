@@ -21,11 +21,11 @@ POST/GET 口径：history=POST form；detail v1/v5=GET query（同平台参数�
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime
 from typing import Any
 
 import httpx
+import structlog
 
 from app.core.errors import (
     AppError,
@@ -35,7 +35,7 @@ from app.core.errors import (
 )
 from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 DEFAULT_TIMEOUT = 20.0
 BASE_URL = "https://api.justoneapi.com"

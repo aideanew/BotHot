@@ -1,0 +1,22 @@
+# Prometheus 抓取配置（W6 A.2 交付物）：抓 BotHot backend 的 /metrics。
+#
+# 与 docker/compose.yml 的关系：本文件是「抓取侧」参考配置，把 backend 作为抓取目标。
+# 若要把 Prometheus 一并纳入栈，可在 compose 里加 `prometheus` 服务并挂载本文件为
+# `/etc/prometheus/prometheus.yml`、用 `--config.file` 启动；此处只给采集契约，不改栈。
+# 端口/服务名沿用 compose 的 Docker DNS：backend 容器内监听 3300。
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: bothot
+
+scrape_configs:
+  - job_name: bothot-backend
+    metrics_path: /metrics
+    static_configs:
+      # 栈内：经 compose 网络按服务名解析 backend
+      - targets: ["backend:3300"]
+        labels:
+          service: bothot-backend
+      # 宿主裸跑调试时把上行注释掉、启用下行（backend 宿主侧端口准则见 AGENTS.md）
+      # - targets: ["host.docker.internal:3300"]

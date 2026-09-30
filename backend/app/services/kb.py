@@ -15,11 +15,11 @@ builtin 保持 LangBot 原行为零变更；非 builtin Key 未配置 → 10004/
 from __future__ import annotations
 
 import asyncio
-import logging
 import re
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,7 +46,7 @@ from app.services.normalizer import normalize_extracted
 from app.services.quality import score_quality
 from app.services.resolver import SourceResolverService
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # LangBot 文件状态 → 本地文档状态机（SPEC §3.2 冻结映射 + timeout 同失败态）
 _LB_STATUS_MAP = {

@@ -35,6 +35,10 @@ EXPECTED_PUBLIC = {
     # BotHot 的 session cookie）必然 10001，整个 back-channel 静默失效。
     ("post", "/api/v1/auth/backchannel-logout"),  # R9：公开但验签 fail-closed
     ("get", "/api/v1/system/health"),  # 存活探针，容器/编排层轮询
+    # W6 A.3：/live（进程存活，不触依赖）与 /ready（就绪：PG+Redis+schema）供编排层
+    # 探活/摘流，与 /health 同类——由容器/负载均衡轮询，无会话上下文，故公开。
+    ("get", "/api/v1/system/live"),
+    ("get", "/api/v1/system/ready"),
     ("get", "/api/v1/onboarding/steps"),  # 静态默认值，不含任何用户数据
 }
 

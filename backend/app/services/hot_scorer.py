@@ -19,18 +19,18 @@ topic_age = 距话题内**最早一篇**文章的小时数。
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import structlog
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bothot_entities import FeedItem, HotTopic, HotTopicArticle
 from app.models.entities import ContentAsset
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 BUSINESS_TZ = ZoneInfo("Asia/Shanghai")
 

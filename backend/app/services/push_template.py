@@ -8,12 +8,13 @@
 
 from __future__ import annotations
 
-import logging
 import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 BUSINESS_TZ = ZoneInfo("Asia/Shanghai")
 

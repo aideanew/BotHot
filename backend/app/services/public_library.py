@@ -10,8 +10,7 @@
 
 from __future__ import annotations
 
-import logging
-
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +20,7 @@ from app.models.entities import ContentAsset, KnowledgeDocument
 from app.repositories.asset import DocumentRepository
 from app.repositories.space import SpaceRepository
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def check_publish_gate(allowlist_text: str, operator_id: str, owner_type: str) -> None:

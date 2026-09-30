@@ -18,12 +18,12 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Protocol
 
 import httpx
+import structlog
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 DEFAULT_RERANK_MODEL = "BAAI/bge-reranker-v2-m3"
 DEFAULT_TIMEOUT = 10.0

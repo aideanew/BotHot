@@ -22,7 +22,6 @@ diff，因聚簇结果随窗口漂移（同日不同窗口成员可能变化）�
 
 from __future__ import annotations
 
-import logging
 import math
 import re
 import unicodedata
@@ -33,13 +32,14 @@ from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import structlog
 from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bothot_entities import FeedItem, HotTopic, HotTopicArticle
 from app.models.entities import ContentAsset
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # 热点业务日界 = Asia/Shanghai；如改口径只动此常量（与 hot.py BUSINESS_TZ 同口径）。
 BUSINESS_TZ = ZoneInfo("Asia/Shanghai")

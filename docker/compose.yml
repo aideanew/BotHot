@@ -22,6 +22,25 @@
 #   顶层 `name:` 把项目名写死为 bothot，命令从哪个目录跑、是否加 -p 都不再影响。
 name: bothot
 
+# ── W6 A.4 运行硬化：日志轮转 + 资源上限 + 最小权限 ──────────────────
+# memory 上限取自同代栈实测基线（2026-09 docker stats --no-stream：backend 88MiB /
+# worker 65MiB / scheduler 63MiB / frontend 82MiB / postgres 50MiB / redis 3MiB /
+# langbot 501MiB / plugin_runtime 97MiB），按 ~4-6x 峰值余量设，既兜住 embed/LLM/
+# 聚簇 抖动，又防单服务失控 OOM 拖垮整台宿主。日志一律 10m×3 轮转防撑爆磁盘。
+x-default-logging: &default_logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# backend / scheduler / worker 共用的最小权限片段：丢弃全部 capability + 禁止提权。
+# （三者的 read_only / tmpfs 也一致，但为让每个服务块可独立阅读，read_only/tmpfs 就地声明。）
+x-hardened: &hardened
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -34,6 +53,11 @@ services:
       - TZ=Asia/Shanghai
     ports:
       - "5433:5432"
+    logging: *default_logging
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -46,6 +70,11 @@ services:
     image: redis:7-alpine
     container_name: bothot-redis
     restart: unless-stopped
+    logging: *default_logging
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     ports:
       - "6380:6379"
     volumes:
@@ -55,6 +84,11 @@ services:
     image: rockchin/langbot:latest
     container_name: bothot-langbot-plugin-rt
     restart: unless-stopped
+    logging: *default_logging
+    deploy:
+      resources:
+        limits:
+          memory: 768M
     environment:
       - TZ=Asia/Shanghai
       # M0 实证：显式清空宿主代理（继承自 Docker Desktop 的 127.0.0.1:10809 不可达）
@@ -83,6 +117,11 @@ services:
     image: rockchin/langbot:latest
     container_name: bothot-langbot
     restart: unless-stopped
+    logging: *default_logging
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
     environment:
       - TZ=Asia/Shanghai
       # 覆盖 Docker Desktop 注入的死代理（10809 已关闭），改走宿主可用代理 10808
@@ -133,10 +172,22 @@ services:
         no_proxy: "*"
     container_name: bothot-backend
     restart: unless-stopped
+    # W6 A.4 最小权限：read_only 根 + tmpfs /tmp 写面 + 丢全部 capability + 禁提权
+    logging: *default_logging
+    <<: *hardened
+    read_only: true
+    tmpfs:
+      - /tmp
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     # &backend_env：同一份 env 复用给 migrate/scheduler/worker（三个进程读同一套 Settings，
     # 锚点单点维护，避免三处漂移——漂移过一次就会在容器里指向宿主 127.0.0.1 的库）
     environment: &backend_env
       - APP_ENV=development
+      # W6 A.4：read_only 根文件树下禁止写 __pycache__，须禁字节码（backend/scheduler/worker 共用）
+      - PYTHONDONTWRITEBYTECODE=1
       - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-bothot}:${POSTGRES_PASSWORD:-bothot}@postgres:5432/${POSTGRES_DB:-bothot}
       - REDIS_URL=redis://redis:6379/0
       # T1.5.1（G9，2026-09-22）：会话/state 存储切 Redis（多实例部署与会话持久前置）；
@@ -244,6 +295,11 @@ services:
     image: bothot-backend
     container_name: bothot-migrate
     restart: "no"
+    logging: *default_logging
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     environment: *backend_env
     depends_on:
       postgres:
@@ -266,6 +322,16 @@ services:
     image: bothot-backend
     container_name: bothot-scheduler
     restart: unless-stopped
+    # W6 A.4 最小权限（与 backend 同口径；本服务不开任何端口，cap_drop ALL 无碍）
+    logging: *default_logging
+    <<: *hardened
+    read_only: true
+    tmpfs:
+      - /tmp
+    deploy:
+      resources:
+        limits:
+          memory: 384M
     environment: *backend_env
     depends_on:
       postgres:
@@ -303,6 +369,16 @@ services:
     image: bothot-backend
     container_name: bothot-worker
     restart: unless-stopped
+    # W6 A.4 最小权限（与 backend/scheduler 同口径）
+    logging: *default_logging
+    <<: *hardened
+    read_only: true
+    tmpfs:
+      - /tmp
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment: *backend_env
     depends_on:
       postgres:
@@ -349,6 +425,11 @@ services:
         BACKEND_ORIGIN: http://backend:3300
     container_name: bothot-frontend
     restart: unless-stopped
+    logging: *default_logging
+    deploy:
+      resources:
+        limits:
+          memory: 384M
     environment:
       - TZ=Asia/Shanghai
       # C-CHG-1 容器侧：next rewrites 的代理目标（直连 backend 容器）

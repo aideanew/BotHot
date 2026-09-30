@@ -19,12 +19,13 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from datetime import UTC, datetime, timedelta
 
+import structlog
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.metrics import PUSH_DELIVERIES_TOTAL
 from app.core.secret_crypto import decrypt_channel_secret
 from app.models.bothot_entities import BotChannel, PushLog, PushTask
 from app.providers.push import PushMessage, make_push_provider
@@ -32,7 +33,7 @@ from app.services.cron_expr import parse_cron_next
 from app.services.push_events import claim_pending_events
 from app.services.push_template import render
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 PUSH_SCHEDULER_INTERVAL = 60
 
@@ -79,6 +80,12 @@ class PushTaskScheduler:
             await self._execute_task_safe(task, now)
 
         await self._claim_and_dispatch_events(now)
+
+        # W6 A.5：运行期告警（心跳缺失/Job 积压/推送连败）。run_alert_checks 在
+        # ALERTING_ENABLED 未置真时直接短路返回空，故开发/测试零副作用、生产才投递。
+        from app.core.alerting import run_alert_checks
+
+        await run_alert_checks(self._session_factory)
 
     async def _claim_due_cron_tasks(self, now: datetime) -> list[PushTask]:
         """领取到期任务：cron 到期 OR 重试到期（两类谓词并集，SKIP LOCKED 防多副本）。
@@ -220,6 +227,9 @@ class PushTaskScheduler:
                     # 投递成功清零重试态（上次失败的退避计划作废）
                     task_row.retry_count = 0
                     task_row.next_retry_at = None
+
+            # W6 A.2：投递结果计入 Prometheus（outcome ∈ success/failed/dead）。
+            PUSH_DELIVERIES_TOTAL.labels(channel=ch.channel_type, outcome=log_status).inc()
 
             log = PushLog(
                 bot_channel_id=ch.id,

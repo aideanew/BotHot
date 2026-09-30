@@ -19,10 +19,10 @@ OpenAPI 契约获取：GET /openapi.json（1050 paths，wechat_mp v2 仅 13 端�
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import httpx
+import structlog
 
 from app.core.errors import (
     DependencyUnavailableError,
@@ -30,7 +30,7 @@ from app.core.errors import (
 )
 from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 DEFAULT_TIMEOUT = 15.0
 BASE_URL = "https://api.tikhub.io"

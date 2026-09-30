@@ -10,9 +10,9 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Protocol
 
+import structlog
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +32,7 @@ from app.repositories.asset import AssetRepository, DocumentRepository
 from app.repositories.space import SpaceRepoProto
 from app.services.categorizer import CATEGORIES, DEFAULT_CATEGORY, UNCATEGORIZED
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # 名称约束（最小可执行）：非空、≤128 字符、不含控制字符；更复杂规则随 UI 落地再收敛
 _SPACE_NAME_MAX = 128

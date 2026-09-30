@@ -19,15 +19,16 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+import structlog
+
 from app.core.config import Settings
 from app.services.manifest import WorkListProvider, make_redfox_provider
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)

@@ -11,9 +11,9 @@ push_template.render 零额外查询即可渲染。与业务同事务落库，�
 from __future__ import annotations
 
 import json
-import logging
 from datetime import UTC, datetime
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +21,7 @@ from app.core.errors import RequestInvalidError
 from app.models.bothot_entities import DailyReport, HotTopic, PushEvent
 from app.models.entities import ContentAsset, KnowledgeSpace
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 VALID_EVENT_TYPES = {"new_article", "hot_topic_update", "daily_report"}
 

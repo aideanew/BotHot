@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from functools import partial
 from typing import Any
 
+import structlog
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.dependencies.models import Dependant
 from fastapi.exceptions import RequestValidationError
@@ -32,6 +33,8 @@ from app.api.v1.subscriptions import jobs_router, sources_router, subscriptions_
 from app.api.v1.system import router as system_router
 from app.core.config import assert_production_ready, get_settings
 from app.core.errors import AppError, http_status_for
+from app.core.logging import configure_logging
+from app.core.metrics import MetricsMiddleware, metrics_router
 from app.core.middleware import ErrorEnvelopeMiddleware, RequestIdMiddleware
 from app.core.response import failure
 from app.db import get_session_factory
@@ -40,6 +43,8 @@ from app.services.push_scheduler import start_push_scheduler, stop_push_schedule
 # ------------------------------------------------------------------ R4.9.3 OpenAPI 安全方案
 
 SECURITY_SCHEME_NAME = "BotHotSessionCookie"
+
+logger = structlog.get_logger(__name__)
 
 # 不经 get_current_sub 依赖、在处理器内自查 cookie 的路由：依赖树推导捕不到它们。
 # 新增此类路由必须在此登记，否则文档会把它误标为公开端点（少标比多标危险——
@@ -203,38 +208,27 @@ def _assert_schema_current(settings) -> None:
         return  # 已在 async 上下文（多为测试），跳过启动期探测
 
     try:
-        import logging
-
-        import sqlalchemy
-
-        from alembic.config import Config as AlembicConfig
-        from alembic.script import ScriptDirectory
+        from app.core import schema_guard
         from app.db import create_engine_and_session, resolve_database_url
 
-        cfg = AlembicConfig()
-        cfg.set_main_option("script_location", "alembic")
-        head = ScriptDirectory.from_config(cfg).get_current_head()
+        head = schema_guard.get_alembic_head()
 
         engine, _ = create_engine_and_session(resolve_database_url(settings.database_url))
 
-        async def _probe() -> str | None:
+        async def _probe_and_dispose() -> str | None:
             try:
-                async with engine.connect() as conn:
-                    row = (
-                        await conn.execute(
-                            sqlalchemy.text("SELECT version_num FROM alembic_version")
-                        )
-                    ).fetchone()
-                    return row[0] if row else None
+                return await schema_guard.read_current_version_async(engine)
             finally:
+                # 一次性引擎用完即 dispose：asyncio.run 会关掉所在 loop，
+                # 泄漏绑在已关 loop 上的连接池会污染进程单例（跨 loop 报错）。
                 await engine.dispose()
 
-        current = asyncio.run(_probe())
-        if current != head:
+        current = asyncio.run(_probe_and_dispose())
+        if head is not None and current != head:
             msg = f"schema/code 版本不一致：DB={current}, HEAD={head}"
             if settings.app_env.strip().lower() == "production":
                 raise RuntimeError(msg)
-            logging.getLogger(__name__).warning("⚠️ %s（开发环境仅告警）", msg)
+            logger.warning("⚠️ %s（开发环境仅告警）", msg)
     except RuntimeError:
         raise
     except Exception:
@@ -252,20 +246,34 @@ async def _lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    configure_logging()  # W6 A.1：先装日志，使下方启动守卫的告警走结构化链路
     settings = get_settings()
     assert_production_ready(settings)  # 生产配置不合格即拒启（见 core.config）
     _assert_schema_current(settings)  # R6.1.4：schema/code 版本一致性守卫
     app = FastAPI(title=settings.app_name, version="0.1.0", docs_url="/docs", lifespan=_lifespan)
 
-    # add_middleware 是"后注册者更外层"：先装异常兜底，再装 requestId（最外层，覆盖全部下游）
+    # add_middleware 是"后注册者更外层"：先装异常兜底，再装 requestId，最后装 metrics
+    # （metrics 居最外，连 requestId 上下文缺失的早期异常也能计时）。
     app.add_middleware(ErrorEnvelopeMiddleware)
     app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(MetricsMiddleware)
 
     for router in APP_ROUTERS:
         app.include_router(router)
+    # W6 A.2：/metrics 独立路由（无鉴权、不入 APP_ROUTERS 的安全标注遍历）。
+    app.include_router(metrics_router)
     register_exception_handlers(app)
     # R4.9.3：生成 OpenAPI 后补安全方案标注（见 _annotate_session_security）
     app.openapi = partial(_openapi_with_security, app, APP_ROUTERS)  # type: ignore[method-assign]
+
+    # W6 冻结接口：W7 交付 `install_security_middlewares`；本批只在既有中间件之后装配，
+    # 不实现。W7 未就位时 ImportError 静默跳过，零回归。
+    try:
+        from app.core.security import install_security_middlewares
+
+        install_security_middlewares(app)
+    except ImportError:
+        pass
 
     return app
 
