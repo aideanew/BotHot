@@ -32,12 +32,16 @@ from app.core.errors import (
     DependencyUnavailableError,
     DiscoveryFailedError,
 )
+from app.core.security import upstream_semaphore, upstream_timeout
 from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 15.0
 BASE_URL = "https://www.dajiala.com/fbmain/monitor/v3"
+
+# W7：进程内并发闸名（`UPSTREAM_CONCURRENCY_DAJIALA` 可覆盖上限）
+UPSTREAM_NAME = "dajiala"
 
 _CODE_OK = 0
 
@@ -60,12 +64,18 @@ class DajialaClient:
     ) -> None:
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
-        self._http = http or httpx.AsyncClient(timeout=timeout)
+        # W7：超时拆分（connect 短 / read 长）——`timeout` 参数语义保留为读超时
+        self._http = http or httpx.AsyncClient(timeout=upstream_timeout(timeout))
         self._owns_http = http is None
 
     async def aclose(self) -> None:
         if self._owns_http:
             await self._http.aclose()
+
+    async def _post(self, url: str, **kwargs: Any) -> httpx.Response:
+        """带并发闸的 POST（W7）：限「我们对上游的并发」，不改请求/响应语义。"""
+        async with upstream_semaphore(UPSTREAM_NAME):
+            return await self._http.post(url, **kwargs)
 
     # ── 发现 ──────────────────────────────────────────────────────────
 
@@ -210,7 +220,7 @@ class DajialaClient:
         """POST JSON 到 {base_url}/{endpoint}；错误映射到领域异常。"""
         url = f"{self._base_url}/{endpoint}"
         try:
-            resp = await self._http.post(url, json=body)
+            resp = await self._post(url, json=body)
         except httpx.HTTPError as exc:
             raise DependencyUnavailableError(f"Dajiala 不可达: {exc}") from exc
 

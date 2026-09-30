@@ -14,6 +14,12 @@ ERROR_CODES: dict[int, str] = {
     10004: "FORBIDDEN",
     10005: "REQUEST_INVALID",
     10006: "MALFORMED_URL",
+    # W7：入站限流与请求体上限。归 1xxxx「请求级客户端错误」段——与 10005
+    # REQUEST_INVALID 同族：都不是业务语义失败，而是「这次请求我没接受」。
+    # 与 20005 RATE_LIMITED_UPSTREAM 严格区分：后者是**上游**限频（我们被限），
+    # 前者是我们**自己**限流（对方被限）。
+    10007: "RATE_LIMITED",
+    10008: "PAYLOAD_TOO_LARGE",
     # 2xxxx 采集/信息源
     20001: "SOURCE_URL_UNRECOGNIZED",
     20002: "EXTRACT_FAILED",
@@ -88,6 +94,28 @@ class MalformedUrlError(AppError):
 
     code = 10006
     http_status = 400
+
+
+class RateLimitedError(AppError):
+    """入站限流命中（W7）→ 10007/429。
+
+    与 `RateLimitedUpstreamError`（20005，上游 4004 限频）方向相反：本码表示
+    **本服务**对调用方限流，响应必带 `Retry-After`（由中间件补，非本类职责）。
+    """
+
+    code = 10007
+    http_status = 429
+
+
+class PayloadTooLargeError(AppError):
+    """请求体超上限（W7）→ 10008/413。
+
+    两段式触发都在 `core.security.BodyLimitMiddleware`：`Content-Length` 预检
+    （省掉读取）与流式截断（防 chunked/伪造长度）。
+    """
+
+    code = 10008
+    http_status = 413
 
 
 # ---------------------------------------------------------------- 2xxxx 采集
@@ -215,6 +243,8 @@ _CODE_TO_CLASS: dict[int, type[AppError]] = {
         ForbiddenError,
         RequestInvalidError,
         MalformedUrlError,
+        RateLimitedError,
+        PayloadTooLargeError,
         SourceUrlUnrecognizedError,
         ExtractFailedError,
         ExtractQualityLowError,

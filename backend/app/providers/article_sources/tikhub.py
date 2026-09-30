@@ -28,12 +28,16 @@ from app.core.errors import (
     DependencyUnavailableError,
     DiscoveryFailedError,
 )
+from app.core.security import upstream_semaphore, upstream_timeout
 from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 15.0
 BASE_URL = "https://api.tikhub.io"
+
+# W7：进程内并发闸名（`UPSTREAM_CONCURRENCY_TIKHUB` 可覆盖上限）
+UPSTREAM_NAME = "tikhub"
 
 # fetch_account_articles 请求体参数（OpenAPI 读取）：
 # username: gh_xxx / gh_xxx@app / 自定义微信号
@@ -62,12 +66,23 @@ class TikhubClient:
     ) -> None:
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
-        self._http = http or httpx.AsyncClient(timeout=timeout)
+        # W7：超时拆分（connect 短 / read 长）——`timeout` 参数语义保留为读超时
+        self._http = http or httpx.AsyncClient(timeout=upstream_timeout(timeout))
         self._owns_http = http is None
 
     async def aclose(self) -> None:
         if self._owns_http:
             await self._http.aclose()
+
+    async def _post(self, url: str, **kwargs: Any) -> httpx.Response:
+        """带并发闸的 POST（W7）：限「我们对上游的并发」，不改请求/响应语义。"""
+        async with upstream_semaphore(UPSTREAM_NAME):
+            return await self._http.post(url, **kwargs)
+
+    async def _get(self, url: str, **kwargs: Any) -> httpx.Response:
+        """带并发闸的 GET（W7）：与 `_post` 同闸，故发现与详情共享同一并发预算。"""
+        async with upstream_semaphore(UPSTREAM_NAME):
+            return await self._http.get(url, **kwargs)
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
@@ -97,7 +112,7 @@ class TikhubClient:
         }
 
         try:
-            resp = await self._http.post(
+            resp = await self._post(
                 f"{self._base_url}/api/v1/wechat_mp/web/fetch_account_articles",
                 json=body,
                 headers=self._headers(),
@@ -159,7 +174,7 @@ class TikhubClient:
         # 优先尝试 fetch_article_detail_h5（官方标"推荐"）
         params = {"url": url}
         try:
-            resp = await self._http.get(
+            resp = await self._get(
                 f"{self._base_url}/api/v1/wechat_mp/v2/fetch_article_detail_h5",
                 params=params,
                 headers=self._headers(),
@@ -207,7 +222,7 @@ class TikhubClient:
 
         body = {"keyword": keyword, "business_type": "account"}
         try:
-            resp = await self._http.post(
+            resp = await self._post(
                 f"{self._base_url}/api/v1/wechat_search/v2/fetch_search",
                 json=body,
                 headers=self._headers(),

@@ -23,9 +23,8 @@ class WebPushProvider:
     async def push(self, message: PushMessage) -> PushResult:
         # 尝试导入 Redis（延迟导入，避免在无 Redis 环境下启动失败）
         try:
-            import redis.asyncio as aioredis
-
             from app.core.config import get_settings
+            from app.core.security import get_shared_redis
 
             settings = get_settings()
             if not settings.redis_url:
@@ -46,8 +45,13 @@ class WebPushProvider:
                 else f"{_CHANNEL_PREFIX}:broadcast"
             )
 
-            async with aioredis.from_url(settings.redis_url) as r:
-                await r.publish(channel, json.dumps(notification, ensure_ascii=False))
+            # W7：复用进程级共享客户端（原实现每次投递 `from_url` 新建连接池并随
+            # `async with` 关闭——高频推送下是稳定的连接抖动源）。投递语义不变：
+            # 失败仍走下方 except → PushResult(retryable=True)。
+            client = get_shared_redis(settings.redis_url)
+            if client is None:  # 理论上不可达（上方已判空 url）；防御式保留
+                return PushResult("web", False, "Redis 未配置，站内通知不可用")
+            await client.publish(channel, json.dumps(notification, ensure_ascii=False))
 
             return PushResult("web", True, "", f"published to {channel}")
         except Exception as e:

@@ -37,8 +37,13 @@ from app.core.errors import (
     ForbiddenError,
     RateLimitedUpstreamError,
 )
+from app.core.security import upstream_semaphore, upstream_timeout
 
 DEFAULT_TIMEOUT = 15.0
+
+# W7：进程内并发闸名（`UPSTREAM_CONCURRENCY_REDFOX` 可覆盖上限）。
+# 同 provider 的所有请求共享一个信号量——限的是「我们对上游的并发」，与客户端数无关。
+UPSTREAM_NAME = "redfox"
 
 QUERY_WORK_LIST_PATH = "/story/api/gzh/data/queryWorkList"
 
@@ -66,12 +71,18 @@ class RedfoxClient:
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
-        self._http = http or httpx.AsyncClient(timeout=timeout)
+        # W7：超时拆分（connect 短 / read 长）——`timeout` 参数语义保留为读超时
+        self._http = http or httpx.AsyncClient(timeout=upstream_timeout(timeout))
         self._owns_http = http is None
 
     async def aclose(self) -> None:
         if self._owns_http:
             await self._http.aclose()
+
+    async def _post(self, url: str, **kwargs: Any) -> httpx.Response:
+        """带并发闸的 POST（W7）：限「我们对上游的并发」，不改请求/响应语义。"""
+        async with upstream_semaphore(UPSTREAM_NAME):
+            return await self._http.post(url, **kwargs)
 
     async def query_work_list(
         self, biz: str, page: int
@@ -102,7 +113,7 @@ class RedfoxClient:
         url = f"{self._base_url}{path}"
         headers = {"X-API-KEY": self._api_key}
         try:
-            resp = await self._http.post(url, json=json_payload, headers=headers)
+            resp = await self._post(url, json=json_payload, headers=headers)
         except httpx.HTTPError as exc:
             raise DependencyUnavailableError(f"RedFox 不可达: {exc}") from exc
         if resp.status_code >= 500:

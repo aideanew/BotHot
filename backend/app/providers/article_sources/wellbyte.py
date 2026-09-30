@@ -38,12 +38,16 @@ from app.core.errors import (
     DiscoveryFailedError,
     RateLimitedUpstreamError,
 )
+from app.core.security import upstream_semaphore, upstream_timeout
 from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 20.0
 BASE_URL = "https://api.wellbyte.net"
+
+# W7：进程内并发闸名（`UPSTREAM_CONCURRENCY_WELLBYTE` 可覆盖上限）
+UPSTREAM_NAME = "wellbyte"
 
 _CODE_OK = 0
 
@@ -80,12 +84,18 @@ class WellbyteClient:
     ) -> None:
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
-        self._http = http or httpx.AsyncClient(timeout=timeout)
+        # W7：超时拆分（connect 短 / read 长）——`timeout` 参数语义保留为读超时
+        self._http = http or httpx.AsyncClient(timeout=upstream_timeout(timeout))
         self._owns_http = http is None
 
     async def aclose(self) -> None:
         if self._owns_http:
             await self._http.aclose()
+
+    async def _post(self, url: str, **kwargs: Any) -> httpx.Response:
+        """带并发闸的 POST（W7）：限「我们对上游的并发」，不改请求/响应语义。"""
+        async with upstream_semaphore(UPSTREAM_NAME):
+            return await self._http.post(url, **kwargs)
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
@@ -112,7 +122,7 @@ class WellbyteClient:
 
         body = {"url": identifier}
         try:
-            resp = await self._http.post(
+            resp = await self._post(
                 f"{self._base_url}/v1/wechat_mp/user/account_history_articles_v2",
                 json=body,
                 headers=self._headers(),
@@ -188,7 +198,7 @@ class WellbyteClient:
             "publishTimeType": _TIME_MAP.get(time_range, ""),
         }
         try:
-            resp = await self._http.post(
+            resp = await self._post(
                 f"{self._base_url}/v1/wechat_mp/search/article_v1",
                 json=body,
                 headers=self._headers(),
@@ -247,7 +257,7 @@ class WellbyteClient:
 
         body = {"url": article_url}
         try:
-            resp = await self._http.post(
+            resp = await self._post(
                 f"{self._base_url}/v1/wechat_mp/user/account_history_articles_v2",
                 json=body,
                 headers=self._headers(),
