@@ -63,6 +63,14 @@
 
 ### Fixed
 
+- **security.yml 加载期 0-job 秒红（三轮首跑实证）**：job 级 `env:` 使用了
+  `runner.temp` 与 `coalesce()`——该层表达式白名单均不含二者，GitHub 表现为
+  工作流加载被拒（0 job、created==updated、API 无错误详情，REST 排查通道全部
+  静默）。真凶由 actionlint 定位（本地官方 workflow-parser 只查 schema，查不出
+  上下文可用性）。修复：`VERDICT_DIR` 改静态 `/tmp/security-verdicts`；
+  `SECURITY_GATE_ENFORCE` 改 `${{ vars.X }}` 直引（消费侧 `${X:-1}` 兜底已存在）。
+  防再犯：ci.yml 新增 **`workflow-lint` job**（actionlint v1.7.12 钉版，全部
+  workflow 静态检查）—— `.github/workflows/security.yml` `.github/workflows/ci.yml`
 - **CI frontend 13 秒红：`@bothot/contracts` 幽灵依赖（2026-09-30 首跑实证）**：W9 曾把
   `workspace:*` 写入 `frontend/package.json`，但仓库**无 pnpm workspace 根**且 lockfile
   从未收入该条目——本地 tsc/vitest 因「tsconfig paths + 纯 `import type` 擦除」假绿，

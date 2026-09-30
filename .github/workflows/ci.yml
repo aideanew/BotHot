@@ -6,6 +6,20 @@ on:
   pull_request:
 
 jobs:
+  # 工作流文件静态检查：GitHub 把加载期错误表现为「0 job、created==updated 秒红」且
+  # API 不带任何错误详情——security.yml 首跑三连红（job env 用了 runner.temp/coalesce，
+  # 均不在该层白名单）全靠本地 actionlint 才定位。此 job 让同类问题在 PR 期就红。
+  workflow-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install actionlint (pinned)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash | bash -s -- 1.7.12 ./
+          sudo mv ./actionlint /usr/local/bin/actionlint
+      - name: actionlint (all workflows)
+        run: actionlint
+
   backend:
     runs-on: ubuntu-latest
     defaults:
