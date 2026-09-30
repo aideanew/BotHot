@@ -66,10 +66,19 @@ echo "PROBE_FAIL=$fail"
 exit "$fail"
 INNER
 
-docker run --rm \
-  -v "$PROBE_DIR/src/frontend:/w" \
-  -v "$PROBE_DIR/src/packages:/packages" \
-  -v "$PROBE_DIR/run.sh:/run.sh:ro" \
+# Git Bash/MSYS 会把 /w、/tmp/... 自动改写成 W:/、C:\... 传给 docker.exe，
+# 容器报 "working directory 'W:/' is invalid"（2026-09-30 实测）。挂载源在
+# 有 cygpath 的平台显式转 Windows 路径，并用 MSYS_NO_PATHCONV=1 保住 -w /w；
+# 该变量在 Linux 宿主上是惰性环境变量，无副作用。
+if command -v cygpath >/dev/null 2>&1; then
+  _SRC_WIN="$(cygpath -w "$PROBE_DIR/src")"
+  _RUN_WIN="$(cygpath -w "$PROBE_DIR/run.sh")"
+  M_VOL=(-v "$_SRC_WIN\\frontend:/w" -v "$_SRC_WIN\\packages:/packages" -v "$_RUN_WIN:/run.sh:ro")
+else
+  M_VOL=(-v "$PROBE_DIR/src/frontend:/w" -v "$PROBE_DIR/src/packages:/packages" -v "$PROBE_DIR/run.sh:/run.sh:ro")
+fi
+MSYS_NO_PATHCONV=1 docker run --rm \
+  "${M_VOL[@]}" \
   -w /w \
   -e TZ=UTC -e "NO_PROXY=*" \
   "$NODE_IMAGE" bash /run.sh

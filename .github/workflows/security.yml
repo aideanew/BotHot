@@ -85,7 +85,9 @@ jobs:
       # 汇总门禁的过渡开关。默认强制（'1'）。置 '0' 只把 🔴 降级为 ⚠️ 并**不阻断**——
       # 仅用于「首次接入、需要先摸清真实漏洞存量」这一种场景，稳定后必须删掉这一行
       # 与仓库变量，不允许长期以 '0' 运行（否则本工作流等于 ci.yml 里的一条 echo）。
-      SECURITY_GATE_ENFORCE: ${{ vars.SECURITY_GATE_ENFORCE || '1' }}
+      # 注意：GitHub 表达式无 ||（用 || 会让整个文件解析失败、0 job 秒红——2026-09-30 首跑实证），
+      # 「变量未定义时兜底」的合法写法是 coalesce()。
+      SECURITY_GATE_ENFORCE: ${{ coalesce(vars.SECURITY_GATE_ENFORCE, '1') }}
     steps:
       # fetch-depth: 0 —— ④ gitleaks 走 git 模式（遍历历史）。浅克隆只有 1 个 commit，
       # 「历史上提交过、后来删掉的密钥」会整段漏掉，而那恰是密钥扫描的主要目标。

@@ -178,6 +178,8 @@ describe("/hot 热点中心", () => {
 });
 
 describe("/hot/daily 日报页", () => {
+  // 首个触达 react-markdown 的用例承担其全图（micromark 系数百模块）的冷启动编译，
+  // 容器等价 CI 实测超 5s 默认上限（node:24-bookworm-slim，2026-09-30）；给 20s 余量。
   it("以渲染后的 Markdown 展示正文（非源文本直出）", async () => {
     render(createElement(DailyReportPage));
     fireEvent.click(await screen.findByText("2026-09-30"));
@@ -187,7 +189,7 @@ describe("/hot/daily 日报页", () => {
     expect(screen.queryByText(/## 今日头条/)).toBeNull();
     // **粗体** 被解析为 <strong>（证明真实渲染而非直出）
     expect(await screen.findByText("榜首")).toBeTruthy();
-  });
+  }, 20000);
 
   it("日报列表翻页：下一页以 page=2 重新拉取", async () => {
     render(createElement(DailyReportPage));

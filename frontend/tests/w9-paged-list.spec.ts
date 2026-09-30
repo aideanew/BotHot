@@ -11,6 +11,9 @@ import { describe, expect, it, vi } from "vitest";
  */
 
 describe("usePagedList", () => {
+  // 本文件首个用例承担 hook + @testing-library/react 的冷启动 import 编译，
+  // 容器等价 CI 实测 ~10s（node:24-bookworm-slim，2026-09-30），默认 5s 必超时；
+  // 给 20s 余量，不放开全局 testTimeout（防真实挂起被掩盖）。
   it("page 形状：传 page + page_size", async () => {
     const { usePagedList } = await import("@/lib/hooks/usePagedList");
     const fetcher = vi.fn().mockResolvedValue({
@@ -27,7 +30,7 @@ describe("usePagedList", () => {
     expect(fetcher).toHaveBeenCalledWith(expect.objectContaining({ page: 1, page_size: 20 }));
     expect(result.current.items).toEqual([{ id: "1" }]);
     expect(result.current.total).toBe(30);
-  });
+  }, 20000);
 
   it("offset 形状：传 limit + offset", async () => {
     const { usePagedList } = await import("@/lib/hooks/usePagedList");
