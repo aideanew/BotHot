@@ -141,21 +141,36 @@ class SourceSubscriptionService:
         await self._session.commit()
         return {"sourceId": row.id, "biz": row.external_id, "name": row.name, "url": row.url}
 
-    async def list_sources(self, source_type: str = "wechat_oa") -> list[dict[str, Any]]:
+    async def list_sources(
+        self, source_type: str = "wechat_oa", *, limit: int = 50, offset: int = 0
+    ) -> tuple[list[dict[str, Any]], int]:
         """GET /sources?type=wechat_oa → **全用户共享**的源清单（不是「我的信息源」）。
 
         不带 user_id 参数：`sources` 表**没有 user_id 列**（`uq_source_type_external` 按
         type+external_id 全局去重），「我的信息源」无定义。旧签名收了 user_id 却从不过滤，
         是死参数 + 契约误导（F-23）——参数已移除，登录闸门由路由依赖承担。
         视图只暴露公开标识（biz/name/url/status），无用户可识别信息，故全局可见不构成越界。
+        C.1：SQL 层 LIMIT/OFFSET，返回 (items, total)。
         """
         rows = (
-            await self._session.scalars(select(Source).where(Source.type == source_type))
+            await self._session.scalars(
+                select(Source)
+                .where(Source.type == source_type)
+                .order_by(Source.created_at, Source.id)
+                .limit(limit)
+                .offset(offset)
+            )
         ).all()
+        total = int(
+            (await self._session.scalar(
+                select(func.count()).select_from(Source).where(Source.type == source_type)
+            ))
+            or 0
+        )
         return [
             {"sourceId": r.id, "biz": r.external_id, "name": r.name, "url": r.url, "status": r.status}
             for r in rows
-        ]
+        ], total
 
     async def update_source(self, source_id: str, *, name: str | None = None, url: str | None = None) -> dict[str, Any]:
         """PATCH /sources/{id}：admin 改全局源的展示名 / 上游地址（部分更新）。
@@ -230,31 +245,40 @@ class SourceSubscriptionService:
         await self._session.commit()
         return {"subscriptionId": sub.id, "jobIds": [job.id], "created": True}
 
-    async def list_subscriptions(self, user_id: str, space_id: str) -> list[dict[str, Any]]:
+    async def list_subscriptions(
+        self, user_id: str, space_id: str, *, limit: int = 50, offset: int = 0
+    ) -> tuple[list[dict[str, Any]], int]:
         """GET /spaces/{id}/subscriptions（T1.4.3/T1.4.4 N11 呈现字段已并入）。
 
         每条订阅补三字段（数据列已在库、本卡只接线）：
         - discoveredCount：该源 DISCOVERED 清单计数 = U6"预计篇数"（ArticleManifest 权威）；
         - lastSuccessAt / consecutiveEmptySyncs：U7"自动同步可见性"（worker 未建前为
           空串/0，属诚实缺口呈现，不造假数据）。
+        C.1：SQL 层 LIMIT/OFFSET，返回 (items, total)。
         """
-        return await self._list_subscriptions(space_id, owner=user_id)
+        return await self._list_subscriptions(space_id, owner=user_id, limit=limit, offset=offset)
 
-    async def list_subscriptions_any(self, space_id: str | None = None) -> list[dict[str, Any]]:
+    async def list_subscriptions_any(
+        self, space_id: str | None = None, *, limit: int = 50, offset: int = 0
+    ) -> tuple[list[dict[str, Any]], int]:
         """R4.8（A-2 叠加）：admin 跨用户订阅清单——不做归属校验。
 
         space_id=None → 全系统所有空间的订阅（admin 排查「为什么这条号没人同步」
         需要跨空间视图；既有端点强制本人空间，无法表达）。角色校验留在路由层。
+        C.1：SQL 层 LIMIT/OFFSET，返回 (items, total)。
         """
-        return await self._list_subscriptions(space_id, owner=None)
+        return await self._list_subscriptions(space_id, owner=None, limit=limit, offset=offset)
 
     async def _list_subscriptions(
-        self, space_id: str | None, *, owner: str | None
-    ) -> list[dict[str, Any]]:
+        self, space_id: str | None, *, owner: str | None, limit: int = 50, offset: int = 0
+    ) -> tuple[list[dict[str, Any]], int]:
         """订阅清单单一实现。owner=None 表示无归属约束（/admin 跨用户路径）。
 
         owner 非 None 时先校验 space.user_id == owner（越权/无效空间 → 30004，不泄露存在性）；
         owner 为 None 时仍校验空间存在（space_id=None 表示不过滤，跳过该校验）。
+        C.1：SQL 层 LIMIT/OFFSET，返回 (items, total)。
+        C.6 审计：循环内 `session.get(Source, ...)` 与 per-row latest_job 查询为 N+1，
+        已记入 N+1 审计表交 W10。
         """
         if space_id is not None:
             space = await self._space_repo.get_by_id(space_id)
@@ -266,7 +290,13 @@ class SourceSubscriptionService:
             stmt = stmt.where(SourceSubscription.space_id == space_id)
         if owner is not None:
             stmt = stmt.where(SourceSubscription.user_id == owner)
-        rows = (await self._session.scalars(stmt)).all()
+        rows = (await self._session.scalars(stmt.limit(limit).offset(offset))).all()
+        count_stmt = select(func.count()).select_from(SourceSubscription)
+        if space_id is not None:
+            count_stmt = count_stmt.where(SourceSubscription.space_id == space_id)
+        if owner is not None:
+            count_stmt = count_stmt.where(SourceSubscription.user_id == owner)
+        total = int((await self._session.scalar(count_stmt)) or 0)
         # 归属呈现仅 admin 路径附加：本人清单里 spaceId/ownerId 恒等于调用方，纯噪声，
         # 且「admin 视图的 owner 字段是增量、靠独立端点承载」是 M3 批次 2 已确立的口径
         # （本人端点形状不变，跨用户读另走 /admin）。批量取一次，逐条 get 会是 N+1
@@ -343,7 +373,7 @@ class SourceSubscriptionService:
                     }
                 )
             out.append(view)
-        return out
+        return out, total
 
     # ------------------------------------------------------------------ R0.2.3 订阅生命周期
 
@@ -586,16 +616,29 @@ class SourceSubscriptionService:
             "status": "QUEUED" if failed else job.status,
         }
 
-    async def list_sources_with_counts(self, source_type: str | None = None) -> list[dict[str, Any]]:
+    async def list_sources_with_counts(
+        self, source_type: str | None = None, *, limit: int = 50, offset: int = 0
+    ) -> tuple[list[dict[str, Any]], int]:
         """R7.4.4：admin 信息源清单（含引用计数）。
 
         增量于 list_sources：每条源带 subscriptionCount / assetCount / manifestCount，
         供 admin 决策删除安全性。type 过滤可选（默认不过滤）。
+        C.1：SQL 层 LIMIT/OFFSET，返回 (items, total)。
+        C.6 审计：循环内 `_source_reference_counts(r.id)` 为 per-source 查询（N+1），
+        大集合下应批量聚合——已记入 N+1 审计表交 W10。
         """
         stmt = select(Source)
         if source_type:
             stmt = stmt.where(Source.type == source_type)
-        rows = (await self._session.scalars(stmt.order_by(Source.created_at))).all()
+        rows = (
+            await self._session.scalars(
+                stmt.order_by(Source.created_at, Source.id).limit(limit).offset(offset)
+            )
+        ).all()
+        count_stmt = select(func.count()).select_from(Source)
+        if source_type:
+            count_stmt = count_stmt.where(Source.type == source_type)
+        total = int((await self._session.scalar(count_stmt)) or 0)
         items: list[dict[str, Any]] = []
         for r in rows:
             counts = await self._source_reference_counts(r.id)
@@ -610,7 +653,7 @@ class SourceSubscriptionService:
                 "assetCount": counts["assets"],
                 "manifestCount": counts["manifests"],
             })
-        return items
+        return items, total
 
     # ------------------------------------------------------------------ jobs
 

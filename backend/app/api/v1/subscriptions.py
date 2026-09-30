@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_sub, get_current_user_id, get_db, require_roles
+from app.api.deps import get_current_sub, get_current_user_id, get_db, limit_offset_query, require_roles
 from app.core.response import success
 from app.models.entities import User
 from app.repositories.job import JobRepository
@@ -72,6 +72,7 @@ async def register_source(
 async def list_sources(
     sub: Annotated[str, Depends(get_current_sub)],
     session: Annotated[AsyncSession, Depends(get_db)],
+    paging: Annotated[tuple[int, int], Depends(limit_offset_query)],
     type: Annotated[str, Query()] = "wechat_oa",
 ) -> JSONResponse:
     """GET /sources?type=wechat_oa → data.items（**全用户共享**源清单）。
@@ -79,10 +80,12 @@ async def list_sources(
     `sub` 只作登录闸门、不参与过滤：`sources` 表无 user_id 列
     （uq_source_type_external 按 type+external_id 全局去重），「我的信息源」无定义。
     旧实现把 user_id 透传给服务层却被忽略，属契约误导（F-23），参数已移除。
+    C.1：LIMIT/OFFSET 下沉 service/repo SQL（原无分页，全量返回）。
     """
+    limit, offset = paging
     svc = SourceSubscriptionService(session)
-    items = await svc.list_sources(source_type=type)
-    body = success(data={"items": items})
+    items, total = await svc.list_sources(source_type=type, limit=limit, offset=offset)
+    body = success(data={"items": items, "total": total, "limit": limit, "offset": offset})
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
@@ -176,11 +179,16 @@ async def list_subscriptions(
     space_id: str,
     user_id: Annotated[str, Depends(get_current_user_id)],
     session: Annotated[AsyncSession, Depends(get_db)],
+    paging: Annotated[tuple[int, int], Depends(limit_offset_query)],
 ) -> JSONResponse:
-    """GET /spaces/{id}/subscriptions → data.items（号名/biz/同步策略/下次同步）。"""
+    """GET /spaces/{id}/subscriptions → data.items（号名/biz/同步策略/下次同步）。
+
+    C.1：LIMIT/OFFSET 下沉 service/repo SQL（原无分页，全量返回）。
+    """
+    limit, offset = paging
     svc = SourceSubscriptionService(session)
-    items = await svc.list_subscriptions(user_id, space_id)
-    body = success(data={"items": items})
+    items, total = await svc.list_subscriptions(user_id, space_id, limit=limit, offset=offset)
+    body = success(data={"items": items, "total": total, "limit": limit, "offset": offset})
     return JSONResponse(status_code=200, content=body.model_dump())
 
 

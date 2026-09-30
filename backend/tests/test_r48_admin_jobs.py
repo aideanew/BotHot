@@ -484,14 +484,19 @@ async def test_list_sources_is_global_registry_not_user_scoped(db_session) -> No
 
 
 def test_list_subscriptions_service_signature_has_no_user_scope() -> None:
-    """服务层锁：list_sources 不接受 user_id（死参数移除后不应回归）。"""
+    """服务层锁：list_sources 不接受 user_id（死参数移除后不应回归）。
+
+    W8 C.1 后增 limit/offset（SQL 分页），仍无 user_id 死参数。
+    """
     import inspect
 
     from app.services.subscription import SourceSubscriptionService
 
     sig = inspect.signature(SourceSubscriptionService.list_sources)
-    assert list(sig.parameters) == ["self", "source_type"], list(sig.parameters)
+    assert list(sig.parameters) == ["self", "source_type", "limit", "offset"], list(sig.parameters)
     assert sig.parameters["source_type"].default == "wechat_oa"
+    assert sig.parameters["limit"].default == 50
+    assert sig.parameters["offset"].default == 0
 
 
 # ------------------------------------------------------------------ 路由注册锚

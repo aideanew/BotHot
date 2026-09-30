@@ -30,9 +30,17 @@ class SpaceRepoProto(Protocol):
 
     async def get_by_name(self, user_id: str, name: str) -> KnowledgeSpace | None: ...
 
-    async def list_by_user(self, user_id: str) -> list[KnowledgeSpace]: ...
+    async def list_by_user(
+        self, user_id: str, *, limit: int = ..., offset: int = ...
+    ) -> list[KnowledgeSpace]: ...
 
-    async def list_with_owner(self) -> list[tuple[KnowledgeSpace, User | None]]: ...
+    async def count_by_user(self, user_id: str) -> int: ...
+
+    async def list_with_owner(
+        self, *, limit: int = ..., offset: int = ...
+    ) -> list[tuple[KnowledgeSpace, User | None]]: ...
+
+    async def count_with_owner(self) -> int: ...
 
     async def set_langbot_kb_uuid(self, space_id: str, kb_uuid: str) -> None: ...
 
@@ -59,6 +67,12 @@ class SpaceRepoProto(Protocol):
     async def delete_space_cascade(self, space_id: str) -> dict[str, int]: ...
 
     async def delete_doc(self, doc_id: str) -> dict[str, int]: ...
+
+    async def list_public_spaces(
+        self, *, limit: int = ..., offset: int = ...
+    ) -> list[KnowledgeSpace]: ...
+
+    async def count_public_spaces(self) -> int: ...
 
 
 class SpaceRepository:
@@ -96,31 +110,63 @@ class SpaceRepository:
             )
         )
 
-    async def list_by_user(self, user_id: str) -> list[KnowledgeSpace]:
+    async def list_by_user(
+        self, user_id: str, *, limit: int = 50, offset: int = 0
+    ) -> list[KnowledgeSpace]:
+        """C.1：SQL 层 LIMIT/OFFSET（替代路由层切片）。"""
         result = await self._session.scalars(
             select(KnowledgeSpace)
             .where(KnowledgeSpace.user_id == user_id)
-            .order_by(KnowledgeSpace.created_at)
+            .order_by(KnowledgeSpace.created_at, KnowledgeSpace.id)
+            .limit(limit)
+            .offset(offset)
         )
         return list(result)
 
-    async def list_with_owner(self) -> list[tuple[KnowledgeSpace, User | None]]:
+    async def count_by_user(self, user_id: str) -> int:
+        """C.1：与 list_by_user 同谓词求总数。"""
+        return int(
+            (await self._session.scalar(
+                select(func.count()).select_from(KnowledgeSpace).where(
+                    KnowledgeSpace.user_id == user_id
+                )
+            ))
+            or 0
+        )
+
+    async def list_with_owner(
+        self, *, limit: int = 50, offset: int = 0
+    ) -> list[tuple[KnowledgeSpace, User | None]]:
         """跨用户空间列表（/admin）用：单查询取全部空间 + 归属账号。
 
         归属信息必须随空间同查——逐空间查 owner 会把这里变成 N+1
         （doc 计数的同类缺陷 T1.5.3 已修过一次）。LEFT JOIN：users 行缺失时
         空间仍返回、归属记为 None，不得因孤儿行静默丢空间。
+        C.1：SQL 层 LIMIT/OFFSET。
         """
         stmt = (
             select(KnowledgeSpace, User)
             .outerjoin(User, User.id == KnowledgeSpace.user_id)
-            .order_by(KnowledgeSpace.created_at)
+            .order_by(KnowledgeSpace.created_at, KnowledgeSpace.id)
+            .limit(limit)
+            .offset(offset)
         )
         # LEFT JOIN 的 NULL 可空性 SQLAlchemy 静态类型表达不了，显式标注返回值收窄
         result: list[tuple[KnowledgeSpace, User | None]] = [
             (space, owner) for space, owner in (await self._session.execute(stmt)).all()
         ]
         return result
+
+    async def count_with_owner(self) -> int:
+        """C.1：与 list_with_owner 同谓词求总数。"""
+        return int(
+            (await self._session.scalar(
+                select(func.count())
+                .select_from(KnowledgeSpace)
+                .outerjoin(User, User.id == KnowledgeSpace.user_id)
+            ))
+            or 0
+        )
 
     async def set_langbot_kb_uuid(self, space_id: str, kb_uuid: str) -> None:
         """LangBot KB 建库成功后回写（1:1 映射，ADR-0001）。"""
@@ -140,12 +186,29 @@ class SpaceRepository:
 
     # ------------------------------------------------------------------ AB-P004 P1 公共库
 
-    async def list_public_spaces(self) -> list[KnowledgeSpace]:
-        """公共库列表（is_public=1 系统空间）。"""
+    async def list_public_spaces(
+        self, *, limit: int = 50, offset: int = 0
+    ) -> list[KnowledgeSpace]:
+        """公共库列表（is_public=1 系统空间）。C.1：SQL 层 LIMIT/OFFSET。"""
         result = await self._session.scalars(
-            select(KnowledgeSpace).where(KnowledgeSpace.is_public.is_(True)).order_by(KnowledgeSpace.created_at)
+            select(KnowledgeSpace)
+            .where(KnowledgeSpace.is_public.is_(True))
+            .order_by(KnowledgeSpace.created_at, KnowledgeSpace.id)
+            .limit(limit)
+            .offset(offset)
         )
         return list(result)
+
+    async def count_public_spaces(self) -> int:
+        """C.1：与 list_public_spaces 同谓词求总数。"""
+        return int(
+            (await self._session.scalar(
+                select(func.count())
+                .select_from(KnowledgeSpace)
+                .where(KnowledgeSpace.is_public.is_(True))
+            ))
+            or 0
+        )
 
     async def get_public_space(self, space_id: str) -> KnowledgeSpace | None:
         """按 id 查公共库空间；非公共/不存在 → None（不泄露存在性）。"""
