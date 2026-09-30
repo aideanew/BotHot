@@ -19,7 +19,7 @@ updated: 2026-09-30
 ## ✅ 已完成（BotHot 新增能力）
 
 ### PUSH-001~006：六种渠道 PushProvider ✅
-- **状态**：全部实现真实投递（`backend/app/providers/push/`，注册表见 `__init__.py:16-21`）
+- **状态**：全部实现真实投递（`backend/app/providers/push/`，注册表见 `backend/app/providers/push/__init__.py:24`）
 - **飞书**：交互式卡片消息 + HMAC-SHA256 加签 ✅
 - **钉钉**：Markdown 消息 + HMAC-SHA256 加签 ✅
 - **企业微信**：Markdown 消息 ✅
@@ -97,7 +97,7 @@ updated: 2026-09-30
 - `GET/POST/PUT/DELETE /api/v1/bots` — 渠道 CRUD
 - `POST /api/v1/bots/{id}/test` — 测试推送
 - `GET /api/v1/bots/{id}/logs` — 推送日志
-- `POST/GET/PUT/DELETE /api/v1/bots/tasks` — 推送任务管理（**PUT 为 W1 新增**，支持编辑/暂停恢复，`api/v1/bots.py:481`）
+- `POST/GET/PUT/DELETE /api/v1/bots/tasks` — 推送任务管理（**PUT 为 W1 新增**，支持编辑/暂停恢复，`backend/app/api/v1/bots.py:482`）
 - `POST /api/v1/bots/tasks/{id}/run` — 手动触发
 
 ### FE-001：Bot 渠道管理页面 ✅
@@ -118,16 +118,17 @@ updated: 2026-09-30
 
 ## 🔴 高优先级
 
-### FE-005：站内通知前端订阅侧 ⬜
-- **当前状态**：投递侧已通（`providers/push/web.py`，Redis pub/sub），**前端无订阅**
-  —— `main @ 2fa95f0` 下 `frontend/**` grep `WebSocket|bothot:notifications` 零命中
-- **目标**：订阅 `bothot:notifications:{user_id}`（WebSocket / SSE），顶栏未读数徽标
+### FE-005：站内通知前端订阅侧 ✅
+- **状态**：已实现 SSE 订阅 + 未读数徽标
+- **后端**：`backend/app/api/v1/system.py:262` — SSE 端点 `/notifications`
+- **前端**：`frontend/components/NotificationBell.tsx:12` — 订阅 + 徽标组件
 - **验收**：站内通知在浏览器中实际可见、可标记已读
 
-### PUSH-009：推送失败重试机制 ⬜
-- **当前状态**：失败仅落 `PushLog(status=failed)`，**无重试计数 / 无退避**
-  （对照 `docs/04_engineering/roadmap.md:49` 的 v0.4 唯一未勾项）
-- **目标**：指数退避 + 最大重试次数 + 终态标记；与 outbox 的 at-most-once 语义边界写清
+### PUSH-009：推送失败重试机制 ✅
+- **状态**：已实现指数退避 + 最大重试次数 + 死信终态
+- **实现**：`backend/app/services/push_scheduler.py:41` — MAX_PUSH_RETRIES + 指数退避（重试簿记在 _execute_task）
+- **数据模型**：`backend/app/models/bothot_entities.py:91` — `retry_count` + `next_retry_at` 字段
+- **验收**：失败任务自动重试，超过最大次数后进入死信
 
 ## 🟡 中优先级
 
