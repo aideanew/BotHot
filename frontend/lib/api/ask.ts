@@ -111,8 +111,8 @@ export async function askQuestion(
         body.requestId
       );
     }
-    onChunk?.(body.data.content);
-    return body.data;
+    onChunk?.(body.data!.content);
+    return body.data!;
   }
 
   // SSE 主路径：逐帧 data: <单行JSON>，type 判别

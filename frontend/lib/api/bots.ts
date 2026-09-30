@@ -9,6 +9,7 @@
  * - 可用渠道类型查询
  */
 
+import type { PageResult } from "@bothot/contracts";
 import { request } from "./http";
 
 // ---------- 类型 ----------
@@ -61,13 +62,6 @@ export interface PushTask {
   created_at: string | null;
 }
 
-interface PaginatedResult<T> {
-  items: T[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-
 export interface PushResult {
   delivered: boolean;
   reason: string;
@@ -85,7 +79,7 @@ export async function listChannels(params?: {
   status?: string;
   page?: number;
   page_size?: number;
-}): Promise<PaginatedResult<BotChannel>> {
+}): Promise<PageResult<BotChannel>> {
   const searchParams = new URLSearchParams();
   if (params?.channel_type) searchParams.set("channel_type", params.channel_type);
   if (params?.status) searchParams.set("status", params.status);
@@ -149,7 +143,7 @@ export async function testPush(
 export async function listPushLogs(
   channelId: string,
   params?: { page?: number; page_size?: number },
-): Promise<PaginatedResult<PushLog>> {
+): Promise<PageResult<PushLog>> {
   const searchParams = new URLSearchParams();
   if (params?.page) searchParams.set("page", String(params.page));
   if (params?.page_size) searchParams.set("page_size", String(params.page_size));
@@ -179,7 +173,7 @@ export async function listPushTasks(params?: {
   status?: string;
   page?: number;
   page_size?: number;
-}): Promise<PaginatedResult<PushTask>> {
+}): Promise<PageResult<PushTask>> {
   const searchParams = new URLSearchParams();
   if (params?.status) searchParams.set("status", params.status);
   if (params?.page) searchParams.set("page", String(params.page));

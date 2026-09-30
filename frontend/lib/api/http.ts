@@ -97,6 +97,13 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(10001, ERROR_MESSAGES[10001]);
   }
 
+  // W7 429 预留：RATE_LIMITED（20005 / HTTP 429）未落地前，
+  // 此处先按 429 拦截并转 20005 语义，供调用方统一 toast。
+  // W7 落地后后端会直接回 20005 错误码，此处变为冗余保护。
+  if (res.status === 429) {
+    throw new ApiError(20005, "请求过于频繁，请稍后再试");
+  }
+
   let body: Envelope<T>;
   try {
     body = (await res.json()) as Envelope<T>;
@@ -111,5 +118,5 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       body.requestId
     );
   }
-  return body.data;
+  return body.data as T;
 }

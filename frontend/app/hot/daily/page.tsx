@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import dynamic from "next/dynamic";
 import {
   generateDailyReport,
   getDailyReport,
@@ -19,6 +19,12 @@ import {
   type DailyReportDetail,
 } from "@/lib/api/hot";
 import { usePageTitle } from "@/components/usePageTitle";
+import Pagination from "@/components/Pagination";
+
+const ReactMarkdown = dynamic(() => import("react-markdown"), {
+  loading: () => <div className="animate-pulse h-40 rounded bg-neutral-100" />,
+  ssr: false,
+});
 
 const PAGE_SIZE = 10;
 
@@ -145,30 +151,14 @@ export default function DailyReportPage() {
             </div>
           )}
 
-          {/* 4.5b 列表分页（复用 /bots 列表分页交互模式） */}
+          {/* 4.5b 列表分页 */}
           {total > PAGE_SIZE && (
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-sm text-gray-600">共 {total} 条</span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="rounded border px-3 py-1 text-sm disabled:opacity-50"
-                >
-                  上一页
-                </button>
-                <span className="px-2 py-1 text-sm">
-                  第 {page} / {Math.max(1, Math.ceil(total / PAGE_SIZE))} 页
-                </span>
-                <button
-                  onClick={() => setPage((p) => p + 1)}
-                  disabled={page * PAGE_SIZE >= total}
-                  className="rounded border px-3 py-1 text-sm disabled:opacity-50"
-                >
-                  下一页
-                </button>
-              </div>
-            </div>
+            <Pagination
+              page={page}
+              totalPages={Math.ceil(total / PAGE_SIZE)}
+              total={total}
+              onPageChange={setPage}
+            />
           )}
         </div>
 

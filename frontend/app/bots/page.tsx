@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   createChannel,
   deleteChannel,
@@ -28,7 +29,11 @@ import {
 } from "@/lib/api/bots";
 import { usePageTitle } from "@/components/usePageTitle";
 import { useAuth } from "@/components/AuthContext";
-import PushTasksTab from "@/components/PushTasksTab";
+
+const PushTasksTab = dynamic(() => import("@/components/PushTasksTab"), {
+  loading: () => <div className="py-12 text-center text-gray-500">加载推送任务...</div>,
+});
+import Pagination from "@/components/Pagination";
 
 const CHANNEL_LABELS: Record<string, string> = {
   feishu: "飞书",
@@ -355,26 +360,12 @@ export default function BotsPage() {
 
       {/* 分页 */}
       {total > 20 && (
-        <div className="mt-4 flex items-center justify-between">
-          <span className="text-sm text-gray-600">共 {total} 条</span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="rounded border px-3 py-1 text-sm disabled:opacity-50"
-            >
-              上一页
-            </button>
-            <span className="px-3 py-1 text-sm">第 {page} 页</span>
-            <button
-              onClick={() => setPage((p) => p + 1)}
-              disabled={page * 20 >= total}
-              className="rounded border px-3 py-1 text-sm disabled:opacity-50"
-            >
-              下一页
-            </button>
-          </div>
-        </div>
+        <Pagination
+          page={page}
+          totalPages={Math.ceil(total / 20)}
+          total={total}
+          onPageChange={setPage}
+        />
       )}
 
       {/* 创建/编辑弹窗 */}

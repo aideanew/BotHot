@@ -7,6 +7,7 @@
  * - Feed 流
  */
 
+import type { PageResult } from "@bothot/contracts";
 import { request } from "./http";
 
 // ---------- 类型 ----------
@@ -56,13 +57,6 @@ export interface FeedItem {
   created_at: string | null;
 }
 
-interface PaginatedResult<T> {
-  items: T[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-
 // ---------- 热点 ----------
 
 export async function listHotTopics(params?: {
@@ -71,7 +65,7 @@ export async function listHotTopics(params?: {
   topic_date?: string;
   page?: number;
   page_size?: number;
-}): Promise<PaginatedResult<HotTopic>> {
+}): Promise<PageResult<HotTopic>> {
   const sp = new URLSearchParams();
   if (params?.category) sp.set("category", params.category);
   if (params?.status) sp.set("status", params.status);
@@ -112,7 +106,7 @@ export async function listDailyReports(params?: {
   status?: string;
   page?: number;
   page_size?: number;
-}): Promise<PaginatedResult<DailyReport>> {
+}): Promise<PageResult<DailyReport>> {
   const sp = new URLSearchParams();
   if (params?.status) sp.set("status", params.status);
   if (params?.page) sp.set("page", String(params.page));
@@ -141,7 +135,7 @@ export async function getFeed(params?: {
   category?: string;
   page?: number;
   page_size?: number;
-}): Promise<PaginatedResult<FeedItem>> {
+}): Promise<PageResult<FeedItem>> {
   const sp = new URLSearchParams();
   if (params?.item_type) sp.set("item_type", params.item_type);
   if (params?.category) sp.set("category", params.category);

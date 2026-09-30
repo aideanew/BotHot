@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import {
   getFeed,
   listHotTopics,
@@ -17,6 +18,7 @@ import {
 } from "@/lib/api/hot";
 import { usePageTitle } from "@/components/usePageTitle";
 import { useAuth } from "@/components/AuthContext";
+import Pagination from "@/components/Pagination";
 
 const ITEM_TYPE_LABELS: Record<string, string> = {
   article: "文章",
@@ -332,6 +334,16 @@ export default function HotPage() {
                     rel="noopener noreferrer"
                     className="ml-4 flex-shrink-0 text-sm text-blue-600 hover:text-blue-800"
                   >
+                    {item.item_type === "article" ? (
+                      <Image
+                        src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(item.url)}&sz=32`}
+                        alt=""
+                        width={16}
+                        height={16}
+                        className="inline-block mr-1 align-text-bottom"
+                        unoptimized
+                      />
+                    ) : null}
                     查看原文 →
                   </a>
                 )}
@@ -343,26 +355,12 @@ export default function HotPage() {
 
       {/* 分页 */}
       {total > 20 && (
-        <div className="mt-4 flex items-center justify-between">
-          <span className="text-sm text-gray-600">共 {total} 条</span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="rounded border px-3 py-1 text-sm disabled:opacity-50"
-            >
-              上一页
-            </button>
-            <span className="px-3 py-1 text-sm">第 {page} 页</span>
-            <button
-              onClick={() => setPage((p) => p + 1)}
-              disabled={page * 20 >= total}
-              className="rounded border px-3 py-1 text-sm disabled:opacity-50"
-            >
-              下一页
-            </button>
-          </div>
-        </div>
+        <Pagination
+          page={page}
+          totalPages={Math.ceil(total / 20)}
+          total={total}
+          onPageChange={setPage}
+        />
       )}
     </div>
   );
