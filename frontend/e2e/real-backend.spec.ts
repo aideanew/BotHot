@@ -17,9 +17,25 @@ import { test, expect } from "@playwright/test";
  * 需主平台 OIDC 白名单已配置 bothot redirect_uri，否则 SSO 回调失败。
  */
 
+/** 环境闸：三项前置齐备时才真实执行（默认跳过，保证 CI/本地默认态全绿）。 */
+const REAL_BACKEND_ENABLED = process.env.E2E_REAL_BACKEND === "1";
+
+/** 步骤③用的真实文章 URL（须为可公开访问的公众号文章）；可用 E2E_ARTICLE_URL 覆盖。 */
+const ARTICLE_URL =
+  process.env.E2E_ARTICLE_URL ?? "https://mp.weixin.qq.com/s/example";
+
 test.describe.serial("真实后端 e2e", () => {
-  // TODO: 主平台 OIDC 白名单配置后启用（见 §五 阻塞项）
-  test.skip(true, "需主平台 OIDC 白名单 + Compose 栈运行");
+  // WD（2026-09-30）复核：本套件**不能**无条件启用——三项前置 CI/本地均不具备：
+  //   ① Compose 栈全起（PG + Redis + LangBot，且 backend `/health` 已就绪）；
+  //   ② 主平台 OIDC 白名单已登记 bothot redirect_uri（否则 SSO 回调失败）；
+  //   ③ 一篇可公开访问的真实公众号文章 URL（步骤③的入库链路）。
+  // 原实现是 `test.skip(true, "...")` —— **无条件恒跳过**，套件永远不可能被执行（死断言）。
+  // 现改为**环境闸**：设 E2E_REAL_BACKEND=1 即真实执行，未设则跳过。
+  // 效果：默认态仍全绿（不阻塞 CI），但前置落地后**能真正跑起来**，而非永久死代码。
+  test.skip(
+    !REAL_BACKEND_ENABLED,
+    "需三项前置：Compose 栈运行 + 主平台 OIDC 白名单 + 真实文章 URL；设 E2E_REAL_BACKEND=1 启用"
+  );
 
   test("① SSO 登录 → 进入已登录态", async ({ page }) => {
     await page.goto("/");
@@ -40,7 +56,6 @@ test.describe.serial("真实后端 e2e", () => {
   test("③ 粘贴公众号文章链接并入库", async ({ page }) => {
     // 需先有空间（步骤②的结果）
     // 粘贴 mp.weixin.qq.com 链接，提交后等待入库完成
-    const ARTICLE_URL = "https://mp.weixin.qq.com/s/example"; // 替换为真实文章 URL
     await page.getByRole("textbox", { name: /粘贴文章链接/ }).fill(ARTICLE_URL);
     await page.getByRole("button", { name: /提交入库/ }).click();
     // 入库异步 → 等待文档出现在列表中
