@@ -130,6 +130,13 @@ class RagflowAdapter:
         raise NotImplementedError("RagflowAdapter 实接待主平台排期（ADR-0004 P2）")
 
     async def delete_kb(self, kb_id: str) -> None:
+        """未实接引擎的删除降级（3.2）：不调引擎 API，返回 None 作「本地可清」信号——
+        上层据此清 engine_kb_id/langbot 映射并删 PG 行，引擎侧残留保留（无 API 可调）。
+        实接后改为真实删除调用。本方法不抛 NotImplementedError，避免 delete_space 整体回滚
+        导致非 builtin 空间无法删除（engines.py PATCH docstring 同步）。
+        """
+        if not self.implemented:
+            return None  # 本地可清信号：引擎侧残留由上层响应注明（WA/WB 的 service 层职责）
         self._require()
         raise NotImplementedError("RagflowAdapter 实接待主平台排期（ADR-0004 P2）")
 
@@ -177,6 +184,12 @@ class SaasAdapter:
         raise NotImplementedError(f"{self.name} SaaS 实接待 Key 到位（ADR-0004 P3）")
 
     async def delete_kb(self, kb_id: str) -> None:
+        """未实接引擎的删除降级（3.2）：不调引擎 API，返回 None 作「本地可清」信号——
+        上层据此清映射并删 PG 行，引擎侧残留保留。实接后改为真实删除调用。
+        不抛 NotImplementedError，避免 delete_space 整体回滚导致非 builtin 空间无法删除。
+        """
+        if not self.implemented:
+            return None  # 本地可清信号：引擎侧残留由上层响应注明（WA/WB 的 service 层职责）
         self._require()
         raise NotImplementedError(f"{self.name} SaaS 实接待 Key 到位（ADR-0004 P3）")
 

@@ -24,10 +24,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.bothot_entities import HotTopic, HotTopicArticle
+from app.models.bothot_entities import FeedItem, HotTopic, HotTopicArticle
 from app.models.entities import ContentAsset
 
 logger = logging.getLogger(__name__)
@@ -75,15 +75,25 @@ def compute_score(
 def next_status(
     current: str, *, score: float, prev_score: float, topic_age_hours: float
 ) -> str:
-    """状态机迁移。current 已为 archived 时不动。"""
+    """状态机迁移。current 已为 archived 时不动。
+
+    语义（审查缝合修正）：未达 hot 阈值的话题不允许"永困 rising"——
+    过了黄金期（24h）且分数从未/不再够 hot 线，就转入 cooling；
+    否则话题会顶着 rising 标签一直存活到 48h 归档，状态标签失真。
+    """
     if current == "archived":
         return "archived"
     if topic_age_hours > ARCHIVE_AGE_HOURS and current in ("rising", "hot", "cooling"):
         return "archived"
     if current == "rising" and score >= HOT_SCORE_RISING_TO_HOT:
         return "hot"
-    if current == "hot" and topic_age_hours > COOLING_AGE_HOURS and score < prev_score:
-        return "cooling"
+    if topic_age_hours > COOLING_AGE_HOURS and current in ("rising", "hot"):
+        # hot：分数较上次回落即降温（保持 W2 原语义，分未降仍算热度持续）；
+        # rising：从未达 hot 线且已过黄金期，转入 cooling（修复"永困 rising"）
+        if current == "hot" and score < prev_score:
+            return "cooling"
+        if current == "rising" and score < HOT_SCORE_RISING_TO_HOT:
+            return "cooling"
     return current
 
 
@@ -135,5 +145,13 @@ async def run_scoring(session: AsyncSession, *, now: datetime | None = None) -> 
         if new_status != t.status:
             t.status = new_status
         updated += 1
-    logger.info("hot_scorer: 回填 %d 个话题", updated)
+
+    for t in topics:
+        await session.execute(
+            update(FeedItem)
+            .where(FeedItem.item_type == "hot_topic", FeedItem.ref_id == t.id)
+            .values(score=float(t.hot_score or 0.0))
+        )
+
+    logger.info("hot_scorer: 回填 %d 个话题 + Feed 分数同步", updated)
     return updated

@@ -59,15 +59,20 @@ class PatchSpacePublicRequest(BaseModel):
 async def list_public_spaces(
     user_id: Annotated[str, Depends(get_current_user_id)],
     session: Annotated[AsyncSession, Depends(get_db)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> JSONResponse:
     """AB-P004 P1：公共库列表（is_public=1 系统空间）。
 
     data.items=[{id,name,description,docCount,engine,isPublic,updatedAt}]。
-    登录保护 10001；无需空间归属校验（公共库对全用户开放）。
+    分页（3.3，limit/offset 与 knowledge 域 docs 同口径）：路由层切片；service 层
+    limit/offset 待 WA/WB 下沉。登录保护 10001；无需空间归属校验（公共库对全用户开放）。
     """
     svc = PublicLibraryService(session)
     items = await svc.list_public_views()
-    body = success(data={"items": items})
+    total = len(items)
+    page = items[offset : offset + limit]
+    body = success(data={"items": page, "total": total, "limit": limit, "offset": offset})
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
@@ -115,10 +120,18 @@ async def patch_space_public(
 async def list_spaces(
     user_id: Annotated[str, Depends(get_current_user_id)],
     svc: Annotated[SpaceService, Depends(get_space_service)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> JSONResponse:
-    """空间列表：data.items=[{id,name,description,docCount,updatedAt}]。"""
+    """空间列表：data.items=[{id,name,description,docCount,updatedAt}]。
+
+    分页（3.3，limit/offset 与 knowledge 域 docs 同口径）：路由层切片；service 层
+    limit/offset 待 WA/WB 下沉。
+    """
     items = await svc.list_space_views(user_id)
-    body = success(data={"items": items})
+    total = len(items)
+    page = items[offset : offset + limit]
+    body = success(data={"items": page, "total": total, "limit": limit, "offset": offset})
     return JSONResponse(status_code=200, content=body.model_dump())
 
 

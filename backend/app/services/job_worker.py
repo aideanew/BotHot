@@ -64,7 +64,7 @@ _ERROR_MAX_LEN = 500
 
 # W2：无 JobItem 的单作业类型——claim 后直接跑处理函数，不走 _drain_items/_finalize
 # （后者按 JobItem counts 收敛，对无 item 的 Job 会误判 total=0 → FAILED）。
-HOT_JOB_TYPES = frozenset({"hot_cluster", "daily_report"})
+HOT_JOB_TYPES = frozenset({"hot_cluster", "daily_report", "hot_rescore"})
 _HOT_BUSINESS_TZ = ZoneInfo("Asia/Shanghai")
 
 
@@ -262,23 +262,37 @@ class JobWorker:
     # ------------------------------------------------------------------ W2 单作业
 
     async def _run_hot_job(self, job_id: str, job_type: str, payload: dict[str, Any]) -> None:
-        """hot_cluster / daily_report 处理分支：单作业执行，无 JobItem。
+        """hot_cluster / hot_rescore / daily_report 处理分支：单作业执行，无 JobItem。
 
         懒导入服务层避免 worker 启动期强耦合；失败记 error 并收敛到 FAILED（不抛穿，
         与既有逐篇消费口径一致——单轮异常不得让 worker 退出）。
+
+        评分接线语义：
+        - hot_cluster 分支：聚簇后首次评分——run_clustering 落库 HotTopic(hot_score=0.0)，
+          run_scoring 在同事务回填真实分数 + 同步 FeedItem.score；
+        - hot_rescore 分支：周期重评分——仅调 run_scoring 刷新所有非 archived 话题分数；
+        - daily_report 分支：日报前兜底重算——保证 TOP10 按最新分排序，
+          与入队顺序解耦（评分可能在日报入队后被 hot_rescore 刷新）。
         """
         try:
             async with self._factory() as session:
                 if job_type == "hot_cluster":
                     from app.services.hot_cluster import run_clustering
+                    from app.services.hot_scorer import run_scoring
 
                     await run_clustering(session, days=int(payload.get("days", 1)))
+                    await run_scoring(session)
+                elif job_type == "hot_rescore":
+                    from app.services.hot_scorer import run_scoring
+
+                    await run_scoring(session)
                 elif job_type == "daily_report":
                     from app.services.feed_service import build_daily_report
+                    from app.services.hot_scorer import run_scoring
 
+                    await run_scoring(session)
                     report_date = str(payload.get("date", ""))
                     if not report_date:
-                        # payload 无 date（scheduler 兜底）→ 生成前一日日报
                         report_date = (
                             datetime.now(_HOT_BUSINESS_TZ) - timedelta(days=1)
                         ).strftime("%Y-%m-%d")

@@ -19,6 +19,7 @@ upsert 语义：依赖 bothot_entities.FeedItem 的 UniqueConstraint(item_type, 
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -35,6 +36,8 @@ from app.services.llm_summary import summarize_topic
 logger = logging.getLogger(__name__)
 
 BUSINESS_TZ = ZoneInfo("Asia/Shanghai")
+
+_SUMMARY_CONCURRENCY = 3
 
 # 事件类型枚举固定（任务 2.7 契约）
 EVENT_NEW_ARTICLE = "new_article"
@@ -249,15 +252,30 @@ async def build_daily_report(
         )
     ).scalars().all()
 
-    # 中心文章正文：日报摘要的素材 + LLM 失败时的降级源
-    summaries: list[str] = []
+    # 中心文章正文：日报摘要的素材 + LLM 失败时的降级源。
+    # 审查缝合：DB 读取必须在 gather 之外串行完成——AsyncSession 不允许跨任务并发
+    # 使用（并发 session.get 会撞连接 provisioning 竞态）；并发区只保留无 DB 的
+    # LLM 调用（这才是可安全并发的部分）。
+    center_contents: list[str] = []
     for t in topics:
-        center_content = ""
+        content = ""
         if t.center_asset_id:
             asset = await session.get(ContentAsset, t.center_asset_id)
             if asset is not None:
-                center_content = asset.content_markdown or ""
-        summaries.append(await _topic_summary(t, center_content, llm))
+                content = asset.content_markdown or ""
+        center_contents.append(content)
+
+    sem = asyncio.Semaphore(_SUMMARY_CONCURRENCY)
+
+    async def _summarize_one(t: HotTopic, center_content: str) -> str:
+        async with sem:
+            return await _topic_summary(t, center_content, llm)
+
+    summaries = list(
+        await asyncio.gather(
+            *[_summarize_one(t, c) for t, c in zip(topics, center_contents, strict=False)]
+        )
+    )
 
     content_md = assemble_report(report_date, list(topics), summaries)
     title = f"BotHot 热点日报 · {report_date}"

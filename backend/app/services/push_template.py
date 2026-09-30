@@ -1,7 +1,9 @@
 """推送模板渲染与校验。
 
-支持变量：{date} {time} {space_name} {doc_title} {hot_topic} {topic_count}
+支持变量：{date} {time} {space_name} {doc_title} {hot_topic} {topic_count} {report_title}
 未知变量剔除并 logging.warning。
+时区口径（WB）：{date}/{time} 用热点业务日界 Asia/Shanghai（与 hot.py/hot_cluster.py
+的 BUSINESS_TZ 同口径），不再用 UTC。
 """
 
 from __future__ import annotations
@@ -9,17 +11,19 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
-_KNOWN_VARS = {"date", "time", "space_name", "doc_title", "hot_topic", "topic_count"}
+BUSINESS_TZ = ZoneInfo("Asia/Shanghai")
+
+_KNOWN_VARS = {"date", "time", "space_name", "doc_title", "hot_topic", "topic_count", "report_title"}
 
 _VAR_PATTERN = re.compile(r"\{(\w+)\}")
 
 
 def render(template: str, variables: dict) -> str:
-    from datetime import UTC
-    now = datetime.now(UTC)
+    now = datetime.now(BUSINESS_TZ)
     ctx = {
         "date": now.strftime("%Y-%m-%d"),
         "time": now.strftime("%H:%M"),
@@ -27,6 +31,7 @@ def render(template: str, variables: dict) -> str:
         "doc_title": variables.get("doc_title", ""),
         "hot_topic": variables.get("hot_topic", ""),
         "topic_count": str(variables.get("topic_count", "")),
+        "report_title": variables.get("report_title", ""),
     }
 
     def _replace(match: re.Match) -> str:

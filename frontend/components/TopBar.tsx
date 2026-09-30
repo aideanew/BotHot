@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MOCK_LABEL, MOCK_ENABLED } from "@/lib/api";
 import { useAuth } from "@/components/AuthContext";
+import NotificationBell from "@/components/NotificationBell";
 
 /**
  * 顶栏（C-T1 建，C-T2 接入会话态）
@@ -133,6 +134,8 @@ export default function TopBar() {
           )}
           {status === "authed" && me && (
             <>
+              {/* WE 5.2c：站内通知铃铛（仅登录态挂载；登出即卸载并断连 SSE） */}
+              <NotificationBell />
               <span
                 className="truncate text-base text-neutral-700"
                 title={me.email}

@@ -78,8 +78,9 @@ class DingtalkPushProvider:
                     False,
                     f"钉钉返回错误: {data.get('errmsg','')}",
                     json.dumps(data, ensure_ascii=False)[:500],
+                    retryable=False,
                 )
         except httpx.TimeoutException:
-            return PushResult("dingtalk", False, "钉钉 webhook 请求超时")
+            return PushResult("dingtalk", False, "钉钉 webhook 请求超时", retryable=True)
         except Exception as e:
-            return PushResult("dingtalk", False, f"钉钉推送异常: {e}")
+            return PushResult("dingtalk", False, f"钉钉推送异常: {e}", retryable=True)

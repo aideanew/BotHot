@@ -51,4 +51,4 @@ class WebPushProvider:
 
             return PushResult("web", True, "", f"published to {channel}")
         except Exception as e:
-            return PushResult("web", False, f"站内通知发送失败: {e}")
+            return PushResult("web", False, f"站内通知发送失败: {e}", retryable=True)
