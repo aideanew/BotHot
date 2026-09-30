@@ -1,4 +1,4 @@
-"""BotHot 推送任务调度器（W3 并发安全重构）。
+"""BotHot 推送任务调度器（W3 并发安全重构 + WB 重试补完）。
 
 架构取舍（at-most-once 语义）：
 - 短锁领取：FOR UPDATE SKIP LOCKED 选中 due 任务 → 同一短事务内推进
@@ -9,16 +9,20 @@
   claim 后投递前崩溃则该事件丢失（换取绝不重复投递；如需 at-least-once 改为
   投递成功后再标记，代价是可能重复推送）。
 - 单任务隔离：try/except 包裹，单任务异常不影响其他任务。
-- 事件 outbox：claim_pending_events 轮询消费，匹配 event 类型任务投递。
+- 投递重试（WB）：可重试失败（网络/超时/5xx，由 Provider 回执 retryable 位标记）
+  按指数退避重投（60/240/960s），重试态挂 PushTask.retry_count/next_retry_at；
+  超过上限转 PushLog(status="dead") + 任务 status=failed 终态。领取谓词同时覆盖
+  「cron 到期」与「重试到期」两类任务——重试到期的任务不动 next_run_at（cron
+  节奏与重试节奏正交），只推进 last_run_at。
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.secret_crypto import decrypt_channel_secret
@@ -31,6 +35,10 @@ from app.services.push_template import render
 logger = logging.getLogger(__name__)
 
 PUSH_SCHEDULER_INTERVAL = 60
+
+# WB：投递重试策略——指数退避 base*4^(n-1)（60/240/960s），超过上限转死信终态。
+MAX_PUSH_RETRIES = 3
+RETRY_BACKOFF_BASE_SECONDS = 60
 
 
 class PushTaskScheduler:
@@ -73,30 +81,45 @@ class PushTaskScheduler:
         await self._claim_and_dispatch_events(now)
 
     async def _claim_due_cron_tasks(self, now: datetime) -> list[PushTask]:
+        """领取到期任务：cron 到期 OR 重试到期（两类谓词并集，SKIP LOCKED 防多副本）。
+
+        cron 到期的任务推进 next_run_at（解析失败转 paused）；仅重试到期的任务
+        不动 next_run_at（cron 节奏与重试节奏正交），只推进 last_run_at。
+        重试计数与 next_retry_at 的清理/推进在 _execute_task 的投递事务里完成。
+        """
         async with self._session_factory() as db:
             result = await db.execute(
                 select(PushTask)
                 .where(
-                    PushTask.trigger_type == "cron",
                     PushTask.status == "active",
-                    PushTask.next_run_at.is_not(None),
-                    PushTask.next_run_at <= now,
+                    or_(
+                        (PushTask.trigger_type == "cron")
+                        & PushTask.next_run_at.is_not(None)
+                        & (PushTask.next_run_at <= now),
+                        PushTask.next_retry_at.is_not(None) & (PushTask.next_retry_at <= now),
+                    ),
                 )
                 .with_for_update(skip_locked=True)
             )
             tasks = list(result.scalars().all())
 
             for task in tasks:
-                next_run = parse_cron_next(task.cron_expr, now)
-                if next_run is None:
-                    task.status = "paused"
-                    task.last_run_at = now
-                    logger.warning(
-                        "Task %s cron 解析失败，已暂停: %s", task.id, task.cron_expr
-                    )
-                else:
+                cron_due = (
+                    task.trigger_type == "cron"
+                    and task.next_run_at is not None
+                    and task.next_run_at <= now
+                )
+                if cron_due:
+                    next_run = parse_cron_next(task.cron_expr, now)
+                    if next_run is None:
+                        task.status = "paused"
+                        task.last_run_at = now
+                        logger.warning(
+                            "Task %s cron 解析失败，已暂停: %s", task.id, task.cron_expr
+                        )
+                        continue
                     task.next_run_at = next_run
-                    task.last_run_at = now
+                task.last_run_at = now
 
             await db.commit()
             return tasks
@@ -164,10 +187,44 @@ class PushTaskScheduler:
             provider = make_push_provider(ch.channel_type)
             result = await provider.push(push_msg)
 
+            # WB：重试簿记——重投/终态决策与 PushLog 同事务落库。
+            # 任务行重新 SELECT（本 session 与领取 session 不同，领取返回的是
+            # detached 对象），任务已删/暂停则只落日志不动任务。
+            log_status = "success" if result.delivered else "failed"
+            if not result.delivered and result.retryable:
+                task_row = (
+                    await db.execute(select(PushTask).where(PushTask.id == task.id))
+                ).scalar_one_or_none()
+                if task_row is not None and task_row.status == "active":
+                    new_count = int(task_row.retry_count or 0) + 1
+                    if new_count > MAX_PUSH_RETRIES:
+                        log_status = "dead"
+                        task_row.status = "failed"
+                        task_row.next_retry_at = None
+                        logger.warning(
+                            "Task %s 重试 %d 次仍失败，转死信终态", task.id, task_row.retry_count
+                        )
+                    else:
+                        backoff = RETRY_BACKOFF_BASE_SECONDS * (4 ** (new_count - 1))
+                        task_row.retry_count = new_count
+                        task_row.next_retry_at = now + timedelta(seconds=backoff)
+                        logger.info(
+                            "Task %s 第 %d 次投递失败（可重试），%ds 后重投",
+                            task.id, new_count, backoff,
+                        )
+            elif result.delivered:
+                task_row = (
+                    await db.execute(select(PushTask).where(PushTask.id == task.id))
+                ).scalar_one_or_none()
+                if task_row is not None:
+                    # 投递成功清零重试态（上次失败的退避计划作废）
+                    task_row.retry_count = 0
+                    task_row.next_retry_at = None
+
             log = PushLog(
                 bot_channel_id=ch.id,
                 push_task_id=task.id,
-                status="success" if result.delivered else "failed",
+                status=log_status,
                 content_preview=content[:200],
                 error_message=result.reason if not result.delivered else "",
                 response_summary=result.response_data[:500],

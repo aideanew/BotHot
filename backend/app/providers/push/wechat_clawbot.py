@@ -57,8 +57,9 @@ class WechatClawbotPushProvider:
                     False,
                     f"ClawBot 返回 HTTP {resp.status_code}",
                     json.dumps(data, ensure_ascii=False)[:500],
+                    retryable=resp.status_code >= 500,
                 )
         except httpx.TimeoutException:
-            return PushResult("wechat_clawbot", False, "ClawBot 请求超时")
+            return PushResult("wechat_clawbot", False, "ClawBot 请求超时", retryable=True)
         except Exception as e:
-            return PushResult("wechat_clawbot", False, f"ClawBot 推送异常: {e}")
+            return PushResult("wechat_clawbot", False, f"ClawBot 推送异常: {e}", retryable=True)

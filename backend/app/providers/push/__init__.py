@@ -6,7 +6,7 @@
 - wechat_work：企业微信群机器人 webhook
 - webhook：通用 webhook（POST JSON）
 - wechat_clawbot：微信 ClawBot（出站消息 API）
-- web：站内通知（WebSocket 实时推送）
+- web：站内通知（Redis pub/sub → 前端 SSE 订阅实时推送；订阅侧见 api/v1/system.py /notifications）
 
 每个 Provider 实现 PushProvider 协议（一个 async push 方法）。
 注册表 make_push_provider(channel) 按名取实例。

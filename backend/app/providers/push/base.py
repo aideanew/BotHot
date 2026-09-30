@@ -34,12 +34,18 @@ class PushMessage:
 
 @dataclass(frozen=True)
 class PushResult:
-    """推送回执。"""
+    """推送回执。
+
+    retryable：投递失败是否值得重投（WB 重试语义）——网络异常/超时/服务端 5xx 为
+    True（瞬时故障，退避后可能恢复）；配置缺失/业务码拒绝/4xx/验签错为 False
+    （确定性失败，重投无意义）。默认 False（保守：不重试）。
+    """
 
     channel: str
     delivered: bool
     reason: str = ""
     response_data: str = ""
+    retryable: bool = False
 
 
 class PushProvider(Protocol):

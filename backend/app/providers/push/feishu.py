@@ -81,8 +81,14 @@ class FeishuPushProvider:
                 code = data.get("StatusCode", data.get("code", -1))
                 if code == 0:
                     return PushResult("feishu", True, "", json.dumps(data, ensure_ascii=False)[:500])
-                return PushResult("feishu", False, f"飞书返回错误: {data}", json.dumps(data, ensure_ascii=False)[:500])
+                return PushResult(
+                    "feishu",
+                    False,
+                    f"飞书返回错误: {data}",
+                    json.dumps(data, ensure_ascii=False)[:500],
+                    retryable=False,
+                )
         except httpx.TimeoutException:
-            return PushResult("feishu", False, "飞书 webhook 请求超时")
+            return PushResult("feishu", False, "飞书 webhook 请求超时", retryable=True)
         except Exception as e:
-            return PushResult("feishu", False, f"飞书推送异常: {e}")
+            return PushResult("feishu", False, f"飞书推送异常: {e}", retryable=True)

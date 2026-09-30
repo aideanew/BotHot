@@ -48,8 +48,9 @@ class WechatWorkPushProvider:
                     False,
                     f"企业微信返回错误: {data.get('errmsg','')}",
                     json.dumps(data, ensure_ascii=False)[:500],
+                    retryable=False,
                 )
         except httpx.TimeoutException:
-            return PushResult("wechat_work", False, "企业微信 webhook 请求超时")
+            return PushResult("wechat_work", False, "企业微信 webhook 请求超时", retryable=True)
         except Exception as e:
-            return PushResult("wechat_work", False, f"企业微信推送异常: {e}")
+            return PushResult("wechat_work", False, f"企业微信推送异常: {e}", retryable=True)

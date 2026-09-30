@@ -75,17 +75,21 @@ class PushTask(TimestampMixin, Base):
     content_template: Mapped[str] = mapped_column(Text, default="", nullable=False)
     # 关联空间（可选：限定推送某个空间的新文章）
     space_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("knowledge_spaces.id", ondelete="SET NULL"), nullable=True
+        String(36), ForeignKey("knowledge_spaces.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # 下次执行时间（cron 类型由 scheduler 计算）
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # 状态：active | paused | deleted
+    # 状态：active | paused | deleted | failed（重试超限终态）
     status: Mapped[str] = mapped_column(String(16), default="active", nullable=False, index=True)
     # 创建者
     created_by: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # 投递重试（WB，审查补完）：失败可重试时的已重试次数与下次重投时点；
+    # 挂在任务而非日志——日志（PushLog）只记事实，调度语义归任务。
+    retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
 
 # ── 3. 推送日志 ──────────────────────────────────────────────────────
@@ -104,9 +108,9 @@ class PushLog(TimestampMixin, Base):
         String(36), ForeignKey("bot_channels.id", ondelete="CASCADE"), nullable=False, index=True
     )
     push_task_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("push_tasks.id", ondelete="SET NULL"), nullable=True
+        String(36), ForeignKey("push_tasks.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    # 投递状态：success | failed | pending
+    # 投递状态：success | failed | dead（重试超限死信） | pending
     status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False, index=True)
     # 推送内容摘要（前 200 字）
     content_preview: Mapped[str] = mapped_column(String(200), default="", nullable=False)
@@ -135,7 +139,7 @@ class HotTopic(TimestampMixin, Base):
     summary: Mapped[str] = mapped_column(Text, default="", nullable=False)
     # 聚簇中心文章 ID
     center_asset_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("content_assets.id", ondelete="SET NULL"), nullable=True
+        String(36), ForeignKey("content_assets.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # 热度分数
     hot_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False, index=True)

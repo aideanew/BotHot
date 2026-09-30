@@ -192,6 +192,12 @@ class Settings(BaseSettings):
             bad.append("OIDC_ISSUER_EXPECTED 未配置（生产环境须校验 userinfo iss 声明）")
         if not self.oidc_audience_expected:
             bad.append("OIDC_AUDIENCE_EXPECTED 未配置（生产环境须校验 userinfo aud 声明）")
+        # WB（审查补完）：两个落库加密主密钥纳入启动守卫——运行时本就 fail-closed，
+        # 守卫只是把失败从「首次投递/首次登记时」提前到「启动时」显式暴露。
+        if not self.push_secret_master_key:
+            bad.append("PUSH_SECRET_MASTER_KEY 未配置（渠道密钥 AES 加解密，缺失即投递全拒）")
+        if not self.engine_key_master_key:
+            bad.append("ENGINE_KEY_MASTER_KEY 未配置（引擎 Key 登记加密，缺失即登记全拒）")
         return bad
 
 

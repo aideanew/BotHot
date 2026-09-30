@@ -38,8 +38,14 @@ class WebhookPushProvider:
                 )
                 if 200 <= resp.status_code < 300:
                     return PushResult("webhook", True, "", resp.text[:500])
-                return PushResult("webhook", False, f"webhook 返回 HTTP {resp.status_code}", resp.text[:500])
+                return PushResult(
+                    "webhook",
+                    False,
+                    f"webhook 返回 HTTP {resp.status_code}",
+                    resp.text[:500],
+                    retryable=resp.status_code >= 500,
+                )
         except httpx.TimeoutException:
-            return PushResult("webhook", False, "webhook 请求超时")
+            return PushResult("webhook", False, "webhook 请求超时", retryable=True)
         except Exception as e:
-            return PushResult("webhook", False, f"webhook 推送异常: {e}")
+            return PushResult("webhook", False, f"webhook 推送异常: {e}", retryable=True)
