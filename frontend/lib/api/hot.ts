@@ -86,11 +86,17 @@ export async function getHotTopic(id: string): Promise<HotTopicDetail> {
   return request(`/api/v1/hot/topics/${id}`);
 }
 
+/**
+ * POST /api/v1/hot/topics/cluster —— 触发聚簇（W2 交付后为**异步入队**语义）。
+ * 响应 {queued: true, ...}：页面展示「已入队」而非「已完成」；
+ * 旧后端同步实现返 triggered，两字段都声明为可选，调用方按 queued 优先判定。
+ */
 export async function triggerCluster(days?: number): Promise<{
-  triggered: boolean;
-  topic_date: string;
+  queued?: boolean;
+  triggered?: boolean;
+  topic_date?: string;
   days: number;
-  message: string;
+  message?: string;
 }> {
   const sp = new URLSearchParams();
   if (days) sp.set("days", String(days));

@@ -8,8 +8,15 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { getFeed, listHotTopics, type FeedItem, type HotTopic } from "@/lib/api/hot";
+import {
+  getFeed,
+  listHotTopics,
+  triggerCluster,
+  type FeedItem,
+  type HotTopic,
+} from "@/lib/api/hot";
 import { usePageTitle } from "@/components/usePageTitle";
+import { useAuth } from "@/components/AuthContext";
 
 const ITEM_TYPE_LABELS: Record<string, string> = {
   article: "文章",
@@ -32,7 +39,11 @@ const STATUS_LABELS: Record<string, string> = {
   archived: "已归档",
 };
 
+/** 状态过滤候选（4.4c）：与 STATUS_LABELS 同集。 */
+const STATUS_FILTERS = ["rising", "hot", "cooling", "archived"] as const;
+
 export default function HotPage() {
+  const { status, me } = useAuth();
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [topics, setTopics] = useState<HotTopic[]>([]);
   const [loading, setLoading] = useState(false);
@@ -40,6 +51,13 @@ export default function HotPage() {
   const [filterType, setFilterType] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  // 4.4 热点区：状态过滤 + 聚簇触发提示
+  const [topicStatus, setTopicStatus] = useState("");
+  const [clustering, setClustering] = useState(false);
+  const [clusterMsg, setClusterMsg] = useState("");
+  // admin 面唯一门禁信号是 is_admin（后端 require_roles("admin","operator")，
+  // 但 /auth/me 契约只回显 is_admin，operator 秩无法在纯前端区分——见交付说明）。
+  const canCluster = status === "authed" && me?.is_admin === true;
 
   const fetchFeed = useCallback(async () => {
     setLoading(true);
@@ -61,12 +79,16 @@ export default function HotPage() {
 
   const fetchTopics = useCallback(async () => {
     try {
-      const res = await listHotTopics({ page: 1, page_size: 10 });
+      const res = await listHotTopics({
+        status: topicStatus || undefined,
+        page: 1,
+        page_size: 10,
+      });
       setTopics(res.items || []);
     } catch {
       // 静默失败，Feed 是主内容
     }
-  }, []);
+  }, [topicStatus]);
 
   useEffect(() => {
     fetchFeed();
@@ -76,16 +98,74 @@ export default function HotPage() {
     fetchTopics();
   }, [fetchTopics]);
 
+  // 初次挂载读 URL query（status 参数可选同步，刷新/分享链接保留过滤态）
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("status");
+    if (q && (STATUS_FILTERS as readonly string[]).includes(q)) {
+      setTopicStatus(q);
+    }
+  }, []);
+
+  // 状态徒章点击切换过滤，并同步 URL query（replaceState 不触发路由重渲染）
+  const handleTopicStatusFilter = (next: string) => {
+    const value = topicStatus === next ? "" : next;
+    setTopicStatus(value);
+    const sp = new URLSearchParams(window.location.search);
+    if (value) sp.set("status", value);
+    else sp.delete("status");
+    const query = sp.toString();
+    window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname);
+  };
+
+  const handleCluster = async () => {
+    setClustering(true);
+    setClusterMsg("");
+    try {
+      const res = await triggerCluster();
+      // W2 异步语义：响应 {queued:true} → 提示「已入队」而非「已完成」
+      setClusterMsg(
+        res.queued === false
+          ? `⚠️ 聚簇未能入队：${res.message || "请稍后重试"}`
+          : `✅ 聚簇任务已入队（${res.message || "完成后自动更新热点"}）`,
+      );
+    } catch (e: unknown) {
+      setClusterMsg(`❌ 触发聚簇失败：${e instanceof Error ? e.message : "未知错误"}`);
+    } finally {
+      setClustering(false);
+    }
+  };
+
   usePageTitle("热点中心");
+
+  // 热度条形可视化基准（4.4b）：以当前展示集的最高分为满格，纯 CSS 宽度比例
+  const maxScore = topics.reduce((m, t) => Math.max(m, t.hot_score), 0);
 
   return (
     <div className="mx-auto max-w-4xl p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">热点中心</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          实时热点聚簇、信息流与每日日报
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">热点中心</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            实时热点聚簇、信息流与每日日报
+          </p>
+        </div>
+        {/* 4.4a admin/operator 可见的触发聚簇按钮（入队语义提示） */}
+        {canCluster && (
+          <button
+            onClick={handleCluster}
+            disabled={clustering}
+            className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {clustering ? "入队中..." : "触发聚簇"}
+          </button>
+        )}
       </div>
+
+      {clusterMsg && (
+        <div className="mb-4 rounded border border-blue-300 bg-blue-50 p-3 text-sm text-blue-700">
+          {clusterMsg}
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">
@@ -97,8 +177,35 @@ export default function HotPage() {
       {topics.length > 0 && (
         <div className="mb-6">
           <h2 className="mb-3 text-sm font-semibold text-gray-700">🔥 今日热点 TOP 10</h2>
+          {/* 4.4c 状态徽章点击过滤 */}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => handleTopicStatusFilter("")}
+              className={`rounded px-2.5 py-1 text-xs ${
+                topicStatus === ""
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              全部
+            </button>
+            {STATUS_FILTERS.map((s) => (
+              <button
+                key={s}
+                onClick={() => handleTopicStatusFilter(s)}
+                aria-pressed={topicStatus === s}
+                className={`rounded px-2.5 py-1 text-xs ring-1 ring-transparent ${
+                  STATUS_COLORS[s]
+                } ${topicStatus === s ? "ring-blue-400" : "hover:opacity-80"}`}
+              >
+                {STATUS_LABELS[s]}
+              </button>
+            ))}
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            {topics.map((t, i) => (
+            {topics.map((t, i) => {
+              const heatPct = maxScore > 0 ? Math.round((t.hot_score / maxScore) * 100) : 0;
+              return (
               <div
                 key={t.id}
                 className="rounded-lg border border-gray-200 p-4 hover:shadow-md"
@@ -123,10 +230,25 @@ export default function HotPage() {
                       <span>文章 {t.article_count}</span>
                       {t.category && <span>· {t.category}</span>}
                     </div>
+                    {/* 热度比例条（无图表库，纯 CSS 宽度） */}
+                    <div
+                      className="mt-2 h-1.5 w-full rounded bg-gray-100"
+                      role="progressbar"
+                      aria-label="热度"
+                      aria-valuenow={heatPct}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                    >
+                      <div
+                        className="h-1.5 rounded bg-gradient-to-r from-orange-400 to-red-500"
+                        style={{ width: `${heatPct}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
