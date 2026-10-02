@@ -389,4 +389,29 @@ FREE_RSS_FEEDS: list[dict[str, str]] = [
         "category": "tech",
         "note": "TechCrunch 科技新闻",
     },
+    # 调研新增：可用公共实例和源（2026-10-02 验证）
+    {
+        "name": "RSSHub-injahow",
+        "url": "https://rss.injahow.cn/wechat/ce/CeBaoShi",
+        "category": "wechat",
+        "note": "社区RSSHub实例，已验证可用",
+    },
+    {
+        "name": "Wechat2RSS-安全",
+        "url": "https://wechat2rss.xlab.app/list/all",
+        "category": "wechat",
+        "note": "Wechat2RSS公共列表，400+公众号(安全/开发)",
+    },
+    {
+        "name": "36氪快讯",
+        "url": "https://rsshub.app/36kr/newsflashes",
+        "category": "news",
+        "note": "36氪快讯新闻",
+    },
+    {
+        "name": "澎湃新闻",
+        "url": "https://rsshub.app/thepaper/featured",
+        "category": "news",
+        "note": "澎湃新闻精选",
+    },
 ]
