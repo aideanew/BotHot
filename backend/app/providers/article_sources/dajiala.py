@@ -79,9 +79,7 @@ class DajialaClient:
 
     # ── 发现 ──────────────────────────────────────────────────────────
 
-    async def query_work_list(
-        self, identifier: str, page: int
-    ) -> tuple[list[dict[str, Any]], int | None]:
+    async def query_work_list(self, identifier: str, page: int) -> tuple[list[dict[str, Any]], int | None]:
         """按 ghid 获取最新发文清单。
 
         identifier = ghid（gh_xxx 格式）。
@@ -93,11 +91,14 @@ class DajialaClient:
         if page > 1:
             return [], 0  # post_condition 无翻页，仅返回最新批次
 
-        payload = await self._request("post_condition", {
-            "key": self._api_key,
-            "verifycode": "",
-            "ghid": identifier,
-        })
+        payload = await self._request(
+            "post_condition",
+            {
+                "key": self._api_key,
+                "verifycode": "",
+                "ghid": identifier,
+            },
+        )
         data = payload.get("data")
         if not isinstance(data, list):
             raise DiscoveryFailedError("Dajiala post_condition 响应缺 data 数组")
@@ -131,11 +132,14 @@ class DajialaClient:
             return None
 
         try:
-            payload = await self._request("article_html", {
-                "key": self._api_key,
-                "verifycode": "",
-                "url": url,
-            })
+            payload = await self._request(
+                "article_html",
+                {
+                    "key": self._api_key,
+                    "verifycode": "",
+                    "url": url,
+                },
+            )
         except AppError as e:
             logger.warning("Dajiala article_html 失败: %s", e)
             return None
@@ -188,11 +192,14 @@ class DajialaClient:
         if not self._api_key:
             return []
         try:
-            payload = await self._request("kw_search", {
-                "key": self._api_key,
-                "verifycode": "",
-                "keyword": keyword,
-            })
+            payload = await self._request(
+                "kw_search",
+                {
+                    "key": self._api_key,
+                    "verifycode": "",
+                    "keyword": keyword,
+                },
+            )
         except AppError as e:
             logger.warning("Dajiala kw_search 失败: %s", e)
             return []
@@ -205,13 +212,15 @@ class DajialaClient:
         for item in data:
             if not isinstance(item, dict):
                 continue
-            results.append(ArticleSearchResult(
-                url=item.get("url", ""),
-                title=item.get("title", ""),
-                digest=item.get("digest", ""),
-                author=item.get("nickname", ""),
-                source="dajiala",
-            ))
+            results.append(
+                ArticleSearchResult(
+                    url=item.get("url", ""),
+                    title=item.get("title", ""),
+                    digest=item.get("digest", ""),
+                    author=item.get("nickname", ""),
+                    source="dajiala",
+                )
+            )
         return results
 
     # ── HTTP 层 ──────────────────────────────────────────────────────
@@ -246,6 +255,7 @@ class DajialaClient:
 def _strip_html(html: str) -> str:
     """粗略去 HTML 标签取纯文本（详情兜底用，extractor 会做正式清洗）。"""
     import re
+
     text = re.sub(r"<[^>]+>", "", html)
     return text.strip()
 

@@ -36,6 +36,8 @@ def _restore_llm_factory():
     original = chat_module._llm_http_factory
     yield
     chat_module._llm_http_factory = original
+
+
 # ------------------------------------------------------------------ 桩
 
 
@@ -44,16 +46,20 @@ class _StubLangBot(LangBotClient):
 
     def __init__(self, results: list[dict[str, Any]] | None = None, fail: bool = False) -> None:
         super().__init__("http://langbot.stub", "a", "b")
-        self._results = results if results is not None else [
-            {
-                "content": [{"text": "麻籽是核心货币。抓鸟→驯养→进化是主循环。", "file_name": "v1/x/养成循环.md"}],
-                "score": 0.92,
-            },
-            {
-                "content": [{"text": "第二段落：星辉用于高级兑换。", "file_name": "v1/x/经济系统.md"}],
-                "score": 0.81,
-            },
-        ]
+        self._results = (
+            results
+            if results is not None
+            else [
+                {
+                    "content": [{"text": "麻籽是核心货币。抓鸟→驯养→进化是主循环。", "file_name": "v1/x/养成循环.md"}],
+                    "score": 0.92,
+                },
+                {
+                    "content": [{"text": "第二段落：星辉用于高级兑换。", "file_name": "v1/x/经济系统.md"}],
+                    "score": 0.81,
+                },
+            ]
+        )
         self._fail = fail
 
     async def retrieve(
@@ -70,7 +76,7 @@ def _frames(text: str) -> list[dict[str, Any]]:
     for block in text.split("\n\n"):
         block = block.strip()
         if block.startswith("data: "):
-            frames.append(json.loads(block[len("data: "):]))
+            frames.append(json.loads(block[len("data: ") :]))
     return frames
 
 
@@ -84,8 +90,7 @@ def _llm_echo_transport() -> httpx.MockTransport:
         user_msg = next(m["content"] for m in body["messages"] if m["role"] == "user")
         chunks = [user_msg[i : i + 32] for i in range(0, len(user_msg), 32)]
         payload = "".join(
-            f'data: {{"choices":[{{"delta":{{"content":{_json.dumps(c, ensure_ascii=False)}}}}}]}}\n\n'
-            for c in chunks
+            f'data: {{"choices":[{{"delta":{{"content":{_json.dumps(c, ensure_ascii=False)}}}}}]}}\n\n' for c in chunks
         )
         return httpx.Response(200, text=payload + "data: [DONE]\n\n")
 
@@ -139,9 +144,7 @@ async def test_ask_full_stream_meta_delta_done(db_session) -> None:  # type: ign
     from app.repositories.space import SpaceRepository
 
     user = await _make_user(db_session)
-    space = await SpaceRepository(db_session).create(
-        user_id=user.id, name="问答空间", langbot_kb_uuid="kb-1"
-    )
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="问答空间", langbot_kb_uuid="kb-1")
     await _seed_ready_doc(db_session, space.id, "v1/x/养成循环.md")
     await _seed_ready_doc(db_session, space.id, "v1/x/经济系统.md")
     client = _client(db_session, _StubLangBot(), user.id)
@@ -181,9 +184,7 @@ async def test_ask_ping_covers_retrieve_blocking(db_session, monkeypatch) -> Non
             return await super().retrieve(kb_uuid, query, top_k, search_type)
 
     user = await _make_user(db_session)
-    space = await SpaceRepository(db_session).create(
-        user_id=user.id, name="慢检索空间", langbot_kb_uuid="kb-1"
-    )
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="慢检索空间", langbot_kb_uuid="kb-1")
     monkeypatch.setattr(chat_module, "PING_INTERVAL_SECONDS", 0.1)
     client = _client(db_session, _SlowStub(), user.id)
     resp = client.post("/api/v1/chat/ask", json={"spaceId": space.id, "question": "q"})
@@ -201,9 +202,7 @@ async def test_ask_citation_title_prefers_local_doc(db_session) -> None:  # type
     from app.repositories.space import SpaceRepository
 
     user = await _make_user(db_session)
-    space = await SpaceRepository(db_session).create(
-        user_id=user.id, name="引用空间", langbot_kb_uuid="kb-1"
-    )
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="引用空间", langbot_kb_uuid="kb-1")
     source = await _make_source(db_session)
     asset = await AssetRepository(db_session).create(
         source_id=source.id,
@@ -238,14 +237,9 @@ async def test_ask_citations_dedup_multi_chunk_hits(db_session) -> None:  # type
     from app.repositories.space import SpaceRepository
 
     user = await _make_user(db_session)
-    space = await SpaceRepository(db_session).create(
-        user_id=user.id, name="去重空间", langbot_kb_uuid="kb-1"
-    )
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="去重空间", langbot_kb_uuid="kb-1")
     same_doc = "v1/x/同一篇.md"
-    hits = [
-        {"content": [{"text": f"第 {i} 块正文。", "file_name": same_doc}], "distance": i * 0.05}
-        for i in range(4)
-    ]
+    hits = [{"content": [{"text": f"第 {i} 块正文。", "file_name": same_doc}], "distance": i * 0.05} for i in range(4)]
     await _seed_ready_doc(db_session, space.id, same_doc)
     client = _client(db_session, _StubLangBot(hits), user.id)
     meta = _frames(client.post("/api/v1/chat/ask", json={"spaceId": space.id, "question": "q"}).text)[0]
@@ -275,9 +269,7 @@ async def test_ask_stream_error_frame_dependency_unavailable(db_session) -> None
     from app.repositories.space import SpaceRepository
 
     user = await _make_user(db_session)
-    space = await SpaceRepository(db_session).create(
-        user_id=user.id, name="宕机空间", langbot_kb_uuid="kb-1"
-    )
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="宕机空间", langbot_kb_uuid="kb-1")
     client = _client(db_session, _RaisingStub(DependencyUnavailableError("LangBot 不可达")), user.id)
     resp = client.post("/api/v1/chat/ask", json={"spaceId": space.id, "question": "q"})
     frames = _frames(resp.text)
@@ -293,9 +285,7 @@ async def test_ask_stream_error_frame_resource_not_found(db_session) -> None:  #
     from app.repositories.space import SpaceRepository
 
     user = await _make_user(db_session)
-    space = await SpaceRepository(db_session).create(
-        user_id=user.id, name="资源缺失空间", langbot_kb_uuid="kb-1"
-    )
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="资源缺失空间", langbot_kb_uuid="kb-1")
     client = _client(db_session, _RaisingStub(ResourceNotFoundError("LangBot 资源不存在")), user.id)
     resp = client.post("/api/v1/chat/ask", json={"spaceId": space.id, "question": "q"})
     frames = _frames(resp.text)
@@ -308,9 +298,7 @@ async def test_ask_langbot_down_error_frame_50002(db_session) -> None:  # type: 
     from app.repositories.space import SpaceRepository
 
     user = await _make_user(db_session)
-    space = await SpaceRepository(db_session).create(
-        user_id=user.id, name="宕机空间", langbot_kb_uuid="kb-1"
-    )
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="宕机空间", langbot_kb_uuid="kb-1")
     client = _client(db_session, _RaisingStub(DependencyUnavailableError("LangBot 不可达")), user.id)
     resp = client.post("/api/v1/chat/ask", json={"spaceId": space.id, "question": "q"})
     frames = _frames(resp.text)
@@ -322,9 +310,7 @@ async def test_ask_langbot_raw_httpx_error_frame_50002(db_session) -> None:  # t
     from app.repositories.space import SpaceRepository
 
     user = await _make_user(db_session)
-    space = await SpaceRepository(db_session).create(
-        user_id=user.id, name="裸错空间", langbot_kb_uuid="kb-1"
-    )
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="裸错空间", langbot_kb_uuid="kb-1")
     client = _client(db_session, _StubLangBot(fail=True), user.id)
     resp = client.post("/api/v1/chat/ask", json={"spaceId": space.id, "question": "q"})
     frames = _frames(resp.text)
@@ -337,9 +323,7 @@ async def test_ask_error_frame_30002_via_real_shape_stub(db_session) -> None:  #
     from app.repositories.space import SpaceRepository
 
     user = await _make_user(db_session)
-    space = await SpaceRepository(db_session).create(
-        user_id=user.id, name="错误空间", langbot_kb_uuid="kb-1"
-    )
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="错误空间", langbot_kb_uuid="kb-1")
     client = _client(db_session, _RaisingStub(LangbotApiError("LangBot 检索或生成异常")), user.id)
     resp = client.post("/api/v1/chat/ask", json={"spaceId": space.id, "question": "普通问题"})
     frames = _frames(resp.text)
@@ -355,9 +339,7 @@ async def test_ask_pre_stream_envelopes(db_session) -> None:  # type: ignore[no-
     from app.repositories.space import SpaceRepository
 
     user = await _make_user(db_session)
-    space = await SpaceRepository(db_session).create(
-        user_id=user.id, name="信封空间", langbot_kb_uuid="kb-1"
-    )
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="信封空间", langbot_kb_uuid="kb-1")
     client = _client(db_session, _StubLangBot(), user.id)
 
     resp = client.post("/api/v1/chat/ask", json={"spaceId": space.id, "question": "  "})
@@ -371,9 +353,7 @@ async def test_ask_pre_stream_envelopes(db_session) -> None:  # type: ignore[no-
     assert msg != "no-such", "30004 message 仍是裸 id"
 
     # 越权：他人空间（真实第二用户行，FK 约束）
-    other_user = await SqlAlchemyUserStore(db_session).upsert_by_sub(
-        "sub-other-chat", "other@test.local", "他人"
-    )
+    other_user = await SqlAlchemyUserStore(db_session).upsert_by_sub("sub-other-chat", "other@test.local", "他人")
     other = await SpaceRepository(db_session).create(user_id=other_user.id, name="他人空间")
     resp = client.post("/api/v1/chat/ask", json={"spaceId": other.id, "question": "q"})
     assert resp.status_code == 404 and resp.json()["code"] == 30004
@@ -448,12 +428,11 @@ async def test_ask_llm_stream_passthrough(db_session, monkeypatch) -> None:  # t
     from app.repositories.space import SpaceRepository
 
     chunks = ["麻籽的秘密数字是 ", "42", "。"]
-    monkeypatch.setattr(chat_module, "_llm_http_factory",
-                        lambda: httpx.AsyncClient(transport=_llm_sse_transport(chunks)))
-    user = await _make_user(db_session)
-    space = await SpaceRepository(db_session).create(
-        user_id=user.id, name="LLM流空间", langbot_kb_uuid="kb-1"
+    monkeypatch.setattr(
+        chat_module, "_llm_http_factory", lambda: httpx.AsyncClient(transport=_llm_sse_transport(chunks))
     )
+    user = await _make_user(db_session)
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="LLM流空间", langbot_kb_uuid="kb-1")
     await _seed_ready_doc(db_session, space.id, "v1/x/养成循环.md")
     client = _client(db_session, _StubLangBot(), user.id, llm_transport=_llm_sse_transport(chunks))
     resp = client.post("/api/v1/chat/ask", json={"spaceId": space.id, "question": "秘密数字"})
@@ -469,15 +448,15 @@ async def test_ask_llm_first_token_timeout_50002(db_session, monkeypatch) -> Non
     from app.repositories.space import SpaceRepository
 
     monkeypatch.setattr(chat_module, "LLM_FIRST_TOKEN_TIMEOUT", 0.1)
-    monkeypatch.setattr(chat_module, "_llm_http_factory",
-                        lambda: httpx.AsyncClient(transport=_llm_sse_transport(["晚到"], first_delay=0.5)))
-    user = await _make_user(db_session)
-    space = await SpaceRepository(db_session).create(
-        user_id=user.id, name="首token超时空间", langbot_kb_uuid="kb-1"
+    monkeypatch.setattr(
+        chat_module,
+        "_llm_http_factory",
+        lambda: httpx.AsyncClient(transport=_llm_sse_transport(["晚到"], first_delay=0.5)),
     )
+    user = await _make_user(db_session)
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="首token超时空间", langbot_kb_uuid="kb-1")
     await _seed_ready_doc(db_session, space.id, "v1/x/养成循环.md")
-    client = _client(db_session, _StubLangBot(), user.id,
-                     llm_transport=_llm_sse_transport(["晚到"], first_delay=0.5))
+    client = _client(db_session, _StubLangBot(), user.id, llm_transport=_llm_sse_transport(["晚到"], first_delay=0.5))
     resp = client.post("/api/v1/chat/ask", json={"spaceId": space.id, "question": "q"})
     frames = _frames(resp.text)
     assert frames[-1]["type"] == "error" and frames[-1]["code"] == 50002
@@ -492,12 +471,9 @@ async def test_ask_llm_upstream_4xx_30002(db_session) -> None:  # type: ignore[n
     from app.repositories.space import SpaceRepository
 
     user = await _make_user(db_session)
-    space = await SpaceRepository(db_session).create(
-        user_id=user.id, name="上游4xx空间", langbot_kb_uuid="kb-1"
-    )
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="上游4xx空间", langbot_kb_uuid="kb-1")
     await _seed_ready_doc(db_session, space.id, "v1/x/养成循环.md")
-    client = _client(db_session, _StubLangBot(), user.id,
-                     llm_transport=_llm_sse_transport([], status=401))
+    client = _client(db_session, _StubLangBot(), user.id, llm_transport=_llm_sse_transport([], status=401))
     resp = client.post("/api/v1/chat/ask", json={"spaceId": space.id, "question": "q"})
     frames = _frames(resp.text)
     assert frames[-1]["type"] == "error" and frames[-1]["code"] == 30002
@@ -520,23 +496,19 @@ async def test_ask_llm_disconnect_aborts_upstream(db_session, monkeypatch) -> No
 
     def counting_handler(request: httpx.Request) -> httpx.Response:
         calls["n"] += 1
-        return httpx.Response(
-            200, text='data: {"choices":[{"delta":{"content":"x"}}]}\n\ndata: [DONE]\n\n'
-        )
+        return httpx.Response(200, text='data: {"choices":[{"delta":{"content":"x"}}]}\n\ndata: [DONE]\n\n')
 
     async def _disconnect_after_retrieve(self) -> bool:  # type: ignore[no-untyped-def]
         return flags.pop(0) if flags else True
 
     monkeypatch.setattr(FastapiRequest, "is_disconnected", _disconnect_after_retrieve)
-    monkeypatch.setattr(chat_module, "_llm_http_factory",
-                        lambda: httpx.AsyncClient(transport=httpx.MockTransport(counting_handler)))
-    user = await _make_user(db_session)
-    space = await SpaceRepository(db_session).create(
-        user_id=user.id, name="断连空间", langbot_kb_uuid="kb-1"
+    monkeypatch.setattr(
+        chat_module, "_llm_http_factory", lambda: httpx.AsyncClient(transport=httpx.MockTransport(counting_handler))
     )
+    user = await _make_user(db_session)
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="断连空间", langbot_kb_uuid="kb-1")
     await _seed_ready_doc(db_session, space.id, "v1/x/养成循环.md")
-    client = _client(db_session, _StubLangBot(), user.id,
-                     llm_transport=httpx.MockTransport(counting_handler))
+    client = _client(db_session, _StubLangBot(), user.id, llm_transport=httpx.MockTransport(counting_handler))
     resp = client.post("/api/v1/chat/ask", json={"spaceId": space.id, "question": "q"})
     frames = _frames(resp.text)
     assert not any(f["type"] == "delta" for f in frames)
@@ -595,7 +567,8 @@ async def test_llm_first_token_timeout_cleans_pending(monkeypatch) -> None:  # t
     created = _track_llm_tasks(monkeypatch)
     monkeypatch.setattr(chat_module, "LLM_FIRST_TOKEN_TIMEOUT", 0.1)
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=_llm_sse_transport(["晚到"], first_delay=0.5)),
     )
     gen = chat_module._llm_stream_delta("q", [{"content": [{"text": "上下文"}]}])
@@ -617,7 +590,8 @@ async def test_llm_idle_timeout_cleans_pending(monkeypatch) -> None:  # type: ig
     monkeypatch.setattr(chat_module, "LLM_STREAM_IDLE_TIMEOUT", 0.1)
     monkeypatch.setattr(chat_module, "LLM_MAX_CONSECUTIVE_IDLE", 2)
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=_llm_sse_transport(["首块"], stall_after_first=True)),
     )
     gen = chat_module._llm_stream_delta("q", [{"content": [{"text": "上下文"}]}])
@@ -645,7 +619,8 @@ async def test_llm_disconnect_stops_upstream_no_delta_after(monkeypatch) -> None
         return next(flags)
 
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=_llm_sse_transport(["一", "二", "三"])),
     )
     items = await _consume(chat_module._llm_stream_delta("q", [{"content": [{"text": "上下文"}]}], disconnect))
@@ -663,7 +638,8 @@ async def test_llm_malformed_json_cleans_pending(monkeypatch) -> None:  # type: 
 
     created = _track_llm_tasks(monkeypatch)
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(
             transport=_llm_sse_transport([], raw_lines=["data: {bad json\n", "data: [DONE]\n\n"])
         ),
@@ -682,7 +658,8 @@ async def test_llm_mid_stream_read_error_cleans_pending(monkeypatch) -> None:  #
 
     created = _track_llm_tasks(monkeypatch)
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=_llm_sse_transport(["块1", "块2"], mid_error=True)),
     )
     with pytest.raises(httpx.ReadError):
@@ -699,7 +676,8 @@ async def test_llm_normal_done_cleans_pending(monkeypatch) -> None:  # type: ign
 
     created = _track_llm_tasks(monkeypatch)
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=_llm_sse_transport(["a", "b"])),
     )
     items = await _consume(chat_module._llm_stream_delta("q", [{"content": [{"text": "上下文"}]}]))
@@ -720,7 +698,8 @@ async def test_llm_explicit_api_key_precedence(monkeypatch) -> None:  # type: ig
 
     _stub_settings(monkeypatch)  # llm_api_key=llm-key-explicit / embedding_api_key=emb-key-other
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
     )
     items = await _consume(chat_module._llm_stream_delta("q", [{"content": [{"text": "上下文"}]}]))
@@ -772,7 +751,7 @@ async def _consume_frames(gen: Any) -> list[dict[str, Any]]:
     async for raw in gen:
         block = raw.strip()
         if block.startswith("data: "):
-            frames.append(json.loads(block[len("data: "):]))
+            frames.append(json.loads(block[len("data: ") :]))
     return frames
 
 
@@ -784,7 +763,12 @@ async def _drive_event_stream(langbot: Any, disconnect: Any = None) -> list[dict
     from app.api.v1 import chat as chat_module
 
     gen = chat_module._event_stream(
-        _stub_request(disconnect), langbot, "kb-1", "q", _SPACE_STUB, None  # type: ignore[arg-type]
+        _stub_request(disconnect),
+        langbot,
+        "kb-1",
+        "q",
+        _SPACE_STUB,
+        None,  # type: ignore[arg-type]
     )
     return await _consume_frames(gen)
 
@@ -801,7 +785,8 @@ async def test_llm_outer_close_cleans_pending(monkeypatch) -> None:  # type: ign
 
     created = _track_llm_tasks(monkeypatch)
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=_llm_sse_transport(["首块"], stall_after_first=True)),
     )
     gen = chat_module._llm_stream_delta("q", [{"content": [{"text": "上下文"}]}])
@@ -849,7 +834,8 @@ async def test_llm_single_idle_recovers(monkeypatch) -> None:  # type: ignore[no
         return httpx.Response(200, content=body())
 
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
     )
     gen = chat_module._llm_stream_delta("q", [{"content": [{"text": "上下文"}]}])
@@ -876,7 +862,8 @@ async def test_event_stream_retrieve_normal_no_residue(monkeypatch) -> None:  # 
     tasks = _track_create_task(monkeypatch)
     monkeypatch.setattr(chat_module, "_local_title_map", _noop_title_map)
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=_llm_echo_transport()),
     )
     frames = await _drive_event_stream(_StubLangBot())
@@ -897,7 +884,8 @@ async def test_event_stream_retrieve_blocking_ping_not_cancelled(monkeypatch) ->
     monkeypatch.setattr(chat_module, "PING_INTERVAL_SECONDS", 0.05)
     monkeypatch.setattr(chat_module, "_local_title_map", _noop_title_map)
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=_llm_echo_transport()),
     )
 
@@ -948,7 +936,8 @@ async def test_event_stream_disconnect_cancels_retrieve(monkeypatch) -> None:  #
 
     tasks = _track_create_task(monkeypatch)
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=httpx.MockTransport(counting_handler)),
     )
 
@@ -979,7 +968,8 @@ async def test_event_stream_title_map_error(monkeypatch) -> None:  # type: ignor
 
     monkeypatch.setattr(chat_module, "_local_title_map", _boom)
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=_llm_echo_transport()),
     )
     frames = await _drive_event_stream(_StubLangBot())
@@ -1000,7 +990,8 @@ async def test_event_stream_llm_error_retrieve_converged(monkeypatch) -> None:  
     monkeypatch.setattr(chat_module, "_local_title_map", _noop_title_map)
     monkeypatch.setattr(chat_module, "LLM_FIRST_TOKEN_TIMEOUT", 0.1)
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=_llm_sse_transport(["晚到"], first_delay=0.5)),
     )
     frames = await _drive_event_stream(_StubLangBot())
@@ -1023,7 +1014,8 @@ async def test_event_stream_outer_close_cleans_retrieve(monkeypatch) -> None:  #
     tasks = _track_create_task(monkeypatch)
     monkeypatch.setattr(chat_module, "_local_title_map", _noop_title_map)
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=_llm_echo_transport()),
     )
 
@@ -1035,7 +1027,12 @@ async def test_event_stream_outer_close_cleans_retrieve(monkeypatch) -> None:  #
             return await super().retrieve(kb_uuid, query, top_k, search_type)
 
     gen: Any = chat_module._event_stream(
-        _stub_request(), _SlowStub(), "kb-1", "q", _SPACE_STUB, None  # type: ignore[arg-type]
+        _stub_request(),
+        _SlowStub(),
+        "kb-1",
+        "q",
+        _SPACE_STUB,
+        None,  # type: ignore[arg-type]
     )
     consumer = asyncio.create_task(gen.asend(None))  # 后台驱动：挂起在 retrieve 等待
     await asyncio.sleep(0.2)
@@ -1054,7 +1051,8 @@ async def test_event_stream_malformed_json_error_frame(monkeypatch) -> None:  # 
 
     monkeypatch.setattr(chat_module, "_local_title_map", _noop_title_map)
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(
             transport=_llm_sse_transport([], raw_lines=["data: {bad json\n", "data: [DONE]\n\n"])
         ),
@@ -1072,7 +1070,8 @@ async def test_event_stream_read_error_error_frame(monkeypatch) -> None:  # type
 
     monkeypatch.setattr(chat_module, "_local_title_map", _noop_title_map)
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=_llm_sse_transport(["块1"], mid_error=True)),
     )
     frames = await _drive_event_stream(_StubLangBot())
@@ -1091,7 +1090,8 @@ async def test_event_stream_delta_then_idle_error_sequence(monkeypatch) -> None:
     monkeypatch.setattr(chat_module, "LLM_STREAM_IDLE_TIMEOUT", 0.1)
     monkeypatch.setattr(chat_module, "LLM_MAX_CONSECUTIVE_IDLE", 2)
     monkeypatch.setattr(
-        chat_module, "_llm_http_factory",
+        chat_module,
+        "_llm_http_factory",
         lambda: httpx.AsyncClient(transport=_llm_sse_transport(["首块"], stall_after_first=True)),
     )
     frames = await _drive_event_stream(_StubLangBot())
@@ -1205,9 +1205,7 @@ async def test_ask_real_full_chain_smoke() -> None:
 
     client = LangBotClient(s.langbot_base_url, s.langbot_admin_username, s.langbot_admin_password)
     kb_uuid: str | None = None
-    engine = create_async_engine(
-        PG_URL, pool_pre_ping=True, connect_args={"connect_timeout": 3}
-    )
+    engine = create_async_engine(PG_URL, pool_pre_ping=True, connect_args={"connect_timeout": 3})
     factory = async_sessionmaker(bind=engine, expire_on_commit=False)
     user_id = ""
     space_id = ""
@@ -1262,9 +1260,7 @@ async def test_ask_real_full_chain_smoke() -> None:
             )
             await session.commit()
             user_id = user.id
-            space = await SpaceRepository(session).create(
-                user_id=user_id, name="全链冒烟空间", langbot_kb_uuid=kb_uuid
-            )
+            space = await SpaceRepository(session).create(user_id=user_id, name="全链冒烟空间", langbot_kb_uuid=kb_uuid)
             await session.commit()
             space_id = space.id
 
@@ -1273,9 +1269,7 @@ async def test_ask_real_full_chain_smoke() -> None:
 
         async def _real_db() -> Any:
             # TestClient 自起事件循环：引擎必须在请求 loop 内新建（跨 loop 绑定会炸 Event）
-            req_engine = create_async_engine(
-                PG_URL, pool_pre_ping=True, connect_args={"connect_timeout": 3}
-            )
+            req_engine = create_async_engine(PG_URL, pool_pre_ping=True, connect_args={"connect_timeout": 3})
             try:
                 mk = async_sessionmaker(bind=req_engine, expire_on_commit=False)
                 async with mk() as session:
@@ -1285,11 +1279,10 @@ async def test_ask_real_full_chain_smoke() -> None:
 
         app.dependency_overrides[get_current_user_id] = lambda: user_id
         app.dependency_overrides[get_db] = _real_db
+
         # LangBotClient 同样 loop 绑定（httpx 内部锁）：依赖内新建+teardown（请求 loop 内完成）
         async def _real_langbot() -> Any:
-            c2 = LangBotClient(
-                s.langbot_base_url, s.langbot_admin_username, s.langbot_admin_password
-            )
+            c2 = LangBotClient(s.langbot_base_url, s.langbot_admin_username, s.langbot_admin_password)
             try:
                 yield c2
             finally:
@@ -1305,7 +1298,7 @@ async def test_ask_real_full_chain_smoke() -> None:
         assert frames[0]["type"] == "meta", f"首帧非 meta: {frames[0]}"
         answer = "".join(f["content"] for f in frames if f["type"] == "delta")
         assert len(answer) > 0, (
-            f"delta 全空: frames={[(f['type'], f.get('code'), f.get('message','')[:60]) for f in frames]}"
+            f"delta 全空: frames={[(f['type'], f.get('code'), f.get('message', '')[:60]) for f in frames]}"
         )
         assert "麻籽" in answer, f"delta 非语义回答: {answer[:100]}"
         pings = sum(1 for f in frames if f["type"] == "ping")
@@ -1325,16 +1318,10 @@ async def test_ask_real_full_chain_smoke() -> None:
             try:
                 async with factory() as session:
                     if space_id:
-                        await session.execute(
-                            sa_delete(KnowledgeSpace).where(KnowledgeSpace.id == space_id)
-                        )
+                        await session.execute(sa_delete(KnowledgeSpace).where(KnowledgeSpace.id == space_id))
                     if user_id:
-                        await session.execute(
-                            sa_delete(KnowledgeSpace).where(KnowledgeSpace.user_id == user_id)
-                        )
-                        await session.execute(
-                            sa_delete(UserEntity).where(UserEntity.sub == "sub-b-t10r-smoke")
-                        )
+                        await session.execute(sa_delete(KnowledgeSpace).where(KnowledgeSpace.user_id == user_id))
+                        await session.execute(sa_delete(UserEntity).where(UserEntity.sub == "sub-b-t10r-smoke"))
                     await session.commit()
             except Exception:  # noqa: BLE001
                 print("[B-T10R real full-chain] 本地行清理失败（user=sub-b-t10r-smoke）")

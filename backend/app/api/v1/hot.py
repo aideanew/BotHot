@@ -48,6 +48,7 @@ router = APIRouter(
 
 # ── 热点列表 ──────────────────────────────────────────────────────────
 
+
 @router.get("/topics")
 async def list_hot_topics(
     category: str = "",
@@ -55,7 +56,7 @@ async def list_hot_topics(
     topic_date: str = "",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db = Depends(get_db),
+    db=Depends(get_db),
 ):
     """查询热点列表（按热度排序）。"""
     q = select(HotTopic)
@@ -79,30 +80,32 @@ async def list_hot_topics(
     q = q.offset((page - 1) * page_size).limit(page_size)
     rows = (await db.execute(q)).scalars().all()
 
-    return success({
-        "items": [
-            {
-                "id": t.id,
-                "title": t.title,
-                "summary": t.summary,
-                "hot_score": t.hot_score,
-                "source_count": t.source_count,
-                "article_count": t.article_count,
-                "status": t.status,
-                "topic_date": t.topic_date,
-                "category": t.category,
-                "created_at": t.created_at.isoformat() if t.created_at else None,
-            }
-            for t in rows
-        ],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    })
+    return success(
+        {
+            "items": [
+                {
+                    "id": t.id,
+                    "title": t.title,
+                    "summary": t.summary,
+                    "hot_score": t.hot_score,
+                    "source_count": t.source_count,
+                    "article_count": t.article_count,
+                    "status": t.status,
+                    "topic_date": t.topic_date,
+                    "category": t.category,
+                    "created_at": t.created_at.isoformat() if t.created_at else None,
+                }
+                for t in rows
+            ],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
 
 
 @router.get("/topics/{topic_id}")
-async def get_hot_topic(topic_id: str, db = Depends(get_db)):
+async def get_hot_topic(topic_id: str, db=Depends(get_db)):
     """查询单个热点详情（含关联文章）。"""
     t = (await db.execute(select(HotTopic).where(HotTopic.id == topic_id))).scalar_one_or_none()
     if t is None:
@@ -110,40 +113,47 @@ async def get_hot_topic(topic_id: str, db = Depends(get_db)):
 
     # 查关联文章
     arts = (
-        await db.execute(
-            select(HotTopicArticle)
-            .where(HotTopicArticle.hot_topic_id == topic_id)
-            .order_by(HotTopicArticle.relevance_score.desc())
+        (
+            await db.execute(
+                select(HotTopicArticle)
+                .where(HotTopicArticle.hot_topic_id == topic_id)
+                .order_by(HotTopicArticle.relevance_score.desc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
-    return success({
-        "id": t.id,
-        "title": t.title,
-        "summary": t.summary,
-        "hot_score": t.hot_score,
-        "source_count": t.source_count,
-        "article_count": t.article_count,
-        "status": t.status,
-        "topic_date": t.topic_date,
-        "category": t.category,
-        "created_at": t.created_at.isoformat() if t.created_at else None,
-        "articles": [
-            {
-                "asset_id": a.asset_id,
-                "relevance_score": a.relevance_score,
-            }
-            for a in arts
-        ],
-    })
+    return success(
+        {
+            "id": t.id,
+            "title": t.title,
+            "summary": t.summary,
+            "hot_score": t.hot_score,
+            "source_count": t.source_count,
+            "article_count": t.article_count,
+            "status": t.status,
+            "topic_date": t.topic_date,
+            "category": t.category,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "articles": [
+                {
+                    "asset_id": a.asset_id,
+                    "relevance_score": a.relevance_score,
+                }
+                for a in arts
+            ],
+        }
+    )
 
 
 # ── 手动触发聚簇 ──────────────────────────────────────────────────────
 
+
 @router.post("/topics/cluster")
 async def trigger_cluster(
     days: int = 1,
-    db = Depends(get_db),
+    db=Depends(get_db),
     user: User = Depends(require_roles("admin", "operator")),
 ):
     """手动触发热点聚簇：入队 Job type=hot_cluster，立即返回 queued 回执。
@@ -163,13 +173,15 @@ async def trigger_cluster(
         except ValueError:
             payload = {}
         if str(payload.get("date", "")) == today and int(payload.get("days", 0)) == days:
-            return success({
-                "queued": False,
-                "job_id": j.id,
-                "topic_date": today,
-                "days": days,
-                "message": "同日聚簇任务已在执行中，未重复入队",
-            })
+            return success(
+                {
+                    "queued": False,
+                    "job_id": j.id,
+                    "topic_date": today,
+                    "days": days,
+                    "message": "同日聚簇任务已在执行中，未重复入队",
+                }
+            )
 
     # idempotency_key 含短随机：已终结 job 不阻塞重跑（同日新触发建新 Job）
     from uuid import uuid4
@@ -180,22 +192,25 @@ async def trigger_cluster(
         idempotency_key=f"hot_cluster:{today}:{days}:{uuid4().hex[:8]}",
         payload_json=json.dumps({"date": today, "days": days}),
     )
-    return success({
-        "queued": True,
-        "job_id": job.id,
-        "topic_date": today,
-        "days": days,
-    })
+    return success(
+        {
+            "queued": True,
+            "job_id": job.id,
+            "topic_date": today,
+            "days": days,
+        }
+    )
 
 
 # ── 日报 ──────────────────────────────────────────────────────────────
+
 
 @router.get("/daily/reports")
 async def list_daily_reports(
     status: str = "",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db = Depends(get_db),
+    db=Depends(get_db),
 ):
     """查询日报列表。"""
     q = select(DailyReport)
@@ -209,50 +224,52 @@ async def list_daily_reports(
     q = q.offset((page - 1) * page_size).limit(page_size)
     rows = (await db.execute(q)).scalars().all()
 
-    return success({
-        "items": [
-            {
-                "id": r.id,
-                "report_date": r.report_date,
-                "title": r.title,
-                "topic_count": r.topic_count,
-                "status": r.status,
-                "generated_by": r.generated_by,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-            }
-            for r in rows
-        ],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    })
+    return success(
+        {
+            "items": [
+                {
+                    "id": r.id,
+                    "report_date": r.report_date,
+                    "title": r.title,
+                    "topic_count": r.topic_count,
+                    "status": r.status,
+                    "generated_by": r.generated_by,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                }
+                for r in rows
+            ],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
 
 
 @router.get("/daily/reports/{report_date}")
-async def get_daily_report(report_date: str, db = Depends(get_db)):
+async def get_daily_report(report_date: str, db=Depends(get_db)):
     """查询指定日期的日报详情。"""
-    r = (
-        await db.execute(select(DailyReport).where(DailyReport.report_date == report_date))
-    ).scalar_one_or_none()
+    r = (await db.execute(select(DailyReport).where(DailyReport.report_date == report_date))).scalar_one_or_none()
     if r is None:
         raise ResourceNotFoundError(f"日报不存在: {report_date}")
 
-    return success({
-        "id": r.id,
-        "report_date": r.report_date,
-        "title": r.title,
-        "content_markdown": r.content_markdown,
-        "topic_count": r.topic_count,
-        "status": r.status,
-        "generated_by": r.generated_by,
-        "created_at": r.created_at.isoformat() if r.created_at else None,
-    })
+    return success(
+        {
+            "id": r.id,
+            "report_date": r.report_date,
+            "title": r.title,
+            "content_markdown": r.content_markdown,
+            "topic_count": r.topic_count,
+            "status": r.status,
+            "generated_by": r.generated_by,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+    )
 
 
 @router.post("/daily/generate")
 async def generate_daily_report(
     report_date: str = "",
-    db = Depends(get_db),
+    db=Depends(get_db),
     _: User = Depends(require_roles("admin", "operator")),
 ):
     """手动生成日报：取当日 TOP10 热点 → LLM 摘要（失败降级正文首段）→ 落库 DailyReport。
@@ -278,16 +295,19 @@ async def generate_daily_report(
     await db.commit()
     await db.refresh(report)
 
-    return success({
-        "id": report.id,
-        "report_date": report.report_date,
-        "title": report.title,
-        "topic_count": report.topic_count,
-        "status": report.status,
-    })
+    return success(
+        {
+            "id": report.id,
+            "report_date": report.report_date,
+            "title": report.title,
+            "topic_count": report.topic_count,
+            "status": report.status,
+        }
+    )
 
 
 # ── Feed 流 ───────────────────────────────────────────────────────────
+
 
 @router.get("/feed")
 async def get_feed(
@@ -295,7 +315,7 @@ async def get_feed(
     category: str = "",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db = Depends(get_db),
+    db=Depends(get_db),
 ):
     """查询 Feed 流（信息流首页用）。
 
@@ -320,24 +340,26 @@ async def get_feed(
     q = q.offset((page - 1) * page_size).limit(page_size)
     rows = (await db.execute(q)).scalars().all()
 
-    return success({
-        "items": [
-            {
-                "id": f.id,
-                "item_type": f.item_type,
-                "ref_id": f.ref_id,
-                "title": f.title,
-                "summary": f.summary,
-                "source_name": f.source_name,
-                "score": f.score,
-                "category": f.category,
-                "url": f.url,
-                "is_pinned": f.is_pinned,
-                "created_at": f.created_at.isoformat() if f.created_at else None,
-            }
-            for f in rows
-        ],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    })
+    return success(
+        {
+            "items": [
+                {
+                    "id": f.id,
+                    "item_type": f.item_type,
+                    "ref_id": f.ref_id,
+                    "title": f.title,
+                    "summary": f.summary,
+                    "source_name": f.source_name,
+                    "score": f.score,
+                    "category": f.category,
+                    "url": f.url,
+                    "is_pinned": f.is_pinned,
+                    "created_at": f.created_at.isoformat() if f.created_at else None,
+                }
+                for f in rows
+            ],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )

@@ -151,9 +151,7 @@ def get_shared_redis(url: str | None = None) -> Any | None:
         import redis.asyncio as aioredis
 
         timeout = settings.rate_limit_redis_timeout_seconds
-        client = aioredis.from_url(
-            target, socket_connect_timeout=timeout, socket_timeout=timeout
-        )
+        client = aioredis.from_url(target, socket_connect_timeout=timeout, socket_timeout=timeout, protocol=2)
         _redis_clients[target] = client
     return client
 
@@ -237,8 +235,7 @@ def _rule_limit(name: str, default: int) -> int:
 
 def _build_rules(default_per_minute: int) -> tuple[_Rule, ...]:
     return tuple(
-        _Rule(name, re.compile(pattern), _rule_limit(name, limit))
-        for name, pattern, limit in _SENSITIVE_RULES
+        _Rule(name, re.compile(pattern), _rule_limit(name, limit)) for name, pattern, limit in _SENSITIVE_RULES
     ) + (_Rule("global", re.compile(r".*"), default_per_minute),)
 
 
@@ -297,10 +294,16 @@ class RateLimitMiddleware:
                 retry_after = self._window - int(now) % self._window
                 logger.warning(
                     "入站限流命中 rule=%s dim=%s limit=%d/%ds path=%s",
-                    rule.name, dimension, rule.per_minute, self._window, path,
+                    rule.name,
+                    dimension,
+                    rule.per_minute,
+                    self._window,
+                    path,
                 )
                 await _send_envelope(
-                    scope, receive, send,
+                    scope,
+                    receive,
+                    send,
                     status=429,
                     code=RATE_LIMITED_CODE,
                     message=f"请求过于频繁，请于 {retry_after} 秒后重试",
@@ -401,7 +404,9 @@ class BodyLimitMiddleware:
         limit = self._max_bytes
         logger.warning("请求体超限：%d > %d bytes path=%s", size, limit, scope.get("path"))
         await _send_envelope(
-            scope, receive, send,
+            scope,
+            receive,
+            send,
             status=413,
             code=PAYLOAD_TOO_LARGE_CODE,
             message=f"请求体过大（上限 {limit} 字节）",
@@ -486,9 +491,7 @@ def install_security_middlewares(app: FastAPI) -> None:
 # 每个事件循环一套信号量：`asyncio.Semaphore` 首次使用即绑定当时循环，
 # 跨循环复用会 raise（pytest-asyncio 每用例新循环必踩）。按循环分表既避免该问题，
 # 又保留了「同一循环（= 生产单进程）内跨请求真限流」这一目标性质。
-_upstream_semaphores: weakref.WeakKeyDictionary[Any, dict[str, asyncio.Semaphore]] = (
-    weakref.WeakKeyDictionary()
-)
+_upstream_semaphores: weakref.WeakKeyDictionary[Any, dict[str, asyncio.Semaphore]] = weakref.WeakKeyDictionary()
 
 
 def upstream_concurrency(name: str) -> int:

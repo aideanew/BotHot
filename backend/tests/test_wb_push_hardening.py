@@ -62,9 +62,7 @@ class TestRenderBusinessTz:
 
 @pytest.fixture
 async def wb_user(db_session: Any):
-    user = (
-        await db_session.execute(select(User).where(User.sub == _TEST_USER_SUB))
-    ).scalar_one_or_none()
+    user = (await db_session.execute(select(User).where(User.sub == _TEST_USER_SUB))).scalar_one_or_none()
     if user is None:
         user = User(sub=_TEST_USER_SUB, email=f"{_TEST_USER_SUB}@test.local", nickname="WB 测试")
         db_session.add(user)
@@ -113,10 +111,10 @@ async def test_emit_event_hydrates_doc_title(db_session: Any) -> None:
     await db_session.flush()
 
     row = (
-        await db_session.execute(
-            select(PushEvent).where(PushEvent.event_type == "new_article").limit(1)
-        )
-    ).scalars().first()
+        (await db_session.execute(select(PushEvent).where(PushEvent.event_type == "new_article").limit(1)))
+        .scalars()
+        .first()
+    )
     import json
 
     payload = json.loads(row.payload)
@@ -139,10 +137,10 @@ async def test_emit_event_hydrates_topic_fields(db_session: Any) -> None:
     import json
 
     row = (
-        await db_session.execute(
-            select(PushEvent).where(PushEvent.event_type == "hot_topic_update").limit(1)
-        )
-    ).scalars().first()
+        (await db_session.execute(select(PushEvent).where(PushEvent.event_type == "hot_topic_update").limit(1)))
+        .scalars()
+        .first()
+    )
     payload = json.loads(row.payload)
     assert payload["hot_topic"] == "WB 测试热点"
     assert payload["topic_count"] == "3"
@@ -161,10 +159,10 @@ async def test_emit_event_hydrates_daily_report_title(db_session: Any) -> None:
     import json
 
     row = (
-        await db_session.execute(
-            select(PushEvent).where(PushEvent.event_type == "daily_report").limit(1)
-        )
-    ).scalars().first()
+        (await db_session.execute(select(PushEvent).where(PushEvent.event_type == "daily_report").limit(1)))
+        .scalars()
+        .first()
+    )
     payload = json.loads(row.payload)
     assert payload["report_title"] == "BotHot 热点日报 · 测试"
 
@@ -216,9 +214,7 @@ async def _task_row(db_session: Any, task_id: str) -> PushTask | None:
     # 普通 SELECT 不会覆盖已缓存属性）
     return (
         await db_session.execute(
-            select(PushTask)
-            .where(PushTask.id == task_id)
-            .execution_options(populate_existing=True)
+            select(PushTask).where(PushTask.id == task_id).execution_options(populate_existing=True)
         )
     ).scalar_one_or_none()
 
@@ -258,9 +254,7 @@ async def test_retry_then_success(
     assert row.next_retry_at is None
     assert provider.calls == 2
 
-    logs = (
-        await db_session.execute(select(PushLog).where(PushLog.push_task_id == retry_task.id))
-    ).scalars().all()
+    logs = (await db_session.execute(select(PushLog).where(PushLog.push_task_id == retry_task.id))).scalars().all()
     assert [log.status for log in logs] == ["failed", "success"]
 
 
@@ -280,9 +274,7 @@ async def test_retry_exhausted_becomes_dead(
     assert row.status == "failed"
     assert row.next_retry_at is None
 
-    logs = (
-        await db_session.execute(select(PushLog).where(PushLog.push_task_id == retry_task.id))
-    ).scalars().all()
+    logs = (await db_session.execute(select(PushLog).where(PushLog.push_task_id == retry_task.id))).scalars().all()
     statuses = [log.status for log in logs]
     assert statuses[-1] == "dead"
     assert statuses.count("failed") == MAX_PUSH_RETRIES
@@ -304,9 +296,7 @@ async def test_non_retryable_failure_never_reschedules(
     assert row.status == "active"
 
 
-async def test_claim_picks_retry_due_and_keeps_cron_schedule(
-    db_session: Any, wb_user, wb_channel
-) -> None:
+async def test_claim_picks_retry_due_and_keeps_cron_schedule(db_session: Any, wb_user, wb_channel) -> None:
     """重试到期但 cron 未到期的任务被领取，且 next_run_at 不被推进（节奏正交）。"""
     task = PushTask(
         name="wb-retry-only",
@@ -364,7 +354,5 @@ class TestProductionGuard:
         import base64
 
         mk = base64.b64encode(os.urandom(32)).decode()
-        violations = self._settings(
-            push_secret_master_key=mk, engine_key_master_key=mk
-        ).production_guard_violations()
+        violations = self._settings(push_secret_master_key=mk, engine_key_master_key=mk).production_guard_violations()
         assert not any("MASTER_KEY" in v for v in violations)

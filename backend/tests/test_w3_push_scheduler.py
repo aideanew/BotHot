@@ -35,9 +35,7 @@ from app.services.push_template import render, validate_template
 # 此前 created_by="test-user" 无对应 users 行，PG 外键一律拒绝）。
 _TEST_USER_SUB = "w3-scheduler-test-user"
 
-_PG_DSN = os.environ.get(
-    "AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot"
-)
+_PG_DSN = os.environ.get("AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot")
 
 
 def _real_factory() -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
@@ -55,9 +53,7 @@ async def _purge_tables(engine: AsyncEngine, *models: type) -> None:
 
 @pytest.fixture
 async def scheduler_user(db_session: AsyncSession):
-    user = (
-        await db_session.execute(select(User).where(User.sub == _TEST_USER_SUB))
-    ).scalar_one_or_none()
+    user = (await db_session.execute(select(User).where(User.sub == _TEST_USER_SUB))).scalar_one_or_none()
     if user is None:
         user = User(
             sub=_TEST_USER_SUB,
@@ -227,6 +223,7 @@ async def test_cron_parse_failure_pauses_task(db_session: AsyncSession, channel,
 
 async def test_emit_event_invalid_type_rejected(db_session: AsyncSession):
     from app.core.errors import RequestInvalidError
+
     with pytest.raises(RequestInvalidError):
         await emit_event(db_session, "invalid_type", {})
 

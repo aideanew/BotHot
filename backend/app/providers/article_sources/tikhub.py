@@ -89,9 +89,7 @@ class TikhubClient:
 
     # ── 发现 ──────────────────────────────────────────────────────────
 
-    async def query_work_list(
-        self, identifier: str, page: int
-    ) -> tuple[list[dict[str, Any]], int | None]:
+    async def query_work_list(self, identifier: str, page: int) -> tuple[list[dict[str, Any]], int | None]:
         """按 username（gh_xxx）获取账号文章列表。
 
         TikHub 用 base64 游标分页：首页 offset=空串，后续页用上页返回的 cursor。
@@ -243,12 +241,14 @@ class TikhubClient:
         for item in data:
             if not isinstance(item, dict):
                 continue
-            results.append(ArticleSearchResult(
-                url=item.get("doc_url", "") or item.get("url", ""),
-                title=item.get("title", ""),
-                digest=item.get("digest", ""),
-                source="tikhub",
-            ))
+            results.append(
+                ArticleSearchResult(
+                    url=item.get("doc_url", "") or item.get("url", ""),
+                    title=item.get("title", ""),
+                    digest=item.get("digest", ""),
+                    source="tikhub",
+                )
+            )
         return results
 
     # ── HTTP 层 ──────────────────────────────────────────────────────
@@ -261,9 +261,7 @@ class TikhubClient:
             if suppress_402:
                 logger.warning("TikHub %s 余额不足（402），降级返回空", op)
                 return None
-            raise DependencyUnavailableError(
-                f"TikHub 余额不足（402）：{op} 需付费，请充值后启用"
-            )
+            raise DependencyUnavailableError(f"TikHub 余额不足（402）：{op} 需付费，请充值后启用")
         if resp.status_code >= 500:
             raise DependencyUnavailableError(f"TikHub 5xx: {resp.status_code}")
         if resp.status_code == 404:

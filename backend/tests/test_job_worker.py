@@ -34,9 +34,7 @@ from app.repositories.space import SpaceRepository
 from app.repositories.user import SqlAlchemyUserStore
 from app.services.job_worker import JobWorker
 
-PG_DSN = os.environ.get(
-    "AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot"
-)
+PG_DSN = os.environ.get("AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot")
 _T23_SUB = "sub-t23-worker"
 _T23_SPACE = "T23执行器空间"
 _T23_KEY_PREFIX = "t23:"
@@ -132,9 +130,7 @@ async def _seed_job(session_factory, *, urls: list[str], key: str) -> str:  # no
         user = await SqlAlchemyUserStore(session).upsert_by_sub(_T23_SUB, "t23@test.local", "T23")
         space = (
             await session.execute(
-                select(KnowledgeSpace).where(
-                    KnowledgeSpace.user_id == user.id, KnowledgeSpace.name == _T23_SPACE
-                )
+                select(KnowledgeSpace).where(KnowledgeSpace.user_id == user.id, KnowledgeSpace.name == _T23_SPACE)
             )
         ).scalar_one_or_none()
         if space is None:
@@ -233,16 +229,10 @@ async def test_failed_item_error_text_shaped_for_consumers() -> None:
     try:
         urls = [_T23_URL.format(n=n) for n in (1, 2)]
         job_id = await _seed_job(factory, urls=urls, key="errtext")
-        await _worker(
-            factory, _StubIngest(fail={urls[0]}, domain_error={urls[1]})
-        ).run_once()
+        await _worker(factory, _StubIngest(fail={urls[0]}, domain_error={urls[1]})).run_once()
 
         async with factory() as session:
-            rows = (
-                await session.execute(
-                    select(JobItem.url, JobItem.error).where(JobItem.job_id == job_id)
-                )
-            ).all()
+            rows = (await session.execute(select(JobItem.url, JobItem.error).where(JobItem.job_id == job_id))).all()
 
         by_url = {url: err for url, err in rows}
         assert by_url[urls[0]] == "RuntimeError: stub ingest 失败", by_url
@@ -269,9 +259,7 @@ async def test_permanent_domain_error_fails_without_retry() -> None:
         async with factory() as session:
             rows = (
                 await session.execute(
-                    select(
-                        JobItem.url, JobItem.status, JobItem.retry_count
-                    ).where(JobItem.job_id == job_id)
+                    select(JobItem.url, JobItem.status, JobItem.retry_count).where(JobItem.job_id == job_id)
                 )
             ).all()
 

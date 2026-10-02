@@ -15,9 +15,15 @@ from app.services.spaces import SpaceService
 
 def _space(sid: str) -> SimpleNamespace:
     return SimpleNamespace(
-        id=sid, name=f"s{sid}", description="d", updated_at=None,
-        engine="builtin", engine_kb_id="", langbot_kb_uuid="",
-        is_public=False, owner_type="user",
+        id=sid,
+        name=f"s{sid}",
+        description="d",
+        updated_at=None,
+        engine="builtin",
+        engine_kb_id="",
+        langbot_kb_uuid="",
+        is_public=False,
+        owner_type="user",
     )
 
 

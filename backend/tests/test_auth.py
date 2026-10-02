@@ -91,10 +91,17 @@ class FakeAideanIdP:
                         400, json={"error": "invalid_grant", "error_description": "code used or expired"}
                     )
                 access, refresh, expires = self._issue_pair()
-                return httpx.Response(200, json={
-                    "access_token": access, "token_type": "Bearer", "expires_in": expires,
-                    "refresh_token": refresh, "id_token": "", "scope": "openid profile wallet:read",
-                })
+                return httpx.Response(
+                    200,
+                    json={
+                        "access_token": access,
+                        "token_type": "Bearer",
+                        "expires_in": expires,
+                        "refresh_token": refresh,
+                        "id_token": "",
+                        "scope": "openid profile wallet:read",
+                    },
+                )
             if grant == "refresh_token":
                 token = form.get("refresh_token", [""])[0]
                 if not self.refresh_chain.pop(token, False):
@@ -103,33 +110,54 @@ class FakeAideanIdP:
                         400, json={"error": "invalid_grant", "error_description": "refresh replay detected"}
                     )
                 access, refresh, expires = self._issue_pair()
-                return httpx.Response(200, json={
-                    "access_token": access, "token_type": "Bearer", "expires_in": expires,
-                    "refresh_token": refresh, "id_token": "", "scope": "openid profile wallet:read",
-                })
+                return httpx.Response(
+                    200,
+                    json={
+                        "access_token": access,
+                        "token_type": "Bearer",
+                        "expires_in": expires,
+                        "refresh_token": refresh,
+                        "id_token": "",
+                        "scope": "openid profile wallet:read",
+                    },
+                )
             return httpx.Response(400, json={"error": "unsupported_grant_type"})
 
         if method == "GET" and path == "/oauth/userinfo":
             token = request.headers.get("authorization", "").removeprefix("Bearer ")
             if token in self.valid_access:
-                return httpx.Response(200, json={
-                    "sub": "user-1", "email": "dev@aidean.local", "nickname": "老板",
-                    "tier": "PRO", "role": "USER",
-                    **self._userinfo_extra,
-                })
+                return httpx.Response(
+                    200,
+                    json={
+                        "sub": "user-1",
+                        "email": "dev@aidean.local",
+                        "nickname": "老板",
+                        "tier": "PRO",
+                        "role": "USER",
+                        **self._userinfo_extra,
+                    },
+                )
             return httpx.Response(401, json={"error": "invalid_token"})
 
         if method == "GET" and path == "/api/v1/internal/billing/wallet":
             if not self._basic_ok(request):
                 return httpx.Response(401, json={"code": 10001, "message": "client 认证失败"})
-            return httpx.Response(200, json={
-                "code": 0, "message": "ok",
-                "data": {
-                    "user": {"id": "user-1", "tier": "PRO", "status": "ACTIVE", "nickname": "老板"},
-                    "wallet": {"balanceYuan": "12.34", "heldYuan": "0.00",
-                               "availableYuan": "12.34", "currency": "CNY"},
+            return httpx.Response(
+                200,
+                json={
+                    "code": 0,
+                    "message": "ok",
+                    "data": {
+                        "user": {"id": "user-1", "tier": "PRO", "status": "ACTIVE", "nickname": "老板"},
+                        "wallet": {
+                            "balanceYuan": "12.34",
+                            "heldYuan": "0.00",
+                            "availableYuan": "12.34",
+                            "currency": "CNY",
+                        },
+                    },
                 },
-            })
+            )
 
         if method == "POST" and path == "/oauth/revoke":
             if not self._basic_ok(request):
@@ -264,9 +292,7 @@ async def test_me_reports_is_admin_from_local_role(db_session) -> None:  # type:
     is_admin 只随本地列变化。
     """
     conn = await db_session.connection()
-    factory = async_sessionmaker(
-        bind=conn, expire_on_commit=False, join_transaction_mode="create_savepoint"
-    )
+    factory = async_sessionmaker(bind=conn, expire_on_commit=False, join_transaction_mode="create_savepoint")
 
     idp = FakeAideanIdP()
     http = httpx.AsyncClient(transport=httpx.MockTransport(idp.handler))
@@ -403,9 +429,7 @@ async def test_me_provider_unreachable_degrades_to_local_profile(db_session) -> 
     顶栏显示「未登录」，而 spaces/jobs 等域接口其实都可用。
     """
     conn = await db_session.connection()
-    factory = async_sessionmaker(
-        bind=conn, expire_on_commit=False, join_transaction_mode="create_savepoint"
-    )
+    factory = async_sessionmaker(bind=conn, expire_on_commit=False, join_transaction_mode="create_savepoint")
 
     # 本地 users 行必须存在——callback 正常路径会 upsert，此处直接落一行等价数据
     user = (await db_session.execute(select(User).where(User.sub == "user-1"))).scalar_one_or_none()
@@ -443,7 +467,7 @@ def test_logout_revokes_chain_and_clears_session() -> None:
     logout = client.post("/api/v1/auth/logout")
     assert logout.status_code == 200
     assert logout.json()["data"]["logged_out"] is True
-    assert idp.last_revoke == refresh_token          # refresh 链已撤销
+    assert idp.last_revoke == refresh_token  # refresh 链已撤销
     assert session_store._sessions.get(sid) is None  # 服务端会话已删除
     assert "bothot_session=" in logout.headers.get("set-cookie", "")
 
@@ -497,6 +521,7 @@ def test_callback_with_idp_error_param_maps_to_10003() -> None:
 # R5.1.1：SSO userinfo iss/aud 校验
 # ---------------------------------------------------------------------------
 
+
 def _settings_with_claims(
     issuer: str = "",
     audience: str = "",
@@ -521,8 +546,9 @@ def _svc_bundle_with_claims(
     client = AideanProviderClient(ISSUER, CLIENT_ID, CLIENT_SECRET, client=http)
     user_store = InMemoryUserStore()
     session_store = InMemorySessionStore()
-    svc = AuthService(client, InMemorySsoStateStore(), session_store, user_store,
-                       _settings_with_claims(issuer, audience))
+    svc = AuthService(
+        client, InMemorySsoStateStore(), session_store, user_store, _settings_with_claims(issuer, audience)
+    )
     return svc, idp, user_store, session_store
 
 
@@ -623,4 +649,3 @@ def test_production_guard_rejects_empty_iss_aud() -> None:
     aud_msg = [v for v in violations if "OIDC_AUDIENCE_EXPECTED" in v]
     assert len(iss_msg) == 1
     assert len(aud_msg) == 1
-

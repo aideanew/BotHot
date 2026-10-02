@@ -58,9 +58,7 @@ def _payload(*pairs: tuple[int, float]) -> str:
     return json.dumps(
         {
             "id": "r-1",
-            "results": [
-                {"index": i, "document": None, "relevance_score": s} for i, s in pairs
-            ],
+            "results": [{"index": i, "document": None, "relevance_score": s} for i, s in pairs],
             "meta": {"tokens": {"input_tokens": 1, "output_tokens": 0}},
         }
     )
@@ -68,9 +66,7 @@ def _payload(*pairs: tuple[int, float]) -> str:
 
 async def test_rerank_request_shape_and_index_backfill() -> None:
     """请求形状（/rerank + Bearer + model/top_n/return_documents）+ 乱序响应按 index 回填原序。"""
-    reranker, seen = _reranker_with(
-        lambda _r: httpx.Response(200, text=_payload((2, 0.9), (0, 0.1), (1, 0.5)))
-    )
+    reranker, seen = _reranker_with(lambda _r: httpx.Response(200, text=_payload((2, 0.9), (0, 0.1), (1, 0.5))))
     scores = await reranker.rerank("问题", ["doc-a", "doc-b", "doc-c"])
     # 原序回填：doc-a=0.1 / doc-b=0.5 / doc-c=0.9（不依赖上游返回顺序）
     assert scores == [0.1, 0.5, 0.9]
@@ -146,9 +142,7 @@ def test_make_reranker_switches() -> None:
     assert isinstance(from_rerank_key, SiliconflowReranker) and from_rerank_key.available()
     from_embedding = make_reranker(_Settings(embedding_api_key="ek"))
     assert isinstance(from_embedding, SiliconflowReranker) and from_embedding.available()
-    dedicated = make_reranker(
-        _Settings(rerank_api_base="https://other/v1", rerank_api_key="k", embedding_api_key="ek")
-    )
+    dedicated = make_reranker(_Settings(rerank_api_base="https://other/v1", rerank_api_key="k", embedding_api_key="ek"))
     assert isinstance(dedicated, SiliconflowReranker)
 
 
@@ -232,7 +226,11 @@ async def test_ask_rerank_failure_falls_back_to_original_order(db_session: Any) 
 
     frames = _frames(client.post("/api/v1/chat/ask", json={"spaceId": space_id, "question": "q"}).text)
     assert [c["title"] for c in frames[0]["citations"]] == [
-        "标题rk-1", "标题rk-2", "标题rk-3", "标题rk-4", "标题rk-5",
+        "标题rk-1",
+        "标题rk-2",
+        "标题rk-3",
+        "标题rk-4",
+        "标题rk-5",
     ]
     assert frames[-1]["type"] == "done"
 

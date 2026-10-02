@@ -74,9 +74,7 @@ async def _asset(db_session, url: str) -> ContentAsset:
     get_by_source_external，永远查空 → ②③ 两用例误判"asset 不存在"。
     """
     source = (
-        await db_session.execute(
-            select(Source).where(Source.type == "wechat_oa", Source.external_id == _biz_anchor())
-        )
+        await db_session.execute(select(Source).where(Source.type == "wechat_oa", Source.external_id == _biz_anchor()))
     ).scalar_one()
     asset = await AssetRepository(db_session).get_by_source_external(source.id, _article_key(url))
     assert asset is not None
@@ -149,7 +147,7 @@ async def test_p0_hash_change_bumps_version_and_stales_old_doc(db_session) -> No
         hit_count=0,
     )
     assert updated is True, "hash 变化应触发 upsert（version+1）"
-    assert asset2.version == old_version + 1, f"version 应递增：{asset2.version} != {old_version+1}"
+    assert asset2.version == old_version + 1, f"version 应递增：{asset2.version} != {old_version + 1}"
     assert asset2.content_hash != old_hash, "hash 应变化（号主改文）"
     assert asset2.hit_count == 0, "新内容版本 hit_count 归零"
 
@@ -201,11 +199,11 @@ async def test_f11_hash_change_stales_docs_across_spaces(db_session) -> None:  #
     asset = await _asset(db_session, URL_A)
     old_version = asset.version  # 须在 upsert 前取：upsert 返回的是同一行实例（identity map）
     docs = dict(
-        (await db_session.execute(
-            select(KnowledgeDocument.space_id, KnowledgeDocument.id).where(
-                KnowledgeDocument.asset_id == asset.id
+        (
+            await db_session.execute(
+                select(KnowledgeDocument.space_id, KnowledgeDocument.id).where(KnowledgeDocument.asset_id == asset.id)
             )
-        )).all()
+        ).all()
     )
     assert set(docs) == {space_a.id, space_b.id}
     await db_session.commit()

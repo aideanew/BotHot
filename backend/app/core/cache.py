@@ -38,7 +38,7 @@ def _get_client() -> Any:
     try:
         import redis.asyncio as aioredis
 
-        _client_inst = aioredis.from_url(url, decode_responses=True)
+        _client_inst = aioredis.from_url(url, decode_responses=True, protocol=2)
         return _client_inst
     except Exception:  # noqa: BLE001 Redis 不可达 → 直穿
         logger.debug("cache: Redis 客户端创建失败，直穿模式", exc_info=True)

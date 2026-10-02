@@ -99,11 +99,13 @@ async def test_ingest_assigns_category_and_docs_expose_it(db_session) -> None:  
     )
     assert created2 is True and asset2.id == asset.id and asset2.category == "产品·商业"
     docs = (
-        await db_session.execute(
-            __import__("sqlalchemy").select(KnowledgeDocument).where(
-                KnowledgeDocument.asset_id == asset.id
+        (
+            await db_session.execute(
+                __import__("sqlalchemy").select(KnowledgeDocument).where(KnowledgeDocument.asset_id == asset.id)
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(docs) >= 1
     await db_session.commit()

@@ -74,9 +74,7 @@ class SyncRunner(Protocol):
     默认走 `SourceSubscriptionService.run_incremental_sync`；测试注入桩以隔离调度算术。
     """
 
-    def __call__(
-        self, session: AsyncSession, sub: SourceSubscription, run_token: str
-    ) -> Awaitable[int]: ...
+    def __call__(self, session: AsyncSession, sub: SourceSubscription, run_token: str) -> Awaitable[int]: ...
 
 
 class DocReconcileFn(Protocol):
@@ -193,9 +191,7 @@ def make_default_doc_reconciler(settings: Settings | None = None) -> DocReconcil
         if not docs:
             return 0
 
-        client = LangBotClient(
-            s.langbot_base_url, s.langbot_admin_username, s.langbot_admin_password
-        )
+        client = LangBotClient(s.langbot_base_url, s.langbot_admin_username, s.langbot_admin_password)
         svc = KnowledgeBaseService(
             client,
             session,
@@ -249,9 +245,7 @@ class IncrementalScheduler:
             if max_backoff_multiplier is not None
             else int(getattr(s, "scheduler_max_backoff_multiplier", 8))
         )
-        self._batch_limit = (
-            batch_limit if batch_limit is not None else int(getattr(s, "scheduler_batch_limit", 100))
-        )
+        self._batch_limit = batch_limit if batch_limit is not None else int(getattr(s, "scheduler_batch_limit", 100))
         self._idle_sleep = (
             idle_sleep_seconds
             if idle_sleep_seconds is not None
@@ -403,9 +397,7 @@ class IncrementalScheduler:
 
     async def _resolve_operator_id(self, session: AsyncSession) -> str | None:
         """取首个 admin 用户 id 作为系统触发 Job 的归属。无 admin → None（跳过）。"""
-        rows = await session.scalars(
-            select(User).where(User.role == "admin").limit(1)
-        )
+        rows = await session.scalars(select(User).where(User.role == "admin").limit(1))
         u = rows.first()
         return u.id if u is not None else None
 
@@ -474,9 +466,7 @@ class IncrementalScheduler:
         await self._reconcile_docs()
         processed = 0
         while processed < self._batch_limit:
-            results = await asyncio.gather(
-                *(self._claim_and_process_one() for _ in range(self._concurrency))
-            )
+            results = await asyncio.gather(*(self._claim_and_process_one() for _ in range(self._concurrency)))
             done = sum(1 for ok in results if ok)
             if not done:
                 break

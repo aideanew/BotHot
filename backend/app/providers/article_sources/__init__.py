@@ -54,9 +54,7 @@ ARTICLE_SOURCE_PROVIDERS: dict[str, type] = {
 }
 
 
-def make_article_source_provider(
-    name: str, settings: Settings
-) -> ArticleSourceProvider:
+def make_article_source_provider(name: str, settings: Settings) -> ArticleSourceProvider:
     """按名称创建文章来源 Provider 实例。
 
     各 Provider 从 settings 读取自己的 API key + base_url。

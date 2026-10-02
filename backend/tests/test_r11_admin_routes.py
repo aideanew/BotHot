@@ -58,9 +58,7 @@ async def _seed(db_session: Any, *, file_id: str = "file-admin") -> dict[str, st
     owner = User(sub="r11-admin-owner", email="r11-admin-owner@r11.test", nickname="owner")
     second = User(sub="r11-admin-second", email="r11-admin-second@r11.test", nickname="second")
     admin = User(sub="r11-admin-admin", email="r11-admin-admin@r11.test", nickname="admin", role="admin")
-    operator = User(
-        sub="r11-admin-operator", email="r11-admin-operator@r11.test", nickname="operator", role="operator"
-    )
+    operator = User(sub="r11-admin-operator", email="r11-admin-operator@r11.test", nickname="operator", role="operator")
     db_session.add_all([owner, second, admin, operator])
     await db_session.flush()
 
@@ -68,39 +66,47 @@ async def _seed(db_session: Any, *, file_id: str = "file-admin") -> dict[str, st
     db_session.add(source)
     await db_session.flush()
 
-    space = KnowledgeSpace(
-        user_id=owner.id, name="租户A空间", langbot_kb_uuid="kb-admin-a", doc_count=1
-    )
-    space_b = KnowledgeSpace(
-        user_id=second.id, name="租户B空间", langbot_kb_uuid="kb-admin-b", doc_count=1
-    )
+    space = KnowledgeSpace(user_id=owner.id, name="租户A空间", langbot_kb_uuid="kb-admin-a", doc_count=1)
+    space_b = KnowledgeSpace(user_id=second.id, name="租户B空间", langbot_kb_uuid="kb-admin-b", doc_count=1)
     db_session.add_all([space, space_b])
     await db_session.flush()
 
     asset_a = ContentAsset(
-        source_id=source.id, external_id="a-1", url="https://mp.weixin.qq.com/s/a1",
-        title="A文章", content_hash="h-a1", content_markdown="# A", category="其他",
+        source_id=source.id,
+        external_id="a-1",
+        url="https://mp.weixin.qq.com/s/a1",
+        title="A文章",
+        content_hash="h-a1",
+        content_markdown="# A",
+        category="其他",
     )
     asset_b = ContentAsset(
-        source_id=source.id, external_id="b-1", url="https://mp.weixin.qq.com/s/b1",
-        title="B文章", content_hash="h-b1", content_markdown="# B", category="其他",
+        source_id=source.id,
+        external_id="b-1",
+        url="https://mp.weixin.qq.com/s/b1",
+        title="B文章",
+        content_hash="h-b1",
+        content_markdown="# B",
+        category="其他",
     )
     db_session.add_all([asset_a, asset_b])
     await db_session.flush()
 
-    doc_a = KnowledgeDocument(
-        asset_id=asset_a.id, space_id=space.id, langbot_file_id=file_id, status="READY"
-    )
-    doc_b = KnowledgeDocument(
-        asset_id=asset_b.id, space_id=space_b.id, langbot_file_id="file-b", status="READY"
-    )
+    doc_a = KnowledgeDocument(asset_id=asset_a.id, space_id=space.id, langbot_file_id=file_id, status="READY")
+    doc_b = KnowledgeDocument(asset_id=asset_b.id, space_id=space_b.id, langbot_file_id="file-b", status="READY")
     db_session.add_all([doc_a, doc_b])
     await db_session.flush()
     await db_session.commit()  # 夹具 savepoint 模式：只释放保存点，外层回滚清场
 
     return {
-        "space": space.id, "space_b": space_b.id, "doc": doc_a.id, "doc_b": doc_b.id,
-        "owner": owner.id, "second": second.id, "admin": admin.id, "operator": operator.id,
+        "space": space.id,
+        "space_b": space_b.id,
+        "doc": doc_a.id,
+        "doc_b": doc_b.id,
+        "owner": owner.id,
+        "second": second.id,
+        "admin": admin.id,
+        "operator": operator.id,
     }
 
 
@@ -109,9 +115,7 @@ def _app(db_session: Any, actor_id: str, kb: FakeKbClient | None = None) -> Test
     app = create_app()
     app.dependency_overrides[get_current_user_id] = lambda: actor_id
     app.dependency_overrides[get_db] = lambda: db_session
-    app.dependency_overrides[get_space_service] = lambda: SpaceService(
-        SpaceRepository(db_session), db_session
-    )
+    app.dependency_overrides[get_space_service] = lambda: SpaceService(SpaceRepository(db_session), db_session)
     if kb is not None:
         app.dependency_overrides[get_langbot_client] = lambda: kb  # type: ignore[arg-type]
     return TestClient(app)
@@ -182,7 +186,9 @@ async def test_admin_patch_space_invalid_id_30004(db_session) -> None:  # type: 
     rows = await _seed(db_session)
     status, code = _hit(
         _app(db_session, rows["admin"], kb=FakeKbClient()),
-        "patch", f"/api/v1/admin/spaces/{SPACE_ID_MISSING}", json={"description": "x"},
+        "patch",
+        f"/api/v1/admin/spaces/{SPACE_ID_MISSING}",
+        json={"description": "x"},
     )
     assert (status, code) == (404, 30004)
 
@@ -224,7 +230,10 @@ async def test_admin_delete_doc_cross_user_engine_first(
     resp = client.delete(f"/api/v1/admin/spaces/{rows['space']}/docs/{rows['doc']}")
     assert resp.status_code == 200, resp.text
     assert resp.json()["data"] == {
-        "ok": True, "docId": rows["doc"], "docs": 1, "assets": 1,
+        "ok": True,
+        "docId": rows["doc"],
+        "docs": 1,
+        "assets": 1,
     }
     assert kb.deleted_files == [("kb-admin-a", "file-admin")]  # 引擎先删且用 langbot_kb_uuid
 
@@ -299,13 +308,9 @@ async def test_admin_routes_role_gate(db_session) -> None:  # type: ignore[no-un
 
     for actor_key in ("owner", "operator"):
         client = _app(db_session, rows[actor_key], kb=FakeKbClient())
-        status, code = _hit(
-            client, "patch", f"/api/v1/admin/spaces/{rows['space']}", json={"description": "越权"}
-        )
+        status, code = _hit(client, "patch", f"/api/v1/admin/spaces/{rows['space']}", json={"description": "越权"})
         assert (status, code) == (403, 10004), actor_key
-        status, code = _hit(
-            client, "delete", f"/api/v1/admin/spaces/{rows['space']}/docs/{rows['doc']}"
-        )
+        status, code = _hit(client, "delete", f"/api/v1/admin/spaces/{rows['space']}/docs/{rows['doc']}")
         assert (status, code) == (403, 10004), actor_key
 
     space = await db_session.get(KnowledgeSpace, rows["space"])
@@ -338,9 +343,7 @@ async def test_user_routes_still_reject_cross_user(db_session) -> None:  # type:
     rows = await _seed(db_session)
     client = _app(db_session, rows["second"], kb=FakeKbClient())
 
-    status, code = _hit(
-        client, "patch", f"/api/v1/spaces/{rows['space']}", json={"description": "越权"}
-    )
+    status, code = _hit(client, "patch", f"/api/v1/spaces/{rows['space']}", json={"description": "越权"})
     assert (status, code) == (404, 30004)
     status, code = _hit(client, "delete", f"/api/v1/spaces/{rows['space']}/docs/{rows['doc']}")
     assert (status, code) == (404, 30004)

@@ -195,9 +195,8 @@ async def test_is_admin_flag_and_admin_gate_agree(db_session) -> None:  # type: 
     """
     for role in ("user", "operator", "admin", "superadmin", ""):
         actor = await _seed_user(db_session, f"r11-agree-{role or 'blank'}", role=role)
-        assert (
-            await sub_has_min_rank(db_session, actor.sub, "admin")
-            is await _allowed(db_session, actor, ("admin",))
+        assert await sub_has_min_rank(db_session, actor.sub, "admin") is await _allowed(
+            db_session, actor, ("admin",)
         ), f"role={role!r} 的回显与门禁结论分歧"
 
 
@@ -246,9 +245,7 @@ async def test_require_roles_dependency_matrix_end_to_end(
         "operator": await _seed_user(db_session, "r11-wire-operator", role="operator"),
         "admin": await _seed_user(db_session, "r11-wire-admin", role="admin"),
         # id = OP_USER：正是「会被写进 allowlist」的形状，锁定收敛后不再生效
-        "allowlisted": await _seed_user(
-            db_session, "r11-wire-allowlisted", role="user", uid=OP_USER
-        ),
+        "allowlisted": await _seed_user(db_session, "r11-wire-allowlisted", role="user", uid=OP_USER),
     }
 
     def _hit(actor: User, path: str) -> tuple[int, int]:

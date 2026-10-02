@@ -30,8 +30,11 @@ class UserSnapshot:
 
 def _to_snapshot(user: User) -> UserSnapshot:
     return UserSnapshot(
-        id=user.id, sub=user.sub, email=user.email,
-        nickname=user.nickname, role=user.role,
+        id=user.id,
+        sub=user.sub,
+        email=user.email,
+        nickname=user.nickname,
+        role=user.role,
     )
 
 

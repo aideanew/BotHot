@@ -82,8 +82,12 @@ def count_of(paragraphs: list[str]) -> int:
 
 def _extracted(**overrides: Any) -> ExtractedContent:
     base = ExtractedContent(
-        title="标题", author="作者", publish_time="2024-06-12T01:00:00+00:00",
-        paragraphs=["段落一", "段落二", "段落三"], images=[], word_count=300,
+        title="标题",
+        author="作者",
+        publish_time="2024-06-12T01:00:00+00:00",
+        paragraphs=["段落一", "段落二", "段落三"],
+        images=[],
+        word_count=300,
         langbot_format="",
     )
     return replace(base, **overrides)
@@ -98,9 +102,7 @@ def test_score_high_quality_passes() -> None:
 def test_score_threshold_boundary_below_30() -> None:
     """边界下侧精确构造：wordCount=50（10）+ 仅标题（10）+ 结构（20）- 重复 3 组（-15）= 25 < 30。"""
     p = ["A段", "A段", "B段", "B段", "C段", "C段"]
-    verdict = score_quality(
-        _extracted(word_count=50, paragraphs=p, publish_time=None, author=None)
-    )
+    verdict = score_quality(_extracted(word_count=50, paragraphs=p, publish_time=None, author=None))
     assert verdict.score == 25
     assert verdict.score < QUALITY_PASS_THRESHOLD
     assert not verdict.passed
@@ -116,17 +118,29 @@ def test_score_threshold_boundary_above_30() -> None:
 
 def test_score_penalties_textless_and_imbalance() -> None:
     """纯图无文本：无结构基准分 + 惩罚 -20（20+20-20=20，不通过）；图片失衡 -10（38，仍通过）。"""
-    textless = score_quality(_extracted(word_count=100, paragraphs=[], images=[
-        ImageInfo(src="https://mmbiz.qpic.cn/a?wx_fmt=png"),
-        ImageInfo(src="https://mmbiz.qpic.cn/b?wx_fmt=png"),
-    ]))
+    textless = score_quality(
+        _extracted(
+            word_count=100,
+            paragraphs=[],
+            images=[
+                ImageInfo(src="https://mmbiz.qpic.cn/a?wx_fmt=png"),
+                ImageInfo(src="https://mmbiz.qpic.cn/b?wx_fmt=png"),
+            ],
+        )
+    )
     assert textless.score == 20  # 长度20 + 元信息20 + 结构0 - 惩罚20
     assert not textless.passed
     assert "纯图片无正文文本" in textless.reasons
 
-    imbalance = score_quality(_extracted(word_count=25, paragraphs=["短"], images=[
-        ImageInfo(src="https://mmbiz.qpic.cn/a?wx_fmt=png"),
-    ]))
+    imbalance = score_quality(
+        _extracted(
+            word_count=25,
+            paragraphs=["短"],
+            images=[
+                ImageInfo(src="https://mmbiz.qpic.cn/a?wx_fmt=png"),
+            ],
+        )
+    )
     assert imbalance.score == 35  # 长度5 + 元信息20 + 结构20 - 失衡10
     assert any("图片占比过高" in r for r in imbalance.reasons)
 
@@ -193,8 +207,16 @@ def test_extract_endpoint_good_quality_includes_quality_fields() -> None:
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert set(data.keys()) == {
-        "title", "author", "publishTime", "paragraphs", "images",
-        "wordCount", "langbotFormat", "qualityScore", "qualityPassed", "qualityReasons",
+        "title",
+        "author",
+        "publishTime",
+        "paragraphs",
+        "images",
+        "wordCount",
+        "langbotFormat",
+        "qualityScore",
+        "qualityPassed",
+        "qualityReasons",
     }
     assert data["qualityPassed"] is True and data["qualityScore"] >= QUALITY_PASS_THRESHOLD
     assert data["qualityReasons"] == []

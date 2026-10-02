@@ -186,8 +186,12 @@ class _StubResolver:
         from app.services.resolver import ResolvedArticle
 
         return ResolvedArticle(
-            title="桩标题", author="桩作者", publish_time="2024-06-12T09:00:00",
-            content="桩正文", url=url, biz="MzSTUB==",
+            title="桩标题",
+            author="桩作者",
+            publish_time="2024-06-12T09:00:00",
+            content="桩正文",
+            url=url,
+            biz="MzSTUB==",
         )
 
 

@@ -76,7 +76,7 @@ class DingtalkPushProvider:
                 return PushResult(
                     "dingtalk",
                     False,
-                    f"钉钉返回错误: {data.get('errmsg','')}",
+                    f"钉钉返回错误: {data.get('errmsg', '')}",
                     json.dumps(data, ensure_ascii=False)[:500],
                     retryable=False,
                 )

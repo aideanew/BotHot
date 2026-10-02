@@ -128,16 +128,39 @@ async def test_allowed_file_ids_source_and_time_window(db_session: Any) -> None:
     src_a = await _seed_source(db_session, "mf-biz-A")
     src_b = await _seed_source(db_session, "mf-biz-B")
     now = datetime.now(UTC)
-    await _seed_doc(db_session, space_id=space_id, source_id=src_a.id, external_id="a-new",
-                    file_id="f-a-new", published_at=now - timedelta(days=2))
-    await _seed_doc(db_session, space_id=space_id, source_id=src_a.id, external_id="a-old",
-                    file_id="f-a-old", published_at=now - timedelta(days=30))
-    await _seed_doc(db_session, space_id=space_id, source_id=src_b.id, external_id="b-new",
-                    file_id="f-b-new", published_at=now - timedelta(days=1))
-    await _seed_doc(db_session, space_id=space_id, source_id=src_a.id, external_id="a-pending",
-                    file_id="f-a-pending", status="FETCHED")
-    await _seed_doc(db_session, space_id=space_id, source_id=src_a.id, external_id="a-nofid",
-                    file_id="")
+    await _seed_doc(
+        db_session,
+        space_id=space_id,
+        source_id=src_a.id,
+        external_id="a-new",
+        file_id="f-a-new",
+        published_at=now - timedelta(days=2),
+    )
+    await _seed_doc(
+        db_session,
+        space_id=space_id,
+        source_id=src_a.id,
+        external_id="a-old",
+        file_id="f-a-old",
+        published_at=now - timedelta(days=30),
+    )
+    await _seed_doc(
+        db_session,
+        space_id=space_id,
+        source_id=src_b.id,
+        external_id="b-new",
+        file_id="f-b-new",
+        published_at=now - timedelta(days=1),
+    )
+    await _seed_doc(
+        db_session,
+        space_id=space_id,
+        source_id=src_a.id,
+        external_id="a-pending",
+        file_id="f-a-pending",
+        status="FETCHED",
+    )
+    await _seed_doc(db_session, space_id=space_id, source_id=src_a.id, external_id="a-nofid", file_id="")
     repo = DocumentRepository(db_session)
 
     assert await repo.allowed_file_ids(space_id) == {"f-a-new", "f-a-old", "f-b-new"}
@@ -154,12 +177,25 @@ async def test_allowed_file_ids_space_isolation_and_created_fallback(db_session:
     _, space_b = await _seed_space(db_session, sub="sub-mf-repo-2b", name="过滤空间B")
     src = await _seed_source(db_session, "mf-biz-C")
     now = datetime.now(UTC)
-    await _seed_doc(db_session, space_id=space_a, source_id=src.id, external_id="c-fresh",
-                    file_id="f-c-fresh", asset_created_at=now - timedelta(days=1))
-    await _seed_doc(db_session, space_id=space_a, source_id=src.id, external_id="c-stale",
-                    file_id="f-c-stale", asset_created_at=now - timedelta(days=30))
-    await _seed_doc(db_session, space_id=space_b, source_id=src.id, external_id="c-other",
-                    file_id="f-c-other", published_at=now)
+    await _seed_doc(
+        db_session,
+        space_id=space_a,
+        source_id=src.id,
+        external_id="c-fresh",
+        file_id="f-c-fresh",
+        asset_created_at=now - timedelta(days=1),
+    )
+    await _seed_doc(
+        db_session,
+        space_id=space_a,
+        source_id=src.id,
+        external_id="c-stale",
+        file_id="f-c-stale",
+        asset_created_at=now - timedelta(days=30),
+    )
+    await _seed_doc(
+        db_session, space_id=space_b, source_id=src.id, external_id="c-other", file_id="f-c-other", published_at=now
+    )
     repo = DocumentRepository(db_session)
     since = now - timedelta(days=7)
 
@@ -175,10 +211,22 @@ async def _endpoint_seed(session: Any, *, sub: str, name: str) -> tuple[str, str
     src_a = await _seed_source(session, f"{sub}-A")
     src_b = await _seed_source(session, f"{sub}-B")
     now = datetime.now(UTC)
-    await _seed_doc(session, space_id=space_id, source_id=src_a.id, external_id="ep-a",
-                    file_id="f-ep-a", published_at=now - timedelta(days=1))
-    await _seed_doc(session, space_id=space_id, source_id=src_b.id, external_id="ep-b",
-                    file_id="f-ep-b", published_at=now - timedelta(days=1))
+    await _seed_doc(
+        session,
+        space_id=space_id,
+        source_id=src_a.id,
+        external_id="ep-a",
+        file_id="f-ep-a",
+        published_at=now - timedelta(days=1),
+    )
+    await _seed_doc(
+        session,
+        space_id=space_id,
+        source_id=src_b.id,
+        external_id="ep-b",
+        file_id="f-ep-b",
+        published_at=now - timedelta(days=1),
+    )
     return user_id, space_id, src_a, src_b
 
 
@@ -241,8 +289,14 @@ async def test_ask_without_filters_all_untracked_reports_no_content(db_session: 
     """全部命中孤儿 → 空候选：meta 空引用 + error 30002，不由 LLM 就孤儿内容自由作答。"""
     user_id, space_id = await _seed_space(db_session, sub="sub-mf-ep-6", name="端点全孤儿空间")
     src = await _seed_source(db_session, "sub-mf-ep-6-A")
-    await _seed_doc(db_session, space_id=space_id, source_id=src.id, external_id="ep-real",
-                    file_id="f-ep-real", published_at=datetime.now(UTC))
+    await _seed_doc(
+        db_session,
+        space_id=space_id,
+        source_id=src.id,
+        external_id="ep-real",
+        file_id="f-ep-real",
+        published_at=datetime.now(UTC),
+    )
     stub = _RecordingLangBot(_results("f-orphan-1", "f-orphan-2"))
     client = _client(db_session, stub, user_id)
 
@@ -257,8 +311,14 @@ async def test_ask_filter_with_no_candidate_reports_no_content(db_session: Any) 
     user_id, space_id = await _seed_space(db_session, sub="sub-mf-ep-3", name="端点空候选空间")
     src = await _seed_source(db_session, "sub-mf-ep-3-A")
     now = datetime.now(UTC)
-    await _seed_doc(db_session, space_id=space_id, source_id=src.id, external_id="ep-old",
-                    file_id="f-ep-old", published_at=now - timedelta(days=40))
+    await _seed_doc(
+        db_session,
+        space_id=space_id,
+        source_id=src.id,
+        external_id="ep-old",
+        file_id="f-ep-old",
+        published_at=now - timedelta(days=40),
+    )
     stub = _RecordingLangBot(_results("f-ep-old"))
     client = _client(db_session, stub, user_id)
 

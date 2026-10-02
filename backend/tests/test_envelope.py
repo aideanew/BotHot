@@ -84,9 +84,7 @@ def test_unexpected_exception_returns_5xxxx_envelope() -> None:
         (DependencyUnavailableError("主平台不可达"), 50002, 503),
     ],
 )
-def test_app_error_maps_to_http_status(
-    exc: AppError, expected_code: int, expected_status: int
-) -> None:
+def test_app_error_maps_to_http_status(exc: AppError, expected_code: int, expected_status: int) -> None:
     """各段位错误码到 HTTP 状态的映射（登记表中的 15 码语义不变）。"""
     client = TestClient(_app_with_raising(exc), raise_server_exceptions=False)
     resp = client.get("/api/v1/system/_boom")

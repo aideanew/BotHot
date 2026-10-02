@@ -45,9 +45,7 @@ LONG_KEY = "long-key-001"
 
 # T2.7 自身命名空间（清理夹具按此收敛，绝不触碰命名空间外数据）
 # DSN 允许环境变量覆盖：CI 无 PG 时走 skip 分支，本地/CI service container 可指向他处
-PG_DSN = os.environ.get(
-    "AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot"
-)
+PG_DSN = os.environ.get("AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot")
 _T27_USER_SUBS = ("sub-t27-idem", "sub-t27-race", "sub-t27-f22")
 _T27_ASSET_KEYS = (SHORT_KEY, LONG_KEY)
 _T27_SOURCE_BIZ = "MjM5MjgwNTQ1MQ=="
@@ -96,9 +94,7 @@ def _purge_t27() -> None:
             )
             # 用户级联清 spaces/subscriptions/jobs/job_items/docs（FK ondelete=CASCADE）
             conn.execute(text("DELETE FROM users WHERE sub = ANY(:ss)"), {"ss": list(_T27_USER_SUBS)})
-            conn.execute(
-                text("DELETE FROM knowledge_spaces WHERE name LIKE :p"), {"p": f"{_T27_SPACE_PREFIX}%"}
-            )
+            conn.execute(text("DELETE FROM knowledge_spaces WHERE name LIKE :p"), {"p": f"{_T27_SPACE_PREFIX}%"})
             # 孤儿 source（ingest 自动建，FK 指向 sources 的资产已删）
             conn.execute(
                 text(
@@ -148,9 +144,7 @@ async def _seeder(db_session, name: str):
     user = await store.upsert_by_sub("sub-t27-idem", "t27@test.local", "T27")
     space = (
         await db_session.execute(
-            select(KnowledgeSpace).where(
-                KnowledgeSpace.user_id == user.id, KnowledgeSpace.name == name
-            )
+            select(KnowledgeSpace).where(KnowledgeSpace.user_id == user.id, KnowledgeSpace.name == name)
         )
     ).scalar_one_or_none()
     if space is None:
@@ -168,6 +162,7 @@ async def _count_rows(db_session, model, *where) -> int:
 
 # ---------- ① 短链映射层 ----------
 
+
 async def test_short_link_map_created_and_reused_zero_fetch(db_session) -> None:  # type: ignore[no-untyped-def]
     """短链首抓落映射；二次同短链 0 抓取（映射 + READY 复用双链生效）。"""
     user, space = await _seeder(db_session, "T27短链空间")
@@ -180,18 +175,14 @@ async def test_short_link_map_created_and_reused_zero_fetch(db_session) -> None:
 
     # 映射落库（short → long article_key）
     mapping = (
-        await db_session.execute(
-            select(ShortLinkMap).where(ShortLinkMap.short_key == SHORT_KEY)
-        )
+        await db_session.execute(select(ShortLinkMap).where(ShortLinkMap.short_key == SHORT_KEY))
     ).scalar_one_or_none()
     assert mapping is not None, "短链映射应落库"
     assert mapping.article_key == LONG_KEY
 
     # 资产落库键 = 长链末段（与 _persist_document 口径一致）
     asset = (
-        await db_session.execute(
-            select(ContentAsset).where(ContentAsset.external_id == LONG_KEY)
-        )
+        await db_session.execute(select(ContentAsset).where(ContentAsset.external_id == LONG_KEY))
     ).scalar_one_or_none()
     assert asset is not None, "资产应按长链 article_key 落库"
 
@@ -203,6 +194,7 @@ async def test_short_link_map_created_and_reused_zero_fetch(db_session) -> None:
 
 # ---------- ②③ READY 缓存 + uq 单 doc 收敛 ----------
 
+
 async def test_full_chain_double_ingest_single_doc_row(db_session) -> None:  # type: ignore[no-untyped-def]
     """全链：同 URL 二次 ingest → 恒单 asset + 单 doc（uq_doc_asset_space 应用级收敛）。"""
     user, space = await _seeder(db_session, "T27全链空间")
@@ -213,17 +205,18 @@ async def test_full_chain_double_ingest_single_doc_row(db_session) -> None:  # t
     await svc.ingest_url(space.id, LONG_URL)
     assert resolver.fetch_count == 1  # 二次 0 抓取
 
-    asset = (
-        await db_session.execute(select(ContentAsset).where(ContentAsset.external_id == LONG_KEY))
-    ).scalar_one()
+    asset = (await db_session.execute(select(ContentAsset).where(ContentAsset.external_id == LONG_KEY))).scalar_one()
     doc_count = await _count_rows(
-        db_session, KnowledgeDocument,
-        KnowledgeDocument.asset_id == asset.id, KnowledgeDocument.space_id == space.id,
+        db_session,
+        KnowledgeDocument,
+        KnowledgeDocument.asset_id == asset.id,
+        KnowledgeDocument.space_id == space.id,
     )
     assert doc_count == 1, f"uq_doc_asset_space 应保证单 doc，实际 {doc_count}"
 
 
 # ---------- ④ version+1 superseded（并入全链：改文路径） ----------
+
 
 async def test_content_change_bumps_version_and_stales(db_session) -> None:  # type: ignore[no-untyped-def]
     """号主改文（hash 变化）→ version+1 + 旧 doc FAILED/superseded（T2.7 回归锁定）。"""
@@ -233,9 +226,7 @@ async def test_content_change_bumps_version_and_stales(db_session) -> None:  # t
     svc = _svc(db_session, _CountingStubResolver())
     await svc.ingest_url(space.id, LONG_URL)
 
-    asset0 = (
-        await db_session.execute(select(ContentAsset).where(ContentAsset.external_id == LONG_KEY))
-    ).scalar_one()
+    asset0 = (await db_session.execute(select(ContentAsset).where(ContentAsset.external_id == LONG_KEY))).scalar_one()
     old_version = asset0.version
     old_doc_id = (
         await db_session.execute(
@@ -273,6 +264,7 @@ async def test_content_change_bumps_version_and_stales(db_session) -> None:  # t
 
 # ---------- ⑤ 公共库 copy 幂等 ----------
 
+
 async def test_public_copy_second_link_all_skipped(db_session) -> None:  # type: ignore[no-untyped-def]
     """公共库 link 幂等：二次 link 已 copy 的 doc 全 skipped（copied=0, skipped≥1）。"""
     owner, pub_space = await _seeder(db_session, "T27公共空间")
@@ -280,9 +272,7 @@ async def test_public_copy_second_link_all_skipped(db_session) -> None:  # type:
     pub_name = "T27公共库系统空间"
     pub_space = (
         await db_session.execute(
-            select(KnowledgeSpace).where(
-                KnowledgeSpace.user_id == owner.id, KnowledgeSpace.name == pub_name
-            )
+            select(KnowledgeSpace).where(KnowledgeSpace.user_id == owner.id, KnowledgeSpace.name == pub_name)
         )
     ).scalar_one_or_none()
     if pub_space is None:
@@ -315,37 +305,28 @@ async def test_public_copy_empty_public_space_copies_nothing(db_session) -> None
     也违背本模块「不误抄全局其他资产」的契约口径。
     """
     # 干扰项：另一用户空间的私有 READY 资产——旧实现下会被错误抄走
-    stranger = await SqlAlchemyUserStore(db_session).upsert_by_sub(
-        "sub-t27-f22", "f22@test.local", "F22"
-    )
-    stranger_space = await SpaceRepository(db_session).create(
-        user_id=stranger.id, name="T27F22私有空间"
-    )
+    stranger = await SqlAlchemyUserStore(db_session).upsert_by_sub("sub-t27-f22", "f22@test.local", "F22")
+    stranger_space = await SpaceRepository(db_session).create(user_id=stranger.id, name="T27F22私有空间")
     await _svc(db_session, _CountingStubResolver()).ingest_url(stranger_space.id, LONG_URL)
 
     pub_owner, _ = await _seeder(db_session, "T27F22空公共库")
-    pub_space = await SpaceRepository(db_session).create_public_space(
-        pub_owner.id, "T27F22空公共库系统空间"
-    )
+    pub_space = await SpaceRepository(db_session).create_public_space(pub_owner.id, "T27F22空公共库系统空间")
     target_user, target = await _seeder(db_session, "T27F22目标空间")
     await db_session.commit()
 
-    result = await PublicLibraryService(db_session).link_public_space(
-        target_user.id, target.id, pub_space.id
-    )
+    result = await PublicLibraryService(db_session).link_public_space(target_user.id, target.id, pub_space.id)
     assert result == {"copied": 0, "skipped": 0, "total": 0}, result
 
     copied = (
         await db_session.execute(
-            select(func.count())
-            .select_from(KnowledgeDocument)
-            .where(KnowledgeDocument.space_id == target.id)
+            select(func.count()).select_from(KnowledgeDocument).where(KnowledgeDocument.space_id == target.id)
         )
     ).scalar_one()
     assert copied == 0, f"空公共空间不得抄任何 doc（含他人私有资产），实际 {copied} 篇"
 
 
 # ---------- ⑥ 并发竞态收敛 ----------
+
 
 async def test_concurrent_same_url_converges(db_session) -> None:  # type: ignore[no-untyped-def]
     """同 URL 并发 ingest → 收敛为单 asset + 单 doc，无未捕获 IntegrityError 冒泡（竞态兜底）。
@@ -369,9 +350,7 @@ async def test_concurrent_same_url_converges(db_session) -> None:  # type: ignor
         user = await store.upsert_by_sub("sub-t27-race", "t27race@test.local", "T27RACE")
         space = (
             await setup.execute(
-                select(KnowledgeSpace).where(
-                    KnowledgeSpace.user_id == user.id, KnowledgeSpace.name == "T27竞态空间"
-                )
+                select(KnowledgeSpace).where(KnowledgeSpace.user_id == user.id, KnowledgeSpace.name == "T27竞态空间")
             )
         ).scalar_one_or_none()
         if space is None:
@@ -401,25 +380,17 @@ async def test_concurrent_same_url_converges(db_session) -> None:  # type: ignor
             select(func.count()).select_from(ContentAsset).where(ContentAsset.external_id == LONG_KEY)
         ).scalar_one()
         final_docs = conn.execute(
-            select(func.count()).select_from(KnowledgeDocument).where(
-                KnowledgeDocument.space_id == space_id
-            )
+            select(func.count()).select_from(KnowledgeDocument).where(KnowledgeDocument.space_id == space_id)
         ).scalar_one()
 
     # 清理（零残留）：doc → asset → source → space → user
     # 注：必须用 RaceSession（异步工厂）；模块级 Session 是同步会话，await 必炸
     cleanup = RaceSession()
     try:
+        await cleanup.execute(KnowledgeDocument.__table__.delete().where(KnowledgeDocument.space_id == space_id))
+        await cleanup.execute(ContentAsset.__table__.delete().where(ContentAsset.external_id == LONG_KEY))
         await cleanup.execute(
-            KnowledgeDocument.__table__.delete().where(KnowledgeDocument.space_id == space_id)
-        )
-        await cleanup.execute(
-            ContentAsset.__table__.delete().where(ContentAsset.external_id == LONG_KEY)
-        )
-        await cleanup.execute(
-            Source.__table__.delete().where(
-                Source.type == "wechat_oa", Source.external_id == _T27_SOURCE_BIZ
-            )
+            Source.__table__.delete().where(Source.type == "wechat_oa", Source.external_id == _T27_SOURCE_BIZ)
         )
         await cleanup.execute(KnowledgeSpace.__table__.delete().where(KnowledgeSpace.id == space_id))
         await cleanup.execute(User.__table__.delete().where(User.id == user_id))

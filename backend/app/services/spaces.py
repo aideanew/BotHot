@@ -133,9 +133,7 @@ class SpaceService:
 
     # ------------------------------------------------------------------ 写路径
 
-    async def create_space(
-        self, user_id: str, name: str, description: str = ""
-    ) -> KnowledgeSpace:
+    async def create_space(self, user_id: str, name: str, description: str = "") -> KnowledgeSpace:
         """创建空间；重名 IntegrityError → 30006（v0.3a，Service 层映射契约）。
 
         R0.5.2（F-4）：description 落库——此前契约声明该字段但 Service 只取 name，
@@ -143,9 +141,7 @@ class SpaceService:
         self._validate_name(name)
         self._validate_description(description)
         try:
-            space = await self._repo.create(
-                user_id=user_id, name=name, description=description
-            )
+            space = await self._repo.create(user_id=user_id, name=name, description=description)
             await self._commit()  # B-T8R：漏 commit → 请求末回滚 → 空间不持久化
             return space
         except IntegrityError as exc:
@@ -170,9 +166,7 @@ class SpaceService:
         """
         return await self._update_space(space_id, description)
 
-    async def _update_space(
-        self, space_id: str, description: str, owner: str | None = None
-    ) -> dict:
+    async def _update_space(self, space_id: str, description: str, owner: str | None = None) -> dict:
         """简介写路径单一实现。owner=None 表示无归属约束（/admin 跨用户路径）。
 
         两条入口的全部差异就是这一处判据，不另写一份实现——否则简介校验顺序与
@@ -392,8 +386,7 @@ class SpaceService:
             if exc.upstream_status != 405:
                 raise
             logger.warning(
-                "引擎无文件级删除路由（405），继续删本地行（B25 已挡检索越界）: "
-                "kb_file=%s engine=%s",
+                "引擎无文件级删除路由（405），继续删本地行（B25 已挡检索越界）: kb_file=%s engine=%s",
                 file_id,
                 engine,
             )
@@ -633,17 +626,13 @@ class SpaceService:
         ids = await self._normalize_doc_ids(raw_ids)
         _space, docs = await self._resolve_owned_docs(space_id, ids, owner=owner)
 
-        await AssetRepository(self._session_or_raise()).set_category_many(
-            [doc.asset_id for doc in docs], category
-        )
+        await AssetRepository(self._session_or_raise()).set_category_many([doc.asset_id for doc in docs], category)
         await self._commit()
         return {"requested": len(ids), "docs": len(ids), "category": category or DEFAULT_CATEGORY}
 
     # ------------------------------------------------------------------ 读路径（v0.3 视图）
 
-    async def list_space_views(
-        self, user_id: str, *, limit: int = 50, offset: int = 0
-    ) -> tuple[list[dict], int]:
+    async def list_space_views(self, user_id: str, *, limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
         """GET /spaces → data.items 形状。
 
         AB-P004 P4：追加 engine/engineKbId/isPublic（ADR-0004 空间视图增量）。
@@ -655,9 +644,7 @@ class SpaceService:
         counts = await self._repo.count_docs_many([s.id for s in spaces])
         return [self._space_view(s, counts.get(s.id, 0)) for s in spaces], total
 
-    async def list_space_views_any(
-        self, *, limit: int = 50, offset: int = 0
-    ) -> tuple[list[dict], int]:
+    async def list_space_views_any(self, *, limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
         """GET /admin/spaces → 跨用户全量空间视图，每条带归属（批次 2 读面）。
 
         与 list_space_views 的全部差异只在归属约束：既有端点经 list_by_user 硬过滤本人，
@@ -733,9 +720,7 @@ class SpaceService:
         R0.1.1：可选 category 过滤——哨兵 `__uncategorized__` 在本层译为空串精确匹配
         （库里不存哨兵值）；未登记的取值合法地返回空列表，读路径不设校验闸门。
         """
-        return await self._list_space_docs(
-            space_id, limit=limit, offset=offset, category=category, owner=user_id
-        )
+        return await self._list_space_docs(space_id, limit=limit, offset=offset, category=category, owner=user_id)
 
     async def list_space_docs_any(
         self,
@@ -770,9 +755,7 @@ class SpaceService:
         if space is None or (owner is not None and space.user_id != owner):
             raise ResourceNotFoundError(space_id)
         filtered = "" if category == UNCATEGORIZED else category
-        rows = await self._repo.list_docs(
-            space_id, limit=limit, offset=offset, category=filtered
-        )
+        rows = await self._repo.list_docs(space_id, limit=limit, offset=offset, category=filtered)
         total = await self._repo.count_docs(space_id, category=filtered)
         items = [
             {

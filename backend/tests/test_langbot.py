@@ -52,19 +52,28 @@ def _lb_transport() -> tuple[httpx.MockTransport, dict[str, list[tuple[str, str]
         if path == "/api/v1/knowledge/engines":
             return httpx.Response(
                 200,
-                json={"code": 0, "data": {"engines": [
-                    {"plugin_id": "langbot-team/LangRAG", "capabilities": ["doc_ingestion"]}
-                ]}},
+                json={
+                    "code": 0,
+                    "data": {"engines": [{"plugin_id": "langbot-team/LangRAG", "capabilities": ["doc_ingestion"]}]},
+                },
             )
         if path == "/api/v1/provider/models/embedding":
             from app.core.config import get_settings
 
             return httpx.Response(
                 200,
-                json={"code": 0, "data": {"models": [
-                    {"uuid": "emb-1", "name": "bge-m3",
-                     "provider": {"base_url": get_settings().embedding_api_base.rstrip("/")}}
-                ]}},
+                json={
+                    "code": 0,
+                    "data": {
+                        "models": [
+                            {
+                                "uuid": "emb-1",
+                                "name": "bge-m3",
+                                "provider": {"base_url": get_settings().embedding_api_base.rstrip("/")},
+                            }
+                        ]
+                    },
+                },
             )
         if path == "/api/v1/knowledge/bases" and request.method == "POST":
             return httpx.Response(200, json={"uuid": state["kb"]})
@@ -125,9 +134,7 @@ def test_401_relogin_retry() -> None:
             return httpx.Response(401)
         return httpx.Response(200, json={"data": [{"plugin_id": "x"}]})
 
-    client = LangBotClient(
-        BASE, "a", "b", http=httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    )
+    client = LangBotClient(BASE, "a", "b", http=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
     import anyio
 
     assert anyio.run(client.list_engines)[0]["plugin_id"] == "x"
@@ -146,9 +153,7 @@ def test_error_mapping_404_4xx_5xx_network() -> None:
                 raise httpx.ConnectError("boom")
             return httpx.Response(status, json={"message": "err"})
 
-        return LangBotClient(
-            BASE, "a", "b", http=httpx.AsyncClient(transport=httpx.MockTransport(handler))
-        )
+        return LangBotClient(BASE, "a", "b", http=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
 
     with pytest.raises(ResourceNotFoundError):
         anyio.run(make(404).list_engines)
@@ -230,19 +235,28 @@ def _counter_lb_transport() -> tuple[httpx.MockTransport, dict[str, list[tuple[s
         if path == "/api/v1/knowledge/engines":
             return httpx.Response(
                 200,
-                json={"code": 0, "data": {"engines": [
-                    {"plugin_id": "langbot-team/LangRAG", "capabilities": ["doc_ingestion"]}
-                ]}},
+                json={
+                    "code": 0,
+                    "data": {"engines": [{"plugin_id": "langbot-team/LangRAG", "capabilities": ["doc_ingestion"]}]},
+                },
             )
         if path == "/api/v1/provider/models/embedding":
             from app.core.config import get_settings
 
             return httpx.Response(
                 200,
-                json={"code": 0, "data": {"models": [
-                    {"uuid": "emb-1", "name": "bge-m3",
-                     "provider": {"base_url": get_settings().embedding_api_base.rstrip("/")}}
-                ]}},
+                json={
+                    "code": 0,
+                    "data": {
+                        "models": [
+                            {
+                                "uuid": "emb-1",
+                                "name": "bge-m3",
+                                "provider": {"base_url": get_settings().embedding_api_base.rstrip("/")},
+                            }
+                        ]
+                    },
+                },
             )
         if path == "/api/v1/knowledge/bases" and method == "POST":
             return httpx.Response(200, json={"uuid": state["kb"]})
@@ -254,9 +268,7 @@ def _counter_lb_transport() -> tuple[httpx.MockTransport, dict[str, list[tuple[s
         if path == f"/api/v1/knowledge/bases/{state['kb']}/files" and method == "GET":
             return httpx.Response(
                 200,
-                json={"code": 0, "data": {"files": [
-                    {"file_name": f"lb-file-{state['n']}", "status": "processing"}
-                ]}},
+                json={"code": 0, "data": {"files": [{"file_name": f"lb-file-{state['n']}", "status": "processing"}]}},
             )
         return httpx.Response(404, json={"message": "not found"})
 
@@ -508,9 +520,9 @@ def test_ingest_status_endpoint_failed_maps_30003_502() -> None:
 
 def test_ingest_status_endpoint_bad_space_maps_30004_readable() -> None:
     """30004/404：无效空间/文档，message 可读不裸 UUID（不泄露存在性）。"""
-    resp = _ingest_endpoint_client(
-        _StubKBService(ResourceNotFoundError("0f0e9d8c7b6a49388a7b6c5d4e3f2a1b"))
-    ).get("/api/v1/spaces/s1/docs/doc-1/status")
+    resp = _ingest_endpoint_client(_StubKBService(ResourceNotFoundError("0f0e9d8c7b6a49388a7b6c5d4e3f2a1b"))).get(
+        "/api/v1/spaces/s1/docs/doc-1/status"
+    )
     assert resp.status_code == 404
     body = resp.json()
     assert body["code"] == 30004

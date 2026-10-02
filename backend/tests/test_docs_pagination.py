@@ -114,15 +114,11 @@ async def test_list_space_docs_category_filter_matches_total(db_session):  # typ
     assert {r["category"] for r in items} == {"AI·技术"}
 
     # 分页 + 过滤：total 仍是过滤后的数（不是全量 3）
-    items_p, total_p = await svc.list_space_docs(
-        user.id, space.id, limit=1, offset=0, category="AI·技术"
-    )
+    items_p, total_p = await svc.list_space_docs(user.id, space.id, limit=1, offset=0, category="AI·技术")
     assert len(items_p) == 1 and total_p == 2
 
     # 未登记的取值：读路径不设校验闸门，合法地返回空列表
-    items_none, total_none = await svc.list_space_docs(
-        user.id, space.id, category="随手写的标签"
-    )
+    items_none, total_none = await svc.list_space_docs(user.id, space.id, category="随手写的标签")
     assert items_none == [] and total_none == 0
 
     # 不传参数：向后兼容全量
@@ -177,7 +173,7 @@ async def test_list_doc_categories_returns_existing_only(db_session):  # type: i
 
     svc = SpaceService(SpaceRepository(db_session))
     assert await svc.list_doc_categories(user.id, space.id) == [
-        "AI·技术",      # 按 CATEGORIES 声明序，而非入库顺序
+        "AI·技术",  # 按 CATEGORIES 声明序，而非入库顺序
         "教程·实践",
         UNCATEGORIZED,  # 未分类以哨兵置末
     ]
@@ -201,9 +197,12 @@ async def test_list_pending_ingest_only_nonterminal_with_file_id(db_session) -> 
     src = await _seed_source(db_session, "pg-pending-biz")
     assets = [
         ContentAsset(
-            source_id=src.id, external_id=f"pg-pend-{c}",
-            url=f"https://mp.weixin.qq.com/s/pg-pend-{c}", title=f"标题{c}",
-            content_hash=f"hash-{c}", content_markdown="# 正文",
+            source_id=src.id,
+            external_id=f"pg-pend-{c}",
+            url=f"https://mp.weixin.qq.com/s/pg-pend-{c}",
+            title=f"标题{c}",
+            content_hash=f"hash-{c}",
+            content_markdown="# 正文",
             published_at=datetime.now(UTC),
         )
         for c in "abc"
@@ -213,11 +212,11 @@ async def test_list_pending_ingest_only_nonterminal_with_file_id(db_session) -> 
 
     repo = DocumentRepository(db_session)
     docs = [await repo.create(asset_id=a.id, space_id=space.id) for a in assets]
-    await repo.set_status(docs[0].id, "FETCHED")                     # 无 file_id → 排除
+    await repo.set_status(docs[0].id, "FETCHED")  # 无 file_id → 排除
     await repo.set_status(docs[1].id, "INDEXED")
-    await repo.set_langbot_file_id(docs[1].id, "file-1")            # 唯一候选
+    await repo.set_langbot_file_id(docs[1].id, "file-1")  # 唯一候选
     await repo.set_status(docs[2].id, "READY")
-    await repo.set_langbot_file_id(docs[2].id, "file-2")           # 已就绪 → 排除
+    await repo.set_langbot_file_id(docs[2].id, "file-2")  # 已就绪 → 排除
     await db_session.flush()
 
     pending = await repo.list_pending_ingest()

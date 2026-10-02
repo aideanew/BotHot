@@ -79,13 +79,9 @@ def master_key(settings: Settings | None = None) -> bytes:
     try:
         key = base64.b64decode(raw, validate=True)
     except (binascii.Error, ValueError) as exc:
-        raise DependencyUnavailableError(
-            "ENGINE_KEY_MASTER_KEY 不是合法 base64，无法登记或读取引擎 Key"
-        ) from exc
+        raise DependencyUnavailableError("ENGINE_KEY_MASTER_KEY 不是合法 base64，无法登记或读取引擎 Key") from exc
     if len(key) != _KEY_BYTES:
-        raise DependencyUnavailableError(
-            f"ENGINE_KEY_MASTER_KEY 需 {_KEY_BYTES} 字节（AES-256），当前 {len(key)} 字节"
-        )
+        raise DependencyUnavailableError(f"ENGINE_KEY_MASTER_KEY 需 {_KEY_BYTES} 字节（AES-256），当前 {len(key)} 字节")
     return key
 
 
@@ -110,9 +106,7 @@ def decrypt_secret(engine: str, secret_ref: str, master: bytes) -> str:
     """
     try:
         nonce_b64, ct_b64 = secret_ref.split(".", 1)
-        plaintext = AESGCM(master).decrypt(
-            base64.b64decode(nonce_b64), base64.b64decode(ct_b64), engine.encode()
-        )
+        plaintext = AESGCM(master).decrypt(base64.b64decode(nonce_b64), base64.b64decode(ct_b64), engine.encode())
     except (InvalidTag, LookupError, ValueError, binascii.Error, TypeError) as exc:
         # InvalidTag 直连 Exception（不继承 ValueError）：AAD 不匹配时若漏接，
         # 搬移密文的攻击会以未处理异常(500)而非 fail-closed 告终，必须显式列入。

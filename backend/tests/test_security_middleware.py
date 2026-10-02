@@ -264,9 +264,7 @@ def test_rate_limit_window_bucket_is_configured_window() -> None:
 
     _client().get(CHAT_PATH)
 
-    assert {window for _, window in counter.calls} == {
-        get_settings().rate_limit_window_seconds
-    }
+    assert {window for _, window in counter.calls} == {get_settings().rate_limit_window_seconds}
 
 
 # ═══════════════════════════════════════════════════════ B.2 请求体上限
@@ -276,9 +274,7 @@ def test_body_limit_413_by_content_length() -> None:
     """Content-Length 预检：超限直接 413，不进业务路由。"""
     sec.set_rate_limit_counter(_ScriptedCounter(1))
     limit = get_settings().max_request_body_bytes
-    resp = _client().post(
-        "/api/v1/system/_w7_echo", content=b"x" * (limit + 1024)
-    )
+    resp = _client().post("/api/v1/system/_w7_echo", content=b"x" * (limit + 1024))
 
     assert resp.status_code == 413
     body = resp.json()
@@ -327,9 +323,7 @@ def test_body_limit_is_transparent_for_body_methods_under_limit() -> None:
 def test_body_limit_ignores_get() -> None:
     """GET/HEAD 无请求体，不进缓冲路径（省一次读取）。"""
     stack = sec.BodyLimitMiddleware(_noop_app, max_bytes=1)
-    sent = asyncio.run(
-        _drive(stack, [], method="GET", headers=[])
-    )
+    sent = asyncio.run(_drive(stack, [], method="GET", headers=[]))
     assert sent[0]["status"] == 200
 
 
@@ -537,10 +531,7 @@ def test_push_web_reuses_shared_redis_client(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setitem(sec._redis_clients, url, _FakeRedis())
 
     provider = WebPushProvider()
-    results = [
-        asyncio.run(provider.push(PushMessage(external_user_id="u7", message="hi")))
-        for _ in range(2)
-    ]
+    results = [asyncio.run(provider.push(PushMessage(external_user_id="u7", message="hi"))) for _ in range(2)]
 
     assert all(result.delivered for result in results)
     assert len(published) == 2
@@ -690,7 +681,7 @@ def test_security_workflow_declares_all_four_scanners() -> None:
 def test_security_workflow_scan_steps_do_not_short_circuit_each_other() -> None:
     """四个扫描步骤都 continue-on-error：一步失败不得吞掉其余三步（裁决收归末尾汇总门禁）。"""
     text = _SECURITY_YML.read_text(encoding="utf-8")
-    scan_chunks = [c for c in _step_chunks(text) if c.split("\n")[0].strip().startswith("- name: \"")]
+    scan_chunks = [c for c in _step_chunks(text) if c.split("\n")[0].strip().startswith('- name: "')]
     assert len(scan_chunks) == 4, f"应有 4 个带引号编号的扫描步骤，实际 {len(scan_chunks)}"
     for chunk in scan_chunks:
         assert "continue-on-error: true" in chunk, f"扫描步骤缺少 continue-on-error：{chunk.splitlines()[0]}"
@@ -771,7 +762,7 @@ def test_rotate_keys_defaults_to_dry_run_and_requires_explicit_apply() -> None:
     assert _ROTATE_SH.is_file(), f"缺少轮换脚本：{_ROTATE_SH}"
     body = _ROTATE_SH.read_text(encoding="utf-8")
     assert 'MODE="plan"' in body, "默认模式必须是 plan（dry-run）"
-    assert "--apply)" in body and "MODE=\"apply\"" in body
+    assert "--apply)" in body and 'MODE="apply"' in body
     # 反向断言：不允许出现"默认即写库"的形态
     assert 'MODE="apply"' not in body.split('MODE="plan"')[0], "MODE 的初始值必须是 plan"
     assert "新密钥与旧密钥相同" in body, "必须拒绝「新==旧」的假轮换"
@@ -792,9 +783,7 @@ def test_rotate_keys_help_and_missing_dsn_are_side_effect_free() -> None:
     assert helped.returncode == 0, helped.stderr
     assert "--apply" in helped.stdout
 
-    blocked = subprocess.run(
-        [_BASH, str(_ROTATE_SH)], cwd=str(workdir), env=env, capture_output=True, text=True
-    )
+    blocked = subprocess.run([_BASH, str(_ROTATE_SH)], cwd=str(workdir), env=env, capture_output=True, text=True)
     assert blocked.returncode == 1, "缺 DATABASE_URL 必须失败，绝不能猜一个默认 DSN"
     assert "DATABASE_URL" in blocked.stderr
     assert not (workdir / "key-rotation-backups").exists(), "缺 DSN 时不许产出任何产物目录"

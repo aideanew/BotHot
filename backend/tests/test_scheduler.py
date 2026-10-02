@@ -38,9 +38,7 @@ from app.repositories.space import SpaceRepository
 from app.repositories.user import SqlAlchemyUserStore
 from app.services.scheduler import IncrementalScheduler
 
-PG_DSN = os.environ.get(
-    "AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot"
-)
+PG_DSN = os.environ.get("AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot")
 _T24_SUB = "sub-t24-sched"
 _T24_SPACE = "T24调度空间"
 _T24_BIZ = "T24SCHEDBIZ"
@@ -136,9 +134,7 @@ def _scheduler(factory, clock: _Clock, runner) -> IncrementalScheduler:  # noqa:
 
 async def _seed_source(session: AsyncSession, biz: str = _T24_BIZ) -> Source:
     row = (
-        await session.execute(
-            select(Source).where(Source.type == "wechat_oa", Source.external_id == biz)
-        )
+        await session.execute(select(Source).where(Source.type == "wechat_oa", Source.external_id == biz))
     ).scalar_one_or_none()
     if row is None:
         row = Source(type="wechat_oa", external_id=biz, name=biz, url=f"https://redfox.hk/{biz}")
@@ -163,9 +159,7 @@ async def _seed_sub(
         user = await SqlAlchemyUserStore(session).upsert_by_sub(_T24_SUB, "t24@test.local", "T24")
         space = (
             await session.execute(
-                select(KnowledgeSpace).where(
-                    KnowledgeSpace.user_id == user.id, KnowledgeSpace.name == _T24_SPACE
-                )
+                select(KnowledgeSpace).where(KnowledgeSpace.user_id == user.id, KnowledgeSpace.name == _T24_SPACE)
             )
         ).scalar_one_or_none()
         if space is None:
@@ -192,7 +186,11 @@ async def _seed_sub(
 
 
 async def _seed_manifests(
-    factory, source_id: str, count: int, *, prefix: str = "t24-w"  # noqa: ANN001
+    factory,
+    source_id: str,
+    count: int,
+    *,
+    prefix: str = "t24-w",  # noqa: ANN001
 ) -> list[str]:
     """铺 count 篇 DISCOVERED 清单行（= 1.2.1 _sync_manifests 的合法 PG 产物，非伪造抓取）。"""
     ext_ids = [f"{prefix}{i}" for i in range(count)]
@@ -222,9 +220,7 @@ async def _read_sub(factory, sub_id: str) -> SourceSubscription:  # noqa: ANN001
 async def _jobs_for(factory, sub_id: str) -> list[Job]:  # noqa: ANN001
     async with factory() as session:
         rows = await session.scalars(
-            select(Job)
-            .where(Job.idempotency_key.like(f"sync_account:{sub_id}%"))
-            .order_by(Job.created_at)
+            select(Job).where(Job.idempotency_key.like(f"sync_account:{sub_id}%")).order_by(Job.created_at)
         )
         return list(rows)
 
@@ -277,9 +273,7 @@ def test_next_run_at_anchored_exactly_on_hour_rolls_forward() -> None:
     sh = ZoneInfo("Asia/Shanghai")
     now = datetime(2026, 9, 22, 2, 0, 0, tzinfo=UTC)  # = 上海 10:00:00
     s = _scheduler(None, _Clock(now), _StubRunner())  # type: ignore[arg-type]
-    assert s.next_run_at(now, 1440, 0, 10).astimezone(sh) == datetime(
-        2026, 9, 23, 10, 0, tzinfo=sh
-    )
+    assert s.next_run_at(now, 1440, 0, 10).astimezone(sh) == datetime(2026, 9, 23, 10, 0, tzinfo=sh)
 
 
 def test_next_run_at_anchored_backoff_steps_whole_days() -> None:
@@ -366,7 +360,6 @@ async def test_run_once_runs_due_subscriptions_in_parallel() -> None:
         await engine.dispose()
 
 
-
 # ---------------------------------------------------------------- ② 触发窗口
 
 
@@ -375,9 +368,7 @@ async def test_trigger_window_only_due() -> None:
     engine, factory = _factory()
     try:
         clock = _Clock(datetime(2026, 9, 22, 12, 0, tzinfo=UTC))
-        _sub_due, _, _ = await _seed_sub(
-            factory, sub_id="t24-due", next_run_at=clock.now - timedelta(minutes=1)
-        )
+        _sub_due, _, _ = await _seed_sub(factory, sub_id="t24-due", next_run_at=clock.now - timedelta(minutes=1))
         _sub_future, _, _ = await _seed_sub(
             factory, sub_id="t24-future", next_run_at=clock.now + timedelta(minutes=30), biz="T24FUTURE"
         )
@@ -462,9 +453,7 @@ async def test_nonempty_after_empties_resets_backoff() -> None:
     engine, factory = _factory()
     try:
         clock = _Clock(datetime(2026, 9, 22, 12, 0, tzinfo=UTC))
-        sub_id, _, _ = await _seed_sub(
-            factory, sub_id="t24-recover", next_run_at=clock.now, interval_minutes=60
-        )
+        sub_id, _, _ = await _seed_sub(factory, sub_id="t24-recover", next_run_at=clock.now, interval_minutes=60)
         runner = _StubRunner([0, 0, 3])  # 空、空、有 3 篇
         sched = _scheduler(factory, clock, runner)
 

@@ -83,9 +83,7 @@ async def test_cluster_then_score_hot_score_positive(db_session) -> None:
     await run_clustering(db_session, days=1, now=_FIXED_NOW)
     await run_scoring(db_session, now=_FIXED_NOW)
 
-    topics = (
-        await db_session.execute(select(HotTopic).where(HotTopic.topic_date == _TOPIC_DATE))
-    ).scalars().all()
+    topics = (await db_session.execute(select(HotTopic).where(HotTopic.topic_date == _TOPIC_DATE))).scalars().all()
     assert len(topics) == 2
     for t in topics:
         assert t.hot_score > 0.0, f"topic {t.id} hot_score={t.hot_score}，应为正"
@@ -98,19 +96,13 @@ async def test_feed_score_synced_with_hot_score(db_session) -> None:
     await run_clustering(db_session, days=1, now=_FIXED_NOW)
     await run_scoring(db_session, now=_FIXED_NOW)
 
-    topics = (
-        await db_session.execute(select(HotTopic).where(HotTopic.topic_date == _TOPIC_DATE))
-    ).scalars().all()
+    topics = (await db_session.execute(select(HotTopic).where(HotTopic.topic_date == _TOPIC_DATE))).scalars().all()
     for t in topics:
         feed = (
-            await db_session.execute(
-                select(FeedItem).where(FeedItem.item_type == "hot_topic", FeedItem.ref_id == t.id)
-            )
+            await db_session.execute(select(FeedItem).where(FeedItem.item_type == "hot_topic", FeedItem.ref_id == t.id))
         ).scalar_one_or_none()
         assert feed is not None
-        assert abs(feed.score - t.hot_score) < 1e-9, (
-            f"feed.score={feed.score} != hot_score={t.hot_score}"
-        )
+        assert abs(feed.score - t.hot_score) < 1e-9, f"feed.score={feed.score} != hot_score={t.hot_score}"
 
 
 # ── 1.3 状态机迁移（纯函数） ───────────────────────────────────────
@@ -227,12 +219,14 @@ async def test_daily_report_topics_ordered_by_nonzero_score(db_session) -> None:
     assert report.topic_count == 2
 
     topics = (
-        await db_session.execute(
-            select(HotTopic)
-            .where(HotTopic.topic_date == _TOPIC_DATE)
-            .order_by(HotTopic.hot_score.desc())
+        (
+            await db_session.execute(
+                select(HotTopic).where(HotTopic.topic_date == _TOPIC_DATE).order_by(HotTopic.hot_score.desc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     scores = [t.hot_score for t in topics]
     assert all(s > 0 for s in scores), f"存在零分话题: {scores}"
     assert scores == sorted(scores, reverse=True), "TOP10 未按 hot_score 降序"
@@ -249,25 +243,21 @@ async def test_scoring_status_transitions_with_time(db_session) -> None:
     await run_scoring(db_session, now=_FIXED_NOW)
 
     topics_before = (
-        await db_session.execute(select(HotTopic).where(HotTopic.topic_date == _TOPIC_DATE))
-    ).scalars().all()
+        (await db_session.execute(select(HotTopic).where(HotTopic.topic_date == _TOPIC_DATE))).scalars().all()
+    )
     assert len(topics_before) == 2
     for t in topics_before:
         assert t.status in ("rising", "hot"), f"初始状态应为 rising/hot，实际 {t.status}"
 
     now_36h = _FIXED_NOW + timedelta(hours=36)
     await run_scoring(db_session, now=now_36h)
-    topics_36h = (
-        await db_session.execute(select(HotTopic).where(HotTopic.topic_date == _TOPIC_DATE))
-    ).scalars().all()
+    topics_36h = (await db_session.execute(select(HotTopic).where(HotTopic.topic_date == _TOPIC_DATE))).scalars().all()
     for t in topics_36h:
         assert t.status in ("hot", "cooling", "archived"), f"36h 后状态应为 hot/cooling/archived，实际 {t.status}"
 
     now_54h = _FIXED_NOW + timedelta(hours=54)
     await run_scoring(db_session, now=now_54h)
-    topics_54h = (
-        await db_session.execute(select(HotTopic).where(HotTopic.topic_date == _TOPIC_DATE))
-    ).scalars().all()
+    topics_54h = (await db_session.execute(select(HotTopic).where(HotTopic.topic_date == _TOPIC_DATE))).scalars().all()
     for t in topics_54h:
         assert t.status == "archived", f"54h 后状态应为 archived，实际 {t.status}"
 

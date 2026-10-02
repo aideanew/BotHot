@@ -7,9 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # W7：非生产环境白名单（`production_guard_violations` 的唯一放行集合）。
 # 显式枚举而非黑名单——env 命名开放，黑名单永远列不全；漏一个即留一个绕过口子。
 # 新增开发/测试环境名须在此登记（登记成本可控，漏网成本是不可逆的上线事故）。
-NON_PRODUCTION_ENVS: frozenset[str] = frozenset(
-    {"development", "dev", "local", "localhost", "test", "testing", "ci"}
-)
+NON_PRODUCTION_ENVS: frozenset[str] = frozenset({"development", "dev", "local", "localhost", "test", "testing", "ci"})
 
 
 class Settings(BaseSettings):
@@ -171,6 +169,12 @@ class Settings(BaseSettings):
     # 默认渠道名（须为已注册渠道名）：在可用集内即取之，否则回落注册序首个可用渠道。
     # 「只配置了 redfox、没配其他」时 redfox 即唯一且默认的渠道。
     discovery_default_channel: str = "redfox"
+    # RSS 发现渠道：逗号分隔的 RSS feed URL 列表。
+    # 格式：url1,url2,... 或 alias1:url1,alias2:url2
+    # 留空则 RSS 渠道不可用（available=False）。
+    discovery_rss_feeds: str = ""
+    # RSS feed 抓取超时（秒）
+    discovery_rss_timeout: float = 20.0
 
     # T2.6 批量粘贴 Job 化：单次批量提交上限（同步阶段零抓取，逐篇交 JobWorker 消费）
     batch_ingest_max_urls: int = 50
@@ -200,7 +204,6 @@ class Settings(BaseSettings):
     # 上游 httpx 超时拆分：connect 短（连不上要快速失败）、read 长（大响应允许慢）。
     upstream_connect_timeout_seconds: float = 5.0
     upstream_read_timeout_seconds: float = 20.0
-
 
     def production_guard_violations(self) -> list[str]:
         """生产配置守卫：返回致命项描述列表（空 = 通过）。

@@ -62,9 +62,7 @@ LLM_MAX_CONSECUTIVE_IDLE = 2  # 生成期连续 2 次空闲超时 → 判死流�
 
 
 def _build_llm_http() -> httpx.AsyncClient:
-    return httpx.AsyncClient(
-        timeout=httpx.Timeout(connect=LLM_CONNECT_TIMEOUT, read=10.0, write=10.0, pool=5.0)
-    )
+    return httpx.AsyncClient(timeout=httpx.Timeout(connect=LLM_CONNECT_TIMEOUT, read=10.0, write=10.0, pool=5.0))
 
 
 _llm_http_factory = _build_llm_http  # 模块级注入点（测试换桩；生产保持默认）
@@ -82,9 +80,7 @@ def _context_texts(results: list[dict[str, Any]]) -> list[str]:
     return parts
 
 
-def _filter_by_allowed(
-    results: list[dict[str, Any]], allowed_file_ids: set[str]
-) -> list[dict[str, Any]]:
+def _filter_by_allowed(results: list[dict[str, Any]], allowed_file_ids: set[str]) -> list[dict[str, Any]]:
     """阶段 3.1.1：检索结果收窄到候选 doc 集合（entry 内任一 file_name 命中即保留）。
 
     引擎 retrieve 无 doc 级过滤入参，故以「宽取 top_k=20 → 候选集合收窄 → 截断 5」等效
@@ -94,11 +90,7 @@ def _filter_by_allowed(
     for entry in results:
         content = entry.get("content")
         items = content if isinstance(content, list) else [content]
-        names = {
-            str(it.get("file_name"))
-            for it in items
-            if isinstance(it, dict) and it.get("file_name")
-        }
+        names = {str(it.get("file_name")) for it in items if isinstance(it, dict) and it.get("file_name")}
         if names & allowed_file_ids:
             kept.append(entry)
     return kept
@@ -110,9 +102,7 @@ def _entry_text(entry: dict[str, Any]) -> str:
     return parts[0] if parts else ""
 
 
-async def _maybe_rerank(
-    question: str, results: list[dict[str, Any]], reranker: RerankerPort
-) -> list[dict[str, Any]]:
+async def _maybe_rerank(question: str, results: list[dict[str, Any]], reranker: RerankerPort) -> list[dict[str, Any]]:
     """阶段 3.2.1：候选重排取前 RESULT_TOP_K；不可用/失败 → 按上游 score 降序截断。
 
     - reranker 可用时：reranker 分数降序 + 稳定 tie-break；
@@ -125,15 +115,11 @@ async def _maybe_rerank(
     if reranker.available():
         scores = await reranker.rerank(question, [_entry_text(entry) for entry in results])
         if scores is not None and len(scores) == len(results):
-            order = sorted(
-                range(len(scores)), key=lambda i: (-scores[i], i)
-            )[:RESULT_TOP_K]
+            order = sorted(range(len(scores)), key=lambda i: (-scores[i], i))[:RESULT_TOP_K]
             return [results[i] for i in order]
     all_have_score = all(isinstance(r.get("score"), int | float) for r in results)
     if all_have_score:
-        order = sorted(
-            range(len(results)), key=lambda i: (-results[i].get("score", 0), i)
-        )[:RESULT_TOP_K]
+        order = sorted(range(len(results)), key=lambda i: (-results[i].get("score", 0), i))[:RESULT_TOP_K]
         return [results[i] for i in order]
     return results[:RESULT_TOP_K]
 
@@ -204,12 +190,8 @@ def _citations_from(
         )
         if not text:
             continue
-        file_name = next(
-            (str(it.get("file_name", "")) for it in items if isinstance(it, dict)), ""
-        )
-        title = title_map.get(file_name) or (
-            file_name.rsplit("/", 1)[-1].rsplit(".", 1)[0] if file_name else text[:24]
-        )
+        file_name = next((str(it.get("file_name", "")) for it in items if isinstance(it, dict)), "")
+        title = title_map.get(file_name) or (file_name.rsplit("/", 1)[-1].rsplit(".", 1)[0] if file_name else text[:24])
         if title in seen_titles:
             continue  # 同一文档的多个 chunk 命中不重复出引用（空间名/引擎在本次请求内恒定）
         seen_titles.add(title)
@@ -217,9 +199,7 @@ def _citations_from(
     return citations
 
 
-async def _local_title_map(
-    session: AsyncSession, space_id: str, file_ids: list[str]
-) -> dict[str, str]:
+async def _local_title_map(session: AsyncSession, space_id: str, file_ids: list[str]) -> dict[str, str]:
     """langbot_file_id → 本地 asset.title（B-T10 任务4：引用标题接库内真名）。"""
     if not file_ids:
         return {}
@@ -302,7 +282,7 @@ async def _llm_stream_delta(
                         if "[DONE]" in line:
                             break
                         continue
-                    chunk = json.loads(line[len("data: "):])
+                    chunk = json.loads(line[len("data: ") :])
                     content = (chunk.get("choices") or [{}])[0].get("delta", {}).get("content")
                     if content:
                         yield ("delta", str(content))
@@ -352,9 +332,7 @@ async def _event_stream(
     # 阶段 3.1.1/3.2：有候选集收窄或重排 → 先宽取候选、检索后再收窄（防召回塌陷）；
     # allowed_file_ids=None 仅当调用方显式放弃收窄（历史兼容/单测直驱），此时维持 top_k=5。
     reranker = reranker or NoopReranker()
-    base_width = (
-        CANDIDATE_TOP_K if (allowed_file_ids is not None or reranker.available()) else RESULT_TOP_K
-    )
+    base_width = CANDIDATE_TOP_K if (allowed_file_ids is not None or reranker.available()) else RESULT_TOP_K
     # 阶段 3.3.1（T3.1）：意图五分类路由检索宽度——单调放宽（max），绝不收窄基线
     intent = classify_intent(question)
     retrieve_top_k = max(base_width, intent_retrieval_width(intent))
@@ -363,9 +341,7 @@ async def _event_stream(
     try:
         # B-T10 任务2：retrieve 阻塞期持续发 ping（shield 保任务不被超时取消）
         if engine == "builtin":
-            retrieve_call = langbot.retrieve(
-                retrieve_kb_id, question, top_k=retrieve_top_k, search_type="vector"
-            )
+            retrieve_call = langbot.retrieve(retrieve_kb_id, question, top_k=retrieve_top_k, search_type="vector")
         else:
             adapter = router.adapter_for(space)
             retrieve_call = adapter.retrieve(retrieve_kb_id, question, top_k=retrieve_top_k)
@@ -376,9 +352,7 @@ async def _event_stream(
             if await request.is_disconnected():
                 return
             try:
-                results = await asyncio.wait_for(
-                    asyncio.shield(retrieve_task), timeout=PING_INTERVAL_SECONDS
-                )
+                results = await asyncio.wait_for(asyncio.shield(retrieve_task), timeout=PING_INTERVAL_SECONDS)
                 break
             except TimeoutError:
                 yield _sse_frame({"type": "ping"})
@@ -469,9 +443,7 @@ async def ask(
 
     filters = payload.filters
     since = (
-        datetime.now(UTC) - timedelta(days=filters.days)
-        if filters is not None and filters.days is not None
-        else None
+        datetime.now(UTC) - timedelta(days=filters.days) if filters is not None and filters.days is not None else None
     )
     # 候选集默认为「本空间 READY 且已入库」的 doc；filters 只在其上做二次收窄。
     # 缺省也必须收窄：KB 内会滞留 DB 未追踪的文件（重跑覆盖未删旧文件，B27），
@@ -484,8 +456,15 @@ async def ask(
 
     return StreamingResponse(
         _event_stream(
-            request, langbot, kb_uuid, payload.question.strip(), space, session, router,
-            allowed_file_ids, reranker,
+            request,
+            langbot,
+            kb_uuid,
+            payload.question.strip(),
+            space,
+            session,
+            router,
+            allowed_file_ids,
+            reranker,
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},

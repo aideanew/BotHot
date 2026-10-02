@@ -215,8 +215,6 @@ class TestChannelSecretRoundtripThroughApi:
             _="admin",
         )
         channel_id = resp.data["id"]
-        row = (
-            await db_session.execute(select(BotChannel).where(BotChannel.id == channel_id))
-        ).scalar_one()
+        row = (await db_session.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one()
         assert is_aes_ciphertext(row.secret_enc) is True
         assert decrypt_channel_secret(row.id, row.secret_enc) == "sk-regression-secret"

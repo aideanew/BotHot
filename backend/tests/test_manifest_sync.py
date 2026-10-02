@@ -36,9 +36,7 @@ from app.services.manifest import (
 )
 from app.services.scheduler import IncrementalScheduler, make_sync_runner
 
-PG_DSN = os.environ.get(
-    "AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot"
-)
+PG_DSN = os.environ.get("AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot")
 _T22_USER = "sub-t22-manifest"
 _T22_SPACE = "T22清单空间"
 _T22_BIZ = "T22MANIFESTBIZ"
@@ -107,9 +105,7 @@ class _StubProvider:
         self._total = total
         self.calls: list[int] = []
 
-    async def query_work_list(
-        self, biz: str, page: int
-    ) -> tuple[list[dict[str, object]], int | None]:  # noqa: ARG002
+    async def query_work_list(self, biz: str, page: int) -> tuple[list[dict[str, object]], int | None]:  # noqa: ARG002
         self.calls.append(page)
         return self._pages.get(page, []), self._total
 
@@ -125,9 +121,7 @@ class _AlwaysRowsProvider:
         self._total = total
         self.calls: list[int] = []
 
-    async def query_work_list(
-        self, biz: str, page: int
-    ) -> tuple[list[dict[str, object]], int | None]:  # noqa: ARG002
+    async def query_work_list(self, biz: str, page: int) -> tuple[list[dict[str, object]], int | None]:  # noqa: ARG002
         self.calls.append(page)
         return [
             {
@@ -158,17 +152,13 @@ async def _seed_source(factory, biz: str = _T22_BIZ) -> tuple[str, str]:  # noqa
         user = await SqlAlchemyUserStore(session).upsert_by_sub(_T22_USER, "t22@test.local", "T22")
         space = (
             await session.execute(
-                select(KnowledgeSpace).where(
-                    KnowledgeSpace.user_id == user.id, KnowledgeSpace.name == _T22_SPACE
-                )
+                select(KnowledgeSpace).where(KnowledgeSpace.user_id == user.id, KnowledgeSpace.name == _T22_SPACE)
             )
         ).scalar_one_or_none()
         if space is None:
             space = await SpaceRepository(session).create(user_id=user.id, name=_T22_SPACE)
         src = (
-            await session.execute(
-                select(Source).where(Source.type == "wechat_oa", Source.external_id == biz)
-            )
+            await session.execute(select(Source).where(Source.type == "wechat_oa", Source.external_id == biz))
         ).scalar_one_or_none()
         if src is None:
             src = Source(type="wechat_oa", external_id=biz, name=biz, url=f"https://redfox.hk/{biz}")
@@ -181,9 +171,7 @@ async def _seed_source(factory, biz: str = _T22_BIZ) -> tuple[str, str]:  # noqa
 async def _manifest_rows(factory, source_id: str) -> list[ArticleManifest]:  # noqa: ANN001
     async with factory() as session:
         rows = await session.scalars(
-            select(ArticleManifest)
-            .where(ArticleManifest.source_id == source_id)
-            .order_by(ArticleManifest.external_id)
+            select(ArticleManifest).where(ArticleManifest.source_id == source_id).order_by(ArticleManifest.external_id)
         )
         return list(rows)
 
@@ -195,9 +183,13 @@ async def _sync(
     try:
         async with factory() as session:
             report = await ManifestSyncService(
-                session, provider, page_size=page_size  # type: ignore[arg-type]
+                session,
+                provider,
+                page_size=page_size,  # type: ignore[arg-type]
             ).sync_source(
-                source_id, _T22_BIZ, **kw  # type: ignore[arg-type]
+                source_id,
+                _T22_BIZ,
+                **kw,  # type: ignore[arg-type]
             )
             await session.commit()
             return report
@@ -352,9 +344,7 @@ async def test_sync_walk_continues_past_rows_without_id() -> None:
     engine, factory = _factory()
     try:
         source_id, _ = await _seed_source(factory)
-        provider = _StubProvider(
-            {1: [_row(1), {"url": "u", "title": "无ID"}], 2: [_row(2)]}, total=2
-        )
+        provider = _StubProvider({1: [_row(1), {"url": "u", "title": "无ID"}], 2: [_row(2)]}, total=2)
         report = await _sync(source_id, provider)
 
         assert report.skipped == 1 and report.discovered == 2  # type: ignore[attr-defined]
@@ -457,7 +447,9 @@ async def test_sync_max_pages_caps_backfill() -> None:
         huge = _AlwaysRowsProvider(page_size=TEST_PAGE_SIZE, total=1000)
         async with factory() as session:
             r = await ManifestSyncService(
-                session, huge, page_size=TEST_PAGE_SIZE  # type: ignore[arg-type]
+                session,
+                huge,
+                page_size=TEST_PAGE_SIZE,  # type: ignore[arg-type]
             ).sync_source(source_id, "T22CAPBIZ", max_pages=3)
             await session.commit()
         assert r.pages == 3, "max_pages=3 封顶"  # type: ignore[attr-defined]
@@ -486,9 +478,7 @@ async def test_sync_provider_error_propagates() -> None:
     """Provider 报错（如 3201 积分不足）→ 上抛，不吞错冒成功（1.1.4 反造假）。"""
 
     class _Boom:
-        async def query_work_list(
-            self, biz: str, page: int
-        ) -> tuple[list[dict[str, object]], int | None]:  # noqa: ARG002
+        async def query_work_list(self, biz: str, page: int) -> tuple[list[dict[str, object]], int | None]:  # noqa: ARG002
             raise DependencyUnavailableError("RedFox 积分余额不足（3201）")
 
         async def aclose(self) -> None:
@@ -542,11 +532,7 @@ async def test_scheduler_discovers_then_enqueues() -> None:
         rows = await _manifest_rows(factory, source_id)
         assert len(rows) == 2, "发现环节应落 2 条清单"
         async with factory() as session:
-            jobs = list(
-                await session.scalars(
-                    select(Job).where(Job.idempotency_key.like("sync_account:t22-loop%"))
-                )
-            )
+            jobs = list(await session.scalars(select(Job).where(Job.idempotency_key.like("sync_account:t22-loop%"))))
             assert len(jobs) == 1, "非空轮询应建 1 个 Job"
             sub = await session.get(SourceSubscription, "t22-loop")
             assert sub is not None and sub.consecutive_empty_syncs == 0

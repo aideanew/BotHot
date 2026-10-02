@@ -60,9 +60,7 @@ def test_gate_allows_system_space_with_allowlisted_operator() -> None:
 # ------------------------------------------------------------------ 服务层（PG 连库口径）
 
 
-async def test_set_public_status_publish_and_unpublish(
-    db_session, monkeypatch: pytest.MonkeyPatch
-) -> None:  # type: ignore[no-untyped-def]
+async def test_set_public_status_publish_and_unpublish(db_session, monkeypatch: pytest.MonkeyPatch) -> None:  # type: ignore[no-untyped-def]
     """双闸全过：发布 → is_public=True 落库；回收 → False 落库（幂等可逆）。"""
     from sqlalchemy import select
 
@@ -76,18 +74,14 @@ async def test_set_public_status_publish_and_unpublish(
     svc = PublicLibraryService(db_session)
     out = await svc.set_public_status(OP_OK, space.id, True)
     assert out["isPublic"] is True and out["spaceId"] == space.id
-    row = (
-        await db_session.execute(select(KnowledgeSpace).where(KnowledgeSpace.id == space.id))
-    ).scalar_one()
+    row = (await db_session.execute(select(KnowledgeSpace).where(KnowledgeSpace.id == space.id))).scalar_one()
     assert row.is_public is True
 
     out2 = await svc.set_public_status(OP_OK, space.id, False)
     assert out2["isPublic"] is False
 
 
-async def test_set_public_status_rejects_user_space(
-    db_session, monkeypatch: pytest.MonkeyPatch
-) -> None:  # type: ignore[no-untyped-def]
+async def test_set_public_status_rejects_user_space(db_session, monkeypatch: pytest.MonkeyPatch) -> None:  # type: ignore[no-untyped-def]
     """闸②连库口径：owner_type=user 的普通空间 → 10004（is_public 不被改写）。"""
     user = await _make_operator(db_session)
     space = await SpaceRepository(db_session).create(user_id=user.id, name="普通用户空间")
@@ -113,6 +107,4 @@ async def _make_operator(db_session):  # type: ignore[no-untyped-def]
     """操作者用户行（allowlist 校验锚 = 本地 users.id）。"""
     from app.repositories.user import SqlAlchemyUserStore
 
-    return await SqlAlchemyUserStore(db_session).upsert_by_sub(
-        "sub-t141-admin", "t141@test.local", "T141-Admin"
-    )
+    return await SqlAlchemyUserStore(db_session).upsert_by_sub("sub-t141-admin", "t141@test.local", "T141-Admin")

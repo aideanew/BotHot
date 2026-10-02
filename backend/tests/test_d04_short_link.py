@@ -38,11 +38,7 @@ async def test_short_link_map_idempotent_upsert(db_session) -> None:  # type: ig
 
     # 二次同 key 不重插
     await svc._save_short_link("SLK-001", "FINAL-KEY-001", biz="Mzbiz")
-    rows = (
-        await db_session.execute(
-            select(ShortLinkMap).where(ShortLinkMap.short_key == "SLK-001")
-        )
-    ).scalars().all()
+    rows = (await db_session.execute(select(ShortLinkMap).where(ShortLinkMap.short_key == "SLK-001"))).scalars().all()
     assert len(rows) == 1, "同 short_key 应幂等不重插"
     assert rows[0].article_key == "FINAL-KEY-001" and rows[0].biz == "Mzbiz"
     await db_session.commit()
@@ -62,11 +58,7 @@ async def test_short_link_lookup_hit_and_miss(db_session) -> None:  # type: igno
     hit = await svc._lookup_short_link("SLK-002")
     assert hit == "FINAL-KEY-002"
     # 幂等校验：重查映射行完整（列值口径）
-    row = (
-        await db_session.execute(
-            select(ShortLinkMap).where(ShortLinkMap.short_key == "SLK-002")
-        )
-    ).scalar_one()
+    row = (await db_session.execute(select(ShortLinkMap).where(ShortLinkMap.short_key == "SLK-002"))).scalar_one()
     assert row.article_key == "FINAL-KEY-002"
     miss = await svc._lookup_short_link("SLK-NOPE")
     assert miss == "", "未落映射应返回空串（调用方走真实抓取路径）"

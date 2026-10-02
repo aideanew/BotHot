@@ -105,9 +105,7 @@ def _payload(**overrides: Any) -> dict[str, Any]:
     return base
 
 
-def _token(
-    key: RSAPrivateKey | None = None, kid: str = "kid-1", alg: str = "RS256", **overrides: Any
-) -> str:
+def _token(key: RSAPrivateKey | None = None, kid: str = "kid-1", alg: str = "RS256", **overrides: Any) -> str:
     return _sign(_payload(**overrides), key=key or _rsa(), kid=kid, alg=alg)
 
 
@@ -201,9 +199,7 @@ def _client_with(svc: AuthService) -> TestClient:
 
 
 def _http_post(svc: AuthService, token: str) -> httpx.Response:
-    return _client_with(svc).post(
-        "/api/v1/auth/backchannel-logout", data={"logout_token": token}
-    )
+    return _client_with(svc).post("/api/v1/auth/backchannel-logout", data={"logout_token": token})
 
 
 # ------------------------------------------------------------------ 验签层
@@ -318,9 +314,7 @@ async def test_verify_accepts_audience_as_list() -> None:
 
 
 @pytest.mark.parametrize("issuer,audience", [("x", ""), ("", "x"), ("", "")])
-async def test_verify_rejects_when_expected_claims_unset(
-    issuer: str, audience: str
-) -> None:
+async def test_verify_rejects_when_expected_claims_unset(issuer: str, audience: str) -> None:
     """iss/aud 期望值未配置 → 拒绝，**不得沿用 userinfo 路径的 fail-open**（D4）。
 
     本端点无 client 凭证可校验，issuer/audience 是唯一的接收方证明。
@@ -372,9 +366,7 @@ async def test_jwks_refreshes_on_key_rotation() -> None:
     verifier = JwksVerifier(
         ISSUER,
         client=httpx.AsyncClient(
-            transport=httpx.MockTransport(
-                lambda _req: _jwks_response({"kid-old": old.public_key()})
-            )
+            transport=httpx.MockTransport(lambda _req: _jwks_response({"kid-old": old.public_key()}))
         ),
     )
     claims = await verify_logout_token(
@@ -391,9 +383,7 @@ async def test_jwks_refreshes_on_key_rotation() -> None:
         ISSUER,
         client=httpx.AsyncClient(
             transport=httpx.MockTransport(
-                lambda _req: _jwks_response(
-                    {"kid-old": old.public_key(), "kid-new": new_key.public_key()}
-                )
+                lambda _req: _jwks_response({"kid-old": old.public_key(), "kid-new": new_key.public_key()})
             )
         ),
     )
@@ -458,9 +448,7 @@ async def test_backchannel_is_idempotent() -> None:
         pytest.param(_token(iss="http://evil.test"), "issuer_mismatch", id="iss"),
         pytest.param(_token(aud="another-client"), "audience_mismatch", id="aud"),
         pytest.param(_token(nonce="n-1"), "nonce_rejected", id="nonce"),
-        pytest.param(
-            _token(iat=int(time.time()) - 600), "stale_iat", id="iat-out-of-window"
-        ),
+        pytest.param(_token(iat=int(time.time()) - 600), "stale_iat", id="iat-out-of-window"),
     ],
 )
 async def test_backchannel_invalid_token_deletes_nothing(token: str, reason: str) -> None:
@@ -587,9 +575,7 @@ class FakeRedis:
         self.data.pop(key, None)
         self.deleted.append(key)
 
-    async def scan(
-        self, cursor: int = 0, match: str = "*", count: int = 100
-    ) -> tuple[int, list[str]]:
+    async def scan(self, cursor: int = 0, match: str = "*", count: int = 100) -> tuple[int, list[str]]:
         assert cursor == 0  # 单轮即耗尽，验证迭代终止条件
         return 0, [k for k in self.data if fnmatch.fnmatchcase(k, match)]
 
@@ -600,12 +586,22 @@ async def test_redis_delete_by_sub_scans_and_skips_corrupt_records() -> None:
     store = RedisSessionStore(fake)
 
     own = SessionRecord(
-        session_id="a1", sub=SUB, email="a@x", nickname="A",
-        access_token="at", refresh_token="rt", access_expires_at=time.time() + 900,
+        session_id="a1",
+        sub=SUB,
+        email="a@x",
+        nickname="A",
+        access_token="at",
+        refresh_token="rt",
+        access_expires_at=time.time() + 900,
     )
     other = SessionRecord(
-        session_id="b1", sub="user-2", email="b@x", nickname="B",
-        access_token="at", refresh_token="rt", access_expires_at=time.time() + 900,
+        session_id="b1",
+        sub="user-2",
+        email="b@x",
+        nickname="B",
+        access_token="at",
+        refresh_token="rt",
+        access_expires_at=time.time() + 900,
     )
     await store.create(own, 3600)
     await store.create(other, 3600)

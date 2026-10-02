@@ -117,6 +117,7 @@ class ArticleManifest(TimestampMixin, Base):
 
 class ContentAsset(TimestampMixin, Base):
     """内容资产：标准化 Markdown 与元数据（幂等键 = source_id + external_id + content_hash）。"""
+
     __tablename__ = "content_assets"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
@@ -257,9 +258,7 @@ class EngineKeyRegistration(TimestampMixin, Base):
     # Text 而非 VARCHAR：密文长度随明文线性增长，长度上限会造出静默截断/写入失败路径
     secret_ref: Mapped[str] = mapped_column(Text, nullable=False)  # b64(nonce).b64(ct+tag)
     key_id: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)  # 轮换/审计句柄
-    registered_by: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
+    registered_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
 
 class ProcessHeartbeat(Base):

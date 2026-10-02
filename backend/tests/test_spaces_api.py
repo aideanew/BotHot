@@ -45,9 +45,14 @@ class InMemorySpaceRepo:
         space_id = f"space-{self._seq}"
         now = datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
         self._spaces[space_id] = SimpleNamespace(
-            id=space_id, user_id=user_id, name=name,
-            created_at=now, updated_at=now, doc_count=len(docs or []),
-            langbot_kb_uuid=kb_uuid, description=description,
+            id=space_id,
+            user_id=user_id,
+            name=name,
+            created_at=now,
+            updated_at=now,
+            doc_count=len(docs or []),
+            langbot_kb_uuid=kb_uuid,
+            description=description,
         )
         self._docs[space_id] = docs or []
         return space_id
@@ -151,14 +156,29 @@ def _seed_service(user_id: str = "user-1") -> SpaceService:
         user_id,
         "技术文章",
         docs=[
-            {"id": "d1", "title": "文章一", "source": "公众号A", "status": "FETCHED",
-             "category": "AI·技术",
-             "updated_at": datetime(2026, 9, 7, 10, 0, tzinfo=UTC)},
-            {"id": "d2", "title": "文章二", "source": "公众号A", "status": "READY",
-             "updated_at": datetime(2026, 9, 7, 10, 5, tzinfo=UTC)},  # 无 category = 未分类
-            {"id": "d3", "title": "文章三", "source": "公众号B", "status": "FAILED",
-             "category": "AI·技术",
-             "updated_at": datetime(2026, 9, 7, 10, 6, tzinfo=UTC)},
+            {
+                "id": "d1",
+                "title": "文章一",
+                "source": "公众号A",
+                "status": "FETCHED",
+                "category": "AI·技术",
+                "updated_at": datetime(2026, 9, 7, 10, 0, tzinfo=UTC),
+            },
+            {
+                "id": "d2",
+                "title": "文章二",
+                "source": "公众号A",
+                "status": "READY",
+                "updated_at": datetime(2026, 9, 7, 10, 5, tzinfo=UTC),
+            },  # 无 category = 未分类
+            {
+                "id": "d3",
+                "title": "文章三",
+                "source": "公众号B",
+                "status": "FAILED",
+                "category": "AI·技术",
+                "updated_at": datetime(2026, 9, 7, 10, 6, tzinfo=UTC),
+            },
         ],
     )
     return SpaceService(repo)
@@ -175,8 +195,14 @@ def test_list_spaces_items_camel_shape() -> None:
     items = resp.json()["data"]["items"]
     assert len(items) == 1
     assert set(items[0].keys()) == {
-        "id", "name", "description", "docCount", "updatedAt",
-        "engine", "engineKbId", "isPublic",  # AB-P004 P4 空间视图增量
+        "id",
+        "name",
+        "description",
+        "docCount",
+        "updatedAt",
+        "engine",
+        "engineKbId",
+        "isPublic",  # AB-P004 P4 空间视图增量
     }
     assert items[0]["name"] == "技术文章" and items[0]["docCount"] == 3
     assert items[0]["updatedAt"].startswith("2026-09-07T12:00:00")
@@ -191,8 +217,16 @@ def test_get_space_detail_shape_and_stats() -> None:
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert set(data.keys()) == {
-        "id", "name", "description", "docCount", "createdAt", "updatedAt", "stats",
-        "engine", "engineKbId", "isPublic",  # AB-P004 P4 空间视图增量
+        "id",
+        "name",
+        "description",
+        "docCount",
+        "createdAt",
+        "updatedAt",
+        "stats",
+        "engine",
+        "engineKbId",
+        "isPublic",  # AB-P004 P4 空间视图增量
     }
     assert set(data["stats"].keys()) == {"docs", "chunks"}
     assert data["stats"]["docs"] == 3 and data["docCount"] == 3  # count 查询而非 mock
@@ -247,9 +281,7 @@ def test_space_docs_category_filter_and_uncategorized_sentinel() -> None:
     assert all(d["category"] == "AI·技术" for d in data["items"])
 
     # 哨兵：库里无分类标签的行（d2）；库里不存哨兵值，响应仍是空串
-    data = client.get(
-        f"/api/v1/spaces/{space_id}/docs", params={"category": "__uncategorized__"}
-    ).json()["data"]
+    data = client.get(f"/api/v1/spaces/{space_id}/docs", params={"category": "__uncategorized__"}).json()["data"]
     assert data["total"] == 1 and data["items"][0]["id"] == "d2"
     assert data["items"][0]["category"] == ""
 
@@ -260,9 +292,7 @@ def test_space_docs_category_filter_and_uncategorized_sentinel() -> None:
     assert len(data["items"]) == 1 and data["total"] == 2
 
     # 未登记的取值：读路径不设校验闸门，合法地返回空列表
-    data = client.get(
-        f"/api/v1/spaces/{space_id}/docs", params={"category": "随手写的标签"}
-    ).json()["data"]
+    data = client.get(f"/api/v1/spaces/{space_id}/docs", params={"category": "随手写的标签"}).json()["data"]
     assert data["total"] == 0 and data["items"] == []
 
     # 不传参数：向后兼容全量
@@ -290,9 +320,10 @@ def test_space_docs_categories_lists_existing_only() -> None:
     assert data == {"items": ["AI·技术", "__uncategorized__"]}, "去重 + 声明序 + 未分类置末"
 
     # 返回项可直接回传 ?category=（与 docs 列表查询入参口径对称）
-    assert client.get(
-        f"/api/v1/spaces/{space_id}/docs", params={"category": "__uncategorized__"}
-    ).json()["data"]["total"] == 1
+    assert (
+        client.get(f"/api/v1/spaces/{space_id}/docs", params={"category": "__uncategorized__"}).json()["data"]["total"]
+        == 1
+    )
 
     # 鉴权语义不变
     viewer["id"] = "user-2"
@@ -307,8 +338,16 @@ def test_post_space_creates_and_conflict_maps_30006() -> None:
     first = client.post("/api/v1/spaces", json={"name": "新空间"})
     assert first.status_code == 201
     assert set(first.json()["data"].keys()) == {
-        "id", "name", "description", "docCount", "createdAt", "updatedAt", "stats",
-        "engine", "engineKbId", "isPublic",  # AB-P004 P4 空间视图增量
+        "id",
+        "name",
+        "description",
+        "docCount",
+        "createdAt",
+        "updatedAt",
+        "stats",
+        "engine",
+        "engineKbId",
+        "isPublic",  # AB-P004 P4 空间视图增量
     }
     # 标记重名（模拟唯一约束已存在行）
     repo._conflict_names.add(("user-1", "新空间"))
@@ -374,9 +413,7 @@ def test_patch_space_description_validation_10005() -> None:
     """简介超长/含控制字符 → 10005，且先校验后取行：非法值不得写库。"""
     repo = InMemorySpaceRepo()
     client, _ = _stub_client(SpaceService(repo))
-    space_id = client.post(
-        "/api/v1/spaces", json={"name": "校验空间", "description": "原简介"}
-    ).json()["data"]["id"]
+    space_id = client.post("/api/v1/spaces", json={"name": "校验空间", "description": "原简介"}).json()["data"]["id"]
 
     for bad in ("x" * 513, "含控制字符\x02"):
         resp = client.patch(f"/api/v1/spaces/{space_id}", json={"description": bad})
@@ -435,8 +472,12 @@ async def test_space_views_against_real_pg(db_session) -> None:
     # 引入 T2.6 批量用例后返回序变为 failed/pending/ready）。显式时刻使本用例确定性自持。
     for i, st in enumerate(statuses, 1):
         asset = ContentAsset(
-            source_id=source.id, external_id=f"art-{i}", url=f"u{i}", title=f"连库文章{i}",
-            content_hash=f"h{i}", content_markdown="# m",
+            source_id=source.id,
+            external_id=f"art-{i}",
+            url=f"u{i}",
+            title=f"连库文章{i}",
+            content_hash=f"h{i}",
+            content_markdown="# m",
         )
         db_session.add(asset)
         await db_session.flush()
@@ -596,8 +637,12 @@ async def test_delete_space_real_pg_success_and_langbot_called(db_session) -> No
     repo = SpaceRepository(db_session)
     space = await repo.create(user.id, "AB-T11删除空间", langbot_kb_uuid="kb-abt11")
     asset = ContentAsset(
-        source_id=source.id, external_id="abt11-art", url="u", title="删我",
-        content_hash="habt11", content_markdown="# m",
+        source_id=source.id,
+        external_id="abt11-art",
+        url="u",
+        title="删我",
+        content_hash="habt11",
+        content_markdown="# m",
     )
     db_session.add(asset)
     await db_session.flush()
@@ -632,8 +677,12 @@ async def test_delete_space_real_pg_langbot_failure_rolls_back(db_session) -> No
     repo = SpaceRepository(db_session)
     space = await repo.create(user.id, "回滚空间", langbot_kb_uuid="kb-rb")
     asset = ContentAsset(
-        source_id=source.id, external_id="rb-art", url="u", title="留下",
-        content_hash="hrb", content_markdown="# m",
+        source_id=source.id,
+        external_id="rb-art",
+        url="u",
+        title="留下",
+        content_hash="hrb",
+        content_markdown="# m",
     )
     db_session.add(asset)
     await db_session.flush()
@@ -670,8 +719,12 @@ async def test_delete_space_pending_delete_rolled_back_by_get_db_semantics(db_se
     repo = SpaceRepository(db_session)
     space = await repo.create(user.id, "撤销空间", langbot_kb_uuid="kb-fl")
     asset = ContentAsset(
-        source_id=source.id, external_id="fl-art", url="u", title="先删后撤",
-        content_hash="hfl", content_markdown="# m",
+        source_id=source.id,
+        external_id="fl-art",
+        url="u",
+        title="先删后撤",
+        content_hash="hfl",
+        content_markdown="# m",
     )
     db_session.add(asset)
     await db_session.flush()

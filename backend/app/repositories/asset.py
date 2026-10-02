@@ -30,9 +30,7 @@ class AssetRepository:
 
     async def get_by_source_external(self, source_id: str, external_id: str) -> ContentAsset | None:
         return await self._session.scalar(
-            select(ContentAsset).where(
-                ContentAsset.source_id == source_id, ContentAsset.external_id == external_id
-            )
+            select(ContentAsset).where(ContentAsset.source_id == source_id, ContentAsset.external_id == external_id)
         )
 
     async def get_by_url_fragment(self, source_id: str, fragment: str) -> ContentAsset | None:
@@ -56,9 +54,7 @@ class AssetRepository:
         hash 变化则更新正文并 version+1(True)——作者改文语义。
 
         AB-P004 P0：同键资产在命中/未命中两路径均幂等，hit_count 透传防盲写。"""
-        asset = await self.get_by_source_external(
-            str(fields["source_id"]), str(fields["external_id"])
-        )
+        asset = await self.get_by_source_external(str(fields["source_id"]), str(fields["external_id"]))
         if asset is None:
             # T2.7 竞态兜底：同 URL 并发首抓时两事务可能同时查空后并插——savepoint 捕获
             # uq_asset_source_external 冲突后重查既有资产（DB 唯一约束保证零重复，兜底不 500）。
@@ -66,9 +62,7 @@ class AssetRepository:
                 async with self._session.begin_nested():
                     asset = await self.create(**fields)
             except IntegrityError:
-                asset = await self.get_by_source_external(
-                    str(fields["source_id"]), str(fields["external_id"])
-                )
+                asset = await self.get_by_source_external(str(fields["source_id"]), str(fields["external_id"]))
                 if asset is None:  # 非常见冲突如实上抛
                     raise
             return asset, True
@@ -127,7 +121,6 @@ class AssetRepository:
             await self._session.flush()
         return n
 
-
     async def set_category(self, asset_id: str, category: str) -> None:
         """人工纠偏规则分类（站内筛选维度）。只改 category，不动 hash/version/status。"""
         asset = await self.get_by_id(asset_id)
@@ -154,12 +147,8 @@ class DocumentRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def create(
-        self, asset_id: str, space_id: str, content_hash: str = ""
-    ) -> KnowledgeDocument:
-        doc = KnowledgeDocument(
-            asset_id=asset_id, space_id=space_id, content_hash=content_hash
-        )
+    async def create(self, asset_id: str, space_id: str, content_hash: str = "") -> KnowledgeDocument:
+        doc = KnowledgeDocument(asset_id=asset_id, space_id=space_id, content_hash=content_hash)
         self._session.add(doc)
         await self._session.flush()
         return doc
@@ -171,9 +160,7 @@ class DocumentRepository:
         """R0.2.5 批量操作预取：单条 IN 查询取回全部行（含不属本空间的，由调用方判定）。"""
         if not doc_ids:
             return []
-        rows = await self._session.scalars(
-            select(KnowledgeDocument).where(KnowledgeDocument.id.in_(doc_ids))
-        )
+        rows = await self._session.scalars(select(KnowledgeDocument).where(KnowledgeDocument.id.in_(doc_ids)))
         return list(rows)
 
     async def get_by_asset_space(self, asset_id: str, space_id: str) -> KnowledgeDocument | None:
@@ -250,8 +237,6 @@ class DocumentRepository:
         if source_ids:
             stmt = stmt.where(ContentAsset.source_id.in_(source_ids))
         if since is not None:
-            stmt = stmt.where(
-                func.coalesce(ContentAsset.published_at, ContentAsset.created_at) >= since
-            )
+            stmt = stmt.where(func.coalesce(ContentAsset.published_at, ContentAsset.created_at) >= since)
         rows = (await self._session.execute(stmt)).scalars().all()
         return {str(row) for row in rows}

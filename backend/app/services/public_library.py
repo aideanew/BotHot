@@ -50,9 +50,7 @@ class PublicLibraryService:
         self._session = session
         self._repo = SpaceRepository(session)
 
-    async def list_public_views(
-        self, *, limit: int = 50, offset: int = 0
-    ) -> tuple[list[dict], int]:
+    async def list_public_views(self, *, limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
         """GET /spaces/public → data.items：公共库卡（name/docCount/engine/updatedAt/isPublic）。
 
         T1.5.3：doc 计数改 GROUP BY 单查询（原逐空间 count 为 N+1）。
@@ -150,9 +148,7 @@ class PublicLibraryService:
                 continue
             # 指纹随公共资产当前正文记录（R4.4/F-11）：留空会让该 doc 在资产任一版本
             # 变化时被误判为内容落后——「从未同步过」与「已同步到最新」必须可区分。
-            doc = await doc_repo.create(
-                asset_id=asset.id, space_id=space_id, content_hash=asset.content_hash
-            )
+            doc = await doc_repo.create(asset_id=asset.id, space_id=space_id, content_hash=asset.content_hash)
             doc.source = "copy"
             await self._session.flush()
             copied += 1

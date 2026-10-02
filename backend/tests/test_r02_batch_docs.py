@@ -69,9 +69,7 @@ async def _remaining_doc_ids(db_session: Any, space_id: str) -> set[str]:
     必须按 space 限定：夹具只在写侧隔离（外层事务回滚），读侧仍可见环境里
     其他空间的 doc（如人工 QA 数据）——全表计数会把环境噪音误判成产品缺陷。
     """
-    rows = await db_session.execute(
-        select(KnowledgeDocument.id).where(KnowledgeDocument.space_id == space_id)
-    )
+    rows = await db_session.execute(select(KnowledgeDocument.id).where(KnowledgeDocument.space_id == space_id))
     return set(rows.scalars().all())
 
 
@@ -146,7 +144,7 @@ async def test_recategorize_docs_batch_over_business_limit_returns_10005(db_sess
     assert resp.status_code == 422 and resp.json()["code"] == 10005
     assert "51" in resp.text and "50" in resp.text
 
-    assert (await _categories(db_session))  # 资产行与分类均未受影响
+    assert await _categories(db_session)  # 资产行与分类均未受影响
     assert len(await _remaining_doc_ids(db_session, space_id)) == 51
 
 
@@ -155,9 +153,7 @@ async def test_recategorize_docs_batch_illegal_category_returns_10005(db_session
     space_id, user_id, doc_ids = await _seed(db_session, sub="r025-illeg", docs=[("a", "f1")])
     client = _app(db_session, user_id, kb=FakeKbClient())
 
-    resp = client.post(
-        REC.format(space_id=space_id), json={"ids": [doc_ids["a"]], "category": "随手写的标签"}
-    )
+    resp = client.post(REC.format(space_id=space_id), json={"ids": [doc_ids["a"]], "category": "随手写的标签"})
     assert resp.status_code == 422 and resp.json()["code"] == 10005
 
     asset_id = await _asset_id_of(db_session, doc_ids["a"])
@@ -188,9 +184,7 @@ async def test_delete_docs_batch_doc_from_other_space_returns_30004(db_session) 
 
     kb = FakeKbClient()
     client = _app(db_session, user_id, kb=kb)
-    resp = client.post(
-        DEL.format(space_id=space_id), json={"ids": [doc_ids["a"], doc_ids["b"], DOC_ID_UNKNOWN]}
-    )
+    resp = client.post(DEL.format(space_id=space_id), json={"ids": [doc_ids["a"], doc_ids["b"], DOC_ID_UNKNOWN]})
     assert resp.status_code == 404 and resp.json()["code"] == 30004
 
     assert len(await _remaining_doc_ids(db_session, space_id)) == 2
@@ -199,9 +193,7 @@ async def test_delete_docs_batch_doc_from_other_space_returns_30004(db_session) 
 
 async def test_recategorize_docs_batch_missing_id_rolls_back_entire_batch(db_session) -> None:
     """整批原子：任一篇缺失 → 30004，其余合法篇的分类也**不**被改（无中间态）。"""
-    space_id, user_id, doc_ids = await _seed(
-        db_session, sub="r025-atom", docs=[("a", "f1"), ("b", "f2"), ("c", "f3")]
-    )
+    space_id, user_id, doc_ids = await _seed(db_session, sub="r025-atom", docs=[("a", "f1"), ("b", "f2"), ("c", "f3")])
     client = _app(db_session, user_id, kb=FakeKbClient())
 
     resp = client.post(
@@ -233,9 +225,7 @@ async def test_recategorize_docs_batch_requires_login() -> None:
 
 async def test_delete_docs_batch_all_succeed(db_session) -> None:
     """3 篇全成功 → {ok, requested, docs, assets, failed:[]}，引擎按篇调用且用 langbot_kb_uuid。"""
-    space_id, user_id, doc_ids = await _seed(
-        db_session, sub="r025-ok", docs=[("a", "f1"), ("b", "f2"), ("c", "f3")]
-    )
+    space_id, user_id, doc_ids = await _seed(db_session, sub="r025-ok", docs=[("a", "f1"), ("b", "f2"), ("c", "f3")])
     kb = FakeKbClient()
     client = _app(db_session, user_id, kb=kb)
 
@@ -256,18 +246,16 @@ async def test_delete_docs_batch_partial_failure_keeps_failed_rows_retryable(db_
     kb = SelectiveKbClient(fail_file_ids={"f2"})
     client = _app(db_session, user_id, kb=kb)
 
-    resp = client.post(
-        DEL.format(space_id=space_id), json={"ids": [doc_ids["a"], doc_ids["b"], doc_ids["c"]]}
-    )
+    resp = client.post(DEL.format(space_id=space_id), json={"ids": [doc_ids["a"], doc_ids["b"], doc_ids["c"]]})
     assert resp.status_code == 200, resp.text
     data = resp.json()["data"]
     assert data["ok"] is True
     assert data["requested"] == 3
     assert data["docs"] == 2, "引擎删除成功的篇立即生效，不被后续失败回滚"
     assert data["assets"] == 2
-    assert data["failed"] == [
-        {"docId": doc_ids["b"], "code": 30002, "error": "LangBot 删除失败: 500（f2）"}
-    ], "失败明细带码位，前端可按码映射友好文案"
+    assert data["failed"] == [{"docId": doc_ids["b"], "code": 30002, "error": "LangBot 删除失败: 500（f2）"}], (
+        "失败明细带码位，前端可按码映射友好文案"
+    )
 
     # 关键契约：失败篇的 PG 行完整保留（含 langbot_file_id），可原样重试
     assert await _remaining_doc_ids(db_session, space_id) == {doc_ids["b"]}
@@ -280,9 +268,7 @@ async def test_delete_docs_batch_all_failed_raises_envelope(db_session) -> None:
     同时是本批 MissingGreenlet 回归桩：连续两篇引擎失败且中间无 commit——
     若失败分支里仍各回滚一次，即在此爆炸。
     """
-    space_id, user_id, doc_ids = await _seed(
-        db_session, sub="r025-allfail", docs=[("a", "f1"), ("b", "f2")]
-    )
+    space_id, user_id, doc_ids = await _seed(db_session, sub="r025-allfail", docs=[("a", "f1"), ("b", "f2")])
     client = _app(db_session, user_id, kb=FakeKbClient(fail=LangbotApiError("LangBot 删除失败: 500")))
 
     resp = client.post(DEL.format(space_id=space_id), json={"ids": [doc_ids["a"], doc_ids["b"]]})
@@ -293,9 +279,7 @@ async def test_delete_docs_batch_all_failed_raises_envelope(db_session) -> None:
 async def test_delete_docs_batch_405_structural_failure_degrades(db_session) -> None:
     """B34：引擎 405（本 LangBot 版本无文件级 DELETE 路由）对批量路径同样降级——
     三篇全部删除、failed 为空，而非全批 502（修复前批量删除与单删一样整体不可用）。"""
-    space_id, user_id, doc_ids = await _seed(
-        db_session, sub="r025-405", docs=[("a", "f1"), ("b", "f2"), ("c", "f3")]
-    )
+    space_id, user_id, doc_ids = await _seed(db_session, sub="r025-405", docs=[("a", "f1"), ("b", "f2"), ("c", "f3")])
     kb = FakeKbClient(fail=LangbotApiError("LangBot 405: Method Not Allowed", upstream_status=405))
     client = _app(db_session, user_id, kb=kb)
 
@@ -316,9 +300,7 @@ async def test_delete_docs_batch_dedupes_and_strips_ids(db_session) -> None:
     kb = FakeKbClient()
     client = _app(db_session, user_id, kb=kb)
 
-    resp = client.post(
-        DEL.format(space_id=space_id), json={"ids": [f" {doc_ids['a']} ", doc_ids["a"], ""]}
-    )
+    resp = client.post(DEL.format(space_id=space_id), json={"ids": [f" {doc_ids['a']} ", doc_ids["a"], ""]})
     assert resp.status_code == 200, resp.text
     data = resp.json()["data"]
     assert data == {"ok": True, "requested": 1, "docs": 1, "assets": 1, "failed": []}
@@ -328,15 +310,11 @@ async def test_delete_docs_batch_dedupes_and_strips_ids(db_session) -> None:
 
 async def test_delete_docs_batch_skips_engine_for_copy_rows(db_session) -> None:
     """langbot_file_id 为空的副本行（公共库 link 引入）→ 不调引擎，直接删 PG。"""
-    space_id, user_id, doc_ids = await _seed(
-        db_session, sub="r025-copy", docs=[("a", ""), ("b", ""), ("c", "f3")]
-    )
+    space_id, user_id, doc_ids = await _seed(db_session, sub="r025-copy", docs=[("a", ""), ("b", ""), ("c", "f3")])
     kb = FakeKbClient()
     client = _app(db_session, user_id, kb=kb)
 
-    resp = client.post(
-        DEL.format(space_id=space_id), json={"ids": [doc_ids["a"], doc_ids["b"], doc_ids["c"]]}
-    )
+    resp = client.post(DEL.format(space_id=space_id), json={"ids": [doc_ids["a"], doc_ids["b"], doc_ids["c"]]})
     assert resp.status_code == 200, resp.text
     assert resp.json()["data"]["failed"] == []
     assert kb.deleted_files == [("kb-r02", "f3")]
@@ -362,9 +340,7 @@ async def test_delete_docs_batch_keeps_shared_asset(db_session) -> None:
 
 async def test_delete_docs_batch_decrements_doc_count(db_session) -> None:
     """批量删除后 space.doc_count 按成功篇数递减（与单篇 DELETE 对称）。"""
-    space_id, user_id, doc_ids = await _seed(
-        db_session, sub="r025-count", docs=[("a", "f1"), ("b", "f2"), ("c", "f3")]
-    )
+    space_id, user_id, doc_ids = await _seed(db_session, sub="r025-count", docs=[("a", "f1"), ("b", "f2"), ("c", "f3")])
     repo = SpaceRepository(db_session)
     space = await repo.get_by_id(space_id)
     space.doc_count = 3
@@ -372,9 +348,7 @@ async def test_delete_docs_batch_decrements_doc_count(db_session) -> None:
 
     kb = SelectiveKbClient(fail_file_ids={"f2"})
     client = _app(db_session, user_id, kb=kb)
-    resp = client.post(
-        DEL.format(space_id=space_id), json={"ids": [doc_ids["a"], doc_ids["b"], doc_ids["c"]]}
-    )
+    resp = client.post(DEL.format(space_id=space_id), json={"ids": [doc_ids["a"], doc_ids["b"], doc_ids["c"]]})
     assert resp.status_code == 200, resp.text
 
     refreshed = await repo.get_by_id(space_id)
@@ -399,9 +373,7 @@ async def test_delete_docs_batch_non_builtin_uses_engine_router(db_session) -> N
 
 async def test_recategorize_docs_batch_updates_asset_categories(db_session) -> None:
     """整批成功 → 每个资产 category 生效，返回归一化 category。"""
-    space_id, user_id, doc_ids = await _seed(
-        db_session, sub="r025-rec", docs=[("a", "f1"), ("b", "f2"), ("c", "f3")]
-    )
+    space_id, user_id, doc_ids = await _seed(db_session, sub="r025-rec", docs=[("a", "f1"), ("b", "f2"), ("c", "f3")])
     client = _app(db_session, user_id, kb=FakeKbClient())
 
     resp = client.post(
@@ -450,9 +422,7 @@ async def test_recategorize_docs_batch_dedupes_ids(db_session) -> None:
     space_id, user_id, doc_ids = await _seed(db_session, sub="r025-rdedup", docs=[("a", "f1")])
     client = _app(db_session, user_id, kb=FakeKbClient())
 
-    resp = client.post(
-        REC.format(space_id=space_id), json={"ids": [doc_ids["a"], doc_ids["a"]], "category": "AI·技术"}
-    )
+    resp = client.post(REC.format(space_id=space_id), json={"ids": [doc_ids["a"], doc_ids["a"]], "category": "AI·技术"})
     assert resp.status_code == 200, resp.text
     assert resp.json()["data"]["requested"] == 1
 

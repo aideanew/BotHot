@@ -34,7 +34,7 @@ USER_AGENT = (
 _WS = re.compile(r"\s+")
 _BIZ_RE = re.compile(
     # biz 值为 base64（实证形态 Mz…/Mj… 等多种前缀），约束：M 开头 + 12~26 位 base64 字符
-    r'var\s+biz\s*=\s*"(M[A-Za-z0-9+/]{11,25}={0,2})"'       # 形态A：var biz = "M…"（2026-09 真实页面，值在前）
+    r'var\s+biz\s*=\s*"(M[A-Za-z0-9+/]{11,25}={0,2})"'  # 形态A：var biz = "M…"（2026-09 真实页面，值在前）
     r'|var\s+biz\s*=\s*""\s*\|\|\s*"(M[A-Za-z0-9+/]{11,25}={0,2})"'  # 形态B：var biz = "" || "M…"（M0 样本）
 )
 _CT_RE = re.compile(r'var\s+ct\s*=\s*"(\d{10})"')
@@ -95,9 +95,7 @@ def parse_publish_time(html: str) -> str | None:
 
 def _extract_by_id(html: str, element_id: str) -> str:
     """按 id 提取元素内文本（去标签、折叠空白）——activity-name/js_name 共用。"""
-    match = re.search(
-        rf'<[^>]*id="{element_id}"[^>]*>(.*?)</', html, re.IGNORECASE | re.DOTALL
-    )
+    match = re.search(rf'<[^>]*id="{element_id}"[^>]*>(.*?)</', html, re.IGNORECASE | re.DOTALL)
     if not match:
         return ""
     return _WS.sub(" ", re.sub(r"<[^>]+>", "", match.group(1))).strip()

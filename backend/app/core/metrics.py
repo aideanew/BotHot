@@ -83,9 +83,7 @@ HOT_CLUSTER_DURATION = Histogram(
     buckets=(0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0),
 )
 
-_UUID_RE = re.compile(
-    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-)
+_UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 _LONG_HEX_RE = re.compile(r"^[0-9a-fA-F]{16,}$")
 
 # 自监控豁免：/metrics 自身与存活/就绪探针不记延迟直方图，防抓取行为污染指标。
@@ -98,10 +96,7 @@ def normalize_path(path: str) -> str:
         return "/"
     parts = path.split("/")
     folded = [
-        "{id}"
-        if seg and (seg.isdigit() or _UUID_RE.match(seg) or _LONG_HEX_RE.match(seg))
-        else seg
-        for seg in parts
+        "{id}" if seg and (seg.isdigit() or _UUID_RE.match(seg) or _LONG_HEX_RE.match(seg)) else seg for seg in parts
     ]
     return "/".join(folded)
 
@@ -165,9 +160,7 @@ async def _refresh_jobs_by_status() -> None:
         from app.db import get_session_factory
 
         async with get_session_factory()() as session:
-            rows = (
-                await session.execute(sa_text("SELECT status, COUNT(*) FROM jobs GROUP BY status"))
-            ).all()
+            rows = (await session.execute(sa_text("SELECT status, COUNT(*) FROM jobs GROUP BY status"))).all()
         counts = {str(status): float(n) for status, n in rows}
         for status in KNOWN_JOB_STATUSES:
             JOBS_BY_STATUS.labels(status=status).set(counts.get(status, 0.0))

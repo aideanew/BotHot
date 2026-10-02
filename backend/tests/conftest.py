@@ -76,9 +76,7 @@ async def db_session() -> AsyncIterator[AsyncSession]:
 
     A 实测教训：无超时连接在 PG 宕机时整套测试挂死——connect_timeout 强制 ≤3s。
     """
-    engine = create_async_engine(
-        PG_URL, pool_pre_ping=True, connect_args={"connect_timeout": 3}
-    )
+    engine = create_async_engine(PG_URL, pool_pre_ping=True, connect_args={"connect_timeout": 3})
     try:
         async with engine.connect() as connection:
             transaction = await connection.begin()

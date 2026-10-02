@@ -29,8 +29,7 @@ def normalize_text(text: str) -> str:
     out = unicodedata.normalize("NFC", text)
     # 2) 全角→半角：U+FF01–U+FF5E 平移 0xFEE0；全角空格 U+3000 → 半角空格
     out = "".join(
-        chr(ord(ch) - 0xFEE0) if 0xFF01 <= ord(ch) <= 0xFF5E else ("\u0020" if ch == "\u3000" else ch)
-        for ch in out
+        chr(ord(ch) - 0xFEE0) if 0xFF01 <= ord(ch) <= 0xFF5E else ("\u0020" if ch == "\u3000" else ch) for ch in out
     )
     # 3) 零宽字符剔除
     out = _ZERO_WIDTH_RE.sub("", out)
@@ -67,7 +66,11 @@ def normalize_extracted(extracted: ExtractedContent) -> ExtractedContent:
     return replace(
         normalized,
         langbot_format=build_langbot_format(
-            normalized.title, normalized.author, normalized.publish_time,
-            normalized.url, normalized.paragraphs, normalized.images,
+            normalized.title,
+            normalized.author,
+            normalized.publish_time,
+            normalized.url,
+            normalized.paragraphs,
+            normalized.images,
         ),
     )

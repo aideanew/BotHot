@@ -31,6 +31,7 @@ logger = structlog.get_logger(__name__)
 async def _check_pg() -> str:
     try:
         from app.db import get_engine
+
         engine = get_engine()
         async with engine.connect() as conn:
             await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
@@ -42,8 +43,9 @@ async def _check_pg() -> str:
 async def _check_redis() -> str:
     try:
         import redis.asyncio as aioredis
+
         settings = get_settings()
-        r = aioredis.from_url(settings.redis_url, socket_connect_timeout=2)
+        r = aioredis.from_url(settings.redis_url, socket_connect_timeout=2, protocol=2)
         await r.ping()
         await r.aclose()
         return "ok"
@@ -65,9 +67,7 @@ async def _check_langbot() -> str:
 
         settings = get_settings()
         async with httpx.AsyncClient(timeout=3) as client:
-            resp = await client.get(
-                f"{settings.langbot_base_url}/api/v1/knowledge/engines"
-            )
+            resp = await client.get(f"{settings.langbot_base_url}/api/v1/knowledge/engines")
         if resp.status_code != 401:
             return "unhealthy"
         try:
@@ -92,12 +92,14 @@ async def health() -> object:
     langbot = await _check_langbot()
     deps = {"postgres": pg, "redis": redis, "langbot": langbot}
     all_ok = all(v == "ok" for v in deps.values())
-    return success(data={
-        "status": "ok" if all_ok else "degraded",
-        "app": settings.app_name,
-        "env": settings.app_env,
-        "deps": deps,
-    })
+    return success(
+        data={
+            "status": "ok" if all_ok else "degraded",
+            "app": settings.app_name,
+            "env": settings.app_env,
+            "deps": deps,
+        }
+    )
 
 
 async def _check_schema() -> dict[str, object]:
@@ -193,7 +195,7 @@ async def _default_open_subscriber(redis_url: str, channels: list[str]) -> _Redi
     """真实订阅者：延迟导入 redis.asyncio（无 Redis 环境不在 import 期就硬故）。"""
     import redis.asyncio as aioredis
 
-    client = aioredis.from_url(redis_url, socket_connect_timeout=3)
+    client = aioredis.from_url(redis_url, socket_connect_timeout=3, protocol=2)
     pubsub = client.pubsub(ignore_subscribe_messages=True)
     await pubsub.subscribe(*channels)
     return _RedisSubscriber(client, pubsub)

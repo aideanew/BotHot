@@ -24,9 +24,7 @@ from app.repositories.job import JobRepository
 from app.services.job_worker import JobWorker
 from app.services.jobs import JobService
 
-PG_DSN = os.environ.get(
-    "AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot"
-)
+PG_DSN = os.environ.get("AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot")
 _W2_KEY_PREFIX = "w2:"
 _W2_SUB = "sub-w2-worker"
 
@@ -92,18 +90,50 @@ async def _seed(session_factory) -> str:  # noqa: ANN001
         await session.flush()
         now = datetime.now(UTC) - timedelta(hours=2)
         assets = [
-            ContentAsset(source_id=s1.id, external_id="w2:a1", url="https://x/w2-a1", title="OpenAI发布GPT-5模型",
-                         content_hash="w2-h1", content_markdown="OpenAI 发布了 GPT-5。",
-                         quality_score=0.5, category="tech", published_at=now),
-            ContentAsset(source_id=s2.id, external_id="w2:a2", url="https://x/w2-a2", title="OpenAI推出全新GPT-5大模型",
-                         content_hash="w2-h2", content_markdown="OpenAI 推出全新 GPT-5。",
-                         quality_score=0.8, category="tech", published_at=now),
-            ContentAsset(source_id=s1.id, external_id="w2:b1", url="https://x/w2-b1", title="美联储宣布加息50个基点",
-                         content_hash="w2-h3", content_markdown="美联储加息 50 基点。",
-                         quality_score=0.6, category="finance", published_at=now),
-            ContentAsset(source_id=s2.id, external_id="w2:b2", url="https://x/w2-b2", title="美联储加息50基点应对通胀",
-                         content_hash="w2-h4", content_markdown="美联储加息应对通胀。",
-                         quality_score=0.9, category="finance", published_at=now),
+            ContentAsset(
+                source_id=s1.id,
+                external_id="w2:a1",
+                url="https://x/w2-a1",
+                title="OpenAI发布GPT-5模型",
+                content_hash="w2-h1",
+                content_markdown="OpenAI 发布了 GPT-5。",
+                quality_score=0.5,
+                category="tech",
+                published_at=now,
+            ),
+            ContentAsset(
+                source_id=s2.id,
+                external_id="w2:a2",
+                url="https://x/w2-a2",
+                title="OpenAI推出全新GPT-5大模型",
+                content_hash="w2-h2",
+                content_markdown="OpenAI 推出全新 GPT-5。",
+                quality_score=0.8,
+                category="tech",
+                published_at=now,
+            ),
+            ContentAsset(
+                source_id=s1.id,
+                external_id="w2:b1",
+                url="https://x/w2-b1",
+                title="美联储宣布加息50个基点",
+                content_hash="w2-h3",
+                content_markdown="美联储加息 50 基点。",
+                quality_score=0.6,
+                category="finance",
+                published_at=now,
+            ),
+            ContentAsset(
+                source_id=s2.id,
+                external_id="w2:b2",
+                url="https://x/w2-b2",
+                title="美联储加息50基点应对通胀",
+                content_hash="w2-h4",
+                content_markdown="美联储加息应对通胀。",
+                quality_score=0.9,
+                category="finance",
+                published_at=now,
+            ),
         ]
         session.add_all(assets)
         await session.commit()

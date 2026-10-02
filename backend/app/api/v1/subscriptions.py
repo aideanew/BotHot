@@ -166,9 +166,7 @@ async def create_subscription(
     越权/无效空间 → 30004；无效 source → 30004。
     """
     svc = SourceSubscriptionService(session)
-    result = await svc.subscribe(
-        user_id, space_id, payload.source_id, payload.sync_policy, payload.sync_anchor_hour
-    )
+    result = await svc.subscribe(user_id, space_id, payload.source_id, payload.sync_policy, payload.sync_anchor_hour)
     status_code = 201 if result.get("created") else 200
     body = success(data=result)
     return JSONResponse(status_code=status_code, content=body.model_dump())

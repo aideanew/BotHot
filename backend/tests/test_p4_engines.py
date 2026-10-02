@@ -57,6 +57,7 @@ def _clear_saas_keys_env(monkeypatch: pytest.MonkeyPatch) -> None:
     yield
     get_settings.cache_clear()  # teardown：防缓存携带置空值污染后续用例
 
+
 # ------------------------------------------------------------------ ① 适配器 1:1 对照
 
 
@@ -207,9 +208,7 @@ async def test_patch_engine_builtin_double_write(db_session) -> None:  # type: i
     from app.models.entities import KnowledgeSpace
     from app.repositories.user import SqlAlchemyUserStore
 
-    user = await SqlAlchemyUserStore(db_session).upsert_by_sub(
-        "sub-p4-ab004", "p4ab004@test.local", "P4-AB004"
-    )
+    user = await SqlAlchemyUserStore(db_session).upsert_by_sub("sub-p4-ab004", "p4ab004@test.local", "P4-AB004")
     space = KnowledgeSpace(user_id=user.id, name="P4引擎空间", langbot_kb_uuid="lb-kb-99")
     db_session.add(space)
     await db_session.flush()

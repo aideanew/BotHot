@@ -102,9 +102,7 @@ def _validate_channel_type(channel_type: str) -> None:
     """校验渠道类型合法性。"""
     valid = {str(c["channel"]) for c in registered_channels()}
     if channel_type not in valid:
-        raise RequestInvalidError(
-            f"未知渠道类型: {channel_type}（合法：{', '.join(sorted(valid))}）"
-        )
+        raise RequestInvalidError(f"未知渠道类型: {channel_type}（合法：{', '.join(sorted(valid))}）")
 
 
 def _serialize_channel(ch: BotChannel) -> dict:
@@ -158,6 +156,7 @@ def _serialize_task(t: PushTask) -> dict:
 
 # ── 渠道类型查询 ──────────────────────────────────────────────────────
 
+
 @router.get("/channels")
 async def list_channel_types():
     """查询所有可用渠道类型。"""
@@ -165,6 +164,7 @@ async def list_channel_types():
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────
+
 
 @router.post("")
 async def create_channel(
@@ -230,12 +230,14 @@ async def list_channels(
     q = q.offset((page - 1) * page_size).limit(page_size)
     rows = (await db.execute(q)).scalars().all()
 
-    return success({
-        "items": [_serialize_channel(ch) for ch in rows],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    })
+    return success(
+        {
+            "items": [_serialize_channel(ch) for ch in rows],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
 
 
 @router.get("/{channel_id}")
@@ -302,6 +304,7 @@ async def delete_channel(
 
 # ── 测试推送 ──────────────────────────────────────────────────────────
 
+
 @router.post("/{channel_id}/test")
 async def test_push(
     channel_id: str,
@@ -346,14 +349,17 @@ async def test_push(
 
     await db.commit()
 
-    return success({
-        "delivered": result.delivered,
-        "reason": result.reason,
-        "channel": result.channel,
-    })
+    return success(
+        {
+            "delivered": result.delivered,
+            "reason": result.reason,
+            "channel": result.channel,
+        }
+    )
 
 
 # ── 推送日志 ──────────────────────────────────────────────────────────
+
 
 @router.get("/{channel_id}/logs")
 async def list_push_logs(
@@ -374,15 +380,18 @@ async def list_push_logs(
     q = q.offset((page - 1) * page_size).limit(page_size)
     rows = (await db.execute(q)).scalars().all()
 
-    return success({
-        "items": [_serialize_log(log) for log in rows],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    })
+    return success(
+        {
+            "items": [_serialize_log(log) for log in rows],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
 
 
 # ── 推送任务管理 ──────────────────────────────────────────────────────
+
 
 @router.post("/tasks")
 async def create_push_task(
@@ -470,12 +479,14 @@ async def list_push_tasks(
     q = q.offset((page - 1) * page_size).limit(page_size)
     rows = (await db.execute(q)).scalars().all()
 
-    return success({
-        "items": [_serialize_task(t) for t in rows],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    })
+    return success(
+        {
+            "items": [_serialize_task(t) for t in rows],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
 
 
 @router.put("/tasks/{task_id}")
@@ -618,8 +629,10 @@ async def run_push_task_now(
 
     await db.commit()
 
-    return success({
-        "delivered": result.delivered,
-        "reason": result.reason,
-        "channel": result.channel,
-    })
+    return success(
+        {
+            "delivered": result.delivered,
+            "reason": result.reason,
+            "channel": result.channel,
+        }
+    )

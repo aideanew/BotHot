@@ -42,9 +42,7 @@ from app.repositories.user import SqlAlchemyUserStore
 from app.services.batch_ingest import JOB_TYPE_BATCH, BatchIngestService
 from app.services.job_worker import JobWorker
 
-PG_DSN = os.environ.get(
-    "AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot"
-)
+PG_DSN = os.environ.get("AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot")
 _T26_SUB = "sub-t26-batch"
 _T26_SPACE = "T26批量空间"
 _T26_URL = "https://mp.weixin.qq.com/s/t26-{n}?biz=MjM5MjgwNTQ1MQ==&hid=t26"
@@ -102,9 +100,7 @@ async def _seed(factory: Any) -> tuple[str, str]:
         user = await SqlAlchemyUserStore(session).upsert_by_sub(_T26_SUB, "t26@test.local", "T26")
         space = (
             await session.execute(
-                select(KnowledgeSpace).where(
-                    KnowledgeSpace.user_id == user.id, KnowledgeSpace.name == _T26_SPACE
-                )
+                select(KnowledgeSpace).where(KnowledgeSpace.user_id == user.id, KnowledgeSpace.name == _T26_SPACE)
             )
         ).scalar_one_or_none()
         if space is None:
@@ -167,6 +163,7 @@ async def _counts(factory: Any, job_id: str) -> dict[str, int]:
 
 # ---------------------------------------------------------------- ① 提交即返
 
+
 async def test_submit_batch_creates_job_and_pending_items() -> None:
     """批量提交 → Job(batch_ingest, QUEUED) + N 个 PENDING JobItem；counts 全 pending。"""
     engine, factory = _factory()
@@ -215,6 +212,7 @@ async def test_submit_batch_normalizes_strip_and_dedup() -> None:
 
 
 # ---------------------------------------------------------------- ② 幂等提交
+
 
 async def test_submit_batch_reuses_inflight_job() -> None:
     """同批在途（QUEUED）重复提交 → 复用同一 Job（reused=True），不重建 JobItem。"""
@@ -267,6 +265,7 @@ async def test_submit_batch_resubmits_after_terminal() -> None:
 
 # ---------------------------------------------------------------- ③ 校验语义
 
+
 async def test_submit_batch_rejects_other_users_space() -> None:
     """越权空间 → 30004（不泄露存在性），且不落任何 Job。"""
     engine, factory = _factory()
@@ -309,9 +308,7 @@ async def test_submit_batch_rejects_invalid_space_id() -> None:
         (["https://mp.weixin.qq.com/s/" + "x" * 496], 10006),  # 超列宽 512
     ],
 )
-async def test_submit_batch_rejects_invalid_inputs(
-    payload: list[str], expected_code: int
-) -> None:
+async def test_submit_batch_rejects_invalid_inputs(payload: list[str], expected_code: int) -> None:
     """空批/全空白 → 10005；非 http(s)/超长 URL → 10006；均不落 Job。"""
     engine, factory = _factory()
     try:
@@ -343,6 +340,7 @@ async def test_submit_batch_enforces_max_urls() -> None:
 
 
 # ---------------------------------------------------------------- ④ worker 消费闭环
+
 
 async def test_worker_consumes_batch_job_and_finalizes() -> None:
     """worker 逐篇消费 batch Job → 全成 SUCCEEDED；每篇恰好调用 ingest 一次。"""
@@ -431,6 +429,7 @@ async def test_worker_stale_batch_job_requeues_items() -> None:
 
 # ---------------------------------------------------------------- ⑤ HTTP 接线
 
+
 async def test_docs_batch_endpoint_202_envelope() -> None:
     """POST /spaces/{id}/docs:batch → 202 + 统一信封；与 /docs 单篇路由不冲突。"""
     from fastapi.testclient import TestClient
@@ -470,9 +469,7 @@ async def test_docs_batch_endpoint_202_envelope() -> None:
         # 登录保护：未覆盖 user 依赖 → 10001 先行
         app2 = create_app()
         client2 = TestClient(app2, raise_server_exceptions=False)
-        resp2 = client2.post(
-            f"/api/v1/spaces/{space_id}/docs:batch", json={"urls": _urls(1)}
-        )
+        resp2 = client2.post(f"/api/v1/spaces/{space_id}/docs:batch", json={"urls": _urls(1)})
         assert resp2.status_code == 401, f"未登录应 401 登录保护先行，实际 {resp2.status_code}"
     finally:
         await engine.dispose()

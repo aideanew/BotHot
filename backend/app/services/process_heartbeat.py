@@ -146,9 +146,9 @@ async def describe_liveness(
     与「有行但过期」区分开——两者都不可用，但处置动作不同。
     """
     now = datetime.now(UTC) if now_fn is None else now_fn()
-    rows = (await session.execute(
-        sa_text(f"SELECT process_key, last_heartbeat_at, last_detail FROM {TABLE_NAME}")
-    )).all()
+    rows = (
+        await session.execute(sa_text(f"SELECT process_key, last_heartbeat_at, last_detail FROM {TABLE_NAME}"))
+    ).all()
     by_key = {row[0]: row for row in rows}
 
     processes: list[ProcessLiveness] = []

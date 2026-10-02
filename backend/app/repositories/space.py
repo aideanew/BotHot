@@ -30,9 +30,7 @@ class SpaceRepoProto(Protocol):
 
     async def get_by_name(self, user_id: str, name: str) -> KnowledgeSpace | None: ...
 
-    async def list_by_user(
-        self, user_id: str, *, limit: int = ..., offset: int = ...
-    ) -> list[KnowledgeSpace]: ...
+    async def list_by_user(self, user_id: str, *, limit: int = ..., offset: int = ...) -> list[KnowledgeSpace]: ...
 
     async def count_by_user(self, user_id: str) -> int: ...
 
@@ -68,9 +66,7 @@ class SpaceRepoProto(Protocol):
 
     async def delete_doc(self, doc_id: str) -> dict[str, int]: ...
 
-    async def list_public_spaces(
-        self, *, limit: int = ..., offset: int = ...
-    ) -> list[KnowledgeSpace]: ...
+    async def list_public_spaces(self, *, limit: int = ..., offset: int = ...) -> list[KnowledgeSpace]: ...
 
     async def count_public_spaces(self) -> int: ...
 
@@ -105,14 +101,10 @@ class SpaceRepository:
 
     async def get_by_name(self, user_id: str, name: str) -> KnowledgeSpace | None:
         return await self._session.scalar(
-            select(KnowledgeSpace).where(
-                KnowledgeSpace.user_id == user_id, KnowledgeSpace.name == name
-            )
+            select(KnowledgeSpace).where(KnowledgeSpace.user_id == user_id, KnowledgeSpace.name == name)
         )
 
-    async def list_by_user(
-        self, user_id: str, *, limit: int = 50, offset: int = 0
-    ) -> list[KnowledgeSpace]:
+    async def list_by_user(self, user_id: str, *, limit: int = 50, offset: int = 0) -> list[KnowledgeSpace]:
         """C.1：SQL 层 LIMIT/OFFSET（替代路由层切片）。"""
         result = await self._session.scalars(
             select(KnowledgeSpace)
@@ -126,17 +118,15 @@ class SpaceRepository:
     async def count_by_user(self, user_id: str) -> int:
         """C.1：与 list_by_user 同谓词求总数。"""
         return int(
-            (await self._session.scalar(
-                select(func.count()).select_from(KnowledgeSpace).where(
-                    KnowledgeSpace.user_id == user_id
+            (
+                await self._session.scalar(
+                    select(func.count()).select_from(KnowledgeSpace).where(KnowledgeSpace.user_id == user_id)
                 )
-            ))
+            )
             or 0
         )
 
-    async def list_with_owner(
-        self, *, limit: int = 50, offset: int = 0
-    ) -> list[tuple[KnowledgeSpace, User | None]]:
+    async def list_with_owner(self, *, limit: int = 50, offset: int = 0) -> list[tuple[KnowledgeSpace, User | None]]:
         """跨用户空间列表（/admin）用：单查询取全部空间 + 归属账号。
 
         归属信息必须随空间同查——逐空间查 owner 会把这里变成 N+1
@@ -160,11 +150,11 @@ class SpaceRepository:
     async def count_with_owner(self) -> int:
         """C.1：与 list_with_owner 同谓词求总数。"""
         return int(
-            (await self._session.scalar(
-                select(func.count())
-                .select_from(KnowledgeSpace)
-                .outerjoin(User, User.id == KnowledgeSpace.user_id)
-            ))
+            (
+                await self._session.scalar(
+                    select(func.count()).select_from(KnowledgeSpace).outerjoin(User, User.id == KnowledgeSpace.user_id)
+                )
+            )
             or 0
         )
 
@@ -186,9 +176,7 @@ class SpaceRepository:
 
     # ------------------------------------------------------------------ AB-P004 P1 公共库
 
-    async def list_public_spaces(
-        self, *, limit: int = 50, offset: int = 0
-    ) -> list[KnowledgeSpace]:
+    async def list_public_spaces(self, *, limit: int = 50, offset: int = 0) -> list[KnowledgeSpace]:
         """公共库列表（is_public=1 系统空间）。C.1：SQL 层 LIMIT/OFFSET。"""
         result = await self._session.scalars(
             select(KnowledgeSpace)
@@ -202,11 +190,11 @@ class SpaceRepository:
     async def count_public_spaces(self) -> int:
         """C.1：与 list_public_spaces 同谓词求总数。"""
         return int(
-            (await self._session.scalar(
-                select(func.count())
-                .select_from(KnowledgeSpace)
-                .where(KnowledgeSpace.is_public.is_(True))
-            ))
+            (
+                await self._session.scalar(
+                    select(func.count()).select_from(KnowledgeSpace).where(KnowledgeSpace.is_public.is_(True))
+                )
+            )
             or 0
         )
 
@@ -275,15 +263,17 @@ class SpaceRepository:
         join；两个调用方共用它即保证过滤谓词不会各写一份后漂移（F-3 同类缺陷）。
         `category` 为空串即「未分类」（资产无分类标签），哨兵已在 Service 层译好。
         """
-        stmt = select(
-            KnowledgeDocument.id,
-            ContentAsset.title,
-            Source.name,
-            KnowledgeDocument.status,
-            KnowledgeDocument.updated_at,
-            ContentAsset.category,
-        ).join(ContentAsset, KnowledgeDocument.asset_id == ContentAsset.id).join(
-            Source, ContentAsset.source_id == Source.id
+        stmt = (
+            select(
+                KnowledgeDocument.id,
+                ContentAsset.title,
+                Source.name,
+                KnowledgeDocument.status,
+                KnowledgeDocument.updated_at,
+                ContentAsset.category,
+            )
+            .join(ContentAsset, KnowledgeDocument.asset_id == ContentAsset.id)
+            .join(Source, ContentAsset.source_id == Source.id)
         )
         stmt = stmt.where(KnowledgeDocument.space_id == space_id)
         if category is not None:
@@ -308,9 +298,7 @@ class SpaceRepository:
         仅凭 `created_at` 排序属**未定序**（PG 排序非稳定），会让 offset 分页出现
         重复页/漏行。故追加 `id` 作确定性兜底（分页健全性；不改变单页内容集）。
         """
-        stmt = self._docs_stmt(space_id, category).order_by(
-            KnowledgeDocument.created_at, KnowledgeDocument.id
-        )
+        stmt = self._docs_stmt(space_id, category).order_by(KnowledgeDocument.created_at, KnowledgeDocument.id)
         if offset:
             stmt = stmt.offset(offset)
         if limit is not None:
@@ -357,23 +345,13 @@ class SpaceRepository:
                 select(KnowledgeDocument.asset_id).where(KnowledgeDocument.space_id == space_id)
             )
         )
-        r_docs = await self._session.execute(
-            delete(KnowledgeDocument).where(KnowledgeDocument.space_id == space_id)
-        )
+        r_docs = await self._session.execute(delete(KnowledgeDocument).where(KnowledgeDocument.space_id == space_id))
         r_assets = await self._session.execute(
             delete(ContentAsset)
             .where(ContentAsset.id.in_(asset_ids))
-            .where(
-                ~exists(
-                    select(KnowledgeDocument.id).where(
-                        KnowledgeDocument.asset_id == ContentAsset.id
-                    )
-                )
-            )
+            .where(~exists(select(KnowledgeDocument.id).where(KnowledgeDocument.asset_id == ContentAsset.id)))
         )
-        r_space = await self._session.execute(
-            delete(KnowledgeSpace).where(KnowledgeSpace.id == space_id)
-        )
+        r_space = await self._session.execute(delete(KnowledgeSpace).where(KnowledgeSpace.id == space_id))
         await self._session.flush()
         return {
             "docs": _rowcount(r_docs),
@@ -391,9 +369,7 @@ class SpaceRepository:
         doc = await self._session.get(KnowledgeDocument, doc_id)
         if doc is None:
             return {"docs": 0, "assets": 0}
-        r_doc = await self._session.execute(
-            delete(KnowledgeDocument).where(KnowledgeDocument.id == doc_id)
-        )
+        r_doc = await self._session.execute(delete(KnowledgeDocument).where(KnowledgeDocument.id == doc_id))
         r_asset = await self._session.execute(
             delete(ContentAsset)
             .where(ContentAsset.id == doc.asset_id)

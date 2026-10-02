@@ -69,9 +69,7 @@ class BatchIngestService:
             max_urls = int(getattr(get_settings(), "batch_ingest_max_urls", DEFAULT_MAX_URLS))
         self._max_urls = max_urls
 
-    async def submit_batch(
-        self, user_id: str, space_id: str, raw_urls: list[str]
-    ) -> dict[str, Any]:
+    async def submit_batch(self, user_id: str, space_id: str, raw_urls: list[str]) -> dict[str, Any]:
         """POST /spaces/{id}/docs:batch → {jobId,status,counts,reused,urlCount}。
 
         越权/无效空间 → 30004；空批或超上限 → 10005；非 http(s)/超长 URL → 10006。
@@ -115,9 +113,7 @@ class BatchIngestService:
             raise RequestInvalidError(f"批量条数 {len(urls)} 超过单次上限 {self._max_urls}")
         return urls
 
-    async def _create_batch_job(
-        self, user_id: str, space_id: str, urls: list[str]
-    ) -> tuple[Any, bool]:
+    async def _create_batch_job(self, user_id: str, space_id: str, urls: list[str]) -> tuple[Any, bool]:
         """建 Job(batch_ingest) + 逐篇 JobItem(PENDING)；返回 (job, reused)。
 
         幂等键 `batch_ingest:{空间}:{指纹}` 的三段语义：
@@ -126,9 +122,7 @@ class BatchIngestService:
         - 键不冲突 → 新建并装配 JobItem。
         新建时 status 即 QUEUED（Job model 默认值），无需再 set_status。
         """
-        payload = json.dumps(
-            {"space_id": space_id, "urlCount": len(urls)}, ensure_ascii=False
-        )
+        payload = json.dumps({"space_id": space_id, "urlCount": len(urls)}, ensure_ascii=False)
         base_key = f"{JOB_TYPE_BATCH}:{space_id}:{_fingerprint(urls)}"
         for seq in range(1, 65):
             key = base_key if seq == 1 else f"{base_key}:r{seq}"
@@ -140,9 +134,7 @@ class BatchIngestService:
             )
             if created:
                 for url in urls:
-                    item = await self._item_repo.create(
-                        job_id=job.id, external_id=_article_key(url), url=url
-                    )
+                    item = await self._item_repo.create(job_id=job.id, external_id=_article_key(url), url=url)
                     await self._item_repo.set_status(item.id, "PENDING")
                 return job, False
             if job.status in _TERMINAL_STATUSES:

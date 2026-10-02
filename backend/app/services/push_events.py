@@ -56,10 +56,12 @@ async def _hydrate_payload(session: AsyncSession, event_type: str, payload: dict
         if not hydrated.get("report_title"):
             report_date = str(hydrated.get("report_date") or "")
             row = (
-                await session.execute(
-                    select(DailyReport.title).where(DailyReport.report_date == report_date)
-                )
-            ).scalar_one_or_none() if report_date else None
+                (
+                    await session.execute(select(DailyReport.title).where(DailyReport.report_date == report_date))
+                ).scalar_one_or_none()
+                if report_date
+                else None
+            )
             hydrated["report_title"] = row or ""
 
     return hydrated
@@ -67,9 +69,7 @@ async def _hydrate_payload(session: AsyncSession, event_type: str, payload: dict
 
 async def emit_event(session: AsyncSession, event_type: str, payload: dict) -> None:
     if event_type not in VALID_EVENT_TYPES:
-        raise RequestInvalidError(
-            f"非法事件类型: {event_type}（合法：{', '.join(sorted(VALID_EVENT_TYPES))}）"
-        )
+        raise RequestInvalidError(f"非法事件类型: {event_type}（合法：{', '.join(sorted(VALID_EVENT_TYPES))}）")
 
     hydrated = await _hydrate_payload(session, event_type, payload)
     event = PushEvent(

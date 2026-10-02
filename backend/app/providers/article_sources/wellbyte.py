@@ -102,9 +102,7 @@ class WellbyteClient:
 
     # ── 发现 ──────────────────────────────────────────────────────────
 
-    async def query_work_list(
-        self, identifier: str, page: int
-    ) -> tuple[list[dict[str, Any]], int | None]:
+    async def query_work_list(self, identifier: str, page: int) -> tuple[list[dict[str, Any]], int | None]:
         """按文章 URL 获取账号历史文章列表。
 
         identifier = 文章 URL（mp.weixin.qq.com 长链）。
@@ -129,9 +127,7 @@ class WellbyteClient:
             )
         except httpx.HTTPError as exc:
             # CF 1010 拦截会表现为 httpx.HTTPStatusError 或 ConnectError
-            raise DependencyUnavailableError(
-                f"Wellbyte 不可达（检查 Cloudflare 指纹拦截）: {exc}"
-            ) from exc
+            raise DependencyUnavailableError(f"Wellbyte 不可达（检查 Cloudflare 指纹拦截）: {exc}") from exc
 
         payload = await self._handle_response(resp, "account_history_articles_v2")
         if payload is None:
@@ -232,14 +228,16 @@ class WellbyteClient:
                 except (ValueError, OSError):
                     pass
 
-            results.append(ArticleSearchResult(
-                url=item.get("doc_url", "") or item.get("url", ""),
-                title=item.get("title", ""),
-                digest=item.get("digest", ""),
-                author=source_info.get("title", ""),  # source.title = 号名
-                publish_time=publish_time,
-                source="wellbyte",
-            ))
+            results.append(
+                ArticleSearchResult(
+                    url=item.get("doc_url", "") or item.get("url", ""),
+                    title=item.get("title", ""),
+                    digest=item.get("digest", ""),
+                    author=source_info.get("title", ""),  # source.title = 号名
+                    publish_time=publish_time,
+                    source="wellbyte",
+                )
+            )
         return results
 
     # ── 标识映射（免费侧产） ─────────────────────────────────────────
@@ -291,9 +289,7 @@ class WellbyteClient:
             if suppress_errors:
                 logger.warning("Wellbyte %s 被 Cloudflare 拦截（403/1010）", op)
                 return None
-            raise DependencyUnavailableError(
-                "Wellbyte 被 Cloudflare 拦截（403）：需检查 httpx TLS 指纹配置"
-            )
+            raise DependencyUnavailableError("Wellbyte 被 Cloudflare 拦截（403）：需检查 httpx TLS 指纹配置")
         if resp.status_code == 422:
             # 质量门槛拒绝（article_detail_v2），不扣费
             if suppress_errors:

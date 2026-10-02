@@ -93,14 +93,22 @@ class PushService:
             raise RequestInvalidError(f"引用 id 过长（上限 {MAX_REF_CHARS} 字符）")
 
         space = (
-            await self._session.execute(select(KnowledgeSpace).where(KnowledgeSpace.id == space_id))
-        ).scalar_one_or_none() if space_id else None
+            (
+                await self._session.execute(select(KnowledgeSpace).where(KnowledgeSpace.id == space_id))
+            ).scalar_one_or_none()
+            if space_id
+            else None
+        )
         if space_id and space is None:
             raise ResourceNotFoundError(f"推送引用的空间不存在: {space_id}")
 
         doc = (
-            await self._session.execute(select(KnowledgeDocument).where(KnowledgeDocument.id == doc_id))
-        ).scalar_one_or_none() if doc_id else None
+            (
+                await self._session.execute(select(KnowledgeDocument).where(KnowledgeDocument.id == doc_id))
+            ).scalar_one_or_none()
+            if doc_id
+            else None
+        )
         if doc_id and doc is None:
             raise ResourceNotFoundError(f"推送引用的文档不存在: {doc_id}")
         if doc is not None and space is not None and doc.space_id != space.id:

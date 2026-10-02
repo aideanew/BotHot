@@ -37,8 +37,12 @@ class TestProviderRegistry:
     def test_all_channels_registered(self):
         """六个渠道全部注册。"""
         assert set(PUSH_CHANNELS) == {
-            "feishu", "dingtalk", "wechat_work",
-            "webhook", "wechat_clawbot", "web",
+            "feishu",
+            "dingtalk",
+            "wechat_work",
+            "webhook",
+            "wechat_clawbot",
+            "web",
         }
 
     def test_registered_channels_returns_metadata(self):
@@ -117,6 +121,7 @@ class TestDingtalkProvider:
     def test_sign_correctness(self):
         """钉钉加签算法：HMAC-SHA256(secret, timestamp + "\\n" + secret)。"""
         import urllib.parse
+
         secret = "test_secret_456"
         timestamp = 1700000000000
         string_to_sign = f"{timestamp}\n{secret}"

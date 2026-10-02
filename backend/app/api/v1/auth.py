@@ -45,7 +45,7 @@ def _build_stores(settings: Settings) -> tuple[SsoStateStore, SessionStore]:
     if settings.session_store_backend == "redis":
         import redis.asyncio as aioredis
 
-        redis_client = aioredis.from_url(settings.redis_url)
+        redis_client = aioredis.from_url(settings.redis_url, protocol=2)
         return RedisSsoStateStore(redis_client), RedisSessionStore(redis_client)
     return InMemorySsoStateStore(), InMemorySessionStore()
 

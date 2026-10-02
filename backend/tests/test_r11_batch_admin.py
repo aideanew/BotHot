@@ -81,9 +81,7 @@ async def _seed(db_session: Any) -> dict[str, str]:
     owner = User(sub="r11-batch-owner", email="r11-batch-owner@r11.test", nickname="owner")
     second = User(sub="r11-batch-second", email="r11-batch-second@r11.test", nickname="second")
     admin = User(sub="r11-batch-admin", email="r11-batch-admin@r11.test", nickname="admin", role="admin")
-    operator = User(
-        sub="r11-batch-operator", email="r11-batch-operator@r11.test", nickname="operator", role="operator"
-    )
+    operator = User(sub="r11-batch-operator", email="r11-batch-operator@r11.test", nickname="operator", role="operator")
     db_session.add_all([owner, second, admin, operator])
     await db_session.flush()
 
@@ -118,8 +116,13 @@ async def _seed(db_session: Any) -> dict[str, str]:
         assets[f"a{i}"] = asset.id
 
     asset_b = ContentAsset(
-        source_id=source.id, external_id="b-1", url="https://mp.weixin.qq.com/s/b1",
-        title="B文章", content_hash="h-b1", content_markdown="# B", category="其他",
+        source_id=source.id,
+        external_id="b-1",
+        url="https://mp.weixin.qq.com/s/b1",
+        title="B文章",
+        content_hash="h-b1",
+        content_markdown="# B",
+        category="其他",
     )
     db_session.add(asset_b)
     await db_session.flush()
@@ -159,9 +162,7 @@ def _app(db_session: Any, actor_id: str, kb: FakeKbClient | SelectiveKbClient | 
     app = create_app()
     app.dependency_overrides[get_current_user_id] = lambda: actor_id
     app.dependency_overrides[get_db] = lambda: db_session
-    app.dependency_overrides[get_space_service] = lambda: SpaceService(
-        SpaceRepository(db_session), db_session
-    )
+    app.dependency_overrides[get_space_service] = lambda: SpaceService(SpaceRepository(db_session), db_session)
     if kb is not None:
         app.dependency_overrides[get_langbot_client] = lambda: kb  # type: ignore[arg-type]
     return TestClient(app)
@@ -179,9 +180,7 @@ async def _remaining_doc_ids(db_session: Any, space_ids: Iterable[str]) -> set[s
     必须按 space 限定：夹具只在写侧隔离（外层事务回滚），读侧仍可见环境里
     其他空间的 doc（人工 QA 数据）——全表计数会把环境噪音误判成产品缺陷。
     """
-    rows = await db_session.execute(
-        select(KnowledgeDocument.id).where(KnowledgeDocument.space_id.in_(space_ids))
-    )
+    rows = await db_session.execute(select(KnowledgeDocument.id).where(KnowledgeDocument.space_id.in_(space_ids)))
     return set(rows.scalars().all())
 
 
@@ -208,7 +207,11 @@ async def test_admin_batch_delete_cross_user_engine_first(
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["data"] == {
-        "ok": True, "requested": 3, "docs": 3, "assets": 3, "failed": [],
+        "ok": True,
+        "requested": 3,
+        "docs": 3,
+        "assets": 3,
+        "failed": [],
     }
     assert kb.deleted_files == [("kb-a", f"file-a{i}") for i in (1, 2, 3)]  # 引擎先删且用 langbot_kb_uuid
 
@@ -286,13 +289,14 @@ async def test_admin_batch_delete_invalid_targets_30004(
         resp = client.post(DEL.format(space_id=rows["space"]), json=payload)
         assert resp.status_code == 404 and resp.json()["code"] == 30004, payload
 
-    status, code = _hit(
-        client, "post", DEL.format(space_id=SPACE_ID_MISSING), json={"ids": [rows["doc_a1"]]}
-    )
+    status, code = _hit(client, "post", DEL.format(space_id=SPACE_ID_MISSING), json={"ids": [rows["doc_a1"]]})
     assert (status, code) == (404, 30004)  # 空间不存在
 
     assert await _remaining_doc_ids(db_session, {rows["space"], rows["space_b"]}) == {
-        rows["doc_a1"], rows["doc_a2"], rows["doc_a3"], rows["doc_b1"],
+        rows["doc_a1"],
+        rows["doc_a2"],
+        rows["doc_a3"],
+        rows["doc_b1"],
     }
     assert kb.deleted_files == []  # 请求形态错误在任何引擎调用之前被拒
 
@@ -303,13 +307,15 @@ async def test_admin_batch_delete_skips_engine_for_copy_rows(
     """langbot_file_id 为空的 doc（公共库 link 引入的副本）不触发引擎调用，PG 照常删。"""
     rows = await _seed(db_session)
     # 独立资产：knowledge_documents 有 uq_doc_asset_space，同一资产不能在同空间建两篇
-    source_id = await db_session.scalar(
-        select(ContentAsset.source_id).where(ContentAsset.id == rows["asset_a2"])
-    )
+    source_id = await db_session.scalar(select(ContentAsset.source_id).where(ContentAsset.id == rows["asset_a2"]))
     asset = ContentAsset(
-        source_id=source_id, external_id="copy-1",
-        url="https://mp.weixin.qq.com/s/copy1", title="副本", content_hash="h-copy",
-        content_markdown="# C", category="其他",
+        source_id=source_id,
+        external_id="copy-1",
+        url="https://mp.weixin.qq.com/s/copy1",
+        title="副本",
+        content_hash="h-copy",
+        content_markdown="# C",
+        category="其他",
     )
     db_session.add(asset)
     await db_session.flush()
@@ -320,9 +326,7 @@ async def test_admin_batch_delete_skips_engine_for_copy_rows(
     kb = FakeKbClient()
     client = _app(db_session, rows["admin"], kb=kb)
 
-    resp = client.post(
-        DEL.format(space_id=rows["space"]), json={"ids": [rows["doc_a1"], doc.id]}
-    )
+    resp = client.post(DEL.format(space_id=rows["space"]), json={"ids": [rows["doc_a1"], doc.id]})
     assert resp.status_code == 200, resp.text
     assert resp.json()["data"]["docs"] == 2
     assert kb.deleted_files == [("kb-a", "file-a1")]  # 副本篇不触发引擎
@@ -349,7 +353,10 @@ async def test_admin_batch_delete_validation_errors_before_any_engine_call(
 
     assert kb.deleted_files == []
     assert await _remaining_doc_ids(db_session, {rows["space"], rows["space_b"]}) == {
-        rows["doc_a1"], rows["doc_a2"], rows["doc_a3"], rows["doc_b1"],
+        rows["doc_a1"],
+        rows["doc_a2"],
+        rows["doc_a3"],
+        rows["doc_b1"],
     }
 
 
@@ -383,13 +390,17 @@ async def test_admin_batch_recategorize_illegal_category_10005_before_fetch(
     client = _app(db_session, rows["admin"], kb=FakeKbClient())
 
     status, code = _hit(
-        client, "post", REC.format(space_id=rows["space"]),
+        client,
+        "post",
+        REC.format(space_id=rows["space"]),
         json={"ids": [rows["doc_a1"]], "category": "自由文本"},
     )
     assert (status, code) == (422, 10005)
 
     status, code = _hit(
-        client, "post", REC.format(space_id=SPACE_ID_MISSING),
+        client,
+        "post",
+        REC.format(space_id=SPACE_ID_MISSING),
         json={"ids": [rows["doc_a1"]], "category": "自由文本"},
     )
     assert (status, code) == (422, 10005)  # 校验先于取行，不是 30004
@@ -405,7 +416,9 @@ async def test_admin_batch_recategorize_missing_id_rolls_back_entire_batch(
     client = _app(db_session, rows["admin"], kb=FakeKbClient())
 
     status, code = _hit(
-        client, "post", REC.format(space_id=rows["space"]),
+        client,
+        "post",
+        REC.format(space_id=rows["space"]),
         json={"ids": [rows["doc_a1"], DOC_ID_MISSING], "category": "AI·技术"},
     )
     assert (status, code) == (404, 30004)
@@ -440,7 +453,10 @@ async def test_admin_batch_both_entries_validate_before_fetch(
             checks.append((label, False, "", 0))
 
     assert [c[0] for c in checks] == [
-        "delete_docs", "delete_docs_any", "recategorize_docs", "recategorize_docs_any",
+        "delete_docs",
+        "delete_docs_any",
+        "recategorize_docs",
+        "recategorize_docs_any",
     ]
     assert all(c[1] for c in checks), "四条入口都必须在任何取行之前被拒绝"
     assert (checks[0][2], checks[0][3]) == (empty_msg, 10005)
@@ -464,12 +480,12 @@ async def test_admin_batch_role_gate(db_session) -> None:  # type: ignore[no-unt
 
     for actor_key in ("owner", "operator"):
         client = _app(db_session, rows[actor_key], kb=kb)
-        status, code = _hit(
-            client, "post", DEL.format(space_id=rows["space"]), json={"ids": [rows["doc_a1"]]}
-        )
+        status, code = _hit(client, "post", DEL.format(space_id=rows["space"]), json={"ids": [rows["doc_a1"]]})
         assert (status, code) == (403, 10004), actor_key
         status, code = _hit(
-            client, "post", REC.format(space_id=rows["space"]),
+            client,
+            "post",
+            REC.format(space_id=rows["space"]),
             json={"ids": [rows["doc_a1"]], "category": "AI·技术"},
         )
         assert (status, code) == (403, 10004), actor_key
@@ -486,12 +502,12 @@ async def test_admin_batch_requires_login_10001(db_session) -> None:  # type: ig
     app.dependency_overrides[get_space_service] = lambda: SpaceService(SpaceRepository(db_session), db_session)
     client = TestClient(app)
 
-    status, code = _hit(
-        client, "post", DEL.format(space_id=SPACE_ID_MISSING), json={"ids": [DOC_ID_MISSING]}
-    )
+    status, code = _hit(client, "post", DEL.format(space_id=SPACE_ID_MISSING), json={"ids": [DOC_ID_MISSING]})
     assert (status, code) == (401, 10001)
     status, code = _hit(
-        client, "post", REC.format(space_id=SPACE_ID_MISSING),
+        client,
+        "post",
+        REC.format(space_id=SPACE_ID_MISSING),
         json={"ids": [DOC_ID_MISSING], "category": "AI·技术"},
     )
     assert (status, code) == (401, 10001)
@@ -509,18 +525,21 @@ async def test_user_batch_routes_still_reject_cross_user(db_session) -> None:  #
     rows = await _seed(db_session)
     client = _app(db_session, rows["second"], kb=FakeKbClient())
 
-    status, code = _hit(
-        client, "post", f"/api/v1/spaces/{rows['space']}/docs:delete", json={"ids": [rows["doc_a1"]]}
-    )
+    status, code = _hit(client, "post", f"/api/v1/spaces/{rows['space']}/docs:delete", json={"ids": [rows["doc_a1"]]})
     assert (status, code) == (404, 30004)
     status, code = _hit(
-        client, "post", f"/api/v1/spaces/{rows['space']}/docs:recategorize",
+        client,
+        "post",
+        f"/api/v1/spaces/{rows['space']}/docs:recategorize",
         json={"ids": [rows["doc_a1"]], "category": "AI·技术"},
     )
     assert (status, code) == (404, 30004)
 
     assert await _remaining_doc_ids(db_session, {rows["space"], rows["space_b"]}) == {
-        rows["doc_a1"], rows["doc_a2"], rows["doc_a3"], rows["doc_b1"],
+        rows["doc_a1"],
+        rows["doc_a2"],
+        rows["doc_a3"],
+        rows["doc_b1"],
     }
     assert (await _categories(db_session))[rows["asset_a1"]] == "其他"
 
@@ -570,18 +589,24 @@ async def test_admin_list_spaces_cross_user_with_owner(db_session) -> None:  # t
     owner_view, other_view = by_id[rows["space"]], by_id[rows["space_b"]]
     assert owner_view["docCount"] == 3 and other_view["docCount"] == 1
 
-    for key, value in (("ownerId", rows["owner"]), ("ownerSub", "r11-batch-owner"),
-                       ("ownerNickname", "owner")):
+    for key, value in (("ownerId", rows["owner"]), ("ownerSub", "r11-batch-owner"), ("ownerNickname", "owner")):
         assert owner_view[key] == value, key
-    for key, value in (("ownerId", rows["second"]), ("ownerSub", "r11-batch-second"),
-                       ("ownerNickname", "second")):
+    for key, value in (("ownerId", rows["second"]), ("ownerSub", "r11-batch-second"), ("ownerNickname", "second")):
         assert other_view[key] == value, key
     # 既有视图字段形状不变
     for view in (owner_view, other_view):
         assert set(view) == {
-            "id", "name", "description", "docCount", "updatedAt",
-            "engine", "engineKbId", "isPublic",
-            "ownerId", "ownerSub", "ownerNickname",
+            "id",
+            "name",
+            "description",
+            "docCount",
+            "updatedAt",
+            "engine",
+            "engineKbId",
+            "isPublic",
+            "ownerId",
+            "ownerSub",
+            "ownerNickname",
         }
 
 
@@ -615,9 +640,7 @@ async def test_admin_list_docs_pagination_and_category_agree(db_session) -> None
         REC.format(space_id=rows["space"]),
         json={"ids": [rows["doc_a1"]], "category": "AI·技术"},
     )
-    filtered = client.get(
-        f"{DOCS.format(space_id=rows['space'])}?category=AI·技术"
-    ).json()["data"]
+    filtered = client.get(f"{DOCS.format(space_id=rows['space'])}?category=AI·技术").json()["data"]
     assert filtered["total"] == 1 and len(filtered["items"]) == 1
     assert filtered["items"][0]["id"] == rows["doc_a1"]
 

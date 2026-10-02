@@ -81,20 +81,28 @@ async def test_run_clustering_idempotent_no_dup_feed(db_session) -> None:  # typ
 
     # feed_items 无 (hot_topic, ref_id) 重复——每个 topic 恰一条
     feeds = (
-        await db_session.execute(
-            select(FeedItem).where(FeedItem.item_type == "hot_topic", FeedItem.ref_id.in_([t.id for t in topics2]))
+        (
+            await db_session.execute(
+                select(FeedItem).where(FeedItem.item_type == "hot_topic", FeedItem.ref_id.in_([t.id for t in topics2]))
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(feeds) == 2
     # upsert 幂等：对同一 topic 再 add_hot_topic_feed 不新增行
     from app.services.feed_service import add_hot_topic_feed
 
     await add_hot_topic_feed(db_session, topics2[0])
     feeds2 = (
-        await db_session.execute(
-            select(FeedItem).where(FeedItem.item_type == "hot_topic", FeedItem.ref_id == topics2[0].id)
+        (
+            await db_session.execute(
+                select(FeedItem).where(FeedItem.item_type == "hot_topic", FeedItem.ref_id == topics2[0].id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(feeds2) == 1
 
 
@@ -111,10 +119,10 @@ async def test_on_article_indexed_writes_feed_article(db_session) -> None:  # ty
     await on_article_indexed(db_session, asset, space_id="space-1")
 
     items = (
-        await db_session.execute(
-            select(FeedItem).where(FeedItem.item_type == "article", FeedItem.ref_id == asset.id)
-        )
-    ).scalars().all()
+        (await db_session.execute(select(FeedItem).where(FeedItem.item_type == "article", FeedItem.ref_id == asset.id)))
+        .scalars()
+        .all()
+    )
     assert len(items) == 1
     assert items[0].title == "某公众号文章"
     assert items[0].source_name == "来源X"
@@ -123,10 +131,10 @@ async def test_on_article_indexed_writes_feed_article(db_session) -> None:  # ty
     # 验收 3（feed 唯一）：同 asset 再调一次不新增
     await on_article_indexed(db_session, asset, space_id="space-1")
     items2 = (
-        await db_session.execute(
-            select(FeedItem).where(FeedItem.item_type == "article", FeedItem.ref_id == asset.id)
-        )
-    ).scalars().all()
+        (await db_session.execute(select(FeedItem).where(FeedItem.item_type == "article", FeedItem.ref_id == asset.id)))
+        .scalars()
+        .all()
+    )
     assert len(items2) == 1
 
 

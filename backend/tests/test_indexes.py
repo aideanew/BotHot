@@ -24,17 +24,12 @@ async def test_fk_indexes_exist(db_session) -> None:  # type: ignore[no-untyped-
     for table, col in TARGET_INDEXES:
         rows = (
             await db_session.execute(
-                text(
-                    "SELECT indexname, indexdef FROM pg_indexes "
-                    "WHERE schemaname='public' AND tablename=:t"
-                ),
+                text("SELECT indexname, indexdef FROM pg_indexes WHERE schemaname='public' AND tablename=:t"),
                 {"t": table},
             )
         ).all()
         # 索引定义中包含列名即认为该列被索引（单列 index 或复合索引首列）
-        assert any(col in r[1] for r in rows), (
-            f"{table}.{col} 索引缺失——migration 未落库，见 alembic 索引声明"
-        )
+        assert any(col in r[1] for r in rows), f"{table}.{col} 索引缺失——migration 未落库，见 alembic 索引声明"
 
 
 @pytest.mark.asyncio
@@ -50,9 +45,7 @@ async def test_explain_uses_index_not_seq_scan(db_session) -> None:  # type: ign
     for sql, label in checks:
         plan = (await db_session.execute(text(f"EXPLAIN {sql}"))).all()
         plan_text = " ".join(str(r[0]) for r in plan)
-        assert "Seq Scan" not in plan_text, (
-            f"{label}: EXPLAIN 仍走 Seq Scan（索引不可用？）plan={plan_text}"
-        )
+        assert "Seq Scan" not in plan_text, f"{label}: EXPLAIN 仍走 Seq Scan（索引不可用？）plan={plan_text}"
 
 
 @pytest.mark.asyncio

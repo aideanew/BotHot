@@ -37,9 +37,7 @@ from app.services.process_heartbeat import (
     describe_liveness,
 )
 
-PG_DSN = os.environ.get(
-    "AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot"
-)
+PG_DSN = os.environ.get("AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot")
 # 本文件专属的隔离表：与线上 `process_heartbeats` 完全分离。
 TEST_TABLE = "process_heartbeats_r77test"
 
@@ -83,6 +81,7 @@ def _isolated_heartbeat_table(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]
             conn.execute(DropTable(table, if_exists=True))
         engine.dispose()
 
+
 # 锚在**真实当前时刻**而非编造常量：`describe_liveness` 默认用 `datetime.now(UTC)`，
 # `check_process` 更不接收时钟注入。编造一个未来的 NOW 会让「NOW - 2h」恰好落在真实现在
 # 附近，把「过期」测成「新鲜」。整套用例在秒级跑完，漂移远小于 300s 阈值。
@@ -98,16 +97,13 @@ async def _seed_operator(db_session: Any) -> str:  # type: ignore[no-untyped-def
 
 # ------------------------------------------------------------------ 写侧
 
+
 async def test_beacon_inserts_then_upserts_to_single_row(db_session: Any) -> None:  # type: ignore[no-untyped-def]
     """同键二次报到 → 仍是一行，时间戳前移、detail 覆盖（不是追加）。"""
     await beacon(db_session, "scheduler", "round=1")
     await beacon(db_session, "scheduler", "round=2")
 
-    rows = (
-        await db_session.execute(
-            sa_text(f"SELECT last_detail, last_heartbeat_at FROM {TEST_TABLE}")
-        )
-    ).all()
+    rows = (await db_session.execute(sa_text(f"SELECT last_detail, last_heartbeat_at FROM {TEST_TABLE}"))).all()
     assert len(rows) == 1
     assert rows[0][0] == "round=2"
     assert rows[0][1] is not None
@@ -121,6 +117,7 @@ async def test_beacon_truncates_detail_to_column_width(db_session: Any) -> None:
 
 
 # ------------------------------------------------------------------ 读侧
+
 
 async def test_describe_empty_table_lists_every_expected_process(db_session: Any) -> None:  # type: ignore[no-untyped-def]
     """零行 → 每个期望进程都占位且报 stale。只回报「已有行」就查不出缺进程。"""
@@ -173,10 +170,7 @@ async def test_describe_reports_stale_row_when_heartbeat_expired(db_session: Any
 async def test_describe_age_equal_to_threshold_is_still_healthy(db_session: Any) -> None:  # type: ignore[no-untyped-def]
     """边界口径：age == 阈值不算 stale（严格大于才过期）。阈值本身不能自报故障。"""
     await db_session.execute(
-        sa_text(
-            f"INSERT INTO {TEST_TABLE} (process_key, last_heartbeat_at, last_detail) "
-            "VALUES (:k, :at, '')"
-        ),
+        sa_text(f"INSERT INTO {TEST_TABLE} (process_key, last_heartbeat_at, last_detail) VALUES (:k, :at, '')"),
         {"k": "scheduler", "at": NOW - timedelta(seconds=300)},
     )
     await db_session.commit()
@@ -196,10 +190,7 @@ async def test_describe_age_uses_absolute_instant_across_zones(db_session: Any) 
     """
     shanghai = ZoneInfo("Asia/Shanghai")
     await db_session.execute(
-        sa_text(
-            f"INSERT INTO {TEST_TABLE} (process_key, last_heartbeat_at, last_detail) "
-            "VALUES ('worker', :at, '')"
-        ),
+        sa_text(f"INSERT INTO {TEST_TABLE} (process_key, last_heartbeat_at, last_detail) VALUES ('worker', :at, '')"),
         {"at": (NOW - timedelta(seconds=60)).astimezone(shanghai)},
     )
     await db_session.commit()
@@ -211,6 +202,7 @@ async def test_describe_age_uses_absolute_instant_across_zones(db_session: Any) 
 
 
 # ------------------------------------------------------------------ 节流门
+
 
 def test_beacon_gate_blocks_within_interval() -> None:
     """门内不重复放行：空闲循环 10s 一拍时，心跳写入节流到 30s 一次。"""
@@ -231,6 +223,7 @@ def test_beacon_gate_allows_at_and_after_interval() -> None:
 
 # ------------------------------------------------------------------ healthcheck 出口
 
+
 async def _aim_check_process_at(monkeypatch: pytest.MonkeyPatch, db_session: Any) -> None:  # type: ignore[no-untyped-def]
     """check_process 内部自建引擎；改指向夹具会话以复用外层事务的回滚隔离。"""
     import app.core.config as config_module
@@ -250,7 +243,8 @@ async def _aim_check_process_at(monkeypatch: pytest.MonkeyPatch, db_session: Any
 
 
 async def test_check_process_zero_when_fresh(
-    db_session: Any, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+    db_session: Any,
+    monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
 ) -> None:
     await _aim_check_process_at(monkeypatch, db_session)
     await beacon(db_session, "scheduler", "ok")
@@ -258,7 +252,8 @@ async def test_check_process_zero_when_fresh(
 
 
 async def test_check_process_one_when_stale_or_missing(
-    db_session: Any, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+    db_session: Any,
+    monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
 ) -> None:
     """缺行与过期都返回 1（容器 unhealthy），但读侧回报的形态不同。"""
     await _aim_check_process_at(monkeypatch, db_session)
@@ -268,9 +263,7 @@ async def test_check_process_one_when_stale_or_missing(
     assert await check_process("worker", 300) == 0
 
     await db_session.execute(
-        sa_text(
-            f"UPDATE {TEST_TABLE} SET last_heartbeat_at = :at WHERE process_key = 'worker'"
-        ),
+        sa_text(f"UPDATE {TEST_TABLE} SET last_heartbeat_at = :at WHERE process_key = 'worker'"),
         {"at": NOW - timedelta(hours=2)},
     )
     await db_session.commit()
@@ -278,7 +271,8 @@ async def test_check_process_one_when_stale_or_missing(
 
 
 async def test_check_process_one_for_unknown_key(
-    db_session: Any, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+    db_session: Any,
+    monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
 ) -> None:
     """不在期望清单的键返回 1：误配置的 healthcheck 不能因为「查不到行」而假绿。"""
     await _aim_check_process_at(monkeypatch, db_session)
@@ -286,6 +280,7 @@ async def test_check_process_one_for_unknown_key(
 
 
 # ------------------------------------------------------------------ 心跳不是关键路径
+
 
 async def test_scheduler_beacon_swallows_write_failure() -> None:
     """数据库写不进去时心跳静默失败，不上抛——不能把可观测性故障放大成采集停摆。"""
@@ -312,6 +307,7 @@ async def test_worker_beacon_swallows_write_failure() -> None:
 
 
 # ------------------------------------------------------------------ 管理端读侧
+
 
 async def test_admin_liveness_endpoint(db_session: Any) -> None:  # type: ignore[no-untyped-def]
     """operator+ 放行；回报按期望进程全景（缺失也占位）。"""
