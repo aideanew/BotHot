@@ -169,3 +169,62 @@
 | wechaty | TypeScript | 独立服务 | 最成熟微信 SDK，全功能 |
 | Koishi | TypeScript | 独立服务 | 跨平台框架，插件生态 |
 | CountBot | Python | 逻辑参考 | 多渠道 AI Agent 参考 |
+
+
+---
+
+## 八、补充项目（第二轮调研）
+
+### 飞书/Lark 补充
+
+| 项目 | ⭐ | 语言 | 说明 |
+|------|-----|------|------|
+| lark-coding-agent-bridge | 2,589 | TypeScript | 飞书↔Claude Code/Codex CLI 桥接，流式卡片 |
+| botmux | 1,561 | TypeScript | 飞书→AI编程CLI桥接，每会话独立流式 |
+| chyroc/lark | 477 | Go | 社区Go SDK，全API+事件回调覆盖 |
+| iflow-bot | 216 | Python | 零成本多平台AI机器人，内置定时任务 |
+
+### 微信补充
+
+| 项目 | ⭐ | 语言 | 说明 |
+|------|-----|------|------|
+| wechatferry | 2,099 | TypeScript | Windows微信COM注入框架，RPC接口 |
+| wecomchan | 1,759 | Go | 开源Server酱替代，企业微信应用消息推送 |
+
+### wechaty 多语言 SDK
+
+| SDK | ⭐ | 语言 | 说明 |
+|-----|-----|------|------|
+| python-wechaty | 1,826 | Python | wechaty Python SDK，可直接集成 FastAPI |
+
+---
+
+## 九、完整项目清单（25个）
+
+| # | 项目 | ⭐ | 语言 | 渠道 | RSS | 定时 |
+|---|------|-----|------|------|-----|------|
+| 1 | SmsForwarder | 28,232 | Kotlin | 钉钉/企微/飞书/Telegram等15+ | ❌ | ❌ |
+| 2 | LangBot | 17,992 | Python | 飞书/钉钉/微信/QQ/Telegram等9 | ✅ | ✅ |
+| 3 | wechaty | 23,344 | TS | 微信(个人+企业) | ✅ | ✅ |
+| 4 | wechat-bot | 11,418 | JS | 微信/Telegram/WhatsApp/Lark | ❌ | ❌ |
+| 5 | Koishi | 6,242 | TS | 飞书/Discord/Telegram/QQ等7 | ✅ | ✅ |
+| 6 | nexu | 3,283 | TS | 微信/飞书/Slack/Discord | ❌ | ❌ |
+| 7 | lark-coding-agent-bridge | 2,589 | TS | 飞书 | ❌ | ❌ |
+| 8 | wechatbot-webhook | 2,164 | JS | 微信(个人) | ❌ | ❌ |
+| 9 | wechatferry | 2,099 | TS | 微信(Windows) | ❌ | ❌ |
+| 10 | wecomchan | 1,759 | Go | 微信(企业微信) | ❌ | ❌ |
+| 11 | MuseBot | 1,644 | Go | 飞书/钉钉/企微/QQ/微信等8 | ❌ | ❌ |
+| 12 | botmux | 1,561 | TS | 飞书 | ❌ | ❌ |
+| 13 | CountBot | 782 | Python | 微信/飞书/钉钉/QQ/Telegram等 | ❌ | ❌ |
+| 14 | heimdallr | 814 | Python | 飞书/钉钉/企微/Telegram等15+ | ✅ | ✅ |
+| 15 | guanguans/notify | 692 | PHP | 飞书/钉钉/企微/Telegram等20+ | ❌ | ❌ |
+| 16 | rsspush | 622 | Python | 微信/Telegram/Discord/Slack等 | ✅ | ✅ |
+| 17 | larksuite/oapi-sdk-go | 620 | Go | 飞书(官方) | ❌ | ❌ |
+| 18 | ELF_RSS | 609 | Python | QQ(NoneBot2) | ✅ | ✅ |
+| 19 | appstore-discounts | 406 | TS | RSS/Telegram/钉钉 | ✅ | ✅ |
+| 20 | chyroc/lark | 477 | Go | 飞书(社区) | ❌ | ❌ |
+| 21 | larksuite/oapi-sdk-python | 560 | Python | 飞书(官方) | ❌ | ❌ |
+| 22 | CatchZeng/dingtalk | 223 | Go | 钉钉 | ❌ | ✅ |
+| 23 | iflow-bot | 216 | Python | 飞书/钉钉/QQ/Telegram | ❌ | ✅ |
+| 24 | dingtalk-stream-sdk-python | 174 | Python | 钉钉(官方Stream) | ❌ | ❌ |
+| 25 | push-all-in-one | 211 | TS | 飞书/钉钉/企微等16+ | ❌ | ❌ |
