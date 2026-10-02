@@ -122,3 +122,64 @@
 | **最简单免费** | Wechat2RSS 公共列表 | 零配置，复制feed URL即可，400+预索引账号 |
 | **未收录账号** | 国内 RSSHub 实例 + sogou/ce 路由 | 可搜索任意公众号，注意反爬 |
 | **最稳定** | Wechat2RSS 私有部署 (150元/年) | 6小时延迟，全文，图片代理 |
+
+
+---
+
+## 八、RSSHub 中文内容源完整路由表
+
+以下路由均通过 RSSHub 实例访问，以已验证可用的 `rss.injahow.cn` 为例：
+
+### 财经新闻
+
+| 平台 | 路由 | 示例 URL |
+|------|------|----------|
+| 华尔街见闻 | `/wallstreetcn/news` | `https://rss.injahow.cn/wallstreetcn/news` |
+| 华尔街见闻直播 | `/wallstreetcn/live/global` | `https://rss.injahow.cn/wallstreetcn/live/global` |
+| 财联社电报 | `/cls/telegraph` | `https://rss.injahow.cn/cls/telegraph` |
+| 财联社深度 | `/cls/depth/1000` | `https://rss.injahow.cn/cls/depth/1000` |
+| 金十数据 | `/jin10/news` | `https://rss.injahow.cn/jin10/news` |
+| 雪球热帖 | `/xueqiu/hots` | `https://rss.injahow.cn/xueqiu/hots` |
+| 东方财富 | `/eastmoney/report/industry` | `https://rss.injahow.cn/eastmoney/report/industry` |
+| 通联财富 | `/zhitongcaijing/aqs` | `https://rss.injahow.cn/zhitongcaijing/aqs` |
+| 证券时报 | `/stcn/news` | `https://rss.injahow.cn/stcn/news` |
+| 十大看盘 | `/10jqka/news` | `https://rss.injahow.cn/10jqka/news` |
+| 南方周末 | `/nbd` | `https://rss.injahow.cn/nbd` |
+
+### 综合新闻
+
+| 平台 | 路由 | 示例 URL |
+|------|------|----------|
+| 36氪快讯 | `/36kr/newsflashes` | `https://rss.injahow.cn/36kr/newsflashes` |
+| 财新 | `/caixin/latest` | `https://rss.injahow.cn/caixin/latest` |
+| 第一财经 | `/yicai/brief` | `https://rss.injahow.cn/yicai/brief` |
+| 澎湃新闻 | `/thepaper/featured` | `https://rss.injahow.cn/thepaper/featured` |
+| 早报 | `/zaobao/realtime/:section` | `https://rss.injahow.cn/zaobao/realtime/china` |
+
+### 社交/社区
+
+| 平台 | 路由 | 示例 URL |
+|------|------|----------|
+| 微博 | `/weibo/user/:uid` | `https://rss.injahow.cn/weibo/user/1888981347` |
+| 知乎热榜 | `/zhihu/hotlist` | `https://rss.injahow.cn/zhihu/hotlist` |
+| 知乎日报 | `/zhihu/daily` | `https://rss.injahow.cn/zhihu/daily` |
+| 哔哩哔哩 | `/bilibili/user/video/:uid` | `https://rss.injahow.cn/bilibili/user/video/517327498` |
+| 掘金AI | `/juejin/category/ai` | `https://rss.injahow.cn/juejin/category/ai` |
+| CSDN | `/csdn/blog/:user` | `https://rss.injahow.cn/csdn/blog/u013737132` |
+| 观察者网 | `/guancha/personalpage/:uid` | — |
+
+### 国际媒体
+
+| 平台 | 路由 | 示例 URL |
+|------|------|----------|
+| 路透社 | `/reuters/technology` | `https://rss.injahow.cn/reuters/technology` |
+| 华尔街日报 | `/wsj/opinion` | `https://rss.injahow.cn/wsj/opinion` |
+| 纽约时报 | `/nytimes/dual` | `https://rss.injahow.cn/nytimes/dual` |
+| 富途牛牛 | `/futunn/main` | `https://rss.injahow.cn/futunn/main` |
+
+### 播客/知识
+
+| 平台 | 路由 | 示例 URL |
+|------|------|----------|
+| 小宇宙播客 | `/xiaoyuzhou/podcast/:id` | — |
+| 有知有行 | `/youzhiyouxing/materials/:id` | — |
