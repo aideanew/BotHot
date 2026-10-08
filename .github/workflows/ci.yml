@@ -233,10 +233,10 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Type check
         run: pnpm run typecheck
-      # W10：tsc --noEmit 严格门禁
-      # 依赖 W9 落地，若 W9 未落地则 continue-on-error
+      # W10→S0.4：tsc --noEmit 硬门禁。原 continue-on-error 软闸在 W9 契约
+      # 消费落地（前端 lib/api 3 文件 import type 契约类型）后已无存在理由
+      # ——本地实测零错误（2026-10-08 exit 0），软闸只会掩盖未来回归。
       - name: TypeScript strict check (tsc --noEmit)
-        continue-on-error: true
         run: pnpm exec tsc --noEmit
       # N12：补 vitest 单测门禁——此前 89 用例仅本地机检
       # N12b（2026-09-28）：加 --retry=2。t0263 的 findBy* 后立即断言 mock 调用存在
