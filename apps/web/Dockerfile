@@ -42,13 +42,20 @@ RUN corepack enable
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     npm_config_registry=https://registry.npmmirror.com
 
-RUN pnpm install --frozen-lockfile
+# 2026-10-08 实证修复：builder ENV 的 NODE_ENV=production 会让 pnpm install 跳装
+# 全部 devDependencies（typescript 缺失 → Next 无法应用 tsconfig paths → `@/*` 解析
+# 全炸，webpack 错误归并后表象为个别页 Module not found）。--prod=false 显式装全量；
+# build 后 prune --prod 收刀，runner COPY 的 node_modules 仍保持纯生产依赖。
+RUN pnpm install --frozen-lockfile --prod=false
 
 # 契约源码放 /packages：/app(tsconfig) 的 ../packages 即 /packages
 COPY packages /packages
 
 COPY apps/web/. .
 RUN pnpm run build
+
+# 产物定型：剥除 devDependencies（typescript/vitest 等），runner 层保最小依赖面
+RUN pnpm prune --prod
 
 # ---------------- runner：只带运行所需，非 root ----------------
 FROM ${BASE_IMAGE} AS runner

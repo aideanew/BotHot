@@ -1,18 +1,19 @@
-# 根构建上下文忽略清单（2026-09-30 起 frontend 镜像 context=仓库根；backend 镜像 context=backend/ 不受本文件影响）
+# 根构建上下文忽略清单（2026-10-08 修正：S3 目录迁移 backend→apps/api、frontend→apps/web
+# 时本文件漏改——`apps/` 整目录排除使 frontend 镜像 COPY apps/web 直接 not found；
+# backend 镜像 context=apps/api/ 独立，不受本文件影响，但 apps/api 也无需进根 context）
 .git
 .workbuddy/
 .github
 
-# 前端镜像 builder 只消费 frontend/ + packages/，其余目录一律不入上下文
+# 前端镜像 builder 只消费 apps/web/ + packages/，其余目录一律不入上下文
+apps/api/
 backend/
 deploy/
 docker/
 docs/
-apps/
 database/
 infra/
 scripts/
-tests/
 
 # 通用产物/缓存
 **/node_modules
