@@ -132,13 +132,21 @@ updated: 2026-10-08
 - **Dockerfile**：`backend/Dockerfile`+`frontend/Dockerfile` 多阶段（builder/runtime）+ 非 root uid1000（`USER app`）+ `HEALTHCHECK`
 - **compose**：`docker/compose.yml` 全服务 `logging.options`（json-file）+ `resources.limits` + backend/scheduler/worker `read_only`/`tmpfs`/`cap_drop`/`no-new-privileges`
 
-### ALERT-001：运行期告警三类 🔧（W6 A.5，回填 2026-10-08）
+### ALERT-001：运行期告警三类 ✅（W6 A.5 + S2.2 启用，2026-10-08 闭环）
 - **实现**：`backend/app/core/alerting.py` `run_alert_checks`（心跳缺失/Job 积压/推送连败）复用既有 push provider；接线 `push_scheduler.py:86-88`
-- **缺口**：`docker/compose.yml` 未注入 `ALERTING_ENABLED`/`ALERT_CHANNEL`/`ALERT_TARGET`（`ALERT_` grep=0）→ 生产态恒短路，功能就绪但未启用（待办 R1.3）
+- **S2.2 启用**：compose `backend_env` 锚注入 `ALERTING_ENABLED/ALERT_CHANNEL/ALERT_TARGET/ALERT_PUSH_FAIL_WINDOW/ALERT_JOB_BACKLOG`（默认关闭，fail-safe）；`.env.example` 五变量齐
+- **演练留证**：`backend/tests/test_alerting_drill.py`（隔离 PG 构造三类状态 → fired 断言 + `_deliver` 载荷语义抽查，savepoint 同会话探测零残留）
 
-### PERF-001：连接池容量守卫 🔧（W6 C.3.2，回填 2026-10-08）
+### SEC-002：bot_channels.extra_config 整字段加密 ✅（S2.1，2026-10-08 闭环）
+- **加密**：`core/secret_crypto.py` `encrypt_extra_config`/`decrypt_extra_config`（AES-256-GCM，域分隔 AAD=`{channel_id}:extra_config`，与 secret_enc 密文不可互搬）
+- **存量兼容**：`{` 开头明文 JSON 原样放行（含 `{"v":"1.2"}` 不误判——不能用 is_aes_ciphertext）；密文解密 fail-closed
+- **迁移**：`ab1005w5b`（fail-closed：明文待迁行存在而主密钥缺失即中止；畸形形态中止；拒绝降级），隔离 PG 实测 ab1005w5a→ab1005w5b、单头=1
+- **接线 6 处**：写侧 `bots.py` 创建/更新加密、回显 `_serialize_channel` 解密（维持 API 语义）、投递 3 处（test-push/run-now/push_scheduler）解密
+- **测试**：`backend/tests/test_extra_config_crypto.py`（7 例：roundtrip/域分隔/AAD 绑定渠道/明文兼容/错钥 fail-closed/迁移静态纪律）；SOP 增补第 11 节（轮换须覆盖 extra_config 列）
+
+### PERF-001：连接池容量守卫 ✅（W6 C.3.2 + S0.2 接线，2026-10-08 闭环）
 - **实现**：`backend/app/db.py:85 assert_pool_capacity()`（进程数×(pool_size+max_overflow) ≤ PG max_connections）
-- **现状**：定义 + 测试强制（`test_indexes.py:61`），启动 lifespan 尚未自动调用
+- **S0.2 接线**：main/scheduler/worker 三入口启动期调用（engine 参数化），fail-fast 拒启；`5fe5a4f`
 
 ### NOTIF-001：站内通知持久化全链路 ✅（R1.2，2026-10-08 四链路闭环）
 - **存储层（R1.2a）**：`Notification` 实体（`backend/app/models/bothot_entities.py` 第 8 节）+ 迁移 `backend/alembic/versions/ab1005w5a_notifications.py`（单头 `ab1004w4a → ab1005w5a`）
