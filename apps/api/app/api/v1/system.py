@@ -385,5 +385,7 @@ async def notifications_read(
         stmt = stmt.where(Notification.created_at <= payload.before)
     result = await session.execute(stmt.values(read_at=datetime.now(UTC)))
     await session.commit()
-    body = success(data={"updated": result.rowcount})
+    # ORM execute 返回的 Result 泛型不暴露 rowcount；运行时实为 CursorResult（UPDATE 必有）
+    updated = result.rowcount  # type: ignore[attr-defined]
+    body = success(data={"updated": updated})
     return JSONResponse(status_code=200, content=body.model_dump())

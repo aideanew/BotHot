@@ -255,6 +255,31 @@ class PushTaskScheduler:
 
             await db.commit()
 
+    async def _write_failure_log(self, task: PushTask, error_msg: str) -> None:
+        """任务级异常兜底日志（类方法——R2 门禁修复：曾因缩进事故嵌进
+        persist_web_notification 体内，类丢失该方法，异常路径运行时必 AttributeError）。
+        """
+        try:
+            async with self._session_factory() as db:
+                ch = (
+                    await db.execute(select(BotChannel).where(BotChannel.id == task.bot_channel_id))
+                ).scalar_one_or_none()
+                if ch is None:
+                    return
+
+                log = PushLog(
+                    bot_channel_id=ch.id,
+                    push_task_id=task.id,
+                    status="failed",
+                    content_preview="",
+                    error_message=error_msg[:500],
+                    response_summary="",
+                )
+                db.add(log)
+                await db.commit()
+        except Exception:
+            logger.exception("Task %s 写失败日志异常", task.id)
+
 async def persist_web_notification(db: AsyncSession, msg: PushMessage) -> None:
     """S1.1：web 渠道通知落库（notifications 表，R1.2 离线补投存储底座）。
 
@@ -280,29 +305,6 @@ async def persist_web_notification(db: AsyncSession, msg: PushMessage) -> None:
             )
     except Exception:
         logger.warning("web 通知落库失败（不影响投递回执）: %s", msg.title)
-
-
-    async def _write_failure_log(self, task: PushTask, error_msg: str) -> None:
-        try:
-            async with self._session_factory() as db:
-                ch = (
-                    await db.execute(select(BotChannel).where(BotChannel.id == task.bot_channel_id))
-                ).scalar_one_or_none()
-                if ch is None:
-                    return
-
-                log = PushLog(
-                    bot_channel_id=ch.id,
-                    push_task_id=task.id,
-                    status="failed",
-                    content_preview="",
-                    error_message=error_msg[:500],
-                    response_summary="",
-                )
-                db.add(log)
-                await db.commit()
-        except Exception:
-            logger.exception("Task %s 写失败日志异常", task.id)
 
 
 def _extract_payload(event) -> dict:

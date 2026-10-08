@@ -73,7 +73,7 @@ class _FakeConn:
     def __init__(self, max_conn: object) -> None:
         self._max_conn = max_conn
 
-    async def __aenter__(self) -> "_FakeConn":
+    async def __aenter__(self) -> _FakeConn:
         return self
 
     async def __aexit__(self, *exc: object) -> bool:
@@ -121,18 +121,6 @@ async def test_pool_capacity_skips_when_pg_unreachable() -> None:
 
     class _BrokenEngine:  # 模拟 PG 不可达：connect() 即抛
         def connect(self) -> None:
-            raise ConnectionError("pg unreachable")
-
-    await assert_pool_capacity(_BrokenEngine())  # 不抛 = 内部跳过生效
-
-
-@pytest.mark.asyncio
-async def test_pool_capacity_skips_when_pg_unreachable() -> None:  # type: ignore[no-untyped-def]
-    """PG 不可达时启动断言静默跳过（不拒启——连接故障由 pool_pre_ping 首查兜底）。"""
-    from app.db import assert_pool_capacity
-
-    class _BrokenEngine:  # 模拟 PG 不可达：connect() 即抛
-        def connect(self):  # noqa: ANN202
             raise ConnectionError("pg unreachable")
 
     await assert_pool_capacity(_BrokenEngine())  # 不抛 = 内部跳过生效
