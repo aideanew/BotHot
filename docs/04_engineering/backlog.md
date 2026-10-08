@@ -140,10 +140,13 @@ updated: 2026-10-08
 - **实现**：`backend/app/db.py:85 assert_pool_capacity()`（进程数×(pool_size+max_overflow) ≤ PG max_connections）
 - **现状**：定义 + 测试强制（`test_indexes.py:61`），启动 lifespan 尚未自动调用
 
-### NOTIF-001：站内通知持久化底座 🔧（R1.2a，2026-10-08 新增）
-- **实现**：`Notification` 实体（`backend/app/models/bothot_entities.py` 第 8 节）+ 迁移 `backend/alembic/versions/ab1005w5a_notifications.py`（单头 `ab1004w4a → ab1005w5a`）
-- **设计**：收件人锚=sub（SSO）；广播 `is_broadcast=True, sub=""`；`(sub, created_at)` 复合索引支撑离线补投热查询
-- **缺口**：仅存储层落地——写侧落库（web provider）、读侧 `GET /system/notifications/history`、前端重连补投（R1.2b/c/d）待建；SSE 实时侧不变
+### NOTIF-001：站内通知持久化全链路 ✅（R1.2，2026-10-08 四链路闭环）
+- **存储层（R1.2a）**：`Notification` 实体（`backend/app/models/bothot_entities.py` 第 8 节）+ 迁移 `backend/alembic/versions/ab1005w5a_notifications.py`（单头 `ab1004w4a → ab1005w5a`）
+- **写侧（R1.2b）**：`push_scheduler.persist_web_notification`（savepoint 落库，失败不阻断投递回执；广播/定向判定与 web.py 频道同源）—— `1e7202c`
+- **读侧（R1.2c）**：`GET /system/notifications/history`（`{items,total,limit,offset,unread_total}`，`sub==me OR is_broadcast`）+ `PUT /system/notifications/read`（单条 id / 批量 before，越权归零）—— `1e7202c`
+- **前端（R1.2d）**：`notifications.ts fetchHistory/markRead`（mock 态空页降级）+ `NotificationBell` 首连历史合并（serverId 去重）+ 展开批量已读对账 —— `9385991`
+- **测试**：`backend/tests/test_notification_history.py`（8 例连库：savepoint 回滚/可见性/分页窗口/已读三分支）；vitest 359 全绿零回归
+- **遗留待办**：SSE 实时帧与历史条目的展示侧无 id 互通（SSE 帧无 serverId，仅内容窗口去重）——量级触发后再补帧内 id
 
 ## 🔴 高优先级
 
