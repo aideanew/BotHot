@@ -20,6 +20,10 @@
 
 ### Added
 
+- **RSS 订阅发现渠道（远端 2026-10-02 批并入，`5ed5886`）**：article_sources 新增
+  RSS provider + 28 连库/单测；Redis 4 兼容性修复；usePagedList ESLint 修复
+  —— `apps/api/app/providers/article_sources/rss.py`（前端依赖降级裁定不并入，见 `731558b`）
+
 - **站内通知持久化四链路（S0-S1，`87ad712` `1e7202c` `9385991`）**：`Notification` 实体 +
   迁移 `ab1005w5a`（`sub` SSO 锚 + 广播标记 + `(sub, created_at)` 复合索引）；
   调度器 savepoint 落库（失败不阻断投递）+ `/notifications/history` 分页端点
