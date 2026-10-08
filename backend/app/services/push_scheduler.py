@@ -26,7 +26,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.metrics import PUSH_DELIVERIES_TOTAL
-from app.core.secret_crypto import decrypt_channel_secret
+from app.core.secret_crypto import decrypt_channel_secret, decrypt_extra_config
 from app.models.bothot_entities import BotChannel, Notification, PushLog, PushTask
 from app.providers.push import PushMessage, make_push_provider
 from app.services.cron_expr import parse_cron_next
@@ -188,7 +188,8 @@ class PushTaskScheduler:
                 # AES 密文 AAD 绑定 channel id；不可解时抛 RequestInvalidError，
                 # 由 _execute_task_safe 捕获写 failed PushLog（fail-closed，绝不静默空密钥投递）
                 secret=decrypt_channel_secret(ch.id, ch.secret_enc),
-                extra_config=ch.extra_config,
+                # S2.1：投递前解密 extra_config（密文列，存量明文兼容读）
+                extra_config=decrypt_extra_config(ch.id, ch.extra_config),
             )
 
             provider = make_push_provider(ch.channel_type)

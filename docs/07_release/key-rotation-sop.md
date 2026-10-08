@@ -276,3 +276,22 @@ export PYTHON=/path/to/backend/venv/bin/python
 bash scripts/rotate_keys.sh --verify      # 第 ①②④⑤ 判据
 bash scripts/rotate_keys.sh               # 第 1 判据（零写入）
 ```
+
+## 11. S2.1：extra_config 同受主密钥覆盖（2026-10-08 起）
+
+`bot_channels.extra_config`（飞书 app_secret / 钉钉 access_token 等）自迁移
+`ab1005w5b` 起为 AES-256-GCM 密文，AAD = `{channel_id}:extra_config`（域分隔，
+与 secret_enc 密文不可互换）。
+
+**轮换影响**：本规程的窗口期双密钥重加密**必须同时覆盖 extra_config 列**——
+只重加密 secret_enc 会让所有 extra_config 在新密钥下永久不可解（fail-closed，
+运行时投递路径 400 语义）。`scripts/rotate_keys.sh` 若未扩展列覆盖，轮换后需手工执行：
+
+```sql
+-- 窗口期重加密（应用内完成，SQL 仅示意读取范围）
+SELECT id, extra_config FROM bot_channels WHERE extra_config <> '' AND extra_config NOT LIKE '{%';
+```
+
+**存量兼容**：读侧 `decrypt_extra_config` 对 `{` 开头的明文 JSON 原样放行
+（兜底迁移前存量行 / 迁移回滚场景），密文解密失败 fail-closed。
+迁移期纪律：存在明文待迁行而主密钥缺失 → **中止迁移**（与 ab1004w1a 同裁定）。

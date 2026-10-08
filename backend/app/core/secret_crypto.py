@@ -111,3 +111,43 @@ def decrypt_legacy_base64(secret_ref: str) -> str | None:
         return base64.b64decode(secret_ref.encode("utf-8")).decode("utf-8")
     except Exception:
         return None
+
+
+# ── S2.1（R2.6）：bot_channels.extra_config 整字段加密 ─────────────
+# extra_config 承载飞书 app_secret / 钉钉 access_token 等敏感配置，此前为明文 JSON。
+# 域分隔 AAD = "{channel_id}:extra_config"——与 secret_enc（AAD=channel_id）密文
+# 不可互换，同主密钥下两列互搬解密必失败。
+
+
+def encrypt_extra_config(
+    channel_id: str,
+    plaintext: str,
+    master: bytes | None = None,
+    settings: Settings | None = None,
+) -> str:
+    """加密 extra_config（整字段，AAD 域分隔）。空明文返回空串（与 secret 同口径）。"""
+    if not plaintext:
+        return ""
+    return encrypt_channel_secret(
+        channel_id + ":extra_config", plaintext, master=master, settings=settings
+    )
+
+
+def decrypt_extra_config(
+    channel_id: str,
+    raw: str,
+    master: bytes | None = None,
+    settings: Settings | None = None,
+) -> str:
+    """解密 extra_config；**存量明文 JSON 兼容读**（"{" 开头原样返回）。
+
+    形态判定：明文 JSON 必以 "{" 开头，密文必以 base64 字符开头——两形态无交集
+    （明文含 "." 如 {"v":"1.2"} 不会被误判，故不能用 is_aes_ciphertext）。
+    兼容读仅兜底迁移前存量行/迁移回滚场景；密文解密失败 fail-closed 抛
+    RequestInvalidError（与 secret_enc 同口径，绝不静默返回原文）。
+    """
+    if not raw:
+        return ""
+    if raw.startswith("{"):
+        return raw
+    return decrypt_channel_secret(channel_id + ":extra_config", raw, master=master, settings=settings)

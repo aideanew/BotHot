@@ -31,7 +31,12 @@ from app.core.errors import (
     ResourceNotFoundError,
 )
 from app.core.response import success
-from app.core.secret_crypto import decrypt_channel_secret, encrypt_channel_secret
+from app.core.secret_crypto import (
+    decrypt_channel_secret,
+    decrypt_extra_config,
+    encrypt_channel_secret,
+    encrypt_extra_config,
+)
 from app.models.base import gen_uuid
 from app.models.bothot_entities import BotChannel, PushLog, PushTask
 from app.providers.push import PushMessage, make_push_provider, registered_channels
@@ -115,7 +120,8 @@ def _serialize_channel(ch: BotChannel) -> dict:
         "channel_type": ch.channel_type,
         "webhook_url": ch.webhook_url,
         "has_secret": bool(ch.secret_enc),
-        "extra_config": ch.extra_config,
+        # S2.1：存储态为 AES 密文，回显解密明文（维持既有 API 语义，前端零改动）
+        "extra_config": decrypt_extra_config(ch.id, ch.extra_config),
         "status": ch.status,
         "user_id": ch.user_id,
         "total_push_count": ch.total_push_count,
@@ -197,7 +203,8 @@ async def create_channel(
         channel_type=channel_type,
         webhook_url=payload.webhook_url,
         secret_enc=encrypt_channel_secret(channel_id, payload.secret) if payload.secret else "",
-        extra_config=payload.extra_config,
+        # S2.1：明文 JSON 落库前整字段加密（AAD 绑定 channel id + 字段域分隔）
+        extra_config=encrypt_extra_config(channel_id, payload.extra_config),
         status="active",
     )
     db.add(ch)
@@ -324,7 +331,8 @@ async def test_push(
         title=title,
         webhook_url=ch.webhook_url,
         secret=decrypt_channel_secret(ch.id, ch.secret_enc),
-        extra_config=ch.extra_config,
+        # S2.1：投递前解密（存量明文兼容读，密文 fail-closed）
+        extra_config=decrypt_extra_config(ch.id, ch.extra_config),
     )
 
     result = await provider.push(push_msg)
@@ -590,7 +598,8 @@ async def run_push_task_now(
         title=task.name,
         webhook_url=ch.webhook_url,
         secret=decrypt_channel_secret(ch.id, ch.secret_enc),
-        extra_config=ch.extra_config,
+        # S2.1：投递前解密（存量明文兼容读，密文 fail-closed）
+        extra_config=decrypt_extra_config(ch.id, ch.extra_config),
     )
 
     result = await provider.push(push_msg)
