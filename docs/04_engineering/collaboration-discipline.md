@@ -63,3 +63,20 @@ git branch --show-current     # 当前分支
 - 全量 pytest 约 11 分钟：必须后台跑（`run_in_background` + `python -u`），
   junitxml 落盘后二次核对（防单次 stdout 异常）。
 - 隔离 PG 用 `docker run` 独立端口（5547 等），**绝不动 5433**（那是 AideanBot 原项目的库）。
+
+## 7. 实战教训（2026-10-08 S3 迁移沉淀）
+
+- **后台任务禁接管道**（`cmd | tail -N` 会假死：缓冲无输出、真状态不可见）。
+  改为 `cmd > 日志文件 2>&1`，日志落盘后随时 tail 进度。
+- **pnpm install 卡死 = 交互确认**：node_modules 断链时 pnpm 会问
+  "reinstall from scratch? (Y/n)"，后台等输入永不返回。解法：`CI=true pnpm install`
+  （自动确认）或先把坏目录 `mv node_modules node_modules.broken` 再全新安装。
+- **git mv 到已存在目录 = 嵌套而非替换**：`git mv src dst` 当 dst 存在时会把 src
+  塞进 dst 里（src→dst/src）。正确顺序：先让 dst **彻底消失**（删内容 + rmdir），
+  再 git mv。
+- **目录深度变化的连锁**：`backend/tests`→`apps/api/tests` 深一层，
+  测试里 `Path(__file__).parents[2]`（指仓库根）全部要 +1。
+  迁移后必查：`grep -rn "parents\[" tests/`。
+- **路径前缀替换的盲区**：`backend/`→`apps/api/` 覆盖不了
+  `working-directory: backend`、`context: ../backend` 这类**无尾斜杠**形态。
+  迁移后必查：`grep -rn "backend\b" 活配置`（词边界）。
