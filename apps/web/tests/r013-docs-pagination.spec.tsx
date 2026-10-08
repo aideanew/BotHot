@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 /**
  * R0.1.3 —— 服务端分页与分类枚举接线（F-1 + F-9 前端销账）
@@ -106,7 +106,7 @@ async function renderPage(docs = [article("d-1", "文章甲", "AI·技术")], to
   h.getSpace.mockResolvedValue(SPACE);
   h.listSpaceDocs.mockResolvedValue(pg(docs, total));
   h.listSpaceDocCategories.mockResolvedValue(["AI·技术", "__uncategorized__"]);
-  render(createElement(SpaceDetailPage, { params: { id: "sp-1" } }));
+  await act(async () => { render(createElement(SpaceDetailPage, { params: Promise.resolve({ id: "sp-1" }) })); });
   return await screen.findByText("文章甲");
 }
 
@@ -137,7 +137,7 @@ describe("R0.1.3 服务端分页", () => {
       .mockResolvedValueOnce({ items: first, total: 60, limit: 50, offset: 0 })
       .mockResolvedValueOnce({ items: second, total: 60, limit: 50, offset: 50 });
     h.listSpaceDocCategories.mockResolvedValue([]);
-    render(createElement(SpaceDetailPage, { params: { id: "sp-1" } }));
+    await act(async () => { render(createElement(SpaceDetailPage, { params: Promise.resolve({ id: "sp-1" }) })); });
     await screen.findByText("第 1 篇");
 
     // 首屏一页 50 条，没有第 51 篇（服务端没返回就不渲染，不做本地补齐）
@@ -168,7 +168,7 @@ describe("R0.1.3 服务端分页", () => {
     h.listSpaceDocCategories
       .mockResolvedValueOnce(["AI·技术"])
       .mockResolvedValueOnce(["AI·技术"]);
-    render(createElement(SpaceDetailPage, { params: { id: "sp-1" } }));
+    await act(async () => { render(createElement(SpaceDetailPage, { params: Promise.resolve({ id: "sp-1" }) })); });
     await screen.findByText("篇 1");
 
     fireEvent.change(filterSelect(), { target: { value: "AI·技术" } });
@@ -200,7 +200,7 @@ describe("R0.1.3 分类下拉来自服务端枚举（F-9）", () => {
       "教程·实践",
       "__uncategorized__",
     ]);
-    render(createElement(SpaceDetailPage, { params: { id: "sp-1" } }));
+    await act(async () => { render(createElement(SpaceDetailPage, { params: Promise.resolve({ id: "sp-1" }) })); });
     await screen.findByText("文章甲");
 
     expect(
@@ -212,7 +212,7 @@ describe("R0.1.3 分类下拉来自服务端枚举（F-9）", () => {
     h.getSpace.mockResolvedValue(SPACE);
     h.listSpaceDocs.mockResolvedValue(pg([], 0));
     h.listSpaceDocCategories.mockResolvedValue([]);
-    render(createElement(SpaceDetailPage, { params: { id: "sp-1" } }));
+    await act(async () => { render(createElement(SpaceDetailPage, { params: Promise.resolve({ id: "sp-1" }) })); });
     await screen.findByText(/该空间还没有文章/);
     expect(screen.queryByLabelText("按分类筛选")).toBeNull();
   });
@@ -271,7 +271,7 @@ describe("R0.1.3 空态按 total 判定（分页下本页为空 ≠ 空间为空
     h.getSpace.mockResolvedValue(SPACE);
     h.listSpaceDocs.mockResolvedValue(pg([], 0));
     h.listSpaceDocCategories.mockResolvedValue([]);
-    render(createElement(SpaceDetailPage, { params: { id: "sp-1" } }));
+    await act(async () => { render(createElement(SpaceDetailPage, { params: Promise.resolve({ id: "sp-1" }) })); });
     await screen.findByText(
       "该空间还没有文章，使用上方「添加文章」粘贴公众号链接即可入库。"
     );

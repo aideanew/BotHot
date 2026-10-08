@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 /**
  * R0.2.6 —— 批量入口 UI（列表多选 + 批量删除 / 批量改分类）
@@ -147,7 +147,7 @@ async function renderPage() {
   armServer();
   armDelete();
   h.listSpaceDocCategories.mockResolvedValue(["AI·技术", "教程·实践"]);
-  render(createElement(SpaceDetailPage, { params: { id: "sp-1" } }));
+  await act(async () => { render(createElement(SpaceDetailPage, { params: Promise.resolve({ id: "sp-1" }) })); });
   return await screen.findByText("第 1 篇");
 }
 

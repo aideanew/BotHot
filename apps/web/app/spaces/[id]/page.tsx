@@ -1,16 +1,37 @@
 "use client";
 
+import Link from "next/link";
+import { Suspense, use } from "react";
 import { useAuth } from "@/components/AuthContext";
 import { useSpaceDetail } from "@/components/useSpaceDetail";
 import { usePageTitle } from "@/components/usePageTitle";
 import SpaceHeaderPanel from "@/components/SpaceHeaderPanel";
 import SpaceArticleSection from "@/components/SpaceArticleSection";
 
+/**
+ * Next 15：params 为 Promise（动态 API 异步化），client 组件以 React.use() 解包。
+ * use() 首渲染会挂起，故内层组件必须置于 Suspense 边界内（否则无回退 UI 直接抛错）。
+ */
 export default function SpaceDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto max-w-5xl px-4 py-10">
+          <div className="card p-10 text-center text-neutral-500">正在加载…</div>
+        </main>
+      }
+    >
+      <SpaceDetailContent params={params} />
+    </Suspense>
+  );
+}
+
+function SpaceDetailContent({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const { status } = useAuth();
   const {
     space, docs, total, categories,
@@ -18,7 +39,7 @@ export default function SpaceDetailPage({
     setReloadTick, categoryFilter, selected, setSelected,
     refreshDocs, handleCategoryChanged, handleDocChanged,
     loadMore, toggleSelected,
-  } = useSpaceDetail(params.id);
+  } = useSpaceDetail(id);
   usePageTitle(space ? `${space.name}` : "空间详情");
 
   if (status !== "authed") {
@@ -39,12 +60,12 @@ export default function SpaceDetailPage({
           <p className="mt-3 text-neutral-500">
             空间可能已被删除，或链接地址有误。
           </p>
-          <a
+          <Link
             href="/spaces"
             className="mt-8 inline-block rounded-input bg-brand-500 px-6 py-2 text-white hover:bg-brand-600"
           >
             返回空间列表
-          </a>
+          </Link>
         </div>
       </main>
     );

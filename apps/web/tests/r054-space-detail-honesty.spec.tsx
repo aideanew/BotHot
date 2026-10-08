@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 
 /**
  * R0.5.4 —— 空间详情页「契约诚实性」呈现不变式（F-4 + F-5 前端销账）
@@ -100,7 +100,7 @@ afterEach(() => {
 /** 渲染详情页并等到信息头出现 */
 async function renderDetail(space: SpaceDetail) {
   h.getSpace.mockResolvedValue(space);
-  render(createElement(SpaceDetailPage, { params: { id: space.id } }));
+  await act(async () => { render(createElement(SpaceDetailPage, { params: Promise.resolve({ id: space.id }) })); });
   await screen.findByText(space.name);
 }
 

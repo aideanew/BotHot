@@ -1,6 +1,10 @@
 {
   "compilerOptions": {
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -12,12 +16,31 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "plugins": [{ "name": "next" }],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     // @bothot/contracts 为纯类型消费（全部 import type，编译期擦除）：由 paths 解析
     // ../../packages/contracts/src，非 npm 依赖——仓库无 pnpm workspace 根，package.json
     // 里出现 workspace:* 会让 frozen install 必红（2026-09-30 CI 实测）。
-    "paths": { "@/*": ["./*"], "@bothot/contracts": ["../../packages/contracts/src/index"] }
+    "paths": {
+      "@/*": [
+        "./*"
+      ],
+      "@bothot/contracts": [
+        "../../packages/contracts/src/index"
+      ]
+    },
+    "target": "ES2017"
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MOCK_LABEL, MOCK_ENABLED } from "@/lib/api";
@@ -37,75 +38,75 @@ export default function TopBar() {
   return (
     <header className="sticky top-0 z-40 border-b border-neutral-200/80 bg-white/90 shadow-[0_1px_12px_rgba(15,23,42,0.04)] backdrop-blur">
       <div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center gap-3 px-4 py-2 sm:flex-nowrap sm:px-6">
-        <a href="/" className="group flex shrink-0 items-center gap-2.5" aria-label="返回 BotHot 首页">
+        <Link href="/" className="group flex shrink-0 items-center gap-2.5" aria-label="返回 BotHot 首页">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500 text-white text-title-sm font-bold shadow-[0_5px_12px_rgba(47,128,237,0.28)] transition group-hover:bg-brand-600">
             A
           </span>
           <span className="text-title-sm font-bold tracking-tight text-neutral-900">
             BotHot
           </span>
-        </a>
+        </Link>
 
         {/* AB-P004 P5：主导航（T1.3.2 收口五入口统一心智：空间/订阅/公共库/问答/引擎；
             R0.4.3 增「任务」——任务中心是用户级（跨空间）观测面，不进订阅页） */}
         <nav className="hidden shrink-0 items-center gap-1 sm:flex" aria-label="主导航">
-          <a
+          <Link
             href="/spaces"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
           >
             空间
-          </a>
-          <a
+          </Link>
+          <Link
             href="/subscriptions"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
           >
             订阅
-          </a>
-          <a
+          </Link>
+          <Link
             href="/jobs"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
           >
             任务
-          </a>
-          <a
+          </Link>
+          <Link
             href="/public"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
           >
             公共库
-          </a>
-          <a
+          </Link>
+          <Link
             href="/chat"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
           >
             问答
-          </a>
-          <a
+          </Link>
+          <Link
             href="/engines"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
           >
             引擎
-          </a>
-          <a
+          </Link>
+          <Link
             href="/bots"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
           >
             机器人
-          </a>
-          <a
+          </Link>
+          <Link
             href="/hot"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
           >
             热点
-          </a>
+          </Link>
           {/* SPEC-M3 批次 2：admin 入口只按 is_admin 门禁——user.role 是主平台
               userinfo 的大写枚举，与本地授权阶梯不同源，拿它门禁会与后端 10004 分歧 */}
           {status === "authed" && me?.is_admin && (
-            <a
+            <Link
               href="/admin"
               className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
             >
               管理
-            </a>
+            </Link>
           )}
         </nav>
 

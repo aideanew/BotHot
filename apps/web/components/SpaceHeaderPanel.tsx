@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { formatTime } from "@/components/DocStatusBadge";
 import AddArticlePanel from "@/components/AddArticlePanel";
 import SubscribeShortcut from "@/components/SubscribeShortcut";
@@ -18,12 +19,12 @@ export default function SpaceHeaderPanel({
 }: SpaceHeaderPanelProps) {
   return (
     <>
-      <a
+      <Link
         href="/spaces"
         className="inline-flex items-center gap-1 text-caption text-neutral-400 hover:text-neutral-600"
       >
         ← 返回空间列表
-      </a>
+      </Link>
 
       <section className="card mt-4 p-6">
         <p className="eyebrow">KNOWLEDGE SPACE</p>

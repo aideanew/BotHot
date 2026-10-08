@@ -8,6 +8,7 @@
  * - 空态/错误态/未建空间引导齐备。
  * 验收锚（大纲 T1.1.1）：公共库列表可点引入。
  */
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import LoadingErrorShell from "@/components/LoadingErrorShell";
 import PublicLibraryPicker from "@/components/PublicLibraryPicker";
@@ -93,7 +94,7 @@ export default function PublicPage() {
             <h2 className="mb-3 text-title-sm font-semibold text-neutral-900">引入到我的空间</h2>
             {spaces.length === 0 ? (
               <div className="card p-6 text-center text-neutral-500">
-                你还没有自己的空间——先到 <a className="text-brand-600 underline" href="/spaces">空间页</a> 或
+                你还没有自己的空间——先到 <Link className="text-brand-600 underline" href="/spaces">空间页</Link> 或
                 引导流程创建一个，再回来一键引入。
               </div>
             ) : (

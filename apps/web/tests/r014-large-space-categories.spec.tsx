@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 /**
  * R0.1.4 —— 大空间回归锁定：>100 篇时分类仍可完整选择（F-1 + F-9 的原始缺陷形态）
@@ -182,7 +182,7 @@ async function renderLargeSpace() {
   h.getSpace.mockResolvedValue(SPACE);
   armServer();
   h.listSpaceDocCategories.mockResolvedValue(ALL_CATEGORIES);
-  render(createElement(SpaceDetailPage, { params: { id: "sp-1" } }));
+  await act(async () => { render(createElement(SpaceDetailPage, { params: Promise.resolve({ id: "sp-1" }) })); });
   return await screen.findByText("第 1 篇");
 }
 

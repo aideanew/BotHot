@@ -7,6 +7,7 @@
  * - 切换流程：选择目标空间 → 复用 EngineSwitcher（含切换确认模态）；
  * - 验收锚（大纲 T1.1.2）：引擎列表可点切换。
  */
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import EngineSwitcher from "@/components/EngineSwitcher";
 import LoadingErrorShell from "@/components/LoadingErrorShell";
@@ -105,7 +106,7 @@ export default function EnginesPage() {
             <h2 className="mb-3 text-title-sm font-semibold text-neutral-900">按空间切换引擎</h2>
             {spaces.length === 0 ? (
               <div className="card p-6 text-center text-neutral-500">
-                你还没有自己的空间——先到 <a className="text-brand-600 underline" href="/spaces">空间页</a> 创建，
+                你还没有自己的空间——先到 <Link className="text-brand-600 underline" href="/spaces">空间页</Link> 创建，
                 再回来为空间选择引擎。
               </div>
             ) : (

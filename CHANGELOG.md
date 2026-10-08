@@ -10,6 +10,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Security 工作流双红灯修复（CI run 37749240003 实证）**：
+  - trivy 版本钉正 `0.57.1`（不存在的版本，release 下载 404 → SCANNER_ERROR）→ `0.75.0`（API 证实资产命名一致）
+  - **Next 14.2.35 → 15.5.27 迁移**消 pnpm-audit 13 条 critical/high 阻断：next×11（修复线 15.5.24+）+ 传递依赖 postcss 8.4.31（next 钉死版，pnpm overrides 强制 ^8.5.23）+ source-map-js 1.2.1（同法 ^1.2.2）；
+    配套 React 18→19、@types/* 同步、eslint-config-next 15；`spaces/[id]` params Promise 化（`use()` 解包 + Suspense 边界）；6 测试文件 params 传 `Promise.resolve` + `await act` 包裹（React 19 act 语义）；TopBar/首页等 11 处内部导航 `<a>` → `<Link>`（next 15 将 no-html-link-for-pages 升为 Error）。pnpm audit --prod 归零
+  - **mock e2e ⑦ 空间详情红**（CI run 37749239965）：`EngineSwitcher` 挂载即拉 `listEngines`，engines 域原裁定"无 mock 分支"致请求穿透 MOCK 网关 → rewrite 代理 :3300 ECONNREFUSED → 500 → console 门禁红；推翻原裁定补 mock 分支（builtin 可用 + 4 引擎位未配 Key 样例，patchSpaceEngine 未配 Key 拒 10004）。hot 域穿透**保留**：hot.spec 无 console 门禁且该穿透构成"后端不可达降级路径"的真实 e2e 覆盖
+
 ## [v1.0.0] - 2026-10-08
 
 > 主题：v1.0 正式发布——S0–S3 执行批次（通知四链路/加密/告警/轻量迁移）+

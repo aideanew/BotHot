@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 /**
  * R0.2.4 —— 空间详情页与文档生命周期入口的接线（页面层）
@@ -122,7 +122,7 @@ function armInitial(items = DOCS, cats: string[] = ["AI·技术"]) {
 }
 
 async function renderPage() {
-  render(createElement(SpaceDetailPage, { params: { id: "sp-1" } }));
+  await act(async () => { render(createElement(SpaceDetailPage, { params: Promise.resolve({ id: "sp-1" }) })); });
   return await screen.findByText("文章甲");
 }
 

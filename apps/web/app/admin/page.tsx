@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useAdminData } from "@/components/useAdminData";
 import AdminDocSection from "@/components/AdminDocSection";
 import AdminSpaceCard from "@/components/AdminSpaceCard";
@@ -43,12 +44,12 @@ export default function AdminPage() {
             后台管理台需要管理员权限。当前账号不具备该权限，
             或尚未在后端登记为 admin。
           </p>
-          <a
+          <Link
             href="/spaces"
             className="mt-8 inline-block rounded-input bg-brand-500 px-6 py-2 text-white hover:bg-brand-600"
           >
             返回空间列表
-          </a>
+          </Link>
         </div>
       </main>
     );
@@ -79,12 +80,12 @@ export default function AdminPage() {
             后台管理台
           </h1>
         </div>
-        <a
+        <Link
           href="/spaces"
           className="inline-flex items-center gap-1 text-caption text-neutral-400 hover:text-neutral-600"
         >
           ← 返回空间列表
-        </a>
+        </Link>
       </div>
 
       <section className="mt-6">

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { listPublicSpaces, listSpaces, type PublicSpace, type Space } from "@/lib/api";
 import { useAuth, tierLabel } from "@/components/AuthContext";
@@ -108,18 +109,18 @@ export default function HomePage() {
             <section className="mt-7">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-title-sm font-semibold text-neutral-900">最近空间</h2>
-                <a href="/spaces" className="text-base font-medium text-brand-600 hover:text-brand-700">查看全部 →</a>
+                <Link href="/spaces" className="text-base font-medium text-brand-600 hover:text-brand-700">查看全部 →</Link>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {spaces.slice(0, 6).map((s) => (
-                  <a key={s.id} href={`/spaces/${s.id}`} className="card group block p-5 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-popover">
+                  <Link key={s.id} href={`/spaces/${s.id}`} className="card group block p-5 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-popover">
                     <div className="flex items-start justify-between gap-3">
                       <h3 className="truncate text-title-sm font-semibold text-neutral-900">{s.name}</h3>
                       <span className="text-brand-500 transition group-hover:translate-x-0.5" aria-hidden="true">↗</span>
                     </div>
                     <p className="mt-3 line-clamp-2 min-h-12 text-base leading-6 text-neutral-500">{s.description || "暂无简介"}</p>
                     <p className="mt-5 text-caption text-neutral-400">{s.docCount} 篇文章</p>
-                  </a>
+                  </Link>
                 ))}
                 {spaces.length === 0 && (
                   <div className="card col-span-full p-10 text-center">
@@ -128,12 +129,12 @@ export default function HomePage() {
                       创建第一个知识库：粘贴一篇公众号文章，或一键引入公共 AI 库。
                     </p>
                     <div className="mt-5 flex justify-center gap-3">
-                      <a href="/spaces" className="rounded-input bg-brand-500 px-5 py-2 font-medium text-white hover:bg-brand-600">
+                      <Link href="/spaces" className="rounded-input bg-brand-500 px-5 py-2 font-medium text-white hover:bg-brand-600">
                         创建第一个知识库
-                      </a>
-                      <a href="/subscriptions" className="rounded-input border border-neutral-300 px-5 py-2 font-medium text-neutral-700 hover:bg-neutral-50">
+                      </Link>
+                      <Link href="/subscriptions" className="rounded-input border border-neutral-300 px-5 py-2 font-medium text-neutral-700 hover:bg-neutral-50">
                         订阅公众号
-                      </a>
+                      </Link>
                     </div>
                   </div>
                 )}
@@ -149,7 +150,7 @@ export default function HomePage() {
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {publicSpaces.map((ps) => (
-                <a
+                <Link
                   key={ps.id}
                   href={spaces.length > 0 ? `/spaces/${spaces[0].id}` : "/spaces"}
                   className="card block p-5 transition hover:border-brand-200 hover:shadow-popover"
@@ -162,7 +163,7 @@ export default function HomePage() {
                   <p className="mt-4 text-caption text-neutral-400">
                     {ps.docCount} 篇 · 更新于 {new Date(ps.updatedAt).toLocaleDateString("zh-CN")}
                   </p>
-                </a>
+                </Link>
               ))}
             </div>
           </section>

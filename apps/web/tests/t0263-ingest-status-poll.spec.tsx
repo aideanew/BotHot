@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 
 /**
  * 入库状态拉模式接线（实测缺陷）
@@ -128,28 +128,26 @@ describe("入库状态回写", () => {
       .mockResolvedValueOnce(pg([article("d-1", "pending")]))
       .mockResolvedValue(pg([article("d-1", "ready")]));
 
-    render(createElement(SpaceDetailPage, { params: { id: "sp-1" } }));
+    await act(async () => { render(createElement(SpaceDetailPage, { params: Promise.resolve({ id: "sp-1" }) })); });
 
-    expect(await screen.findByText("采集中")).toBeTruthy();
-
-    // 竞态说明（2026-09-28）：此处**不可**直接断言 getDocIngestStatus。
-    // 「采集中」只证明第二轮 render 完成，而 tick() 的前半段
-    // （await Promise.allSettled(...getDocIngestStatus...)）与其后的
-    // loadFirstPage 走的是独立微任务链；在慢 runner 上 getDocIngestStatus
-    // 可能尚未被调用 → 断言 calls=0。这正是 CI 偶发红的机理。
-    // 改为 waitFor 等待该副作用真正发生，断言契约不变、去掉时序假设。
+    // React 19 + await act 语义（2026-10-08 迁移实证）：act 收尾会把
+    // 「pending 首屏 → tick() 状态回写 → loadFirstPage 重拉 → ready 终态」
+    // 整条微任务链在 act 作用域内冲刷完毕，瞬态「采集中」不再可能被
+    // act 之外的 findByText 捕获（原断言在 React 18 同步 render 下依赖
+    // 半刷新时机，属时序假设）。故删去瞬态断言，仅保留三条真实契约：
     await waitFor(() =>
       expect(h.getDocIngestStatus).toHaveBeenCalledWith("sp-1", "d-1")
     );
     expect(await screen.findByText("已就绪")).toBeTruthy();
-    // 回写后确实重新拉了列表（状态不是前端猜的）
+    // 回写后确实重新拉了列表（状态不是前端猜的）；首次拉取消费 pending
+    // 数据、重拉消费 ready 数据，由 mockResolvedValueOnce 的次序保证
     await waitFor(() => expect(h.listSpaceDocs).toHaveBeenCalledTimes(2));
   });
 
   it("全部就绪时不发起状态查询（不空转）", async () => {
     h.listSpaceDocs.mockResolvedValue(pg([article("d-1"), article("d-2")]));
 
-    render(createElement(SpaceDetailPage, { params: { id: "sp-1" } }));
+    await act(async () => { render(createElement(SpaceDetailPage, { params: Promise.resolve({ id: "sp-1" }) })); });
 
     expect(await screen.findByText("文章 d-1")).toBeTruthy();
     await waitFor(() => expect(h.listSpaceDocs).toHaveBeenCalledTimes(1));
@@ -161,7 +159,7 @@ describe("入库状态回写", () => {
     vi.useFakeTimers();
     try {
       h.listSpaceDocs.mockResolvedValue(pg([article("d-9", "pending")]));
-      render(createElement(SpaceDetailPage, { params: { id: "sp-1" } }));
+      await act(async () => { render(createElement(SpaceDetailPage, { params: Promise.resolve({ id: "sp-1" }) })); });
 
       // happy-dom + fake timer：首载 effect 链（getSpace→loadFirstPage→
       // pendingKey 变化→起轮询）需要多轮微任务刷新，固定轮数不可靠
