@@ -368,14 +368,22 @@ async def list_push_logs(
     channel_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    status: str | None = Query(None, description="按投递状态过滤: success/failed/dead"),
     db: AsyncSession = Depends(get_db),
 ):
-    """查询某渠道的推送日志。"""
+    """查询某渠道的推送日志（R3.1：分页既有，补 status 过滤）。"""
     ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
     if ch is None:
         raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
 
-    q = select(PushLog).where(PushLog.bot_channel_id == channel_id).order_by(PushLog.created_at.desc())
+    q = select(PushLog).where(PushLog.bot_channel_id == channel_id)
+    if status is not None:
+        if status not in {"success", "failed", "dead"}:
+            raise RequestInvalidError(
+                f"非法 status: {status}（合法：success/failed/dead）"
+            )
+        q = q.where(PushLog.status == status)
+    q = q.order_by(PushLog.created_at.desc())
     count_q = select(func.count()).select_from(q.subquery())
     total = (await db.execute(count_q)).scalar() or 0
 

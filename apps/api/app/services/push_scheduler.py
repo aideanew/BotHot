@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import UTC, datetime, timedelta
 
 import structlog
@@ -35,7 +36,9 @@ from app.services.push_template import render
 
 logger = structlog.get_logger(__name__)
 
-PUSH_SCHEDULER_INTERVAL = 60
+# R3.3：轮询间隔 env 化（v0.9 §0.4 吸收项）。默认 60 不变，compose 不注入保持默认；
+# 下限 5s 防误配——claim 是 SKIP LOCKED 短锁，频率过高徒增锁竞争与空轮询。
+PUSH_SCHEDULER_INTERVAL = max(5, int(os.getenv("PUSH_SCHEDULER_INTERVAL", "60")))
 
 # WB：投递重试策略——指数退避 base*4^(n-1)（60/240/960s），超过上限转死信终态。
 MAX_PUSH_RETRIES = 3
