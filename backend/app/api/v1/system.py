@@ -9,18 +9,21 @@ from __future__ import annotations
 import contextlib
 import json
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import select
+from pydantic import BaseModel, Field
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_sub, get_db
+from app.api.deps import get_current_sub, get_db, limit_offset_query
 from app.core import schema_guard
 from app.core.config import get_settings
-from app.core.response import success
+from app.core.response import failure, success
+from app.models.bothot_entities import Notification
 from app.models.entities import User
 from app.providers.push.web import _CHANNEL_PREFIX
 
@@ -280,3 +283,107 @@ async def notifications(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ── S1.2/S1.3（R1.2）：通知历史查询 + 已读回执 ──────────────────
+# 存储底座：notifications 表（ab1005w5a），写侧在 push_scheduler.persist_web_notification。
+# 可见性口径与 SSE 频道一致：定向（sub==me）+ 广播（is_broadcast）两类全覆盖。
+# 热路：(sub, created_at) 复合索引 ix_notifications_sub_created 支撑定向倒序分页。
+
+
+def _notification_scope(sub: str):
+    """定向 + 广播统一可见性谓词（与 persist_web_notification 落库口径互补）。"""
+    return or_(Notification.sub == sub, Notification.is_broadcast.is_(True))
+
+
+def _notification_dto(n: Notification) -> dict[str, object]:
+    """载荷字段与 SSE 通知帧一一对应（AppNotification 契约），另附回执元数据。"""
+    return {
+        "id": n.id,
+        "is_broadcast": n.is_broadcast,
+        "title": n.title,
+        "message": n.message,
+        "url": n.url or None,
+        "space_id": n.space_id or None,
+        "doc_id": n.doc_id or None,
+        "read_at": n.read_at.isoformat() if n.read_at else None,
+        "created_at": n.created_at.isoformat() if n.created_at else None,
+    }
+
+
+class NotificationReadRequest(BaseModel):
+    """已读回执请求：id 单条 / before 批量（created_at <= before 的未读全标）二选一。"""
+
+    id: str | None = Field(default=None, description="单条通知 id")
+    before: datetime | None = Field(default=None, description="批量截止时间（含）")
+
+
+@router.get("/notifications/history")
+async def notifications_history(
+    sub: Annotated[str, Depends(get_current_sub)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+    paging: Annotated[tuple[int, int], Depends(limit_offset_query)],
+) -> JSONResponse:
+    """GET /api/v1/system/notifications/history——离线通知补投（分页倒序）。
+
+    须登录；响应 {items,total,limit,offset,unread_total}（C.1 冻结口径 + 未读数免二次拉取）。
+    unread_total = 可见范围内 read_at IS NULL 计数，供前端未读徽标与服务端对账。
+    """
+    limit, offset = paging
+    scope = _notification_scope(sub)
+    total = (
+        await session.execute(select(func.count()).select_from(Notification).where(scope))
+    ).scalar_one()
+    unread_total = (
+        await session.execute(
+            select(func.count())
+            .select_from(Notification)
+            .where(scope, Notification.read_at.is_(None))
+        )
+    ).scalar_one()
+    rows = (
+        await session.execute(
+            select(Notification)
+            .where(scope)
+            .order_by(Notification.created_at.desc(), Notification.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+    ).scalars().all()
+    body = success(
+        data={
+            "items": [_notification_dto(n) for n in rows],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "unread_total": unread_total,
+        }
+    )
+    return JSONResponse(status_code=200, content=body.model_dump())
+
+
+@router.put("/notifications/read")
+async def notifications_read(
+    payload: NotificationReadRequest,
+    sub: Annotated[str, Depends(get_current_sub)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> JSONResponse:
+    """PUT /api/v1/system/notifications/read——已读回执（单条 id / 批量 before 二选一）。
+
+    须登录；只更新**可见范围**（sub==me OR is_broadcast）内的行，越权 id 视同不存在
+    （rowcount=0，不泄露他人通知的存在性）。返回 {updated}。
+    """
+    if (payload.id is None) == (payload.before is None):
+        body = failure(10005, "id 与 before 必须二选一")
+        return JSONResponse(status_code=400, content=body.model_dump())
+
+    scope = _notification_scope(sub)
+    stmt = update(Notification).where(scope, Notification.read_at.is_(None))
+    if payload.id is not None:
+        stmt = stmt.where(Notification.id == payload.id)
+    else:
+        stmt = stmt.where(Notification.created_at <= payload.before)
+    result = await session.execute(stmt.values(read_at=datetime.now(UTC)))
+    await session.commit()
+    body = success(data={"updated": result.rowcount})
+    return JSONResponse(status_code=200, content=body.model_dump())

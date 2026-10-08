@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.metrics import PUSH_DELIVERIES_TOTAL
 from app.core.secret_crypto import decrypt_channel_secret
-from app.models.bothot_entities import BotChannel, PushLog, PushTask
+from app.models.bothot_entities import BotChannel, Notification, PushLog, PushTask
 from app.providers.push import PushMessage, make_push_provider
 from app.services.cron_expr import parse_cron_next
 from app.services.push_events import claim_pending_events
@@ -228,6 +228,11 @@ class PushTaskScheduler:
                     task_row.retry_count = 0
                     task_row.next_retry_at = None
 
+            # S1.1（R1.2）：web 渠道投递成功 → 通知落库（离线补投存储底座）。
+            # savepoint 包裹：落库失败只回滚通知行，投递回执（PushLog/计数）不受影响。
+            if ch.channel_type == "web" and result.delivered:
+                await persist_web_notification(db, push_msg)
+
             # W6 A.2：投递结果计入 Prometheus（outcome ∈ success/failed/dead）。
             PUSH_DELIVERIES_TOTAL.labels(channel=ch.channel_type, outcome=log_status).inc()
 
@@ -245,6 +250,33 @@ class PushTaskScheduler:
                 ch.success_push_count += 1
 
             await db.commit()
+
+async def persist_web_notification(db: AsyncSession, msg: PushMessage) -> None:
+    """S1.1：web 渠道通知落库（notifications 表，R1.2 离线补投存储底座）。
+
+    广播/定向判定与 web.py 频道选择**同源**（external_user_id 有无），两处永不漂移：
+    - 定向：sub=external_user_id，is_broadcast=False；
+    - 广播：sub=""，is_broadcast=True（历史查询按 sub==me OR is_broadcast 覆盖两类）。
+    savepoint 语义：落库失败仅回滚本通知行并 warning（通知历史可容忍单条缺失），
+    绝不影响同事务内的 PushLog/渠道计数（投递回执优先）。
+    """
+    try:
+        async with db.begin_nested():
+            db.add(
+                Notification(
+                    sub=msg.external_user_id or "",
+                    is_broadcast=not msg.external_user_id,
+                    channel_type="web",
+                    title=msg.title or "BotHot 通知",
+                    message=msg.message,
+                    url=msg.url,
+                    space_id=msg.space_id,
+                    doc_id=msg.doc_id,
+                )
+            )
+    except Exception:
+        logger.warning("web 通知落库失败（不影响投递回执）: %s", msg.title)
+
 
     async def _write_failure_log(self, task: PushTask, error_msg: str) -> None:
         try:
