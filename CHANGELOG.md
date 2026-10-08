@@ -28,7 +28,8 @@
   `include_in_schema=False`（`core/metrics.py` + `MetricsMiddleware`）；`/live` `/ready` 探针 +
   `core/schema_guard.py`（schema 不一致 503）；运行时安全中间件限流/体限/安全头
   （`core/security.py`，经 `install_security_middlewares`）；两 Dockerfile 多阶段 + uid1000 +
-  HEALTHCHECK，compose 全服务 logging/limits/read_only/tmpfs/cap_drop/no-new-privileges；
+  HEALTHCHECK，compose 全服务 logging/limits，backend/scheduler/worker 三常驻服务
+  read_only/tmpfs/cap_drop/no-new-privileges（数据服务不设只读根）；
   运行期告警三类（`core/alerting.py`）
 - **站内通知持久化底座（R1.2a，2026-10-08）**：`Notification` 实体 + 迁移 `ab1005w5a`
   （`sub` SSO 锚 + 广播标记 + `(sub, created_at)` 复合索引），作为离线补投存储层；

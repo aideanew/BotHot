@@ -12,6 +12,7 @@ __pycache__/
 .next/
 coverage/
 *.egg-info/
-.workbuddy/tmp/
+.workbuddy/
 .box-agent/
 frontend/vitest-report/
+backend/pytest-report.xml
