@@ -14,5 +14,6 @@ coverage/
 *.egg-info/
 .workbuddy/
 .box-agent/
+.staging/
 apps/web/vitest-report/
 apps/api/pytest-report.xml

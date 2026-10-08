@@ -100,14 +100,20 @@ version: 1.0
 
 **目标**：按 project-structure-design.md 执行 apps/ monorepo 迁移。
 
+> **裁定回填（2026-10-08，`ff6e9da`）**：采用**轻量迁移**——整体 `git mv` 保 import 与
+> 历史（backend→apps/api、frontend→apps/web），拒绝域级新旧并存（双源漂移）；
+> 六边形 `src/modules/<域>` 深度重构**显式推迟立项**（等管理者拍板），下列未勾选项
+> 即为推迟部分。ADR-0006 的 monorepo 目标结构已达成，仅未做域内分层。
+
 **任务**：
-- [ ] 创建 apps/api/src/modules/ 目录骨架
-- [ ] 创建 apps/web/src/features/ 目录骨架
-- [ ] 后端逐域迁移（hot → bot → identity → knowledge → ...）
-- [ ] 前端 features 拆分
-- [ ] packages/contracts/ 共享契约提取
-- [ ] database/migrations/ 和 infra/docker/ 迁移
-- [ ] 迁移后全量测试
+- [x] apps/ monorepo 骨架落地（轻量迁移：apps/api + apps/web + packages/contracts，375 rename）
+- [ ] 创建 apps/api/src/modules/ 目录骨架（**推迟立项**）
+- [ ] 创建 apps/web/src/features/ 目录骨架（**推迟立项**）
+- [ ] 后端逐域迁移（hot → bot → identity → knowledge → ...）（**推迟立项**，随六边形重构）
+- [ ] 前端 features 拆分（**推迟立项**，随六边形重构）
+- [x] packages/contracts/ 共享契约提取（common 三组 + 6 域 dto.ts 生成并 index.ts 导出，`4d8ecd9`；identity/chat/engine 骨架待接）
+- [ ] database/migrations/ 和 infra/docker/ 迁移（**裁定不迁移**：alembic 留 apps/api/alembic、compose 留 docker/，移动只破坏 CI/alembic.ini 无收益）
+- [x] 迁移后全量测试（隔离 PG 968 passed/4 skipped + vitest 359 绿 + tsc 零错，`ff6e9da`）
 
 ## v1.0 — 正式发布
 

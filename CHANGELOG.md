@@ -21,6 +21,63 @@
 
 ## [Unreleased]
 
+> 收录 2026-10-08 的 S0–S3 执行批次与 R0/R1 收口批次（TASK-PLAN-v0.8/v0.9 驱动，基线 `main` 推进至 R1.2）。
+
+### Added
+
+- **站内通知持久化四链路（S0-S1，`87ad712` `1e7202c` `9385991`）**：`Notification` 实体 +
+  迁移 `ab1005w5a`（`sub` SSO 锚 + 广播标记 + `(sub, created_at)` 复合索引）；
+  调度器 savepoint 落库（失败不阻断投递）+ `/notifications/history` 分页端点
+  （定向+广播可见性）+ 已读回执（单条/批量/越权归零，连库 8 用例）+ 前端
+  `fetchHistory`/`markRead` 离线补投 + 首连历史合并去重（serverId 锚点）
+  —— `apps/api/app/services/push_scheduler.py` `apps/api/app/api/v1/system.py` `apps/web/components/NotificationBell.tsx`
+- **extra_config 整字段加密（S2.1，`de4e825`）**：AES-256-GCM 域分隔 AAD
+  （`{channel_id}:extra_config`，与 `secret_enc` 不可互搬）+ 存量明文兼容读
+  （`{` 前缀判定）+ 迁移 `ab1005w5b`（fail-closed）+ 6 处接线（写2/回显1/投递3）+ 7 单测
+- **告警生产装配启用（S2.2，`1eaa9b7`）**：compose backend_env 注入五变量（默认关闭）
+  + 三类告警演练留证（隔离 PG savepoint 同会话探测，载荷语义断言）
+- **轻量目录迁移（S3，`ff6e9da`）**：`backend/→apps/api/`、`frontend/→apps/web/`
+  （git mv 保历史，375 rename；183 骨架 `.gitkeep` 清理）+ CI×2/compose/Makefile/
+  Dockerfile/tsconfig 路径同步 + parents 层级修复；六边形 modules/ 重构显式推迟立项
+- **契约接线（R1.1，`4d8ecd9`）**：`@bothot/contracts` index.ts 导出 6 域 DTO
+  （bot/hot/ingest/knowledge/push_event/subscription）；CI 双门禁（backend 契约漂移
+  `--check` + frontend 契约包整包 tsc——paths 只解析 dist 的源码盲区堵死）
+
+### Fixed
+
+- **S0 执行收口批（`5fe5a4f` `8c9026c` `5476807` `7dfed5a` `01a08a6`）**：连接池容量守卫
+  生产接线（web/scheduler/worker 三进程 fail-fast）；限流 fail-open 告警 60s 窗口节流；
+  tsc --noEmit 摘软闸转硬门禁；Windows 无 WSL 的 bash 功能探针防假阳性 + MOCK 态 SSE
+  不建连；MOCK 门 `NODE_ENV=test` 豁免（vitest 全量 359 用例全绿）
+- **`test_security_middleware` 跨平台假阳性（S0-R0.1，`7dfed5a`）**：`_BASH` 由
+  `shutil.which` 升级为功能探针（`bash -c 'exit 0'` 非 0 视同不可用→skip），并给子进程
+  补 UTF-8 解码——修复 Windows 无 WSL 下 2 例假阳性失败
+  —— `apps/api/tests/test_security_middleware.py`
+- **S3 迁移漏网脚本复活（R0，`e019bb0` `1526a6b`）**：`gen_contracts.py` BACKEND_DIR
+  `backend→apps/api`（sys.path 插死目录致 import 必炸）与 `preflight.sh` 12 处旧路径修复；
+  连带修复 gen_contracts 游离 `*/` 语法错误（split hack 切出头残留，`bot/dto.ts:54`
+  TS1109 实证，契约包整包 tsc 首次全绿）
+- **outbox 消费失败分支端到端（R1.2，`9a6e5ab`）**：emit→claim（consumed_at 先标记）→
+  派发→webhook 不可达注入失败→failed PushLog + 重试簿记→重投领取为空
+  （at-most-once 锚定）；隔离 PG 11/11 绿 —— `apps/api/tests/test_w3_push_scheduler.py`
+
+### Changed
+
+- **多会话协作纪律固化（`566633c` `8ba2512`）**：开工取证/可信通道序/单一提交身份/
+  路径所有权/断点报告 + §7 实战教训（后台管道假死/pnpm 交互确认/git mv 嵌套/
+  parents 层级/无尾斜杠盲区）—— `docs/04_engineering/collaboration-discipline.md`
+- **文档一致性修复（R0.3，`7a0be0f`）**：backlog 20 处旧路径引用改 `apps/*`
+  （check_docs_consistency 实测 20/20 通过，此前该门禁因迁移假红）；
+  roadmap 告警装配置 ✅ —— `docs/04_engineering/backlog.md`
+- **任务计划 v0.8/v0.9 入库（`fbaaeaa` `be6077d`）**：S0 执行收口节 + 外部 81 项大纲
+  逐条裁定（剔除已完成 9/修正 3/补遗 P0 4）
+  —— `docs/05_execution/tasks/`
+
+## [v0.6.5] - 2026-09-30
+
+> 主题：W6-W10 六路并行交付（观测硬化/入站防护/数据层/契约消费/前端/文档治理）+
+  集成审查修复 + CI 首跑红灯五连修（`c56b642` 状态回填收口，提交日 2026-10-08）。
+
 ### Added
 
 - **观测与运行时硬化（W6-W10，`main @ 8b1b5f2`）**：structlog 双模日志（`core/logging.py`，
@@ -31,9 +88,35 @@
   HEALTHCHECK，compose 全服务 logging/limits，backend/scheduler/worker 三常驻服务
   read_only/tmpfs/cap_drop/no-new-privileges（数据服务不设只读根）；
   运行期告警三类（`core/alerting.py`）
-- **站内通知持久化底座（R1.2a，2026-10-08）**：`Notification` 实体 + 迁移 `ab1005w5a`
-  （`sub` SSO 锚 + 广播标记 + `(sub, created_at)` 复合索引），作为离线补投存储层；
-  写侧落库/读侧 `/history`/前端补投待建 —— `backend/app/models/bothot_entities.py`
+
+### Fixed
+
+- **CI 首跑红灯修复（`08c3935..7bdb964`）**：契约幽灵依赖清零 + 前端镜像 context 升根、
+  `security.yml` 解析即拒 + 加载期 env 白名单越界、mock 产物缓存复用 + 排序断言时间戳并列、
+  UP017 风格清零
+- **security.yml 加载期 0-job 秒红（三轮首跑实证）**：job 级 `env:` 使用了
+  `runner.temp` 与 `coalesce()`——该层表达式白名单均不含二者，GitHub 表现为
+  工作流加载被拒（0 job、created==updated、API 无错误详情，REST 排查通道全部
+  静默）。真凶由 actionlint 定位（本地官方 workflow-parser 只查 schema，查不出
+  上下文可用性）。修复：`VERDICT_DIR` 改静态 `/tmp/security-verdicts`；
+  `SECURITY_GATE_ENFORCE` 改 `${{ vars.X }}` 直引（消费侧 `${X:-1}` 兜底已存在）。
+  防再犯：ci.yml 新增 **`workflow-lint` job**（actionlint v1.7.12 钉版，全部
+  workflow 静态检查）—— `.github/workflows/security.yml` `.github/workflows/ci.yml`
+- **CI frontend 13 秒红：`@bothot/contracts` 幽灵依赖（2026-09-30 首跑实证）**：W9 曾把
+  `workspace:*` 写入 `frontend/package.json`，但仓库**无 pnpm workspace 根**且 lockfile
+  从未收入该条目——本地 tsc/vitest 因「tsconfig paths + 纯 `import type` 擦除」假绿，
+  CI 第一步 `pnpm install --frozen-lockfile` 因 package.json ↔ lockfile 声明漂移必红。
+  修复 = 删除该从未生效的依赖声明，契约消费机制明确为 **纯 tsconfig paths 类型解析**
+  （机制本身不变，仅删幽灵声明；运行时导入若未来出现，next build 期即报错，非静默漏过）
+  —— `frontend/package.json` `frontend/tsconfig.json`
+
+## [v0.6] - 2026-09-30
+
+> 主题：WA/WB/WC/WE 四路交付集成（评分接线/推送加固/基建/通知闭环）+
+  WD CI 编排补全（e2e/compose-smoke/单头断言/guard-ports fail-closed）+ 集成终态同步。
+
+### Added
+
 - **CI 门禁补全（WD）**：`frontend` job 增 Playwright **mock UI e2e**（`PORT=3456`，**阻塞门禁**，
   产物以 `next build` + `NEXT_PUBLIC_API_MOCK=true` 生成）；新增 **`compose-smoke` job**
   （build backend 镜像 → 起核心服务 → 跑 `scripts/smoke.sh`：`/api/v1/system/health` +
@@ -43,15 +126,6 @@
   `ENGINE_KEY_MASTER_KEY` 等必填主密钥）+ 端口纪律表 —— `README.md`
 - **过时规划文档归档（WD）**：`当前任务规划.md` → `docs/09_archive/superseded/`（附归档标识头，
   说明其成文于 W1–W5 之前、约七成已过期）
-
-### Fixed
-
-- **CI 首跑红灯修复（`08c3935..7bdb964`）**：契约幽灵依赖清零 + 前端镜像 context 升根、
-  `security.yml` 解析即拒 + 加载期 env 白名单越界、mock 产物缓存复用 + 排序断言时间戳并列、
-  UP017 风格清零
-- **`test_security_middleware` 跨平台假阳性（R0.1，2026-10-08）**：`_BASH` 由 `shutil.which`
-  升级为功能探针（`bash -c 'exit 0'` 非 0 视同不可用→skip），并给子进程补 UTF-8 解码——
-  修复 Windows 无 WSL 下 2 例假阳性失败 —— `backend/tests/test_security_middleware.py`
 
 ### Changed
 
@@ -83,21 +157,6 @@
 
 ### Fixed
 
-- **security.yml 加载期 0-job 秒红（三轮首跑实证）**：job 级 `env:` 使用了
-  `runner.temp` 与 `coalesce()`——该层表达式白名单均不含二者，GitHub 表现为
-  工作流加载被拒（0 job、created==updated、API 无错误详情，REST 排查通道全部
-  静默）。真凶由 actionlint 定位（本地官方 workflow-parser 只查 schema，查不出
-  上下文可用性）。修复：`VERDICT_DIR` 改静态 `/tmp/security-verdicts`；
-  `SECURITY_GATE_ENFORCE` 改 `${{ vars.X }}` 直引（消费侧 `${X:-1}` 兜底已存在）。
-  防再犯：ci.yml 新增 **`workflow-lint` job**（actionlint v1.7.12 钉版，全部
-  workflow 静态检查）—— `.github/workflows/security.yml` `.github/workflows/ci.yml`
-- **CI frontend 13 秒红：`@bothot/contracts` 幽灵依赖（2026-09-30 首跑实证）**：W9 曾把
-  `workspace:*` 写入 `frontend/package.json`，但仓库**无 pnpm workspace 根**且 lockfile
-  从未收入该条目——本地 tsc/vitest 因「tsconfig paths + 纯 `import type` 擦除」假绿，
-  CI 第一步 `pnpm install --frozen-lockfile` 因 package.json ↔ lockfile 声明漂移必红。
-  修复 = 删除该从未生效的依赖声明，契约消费机制明确为 **纯 tsconfig paths 类型解析**
-  （机制本身不变，仅删幽灵声明；运行时导入若未来出现，next build 期即报错，非静默漏过）
-  —— `frontend/package.json` `frontend/tsconfig.json`
 - **`Makefile` `guard-ports` fail-open（WD）**：原实现两段 `grep` 用 `\` 续行后，
   `if [ $? -eq 0 ]` 取到的是**第二条（前端）grep** 的退出码——后端/编排侧独有 `3333`
   命中时被静默放过，守卫形同虚设。改为两段各自捕获输出、各自判据，任一命中即 `exit 1`

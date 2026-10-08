@@ -11,6 +11,14 @@ version: 1.0
 
 # BotHot 项目目录架构设计
 
+> **⚠️ 实施裁定横幅（2026-10-08，`ff6e9da`）**：本设计的 **apps/ monorepo 一级结构已按
+> 「轻量迁移」落地**（整体 git mv 保 import/历史：backend→apps/api、frontend→apps/web）；
+> 二级结构的六边形分层（`apps/api/src/modules/<域>/{domain,application,interfaces,infrastructure}`
+> 与 `apps/web/src/features/<域>`）**显式推迟立项**，需管理者拍板后才实施——当前代码保持
+> `apps/api/app/{api,services,models,providers,core}` 与 `apps/web/{app,components,lib}` 扁平形态。
+> 本文档保留为目标形态参考，**不描述现状**；现状以 `AGENTS.md` 目录树为准。
+> `database/migrations/`、`infra/docker/` 的迁移**裁定不做**（移动破坏 CI 与 alembic.ini，无收益）。
+
 > 本文档基于 PROJECT-STRUCTURE-SPEC 规范，将 BotHot 从当前 `backend/ + frontend/` 扁平结构重新设计为 `apps/ + packages/ + database/ + infra/` 规范化结构。
 
 ---
