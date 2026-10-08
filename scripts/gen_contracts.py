@@ -138,9 +138,11 @@ def generate() -> dict[str, str]:
         if missing:
             raise SystemExit(f"[error] OpenAPI 缺少请求模型: {missing}（域 {domain}）")
         blocks = [_schema_to_ts(name, components[name]) for name in wanted]
-        note = "apps/api/app/main.py create_app().openapi()（Pydantic 请求模型）"
-        request_block = _render_domain(domain + " 请求", blocks, note).split("\n", 5)[-1]
-        out[domain] = out[domain].rstrip("\n") + "\n\n" + request_block
+        # 直接拼块 + 简洁分节注释。旧实现 `_render_domain(...).split("\n", 5)[-1]`
+        # 依赖头部行数硬编码，切出残留 `*/` 产生 TS 语法错误（bot/dto.ts:54 实证，
+        # 且因 apps/web 仅消费 dist 声明而从未被 tsc 检出）。
+        request_block = "// ── 请求模型（Pydantic 请求体，OpenAPI 内省）──\n\n" + "\n\n".join(blocks)
+        out[domain] = out[domain].rstrip("\n") + "\n\n" + request_block + "\n"
     return out
 
 

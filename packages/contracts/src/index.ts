@@ -12,8 +12,15 @@
  * 当前已冻结（W5）：
  * - 通用：分页 `PageResult<T>` / 响应信封 `ApiResponse<T>` / 错误码 `ApiErrorCode`
  *
- * 尚未冻结（保持骨架目录）：identity / knowledge / subscription / ingest / chat / engine / bot / hot
- * ——各域契约提取属迁移期工作（MIG-003）。
+ * 域 DTO（S3.4 接线，2026-10-08 起 index.ts 导出）：
+ * - 已导出：bot / hot / ingest / knowledge / push_event / subscription（6 域，模型内省生成）
+ * - 保持骨架：identity / chat / engine（`.gitkeep`，待后端对应模型纳入生成器后接线）
+ *
+ * ⚠️ 口径限定（重要）：域 dto 是**持久层实体镜像**（SQLAlchemy 列内省），
+ * 不是 API 响应形状——序列化器会隐藏字段（如 BotChannel 的 `secret_enc` →
+ * `has_secret`，bots.py:134 `_serialize_log` 只输出 8 字段且 `created_at` 可空）。
+ * 前端消费线上形状时以序列化器为准；实体镜像用于「确认后端真实列形状」的
+ * 单一来源（见下条纪律）。响应形状 DTO 的生成器扩展已登记 backlog。
  */
 export type { PageQuery, PageResult } from "./common/pagination";
 export type { ApiFailure, ApiResponse, ApiSuccess, Envelope } from "./common/response";
@@ -23,3 +30,29 @@ export type {
   ApiErrorName,
   AuthErrorCode,
 } from "./common/errors";
+
+// ── bot 域（实体 + 请求模型）──
+export type {
+  BotChannel,
+  PushTask,
+  PushLog,
+  ChannelCreateRequest,
+  ChannelUpdateRequest,
+  PushTaskCreateRequest,
+  PushTaskUpdateRequest,
+} from "./bot/dto";
+
+// ── hot 域 ──
+export type { HotTopic, HotTopicArticle, DailyReport, FeedItem } from "./hot/dto";
+
+// ── ingest 域 ──
+export type { Job, JobItem } from "./ingest/dto";
+
+// ── knowledge 域 ──
+export type { KnowledgeSpace } from "./knowledge/dto";
+
+// ── push_event 域 ──
+export type { PushEvent } from "./push_event/dto";
+
+// ── subscription 域 ──
+export type { Source, SourceSubscription } from "./subscription/dto";

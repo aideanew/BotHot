@@ -51,7 +51,7 @@ export interface PushLog {
   updated_at: string;
 }
 
- */
+// ── 请求模型（Pydantic 请求体，OpenAPI 内省）──
 
 export interface ChannelCreateRequest {
   name: string;

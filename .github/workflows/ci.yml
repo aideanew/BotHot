@@ -91,6 +91,11 @@ jobs:
             exit 1
           fi
           echo "✅ 单一 alembic head"
+      # S3.4/R1.1（2026-10-08）：契约漂移门禁。dto.ts 由模型内省生成，后端模型
+      # 变更而未重生成契约时此处红——把「契约与模型同步」从自觉变成机检。
+      # 脚本以 __file__ 定位仓库根，任意 cwd 可跑；alembic head 探测 fail-open 不阻断。
+      - name: Contract drift gate (gen_contracts --check)
+        run: python "$GITHUB_WORKSPACE/scripts/gen_contracts.py" --check
       # W5：skip 门禁。解析 junitxml 的 skipped 用例，两条判据：
       #   1) 「PG 不可达」类 skip 一律判失败——直接锁死本 job 要防的那类静默回归；
       #   2) skip 总数 > 基线阈值 SKIP_BASELINE 判失败。
@@ -233,6 +238,11 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Type check
         run: pnpm run typecheck
+      # S3.4/R1.1（2026-10-08）：契约包整包 tsc。apps/web 的 typecheck 经 paths 只解析
+      # dist/*.d.ts，**从不解析 src 源**——bot/dto.ts 的游离 `*/` 语法错误因此潜伏数周
+      # 未被检出（R1.1 实证）。此步把契约源纳入类型检查面，堵住该盲区。
+      - name: Contracts package strict check (tsc --noEmit)
+        run: pnpm exec tsc --noEmit -p ../../packages/contracts/tsconfig.json
       # W10→S0.4：tsc --noEmit 硬门禁。原 continue-on-error 软闸在 W9 契约
       # 消费落地（前端 lib/api 3 文件 import type 契约类型）后已无存在理由
       # ——本地实测零错误（2026-10-08 exit 0），软闸只会掩盖未来回归。
