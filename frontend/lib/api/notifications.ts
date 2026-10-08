@@ -93,10 +93,14 @@ export function connectNotifications(handlers: NotificationHandlers): () => void
   if (typeof window === "undefined" || typeof EventSource === "undefined") {
     return () => {};
   }
-  // mock 态（演示数据）不建 SSE：EventSource 绕开 http.ts 的 MOCK 网关，会真打
-  // /api/v1 被 rewrite 代理到不存在的后端（2026-09-30 CI mock e2e 实证：代理失败
-  // → 500 → 浏览器 console error → trunk.spec afterEach 零错误断言红）。
-  if (MOCK_ENABLED) {
+  // mock 态（演示数据，next build 产物内联 NEXT_PUBLIC_API_MOCK=true）不建 SSE：
+  // EventSource 绕开 http.ts 的 MOCK 网关，会真打 /api/v1 被 rewrite 代理到
+  // 不存在的后端（2026-09-30 CI mock e2e 实证 → console error → trunk.spec 红）。
+  // vitest（NODE_ENV=test）豁免本门：W9 的 SSE 行为测试以 stub EventSource
+  // 验证连接生命周期，门短路会让 stub 永不被触达（2026-10-08 本地回归实证，
+  // w9-notification-enhance.spec 4 例全红）；mock e2e 跑 build 产物
+  // （NODE_ENV=production），门在该场景保持生效。
+  if (MOCK_ENABLED && process.env.NODE_ENV !== "test") {
     return () => {};
   }
   const es = new EventSource(NOTIFICATIONS_ENDPOINT, { withCredentials: true });
