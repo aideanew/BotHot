@@ -54,6 +54,26 @@ supersedes: docs/05_execution/tasks/TASK-PLAN-v0.7.md（W6–W10 已全部交付
 
 ---
 
+## 〇.5 S0 执行收口（2026-10-08 实测，全部完成 ✅）
+
+> 提交链（main @ `01a08a6`，ahead 8 未推送）：`87ad712` → `7dfed5a` → `c56b642` → `5fe5a4f` → `8c9026c` → `5476807` → `cf0022a` → `01a08a6`。
+
+| 任务 | 状态 | 提交 | 实测证据 |
+|---|---|---|---|
+| S0.1 R1.2a 落定 | ✅ | `87ad712`/`7dfed5a`/`c56b642` | 隔离 PG 5547：单头 `ab1005w5a`、建表+复合索引；后端全量 **943 passed / 7 skipped**（PG 类 skip=0；7 条=LangBot/Redis 死口 5 + Windows bash 探针 2） |
+| S0.2 池断言接线（G2） | ✅ | `5fe5a4f` | `db.py` engine 参数化 + main/scheduler/worker 三入口 fail-fast；mock engine 三分支用例（junitxml 5 passed） |
+| S0.3 限流日志节流（G3） | ✅ | `8c9026c` | 60s 窗口节流，3 用例（窗口内 1 条/越窗复燃/端到端 6 请求 ≤1 条） |
+| S0.4 tsc 转硬门禁（G4） | ✅ | `5476807` | 本地 tsc 零错误实跑后摘 `continue-on-error`（ci.yml ±3） |
+| S0.5 文档卫生（G5/G6/G8/G9） | ✅ | `cf0022a` + `c56b642` | 测试数统一 943/7、CHANGELOG 措辞收窄、.env.example 补双主密钥+ALERT、.gitignore 补 .workbuddy/ |
+| S0.6 auth 域边界（G7） | ✅ | `cf0022a` | `frontend/app/auth/error.tsx`+`loading.tsx`；SSO 失败 mock e2e 断言**登记待办**（mock 态登录不经过 callback 路由，无现成链路） |
+| vitest MOCK 门回归 | ✅ | `01a08a6` | `notifications.ts:103` 门加 `NODE_ENV!=="test"` 豁免；**独立复跑 vitest 全量 359/359 绿（exit 0，2026-10-08 11:35）** |
+
+**协作记录**：S0 由两个并行会话交错完成（含 S0.2 测试文件的 mock engine 方案、`01a08a6` vitest 修复），全部经 git 对象库 + 独立实测交叉验证；无编辑战，磁盘终态自洽。
+
+**0.2 节缺口对账**：G2–G9 全部闭合 ✅；G1（通知四链路）→ S1；G10–G15 → S2–S4 维持原排期。
+
+---
+
 ## 第一节 全量剩余任务大纲体系
 
 ### 阶段 S0：在途落定与 P0 缺陷修复（最先执行，阻塞 S1）
