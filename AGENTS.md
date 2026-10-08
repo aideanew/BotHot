@@ -57,6 +57,7 @@ PLAN 规划 → SPEC 规格 → APPROVE 批准 → IMPLEMENT 实施 → VERIFY �
 - **工程规范** → [docs/04_engineering/conventions.md](docs/04_engineering/conventions.md)
 - **路线图** → [docs/04_engineering/roadmap.md](docs/04_engineering/roadmap.md)
 - **待办清单** → [docs/04_engineering/backlog.md](docs/04_engineering/backlog.md)
+- **多会话协作纪律（AI 会话强制规范，开工前必读）** → [docs/04_engineering/collaboration-discipline.md](docs/04_engineering/collaboration-discipline.md)
 
 ## 当前项目状态
 
