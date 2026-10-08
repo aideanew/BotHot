@@ -48,9 +48,7 @@ class EngineKeyService:
 
     async def _get(self, engine: str) -> EngineKeyRegistration | None:
         return (
-            await self._session.execute(
-                select(EngineKeyRegistration).where(EngineKeyRegistration.engine == engine)
-            )
+            await self._session.execute(select(EngineKeyRegistration).where(EngineKeyRegistration.engine == engine))
         ).scalar_one_or_none()
 
     @staticmethod
@@ -131,9 +129,7 @@ class EngineKeyService:
         self._assert_engine(engine)
         if await self._get(engine) is None:
             raise ResourceNotFoundError(f"引擎 {engine} 无登记 Key")
-        await self._session.execute(
-            delete(EngineKeyRegistration).where(EngineKeyRegistration.engine == engine)
-        )
+        await self._session.execute(delete(EngineKeyRegistration).where(EngineKeyRegistration.engine == engine))
         await self._session.commit()
         await self._refresh()
         return {"engine": engine, "revoked": True}

@@ -74,9 +74,7 @@ class JobRepository:
         **事务开始时刻**——同一事务内批量建的 Job 时间戳完全相同，仅凭 `created_at`
         排序属未定序，offset 分页会出现重复页/漏行。故追加 `id` 作确定性兜底。
         """
-        stmt = self._job_stmt(user_id, status, job_type).order_by(
-            Job.created_at.desc(), Job.id.desc()
-        )
+        stmt = self._job_stmt(user_id, status, job_type).order_by(Job.created_at.desc(), Job.id.desc())
         stmt = stmt.limit(limit)
         if offset:
             stmt = stmt.offset(offset)
@@ -94,14 +92,10 @@ class JobRepository:
         # with_only_columns(func.count()) 把 SELECT 列换成标量函数后，SQLAlchemy 会剪掉
         # 它不引用的 FROM——零条件时语句退化成 `SELECT count(*)`（无表），恒返 1。
         # 显式补 select_from 保住 jobs 表；条件谓词仍全部来自 _job_stmt，不另写一份。
-        stmt = self._job_stmt(user_id, status, job_type).with_only_columns(
-            func.count()
-        ).select_from(Job)
+        stmt = self._job_stmt(user_id, status, job_type).with_only_columns(func.count()).select_from(Job)
         return int((await self._session.scalar(stmt)) or 0)
 
-    def _job_stmt(
-        self, user_id: str | None = None, status: str | None = None, job_type: str | None = None
-    ) -> Select:
+    def _job_stmt(self, user_id: str | None = None, status: str | None = None, job_type: str | None = None) -> Select:
         """Job 清单查询基座（归属 + 状态 + 类型过滤），list/count 共用。
 
         user_id=None 表示无归属约束（/admin 跨用户清单）：省略该列谓词而非传入 None，
@@ -206,15 +200,11 @@ class JobItemRepository:
         return item
 
     async def list_by_job(self, job_id: str) -> list[JobItem]:
-        rows = await self._session.scalars(
-            select(JobItem).where(JobItem.job_id == job_id).order_by(JobItem.created_at)
-        )
+        rows = await self._session.scalars(select(JobItem).where(JobItem.job_id == job_id).order_by(JobItem.created_at))
         return list(rows)
 
     async def list_failed(self, job_id: str) -> list[JobItem]:
-        rows = await self._session.scalars(
-            select(JobItem).where(JobItem.job_id == job_id, JobItem.status == "FAILED")
-        )
+        rows = await self._session.scalars(select(JobItem).where(JobItem.job_id == job_id, JobItem.status == "FAILED"))
         return list(rows)
 
     async def claim_next_pending(self, job_id: str) -> JobItem | None:
@@ -242,9 +232,7 @@ class JobItemRepository:
     async def requeue_running(self, job_id: str) -> int:
         """崩溃自愈：该 job 下遗留 RUNNING 的 item → PENDING（worker 宕机后可重入）。"""
         rows = (
-            await self._session.scalars(
-                select(JobItem).where(JobItem.job_id == job_id, JobItem.status == "RUNNING")
-            )
+            await self._session.scalars(select(JobItem).where(JobItem.job_id == job_id, JobItem.status == "RUNNING"))
         ).all()
         for it in rows:
             it.status = "PENDING"

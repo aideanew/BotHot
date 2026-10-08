@@ -190,17 +190,10 @@ async def _delete_day_topics(session: AsyncSession, topic_date: str) -> None:
     FeedItem(item_type=hot_topic, ref_id=topic_id) 无外键，需显式按 ref_id 删。
     """
     topic_ids = [
-        row[0]
-        for row in (
-            await session.execute(select(HotTopic.id).where(HotTopic.topic_date == topic_date))
-        ).all()
+        row[0] for row in (await session.execute(select(HotTopic.id).where(HotTopic.topic_date == topic_date))).all()
     ]
     if topic_ids:
-        await session.execute(
-            delete(FeedItem).where(
-                FeedItem.item_type == "hot_topic", FeedItem.ref_id.in_(topic_ids)
-            )
-        )
+        await session.execute(delete(FeedItem).where(FeedItem.item_type == "hot_topic", FeedItem.ref_id.in_(topic_ids)))
     await session.execute(delete(HotTopic).where(HotTopic.topic_date == topic_date))
 
 
@@ -227,18 +220,22 @@ async def run_clustering(
     cutoff = moment - timedelta(days=max(days, 1))
 
     rows = (
-        await session.execute(
-            select(ContentAsset).where(
-                or_(
-                    ContentAsset.published_at >= cutoff,
-                    and_(
-                        ContentAsset.published_at.is_(None),
-                        ContentAsset.created_at >= cutoff,
-                    ),
+        (
+            await session.execute(
+                select(ContentAsset).where(
+                    or_(
+                        ContentAsset.published_at >= cutoff,
+                        and_(
+                            ContentAsset.published_at.is_(None),
+                            ContentAsset.created_at >= cutoff,
+                        ),
+                    )
                 )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     rows_list = list(rows)
     if len(rows_list) > max_candidates:
@@ -248,7 +245,8 @@ async def run_clustering(
         rows_list = rows_list[:max_candidates]
         logger.warning(
             "hot_cluster: 候选 %d 篇超限 %d，按 published_at 截断取最新",
-            original_count, max_candidates,
+            original_count,
+            max_candidates,
         )
 
     docs = [AssetDoc(id=a.id, title=a.title, quality_score=float(a.quality_score or 0.0)) for a in rows_list]

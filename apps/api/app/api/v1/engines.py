@@ -114,13 +114,9 @@ def assert_engine_switchable(
         return
     st = _engine_status(engine, settings, registered)
     if not st["allowlisted"]:
-        raise ForbiddenError(
-            f"引擎 {engine} 未开放（allowlist={_engine_allowlist(settings)}），请联系管理员"
-        )
+        raise ForbiddenError(f"引擎 {engine} 未开放（allowlist={_engine_allowlist(settings)}），请联系管理员")
     if not st["configured"]:
-        raise ForbiddenError(
-            f"引擎 {engine} 未配置 API Key（登记表或 env: {st['keyEnv']}），请联系管理员登记"
-        )
+        raise ForbiddenError(f"引擎 {engine} 未配置 API Key（登记表或 env: {st['keyEnv']}），请联系管理员登记")
     if not ENGINE_IMPLEMENTED.get(engine, False):
         raise ForbiddenError(f"引擎 {engine} 尚未实接（仅骨架实现），暂不可切换")
 
@@ -182,7 +178,5 @@ async def patch_space_engine(
         # 非 builtin：engine_kb_id 保留既有映射（无则空串，实接后回填）
         space.engine_kb_id = space.engine_kb_id or ""
     await session.commit()
-    body = success(
-        data={"engine": space.engine, "engineKbId": space.engine_kb_id, "spaceId": space.id}
-    )
+    body = success(data={"engine": space.engine, "engineKbId": space.engine_kb_id, "spaceId": space.id})
     return JSONResponse(status_code=200, content=body.model_dump())

@@ -55,9 +55,7 @@ async def _seed(db_session: Any) -> dict[str, Any]:
     owner = User(sub="r48-owner", email="r48-owner@r48.test", nickname="owner")
     second = User(sub="r48-second", email="r48-second@r48.test", nickname="second")
     admin = User(sub="r48-admin", email="r48-admin@r48.test", nickname="admin", role="admin")
-    operator = User(
-        sub="r48-operator", email="r48-operator@r48.test", nickname="operator", role="operator"
-    )
+    operator = User(sub="r48-operator", email="r48-operator@r48.test", nickname="operator", role="operator")
     db_session.add_all([owner, second, admin, operator])
     await db_session.flush()
 
@@ -109,9 +107,7 @@ async def _seed(db_session: Any) -> dict[str, Any]:
     db_session.add(job_second)
     await db_session.flush()
 
-    db_session.add(
-        ArticleManifest(source_id=src.id, external_id="w-r48-disc", url="https://x/disc")
-    )
+    db_session.add(ArticleManifest(source_id=src.id, external_id="w-r48-disc", url="https://x/disc"))
     await db_session.commit()  # 夹具 savepoint 模式：只释放保存点，外层回滚清场
 
     return {
@@ -293,8 +289,12 @@ async def test_admin_list_subscriptions_all_spaces_with_owner(db_session) -> Non
     assert item["sourceName"] == "R48 测试号" and item["biz"] == "biz-r48"
     assert item["syncPolicy"] == "auto" and item["syncIntervalMinutes"] == 120
     assert item["discoveredCount"] == 1
-    for key, value in (("spaceId", rows["space_b"]), ("spaceName", "R48 租户B空间"),
-                       ("ownerId", rows["second"]), ("ownerNickname", "second")):
+    for key, value in (
+        ("spaceId", rows["space_b"]),
+        ("spaceName", "R48 租户B空间"),
+        ("ownerId", rows["second"]),
+        ("ownerNickname", "second"),
+    ):
         assert item[key] == value, key
     assert item["latestJobId"] == rows["job_second"]
 
@@ -393,7 +393,9 @@ async def test_patch_source_admin_partial_update(db_session) -> None:  # type: i
     assert resp.status_code == 200, resp.text
     data = resp.json()["data"]
     assert data == {
-        "sourceId": rows["source"], "biz": "biz-r48", "name": "改名后",
+        "sourceId": rows["source"],
+        "biz": "biz-r48",
+        "name": "改名后",
         "url": "https://redfox.hk/apis/gongzhonghao/biz-r48",
     }
 
@@ -427,8 +429,10 @@ async def test_patch_source_dedup_anchor_immutable_and_missing_404(db_session) -
     assert row is not None and row.type == "wechat_oa" and row.external_id == "biz-r48"
 
     status, code = _hit(
-        _app(db_session, rows["admin"]), "patch",
-        PATCH_SOURCE.format(source_id=SOURCE_ID_MISSING), json={"name": "x"},
+        _app(db_session, rows["admin"]),
+        "patch",
+        PATCH_SOURCE.format(source_id=SOURCE_ID_MISSING),
+        json={"name": "x"},
     )
     assert (status, code) == (404, 30004)
 
@@ -438,14 +442,18 @@ async def test_patch_source_role_gate_and_requires_login(db_session) -> None:  #
     rows = await _seed(db_session)
     for actor_key in ("owner", "second", "operator"):
         status, code = _hit(
-            _app(db_session, rows[actor_key]), "patch",
-            PATCH_SOURCE.format(source_id=rows["source"]), json={"name": "越权改名"},
+            _app(db_session, rows[actor_key]),
+            "patch",
+            PATCH_SOURCE.format(source_id=rows["source"]),
+            json={"name": "越权改名"},
         )
         assert (status, code) == (403, 10004), actor_key
 
     status, code = _hit(
-        _unauth_client(db_session), "patch",
-        PATCH_SOURCE.format(source_id=rows["source"]), json={"name": "未登录"},
+        _unauth_client(db_session),
+        "patch",
+        PATCH_SOURCE.format(source_id=rows["source"]),
+        json={"name": "未登录"},
     )
     assert (status, code) == (401, 10001)
 
@@ -522,9 +530,9 @@ async def test_r48_admin_routes_registered(db_session) -> None:  # type: ignore[
     assert {"spaceId", "spaceName", "ownerId", "ownerNickname"} <= set(admin_items[0])
 
     # 本人端点不带归属字段（admin 端点单独存在，既有契约零回归）
-    own = _app(db_session, rows["second"]).get(
-        f"/api/v1/spaces/{rows['space_b']}/subscriptions"
-    ).json()["data"]["items"]
+    own = (
+        _app(db_session, rows["second"]).get(f"/api/v1/spaces/{rows['space_b']}/subscriptions").json()["data"]["items"]
+    )
     assert not ({"spaceId", "spaceName", "ownerId", "ownerNickname"} & set(own[0]))
 
 

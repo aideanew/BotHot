@@ -82,8 +82,11 @@ async def _seed(
     db_session.add(source)
     await db_session.flush()
     space = KnowledgeSpace(
-        user_id=user.id, name=f"R02空间-{sub}", langbot_kb_uuid=kb_uuid,
-        engine=space_engine, engine_kb_id=engine_kb_id,
+        user_id=user.id,
+        name=f"R02空间-{sub}",
+        langbot_kb_uuid=kb_uuid,
+        engine=space_engine,
+        engine_kb_id=engine_kb_id,
     )
     db_session.add(space)
     await db_session.flush()
@@ -92,8 +95,12 @@ async def _seed(
     asset_ids: dict[str, str] = {}
     for i, (key, file_id) in enumerate(docs):
         asset = ContentAsset(
-            source_id=source.id, external_id=f"{key}-{i}", url=f"https://mp.weixin.qq.com/s/{key}",
-            title=f"文章 {key}-{i}", content_hash=f"h-{key}-{i}", content_markdown=f"# {key}-{i}",
+            source_id=source.id,
+            external_id=f"{key}-{i}",
+            url=f"https://mp.weixin.qq.com/s/{key}",
+            title=f"文章 {key}-{i}",
+            content_hash=f"h-{key}-{i}",
+            content_markdown=f"# {key}-{i}",
             category="其他",
         )
         db_session.add(asset)
@@ -382,9 +389,7 @@ async def test_patch_doc_unauthorized_returns_30004(db_session) -> None:
     space_id, user_id, doc_ids = await _seed(db_session, sub="r02-authz", docs=[("art-1", "f1")])
     client = _app(db_session, user_id)
 
-    resp = client.patch(
-        f"/api/v1/spaces/{space_id}/docs/{DOC_ID_UNKNOWN}", json={"category": "其他"}
-    )
+    resp = client.patch(f"/api/v1/spaces/{space_id}/docs/{DOC_ID_UNKNOWN}", json={"category": "其他"})
     assert resp.status_code == 404 and resp.json()["code"] == 30004
 
     other = KnowledgeSpace(user_id=user_id, name="别碰", langbot_kb_uuid="kb", engine="builtin")

@@ -185,9 +185,7 @@ def _fallback_summary(center_content: str, *, limit: int = 150) -> str:
     return first_para[:limit]
 
 
-async def _topic_summary(
-    topic: HotTopic, center_content: str, llm: LlmSummarizer | None
-) -> str:
+async def _topic_summary(topic: HotTopic, center_content: str, llm: LlmSummarizer | None) -> str:
     """单话题摘要：LLM 成功用 LLM；LLM 返回空/None/异常 走正文首段降级。
 
     降级语义在 docstring 与代码一致：LLM 故障永不缺失摘要（至少有首段截断）。
@@ -214,8 +212,7 @@ def assemble_report(report_date: str, topics: list[HotTopic], summaries: list[st
         lines.append(f"## {i}. {t.title}")
         lines.append("")
         lines.append(
-            f"**热度**: {float(t.hot_score or 0.0):.1f} | "
-            f"**来源数**: {t.source_count} | **文章数**: {t.article_count}"
+            f"**热度**: {float(t.hot_score or 0.0):.1f} | **来源数**: {t.source_count} | **文章数**: {t.article_count}"
         )
         lines.append("")
         if s:
@@ -244,13 +241,14 @@ async def build_daily_report(
         return existing
 
     topics = (
-        await session.execute(
-            select(HotTopic)
-            .where(HotTopic.topic_date == report_date)
-            .order_by(HotTopic.hot_score.desc())
-            .limit(10)
+        (
+            await session.execute(
+                select(HotTopic).where(HotTopic.topic_date == report_date).order_by(HotTopic.hot_score.desc()).limit(10)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     # 中心文章正文：日报摘要的素材 + LLM 失败时的降级源。
     # 审查缝合：DB 读取必须在 gather 之外串行完成——AsyncSession 不允许跨任务并发
@@ -272,9 +270,7 @@ async def build_daily_report(
             return await _topic_summary(t, center_content, llm)
 
     summaries = list(
-        await asyncio.gather(
-            *[_summarize_one(t, c) for t, c in zip(topics, center_contents, strict=False)]
-        )
+        await asyncio.gather(*[_summarize_one(t, c) for t, c in zip(topics, center_contents, strict=False)])
     )
 
     content_md = assemble_report(report_date, list(topics), summaries)

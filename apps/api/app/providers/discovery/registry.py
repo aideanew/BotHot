@@ -59,6 +59,7 @@ class ChannelSpec:
 # 每个工厂遵循 RedFox 模式：无 Key → None（显式缺省，不造数）。
 # ArticleSourceProvider 协议与 WorkListProvider 结构兼容（同形 query_work_list + aclose）。
 
+
 def _make_dajiala_provider(settings: Settings) -> WorkListProvider | None:
     if not settings.dajiala_api_key:
         return None
@@ -103,6 +104,30 @@ def _make_wellbyte_provider(settings: Settings) -> WorkListProvider | None:
     )
 
 
+def _make_rss_provider(settings: Settings) -> WorkListProvider | None:
+    """RSS Feed Provider 工厂。
+
+    配置了 discovery_rss_feeds 即可用；无配置 → None。
+    """
+    if not settings.discovery_rss_feeds:
+        return None
+    from app.providers.article_sources.rss import RSSFeedConfig, RSSFeedProvider
+
+    feeds: list[RSSFeedConfig] = []
+    for item in settings.discovery_rss_feeds.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if ":" in item and not item.startswith("http"):
+            alias, url = item.split(":", 1)
+            feeds.append(RSSFeedConfig(url=url.strip(), alias=alias.strip()))
+        else:
+            feeds.append(RSSFeedConfig(url=item))
+    if not feeds:
+        return None
+    return RSSFeedProvider(feeds=feeds, timeout=settings.discovery_rss_timeout)
+
+
 CHANNELS: dict[str, ChannelSpec] = {
     "redfox": ChannelSpec(
         name="redfox",
@@ -119,16 +144,17 @@ CHANNELS: dict[str, ChannelSpec] = {
     ),
     "rss": ChannelSpec(
         name="rss",
-        description="自建 RSS 桥清单发现（RSS item 即 query_work_list 形态，端口零改动可接）",
-        implemented=False,
-        required_setting="DISCOVERY_RSS_BASE_URL",
-        available=lambda s: False,
-        factory=lambda s: None,
-        reason=(
-            "未实接：需先把公众号清单暴露为 HTTP 接口（自建 RSS 桥或同类数据源），"
-            "再实接 query_work_list。RSS item 的 {title, link, pubDate} 已由 "
-            "manifest._map_row 的字段别名直接消化，接入点只有 _ID_KEYS 需补 guid"
+        description=(
+            "RSS Feed 文章发现（RSS 2.0 / Atom 解析，支持自建 RSS 桥、RSSHub、"
+            "WeRSS、feeddd 等源）。零额外依赖（httpx + xml.etree）。"
+            "预置 15+ 免费 RSS 源（科技/新闻/社交）。"
         ),
+        implemented=True,
+        required_setting="DISCOVERY_RSS_FEEDS",
+        available=lambda s: bool(s.discovery_rss_feeds),
+        factory=_make_rss_provider,
+        contract_verified_at="2026-10-02",
+        verified_scope="单元测试：RSS 2.0 / Atom 解析 + 字段映射 + 分页语义",
     ),
     "dajiala": ChannelSpec(
         name="dajiala",
@@ -222,7 +248,8 @@ CHANNELS: dict[str, ChannelSpec] = {
             "详情(detail_v2)=活体实测 TC-A4-05/06/07 422 三连拒禁用（0 扣费）；"
             "CF 指纹坑=活体实测 TC-A4-03（urllib 被 1010 拦截，httpx 通过）。"
         ),
-    ),}
+    ),
+}
 
 
 def _whitelist(settings: Settings) -> set[str]:
@@ -326,5 +353,3 @@ def _selection_reason(settings: Settings, default: str | None) -> str:
     if default is None:
         return "none-available"
     return "configured" if _whitelist(settings) else "registration-order"
-
-

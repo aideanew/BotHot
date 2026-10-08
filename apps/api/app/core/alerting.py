@@ -59,9 +59,7 @@ async def _deliver(title: str, message: str) -> bool:
     target = _str_env("ALERT_TARGET", "")
     try:
         provider = make_push_provider(channel)
-        result = await provider.push(
-            PushMessage(external_user_id=target, title=title, message=message)
-        )
+        result = await provider.push(PushMessage(external_user_id=target, title=title, message=message))
         if not result.delivered:
             logger.warning("告警投递未成功", channel=channel, reason=result.reason)
         return bool(result.delivered)
@@ -82,9 +80,7 @@ async def check_heartbeat_missing(session: AsyncSession) -> list[str]:
 
 async def check_job_backlog(session: AsyncSession) -> int:
     """当前 QUEUED 积压条数（阈值判定由调用方按 `ALERT_JOB_BACKLOG` 决定）。"""
-    row = (
-        await session.execute(sa_text("SELECT COUNT(*) FROM jobs WHERE status = 'QUEUED'"))
-    ).one()
+    row = (await session.execute(sa_text("SELECT COUNT(*) FROM jobs WHERE status = 'QUEUED'"))).one()
     return int(row[0])
 
 

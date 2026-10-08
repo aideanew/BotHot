@@ -73,11 +73,7 @@ class ArticleDetailFallbackCoordinator:
 
         providers = make_all_article_source_providers(self._settings)
         # 只保留有详情能力的平台（按 _DETAIL_FALLBACK_ORDER 过滤）
-        return {
-            name: provider
-            for name, provider in providers.items()
-            if name in _DETAIL_FALLBACK_ORDER
-        }
+        return {name: provider for name, provider in providers.items() if name in _DETAIL_FALLBACK_ORDER}
 
     async def fetch_detail(self, url: str) -> ArticleDetail | None:
         """按优先级尝试付费详情 API。

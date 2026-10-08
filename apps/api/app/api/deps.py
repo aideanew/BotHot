@@ -150,8 +150,11 @@ async def get_kb_service(
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> KnowledgeBaseService:
     return KnowledgeBaseService(
-        get_langbot_client(), session, get_resolver_service_internal(),
-        raw_store=get_raw_store(), engine_router=get_engine_router(),
+        get_langbot_client(),
+        session,
+        get_resolver_service_internal(),
+        raw_store=get_raw_store(),
+        engine_router=get_engine_router(),
     )
 
 

@@ -167,9 +167,7 @@ class JobWorker:
             max_item_retries if max_item_retries is not None else int(getattr(s, "job_worker_max_retries", 3))
         )
         self._stale_seconds = (
-            stale_job_seconds
-            if stale_job_seconds is not None
-            else int(getattr(s, "job_worker_stale_seconds", 300))
+            stale_job_seconds if stale_job_seconds is not None else int(getattr(s, "job_worker_stale_seconds", 300))
         )
         self._idle_sleep = (
             idle_sleep_seconds
@@ -298,9 +296,7 @@ class JobWorker:
                     await run_scoring(session)
                     report_date = str(payload.get("date", ""))
                     if not report_date:
-                        report_date = (
-                            datetime.now(_HOT_BUSINESS_TZ) - timedelta(days=1)
-                        ).strftime("%Y-%m-%d")
+                        report_date = (datetime.now(_HOT_BUSINESS_TZ) - timedelta(days=1)).strftime("%Y-%m-%d")
                     await build_daily_report(session, report_date)
                 await session.commit()
             await self._finalize_simple(job_id, True, "")
@@ -432,7 +428,7 @@ class JobWorker:
 
     def _backoff(self, attempts: int) -> float:
         """指数退避：interval × 2^attempts（attempts 从 0 起）。"""
-        return float(self._item_interval * (2**max(attempts, 0)))
+        return float(self._item_interval * (2 ** max(attempts, 0)))
 
 
 async def _main() -> None:

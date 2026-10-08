@@ -102,9 +102,7 @@ class KnowledgeBaseService:
 
     # -------------------------------------------------------------- 孤儿文件清理（B27）
 
-    async def _purge_superseded_file(
-        self, space_id: str, kb_uuid: str, doc: Any, new_file_id: str
-    ) -> None:
+    async def _purge_superseded_file(self, space_id: str, kb_uuid: str, doc: Any, new_file_id: str) -> None:
         """重跑覆盖 langbot_file_id 前尽力删除被取代的引擎文件。
 
         覆盖不删会让旧文件永久滞留 KB：检索可命中已删/过期内容，向量库无界增长
@@ -128,8 +126,7 @@ class KnowledgeBaseService:
                 await self._adapter(space).delete_file(kb_uuid, old_file_id)
         except Exception as exc:  # noqa: BLE001  # 清理失败不阻断入库，见函数说明
             logger.warning(
-                "被取代的引擎文件清理失败（不阻断入库，B25 已挡检索越界）: "
-                "kb=%s file=%s engine=%s err=%s",
+                "被取代的引擎文件清理失败（不阻断入库，B25 已挡检索越界）: kb=%s file=%s engine=%s err=%s",
                 kb_uuid,
                 old_file_id,
                 engine,
@@ -156,9 +153,7 @@ class KnowledgeBaseService:
         if engine == "builtin":
             engine_id = await self._pick_engine()
             embedding_uuid = await self.ensure_embedding_model()
-            kb_uuid = await self._client.create_kb(
-                f"bothot-{space.name}", engine_id, embedding_uuid
-            )
+            kb_uuid = await self._client.create_kb(f"bothot-{space.name}", engine_id, embedding_uuid)
             await space_repo.set_langbot_kb_uuid(space.id, kb_uuid)
             await self._session.commit()  # 编排层提交（建库成功必须落库，防重复建库）
             return kb_uuid
@@ -335,7 +330,7 @@ class KnowledgeBaseService:
             except Exception as exc:
                 last_exc = exc
                 if attempt < self._RESOLVE_MAX_ATTEMPTS - 1:
-                    await asyncio.sleep(self._RESOLVE_BACKOFF_BASE * (2 ** attempt))
+                    await asyncio.sleep(self._RESOLVE_BACKOFF_BASE * (2**attempt))
         raise last_exc  # type: ignore[misc]
 
     async def _find_source_by_anchor(self, article_key: str, url: str) -> Source | None:
@@ -374,9 +369,7 @@ class KnowledgeBaseService:
         if not short_key:
             return ""
         row = (
-            await self._session.execute(
-                select(ShortLinkMap.article_key).where(ShortLinkMap.short_key == short_key)
-            )
+            await self._session.execute(select(ShortLinkMap.article_key).where(ShortLinkMap.short_key == short_key))
         ).scalar_one_or_none()
         return row or ""
 
@@ -387,9 +380,7 @@ class KnowledgeBaseService:
         if not short_key or not article_key:
             return
         exists = (
-            await self._session.execute(
-                select(ShortLinkMap.id).where(ShortLinkMap.short_key == short_key)
-            )
+            await self._session.execute(select(ShortLinkMap.id).where(ShortLinkMap.short_key == short_key))
         ).scalar_one_or_none()
         if exists is None:
             self._session.add(ShortLinkMap(short_key=short_key, article_key=article_key, biz=biz or ""))
@@ -435,9 +426,7 @@ class KnowledgeBaseService:
         prior = await asset_repo.get_by_source_external(source.id, _article_key(url))
         hit_count = int(prior.hit_count or 0) if prior is not None else 0
         # BE-02：raw_uri 走存储抽象（默认 url 透传零回归；local 后端落盘可切换）
-        raw_uri = await self._raw_store.save(
-            url=url, content_markdown=extracted.langbot_format, title=extracted.title
-        )
+        raw_uri = await self._raw_store.save(url=url, content_markdown=extracted.langbot_format, title=extracted.title)
         asset, _ = await asset_repo.upsert_content(
             source_id=source.id,
             external_id=_article_key(url),
@@ -493,17 +482,17 @@ class KnowledgeBaseService:
         try:
             async with self._session.begin_nested():
                 source = Source(
-                    type="wechat_oa", external_id=external_id,
-                    name=extracted.author or "未知公众号", url=url,
+                    type="wechat_oa",
+                    external_id=external_id,
+                    name=extracted.author or "未知公众号",
+                    url=url,
                 )
                 self._session.add(source)
                 await self._session.flush()
         except IntegrityError:
             row = (
                 await self._session.execute(
-                    select(Source).where(
-                        Source.type == "wechat_oa", Source.external_id == external_id
-                    )
+                    select(Source).where(Source.type == "wechat_oa", Source.external_id == external_id)
                 )
             ).scalar_one_or_none()
             if row is None:  # 非常见冲突（非唯一约束）如实上抛，不做掩盖

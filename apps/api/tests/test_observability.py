@@ -49,9 +49,7 @@ def _ours(root: logging.Logger) -> list[logging.Handler]:
     return [h for h in root.handlers if getattr(h, "_bothot_structlog_handler", False)]
 
 
-def test_configure_json_mode_emits_single_parseable_line(
-    clean_logging, monkeypatch, capsys
-) -> None:
+def test_configure_json_mode_emits_single_parseable_line(clean_logging, monkeypatch, capsys) -> None:
     monkeypatch.setenv("LOG_FORMAT", "json")
     blog.configure_logging(force=True)
     structlog.get_logger("w6.json").info("hello_event", user_id=42)
@@ -77,9 +75,7 @@ def test_configure_console_mode_is_not_json(clean_logging, monkeypatch, capsys) 
         json.loads(hit[0])
 
 
-def test_single_handler_and_foreign_lib_no_duplicate_lines(
-    clean_logging, monkeypatch, capsys
-) -> None:
+def test_single_handler_and_foreign_lib_no_duplicate_lines(clean_logging, monkeypatch, capsys) -> None:
     """第三方经 stdlib 的日志也在同一 handler 渲染一次——既无双写也不漏。"""
     monkeypatch.setenv("LOG_FORMAT", "json")
     blog.configure_logging(force=True)
@@ -117,10 +113,7 @@ def test_normalize_path_folds_id_segments() -> None:
     assert m.normalize_path("") == "/"
     assert m.normalize_path("/api/v1/system/health") == "/api/v1/system/health"
     assert m.normalize_path("/api/v1/spaces/123") == "/api/v1/spaces/{id}"
-    assert (
-        m.normalize_path("/api/v1/spaces/550e8400-e29b-41d4-a716-446655440000")
-        == "/api/v1/spaces/{id}"
-    )
+    assert m.normalize_path("/api/v1/spaces/550e8400-e29b-41d4-a716-446655440000") == "/api/v1/spaces/{id}"
     assert m.normalize_path("/api/v1/docs/deadbeefdeadbeef") == "/api/v1/docs/{id}"
 
 
@@ -163,27 +156,20 @@ async def test_metrics_middleware_records_and_exempts() -> None:
     async def send(msg):
         sent.append(msg)
 
-    count_before = _hist_count(
-        m.HTTP_REQUEST_DURATION, method="GET", path="/api/v1/ping", status="201"
-    )
+    count_before = _hist_count(m.HTTP_REQUEST_DURATION, method="GET", path="/api/v1/ping", status="201")
     await mw(
         {"type": "http", "path": "/api/v1/ping", "method": "GET", "headers": []},
         receive,
         send,
     )
-    assert (
-        _hist_count(m.HTTP_REQUEST_DURATION, method="GET", path="/api/v1/ping", status="201")
-        == count_before + 1
-    )
+    assert _hist_count(m.HTTP_REQUEST_DURATION, method="GET", path="/api/v1/ping", status="201") == count_before + 1
     assert [msg["type"] for msg in sent] == ["http.response.start", "http.response.body"]
     # in_flight 结束后归零
     assert m.HTTP_REQUESTS_IN_FLIGHT.labels(method="GET")._value.get() == 0.0
 
     # 豁免路径：/metrics 不记录
     await mw({"type": "http", "path": "/metrics", "method": "GET", "headers": []}, receive, send)
-    assert (
-        _hist_count(m.HTTP_REQUEST_DURATION, method="GET", path="/metrics", status="201") == 0.0
-    )
+    assert _hist_count(m.HTTP_REQUEST_DURATION, method="GET", path="/metrics", status="201") == 0.0
 
 
 def test_metrics_endpoint_exposes_at_least_eight_families() -> None:
@@ -246,9 +232,7 @@ async def test_run_alert_checks_disabled_returns_empty(monkeypatch: pytest.Monke
     assert await alerting.run_alert_checks(None) == []  # type: ignore[arg-type]
 
 
-async def test_deliver_routes_through_make_push_provider(
-    monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_deliver_routes_through_make_push_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.providers.push.base import PushResult
 
     captured: dict = {}

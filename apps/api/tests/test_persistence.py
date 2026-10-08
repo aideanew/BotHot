@@ -29,9 +29,7 @@ from app.services.auth.service import AuthService
 from app.services.jobs import JobService
 from app.services.spaces import SpaceService
 
-PG_URL = os.environ.get(
-    "AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot"
-)
+PG_URL = os.environ.get("AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot")
 
 
 def _settings() -> Settings:
@@ -105,9 +103,7 @@ async def test_callback_user_persists_across_sessions() -> None:
 
         # 自清理（真实 commit 不受夹具回滚保护）
         async with factory() as session:
-            await session.execute(
-                delete(User).where(User.sub == record.sub, User.email == "dev@aidean.local")
-            )
+            await session.execute(delete(User).where(User.sub == record.sub, User.email == "dev@aidean.local"))
             await session.commit()
     finally:
         await engine.dispose()
@@ -123,9 +119,7 @@ async def test_create_space_persists_across_sessions() -> None:
     try:
         sub = f"b-t8r-{uuid.uuid4().hex[:8]}"
         async with factory() as session:
-            user = await SqlAlchemyUserStore(session).upsert_by_sub(
-                sub, f"{sub}@test.local", "回归"
-            )
+            user = await SqlAlchemyUserStore(session).upsert_by_sub(sub, f"{sub}@test.local", "回归")
             await session.commit()
             svc = SpaceService(SpaceRepository(session), session)
             space = await svc.create_space(user.id, "持久化回归空间")
@@ -155,9 +149,7 @@ async def test_space_description_persists_across_sessions() -> None:
     try:
         sub = f"r051-{uuid.uuid4().hex[:8]}"
         async with factory() as session:
-            user = await SqlAlchemyUserStore(session).upsert_by_sub(
-                sub, f"{sub}@test.local", "回归"
-            )
+            user = await SqlAlchemyUserStore(session).upsert_by_sub(sub, f"{sub}@test.local", "回归")
             await session.commit()
             repo = SpaceRepository(session)
             svc = SpaceService(repo, session)
@@ -208,16 +200,12 @@ async def test_job_transition_persists_across_sessions() -> None:
     biz = f"biz-{uuid.uuid4().hex[:8]}"
     try:
         async with factory() as session:
-            user = await SqlAlchemyUserStore(session).upsert_by_sub(
-                sub, f"{sub}@test.local", "回归"
-            )
+            user = await SqlAlchemyUserStore(session).upsert_by_sub(sub, f"{sub}@test.local", "回归")
             source = Source(type="wechat_oa", external_id=biz, name="回归源")
             session.add(source)
             await session.commit()
             svc = JobService(JobRepository(session), session)
-            job, created = await svc.submit(
-                job_type="ingest", user_id=user.id, idempotency_key=f"b-t8r-{biz}"
-            )
+            job, created = await svc.submit(job_type="ingest", user_id=user.id, idempotency_key=f"b-t8r-{biz}")
             assert created
             await svc.transition(job.id, "RUNNING")
             job_id = job.id

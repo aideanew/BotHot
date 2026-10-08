@@ -86,9 +86,7 @@ class JustOneApiClient:
 
     # ── 发现 ──────────────────────────────────────────────────────────
 
-    async def query_work_list(
-        self, identifier: str, page: int
-    ) -> tuple[list[dict[str, Any]], int | None]:
+    async def query_work_list(self, identifier: str, page: int) -> tuple[list[dict[str, Any]], int | None]:
         """按 ghid 获取账号历史文章列表。
 
         identifier = ghid（gh_xxx 格式）。
@@ -200,6 +198,7 @@ class JustOneApiClient:
         # 纯文本兜底
         if not content_text:
             import re
+
             content_text = re.sub(r"<[^>]+>", "", content_html).strip()[:200]
 
         return ArticleDetail(
@@ -258,13 +257,15 @@ class JustOneApiClient:
         for item in data:
             if not isinstance(item, dict):
                 continue
-            results.append(ArticleSearchResult(
-                url=item.get("url", "") or item.get("content_url", ""),
-                title=item.get("title", ""),
-                digest=item.get("digest", ""),
-                author=item.get("author", "") or item.get("nick_name", ""),
-                source="justoneapi",
-            ))
+            results.append(
+                ArticleSearchResult(
+                    url=item.get("url", "") or item.get("content_url", ""),
+                    title=item.get("title", ""),
+                    digest=item.get("digest", ""),
+                    author=item.get("author", "") or item.get("nick_name", ""),
+                    source="justoneapi",
+                )
+            )
         return results
 
     # ── HTTP 层 ──────────────────────────────────────────────────────

@@ -68,9 +68,7 @@ async def _seed(
     user = User(sub=sub, email=f"{sub}@test.local", nickname=sub, role=role)
     db_session.add(user)
     await db_session.flush()
-    space = KnowledgeSpace(
-        user_id=user.id, name=f"R02订阅空间-{sub}", langbot_kb_uuid="kb-r02s", engine="builtin"
-    )
+    space = KnowledgeSpace(user_id=user.id, name=f"R02订阅空间-{sub}", langbot_kb_uuid="kb-r02s", engine="builtin")
     db_session.add(space)
     await db_session.flush()
     source = Source(type="wechat_oa", external_id=f"biz-{sub}", name=source_name, url="https://mp.weixin.qq.com")
@@ -327,12 +325,7 @@ async def test_patch_subscription_authorization(db_session) -> None:
     client = _client(db_session, d["user"].id)
 
     assert client.patch("/api/v1/spaces/not-a-space/subscriptions/x", json={}).status_code == 404
-    assert (
-        client.patch(
-            f"/api/v1/spaces/{d['space'].id}/subscriptions/{ID_UNKNOWN}", json={}
-        ).status_code
-        == 404
-    )
+    assert client.patch(f"/api/v1/spaces/{d['space'].id}/subscriptions/{ID_UNKNOWN}", json={}).status_code == 404
 
     # 他人订阅（同一 source，另一用户）——跨用户不可改
     subs = (
@@ -380,15 +373,13 @@ async def test_cancel_subscription_soft_and_keeps_data(db_session) -> None:
     # 按本用例的 source 限定：夹具只在写侧隔离，读侧可见环境里其他源
     # 的资产/清单行（人工 QA 数据），全表计数会把环境噪音误判成产品缺陷。
     assets = (
-        await db_session.execute(
-            select(ContentAsset).where(ContentAsset.source_id == d["source"].id)
-        )
-    ).scalars().all()
+        (await db_session.execute(select(ContentAsset).where(ContentAsset.source_id == d["source"].id))).scalars().all()
+    )
     manifests = (
-        await db_session.execute(
-            select(ArticleManifest).where(ArticleManifest.source_id == d["source"].id)
-        )
-    ).scalars().all()
+        (await db_session.execute(select(ArticleManifest).where(ArticleManifest.source_id == d["source"].id)))
+        .scalars()
+        .all()
+    )
     assert len(assets) == 2 and len(manifests) == 3, "退订不得删除资产或清单"
 
 

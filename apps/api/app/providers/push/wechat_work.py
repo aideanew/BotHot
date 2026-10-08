@@ -46,7 +46,7 @@ class WechatWorkPushProvider:
                 return PushResult(
                     "wechat_work",
                     False,
-                    f"企业微信返回错误: {data.get('errmsg','')}",
+                    f"企业微信返回错误: {data.get('errmsg', '')}",
                     json.dumps(data, ensure_ascii=False)[:500],
                     retryable=False,
                 )

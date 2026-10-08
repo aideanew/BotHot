@@ -229,19 +229,13 @@ async def test_raw_store_url_passthrough_default() -> None:
 async def test_raw_store_local_volume_writes_file(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """R4b：local 后端落盘返回 file:// URI（同文幂等覆盖）。"""
     store = LocalVolumeStore(base_dir=tmp_path)
-    uri1 = await store.save(
-        url="https://mp.weixin.qq.com/s/y", content_markdown="# 正文A", title="标题A"
-    )
+    uri1 = await store.save(url="https://mp.weixin.qq.com/s/y", content_markdown="# 正文A", title="标题A")
     assert uri1.startswith("file://")
     assert store.backend == "local"
     # 同 url+正文 → 同 URI（幂等）；不同正文 → 不同 URI
-    uri2 = await store.save(
-        url="https://mp.weixin.qq.com/s/y", content_markdown="# 正文A", title="标题A"
-    )
+    uri2 = await store.save(url="https://mp.weixin.qq.com/s/y", content_markdown="# 正文A", title="标题A")
     assert uri1 == uri2
-    uri3 = await store.save(
-        url="https://mp.weixin.qq.com/s/y", content_markdown="# 正文B", title="标题A"
-    )
+    uri3 = await store.save(url="https://mp.weixin.qq.com/s/y", content_markdown="# 正文B", title="标题A")
     assert uri1 != uri3
 
 

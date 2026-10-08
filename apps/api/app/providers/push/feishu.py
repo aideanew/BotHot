@@ -25,9 +25,7 @@ _FEISHU_TIMEOUT = 10
 def _sign(secret: str, timestamp: int) -> str:
     """飞书加签：HMAC-SHA256(timestamp + "\n" + secret)。"""
     string_to_sign = f"{timestamp}\n{secret}"
-    hmac_code = hmac.new(
-        string_to_sign.encode("utf-8"), digestmod=hashlib.sha256
-    ).digest()
+    hmac_code = hmac.new(string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
     return base64.b64encode(hmac_code).decode("utf-8")
 
 
@@ -50,21 +48,27 @@ class FeishuPushProvider:
         }
 
         if message.message:
-            card["elements"].append({
-                "tag": "div",
-                "text": {"tag": "lark_md", "content": message.message},
-            })
+            card["elements"].append(
+                {
+                    "tag": "div",
+                    "text": {"tag": "lark_md", "content": message.message},
+                }
+            )
 
         if message.url:
-            card["elements"].append({
-                "tag": "action",
-                "actions": [{
-                    "tag": "button",
-                    "text": {"tag": "plain_text", "content": "查看详情"},
-                    "url": message.url,
-                    "type": "primary",
-                }],
-            })
+            card["elements"].append(
+                {
+                    "tag": "action",
+                    "actions": [
+                        {
+                            "tag": "button",
+                            "text": {"tag": "plain_text", "content": "查看详情"},
+                            "url": message.url,
+                            "type": "primary",
+                        }
+                    ],
+                }
+            )
 
         payload: dict = {"msg_type": "interactive", "card": card}
 

@@ -50,9 +50,7 @@ class _ArticleTime:
     created_at: datetime
 
 
-def compute_score(
-    articles: list[_ArticleTime], *, now: datetime
-) -> tuple[float, int, int]:
+def compute_score(articles: list[_ArticleTime], *, now: datetime) -> tuple[float, int, int]:
     """返回 (hot_score, source_count_48h, article_count_total)。"""
     # 同来源取最年轻（最小 age）；age 用 published_at，缺失回落 created_at
     freshest_age: dict[str, float] = {}
@@ -72,9 +70,7 @@ def compute_score(
     return score, len(freshest_age), len(articles)
 
 
-def next_status(
-    current: str, *, score: float, prev_score: float, topic_age_hours: float
-) -> str:
+def next_status(current: str, *, score: float, prev_score: float, topic_age_hours: float) -> str:
     """状态机迁移。current 已为 archived 时不动。
 
     语义（审查缝合修正）：未达 hot 阈值的话题不允许"永困 rising"——
@@ -106,9 +102,7 @@ async def run_scoring(session: AsyncSession, *, now: datetime | None = None) -> 
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=BUSINESS_TZ)
 
-    topics = (
-        await session.execute(select(HotTopic).where(HotTopic.status != "archived"))
-    ).scalars().all()
+    topics = (await session.execute(select(HotTopic).where(HotTopic.status != "archived"))).scalars().all()
     updated = 0
     for t in topics:
         rows = (
@@ -128,17 +122,13 @@ async def run_scoring(session: AsyncSession, *, now: datetime | None = None) -> 
         ]
         score, src_count, art_count = compute_score(articles, now=moment)
         # 话题年龄 = 距最早一篇（用 published_at，缺失回落 created_at）
-        moments = [
-            (a.published_at if a.published_at is not None else a.created_at) for a in articles
-        ]
+        moments = [(a.published_at if a.published_at is not None else a.created_at) for a in articles]
         for i, m in enumerate(moments):
             if m.tzinfo is None:
                 moments[i] = m.replace(tzinfo=BUSINESS_TZ)
         topic_age_hours = (moment - min(moments)).total_seconds() / 3600.0 if moments else 0.0
         prev = float(t.hot_score or 0.0)
-        new_status = next_status(
-            t.status, score=score, prev_score=prev, topic_age_hours=topic_age_hours
-        )
+        new_status = next_status(t.status, score=score, prev_score=prev, topic_age_hours=topic_age_hours)
         t.hot_score = float(score)
         t.source_count = int(src_count)
         t.article_count = int(art_count)

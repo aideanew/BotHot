@@ -72,8 +72,7 @@ def test_public_operations_exact_set() -> None:
     """漂移锁：未标注集合必须精确等于 EXPECTED_PUBLIC。"""
     _protected, unmarked = _classify()
     assert unmarked == EXPECTED_PUBLIC, (
-        f"未标注端点与预期不符：多 {sorted(unmarked - EXPECTED_PUBLIC)}"
-        f" / 少 {sorted(EXPECTED_PUBLIC - unmarked)}"
+        f"未标注端点与预期不符：多 {sorted(unmarked - EXPECTED_PUBLIC)} / 少 {sorted(EXPECTED_PUBLIC - unmarked)}"
     )
 
 
@@ -133,9 +132,5 @@ def test_every_included_route_reaches_schema() -> None:
                     seen.add((method.lower(), route.path))
 
     # 反方向：schema 里的操作都要能追溯到 APP_ROUTERS，否则该路由没被登记
-    schema_ops = {
-        (method, path) for path, ops in paths.items() for method in ops
-    }
-    assert schema_ops == seen, (
-        f"schema 多 {sorted(schema_ops - seen)} / APP_ROUTERS 多 {sorted(seen - schema_ops)}"
-    )
+    schema_ops = {(method, path) for path, ops in paths.items() for method in ops}
+    assert schema_ops == seen, f"schema 多 {sorted(schema_ops - seen)} / APP_ROUTERS 多 {sorted(seen - schema_ops)}"

@@ -208,12 +208,8 @@ def test_engine_router_configured_agrees_with_predicate_on_main() -> None:
     base-only 与 base+key 两个分支上必须同结论（R0.3.2 既有不变式未覆盖 base-only）。
     """
     for settings in (_S(base="http://main-kb:8001"), _S(base="http://main-kb:8001", main_key="sk-1")):
-        assert resolve_engine_key("main", settings).configured is EngineRouter(
-            settings=settings
-        ).configured("main")
-        assert resolve_engine_key("main", settings).configured is bool(
-            _engine_status("main", settings)["configured"]
-        )
+        assert resolve_engine_key("main", settings).configured is EngineRouter(settings=settings).configured("main")
+        assert resolve_engine_key("main", settings).configured is bool(_engine_status("main", settings)["configured"])
 
 
 def test_all_slots_two_predicates_agree() -> None:
@@ -245,9 +241,7 @@ async def _seed_operator(db_session: Any) -> str:
     return op.id
 
 
-async def test_register_persists_ciphertext_not_plaintext(
-    db_session, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
+async def test_register_persists_ciphertext_not_plaintext(db_session, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     from app.models.entities import EngineKeyRegistration
 
     set_master_key(monkeypatch)
@@ -258,7 +252,7 @@ async def test_register_persists_ciphertext_not_plaintext(
 
     row = await db_session.get(EngineKeyRegistration, "coze")
     assert row is not None
-    assert row.secret_ref != "sk-live-secret-99"          # 零明文落库
+    assert row.secret_ref != "sk-live-secret-99"  # 零明文落库
     assert "sk-live-secret-99" not in row.secret_ref
     assert row.registered_by == op
     # 解密回来才是真值
@@ -288,9 +282,7 @@ async def test_register_rejects_blank_and_control_chars(db_session) -> None:  # 
         await svc.register("op-1", "coze", "sk\x00bad")
 
 
-async def test_register_without_master_key_refuses_and_writes_nothing(
-    db_session, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
+async def test_register_without_master_key_refuses_and_writes_nothing(db_session, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """无主密钥 → 50002 拒绝，且不落任何行（绝不回落明文）。"""
     svc = EngineKeyService(db_session)
     with pytest.raises(DependencyUnavailableError, match="ENGINE_KEY_MASTER_KEY"):
@@ -298,9 +290,7 @@ async def test_register_without_master_key_refuses_and_writes_nothing(
     assert (await svc.load()).rows == []
 
 
-async def test_register_overwrites_and_rotates_key_id(
-    db_session, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
+async def test_register_overwrites_and_rotates_key_id(db_session, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     set_master_key(monkeypatch)
     op1 = await _seed_operator(db_session)
     op2 = User(sub="r11-key-op2-svc", email="r11-key-op2-svc@r11.test", nickname="op2", role="operator")
@@ -312,15 +302,13 @@ async def test_register_overwrites_and_rotates_key_id(
     assert first["keyId"] != second["keyId"]
 
     loaded = await svc.load()
-    assert len(loaded.rows) == 1                       # 一行一引擎位，不并排多版本
-    assert loaded.plaintext["coze"] == "sk-new"        # 生效的是新值
+    assert len(loaded.rows) == 1  # 一行一引擎位，不并排多版本
+    assert loaded.plaintext["coze"] == "sk-new"  # 生效的是新值
     assert loaded.rows[0]["keyId"] == second["keyId"]
     assert loaded.rows[0]["registeredBy"] == op2.id
 
 
-async def test_revoke_deletes_and_absent_revoke_is_404(
-    db_session, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
+async def test_revoke_deletes_and_absent_revoke_is_404(db_session, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """撤销后回落 env；重复撤销无登记行 → 30004（不谎报已撤销）。"""
     from app.core.errors import ResourceNotFoundError
 
@@ -336,9 +324,7 @@ async def test_revoke_deletes_and_absent_revoke_is_404(
         await svc.revoke(op, "coze")
 
 
-async def test_load_flags_decrypt_failure_instead_of_dropping_it(
-    db_session, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
+async def test_load_flags_decrypt_failure_instead_of_dropping_it(db_session, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """密文损坏（或主密钥轮换）→ 该行不计入可用集，但必须被标注。
 
     静默当「未配置」会让操作者以为登记丢了——F-4 教训。
@@ -361,9 +347,7 @@ async def test_load_flags_decrypt_failure_instead_of_dropping_it(
     assert loaded.rows[0]["engine"] == "coze"  # 行仍在，只是不可用
 
 
-async def test_load_without_master_key_flags_all_rows(
-    db_session, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
+async def test_load_without_master_key_flags_all_rows(db_session, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """主密钥未配置且已有登记行 → 全部行显式标注不可读，不静默当未配置。"""
     set_master_key(monkeypatch)
     svc = EngineKeyService(db_session)
@@ -447,9 +431,7 @@ async def test_admin_register_list_and_revoke_lifecycle(db_session, monkeypatch)
 
     # 撤销后回落 env（envConfigured 仍为真 → configured 仍为真，来源变回 env）
     resp = client.delete("/api/v1/admin/engines/keys/coze")
-    assert resp.status_code == 200 and resp.json()["data"] == {
-        "ok": True, "engine": "coze", "revoked": True
-    }
+    assert resp.status_code == 200 and resp.json()["data"] == {"ok": True, "engine": "coze", "revoked": True}
     items_after = client.get("/api/v1/admin/engines/keys").json()["data"]["items"]
     coze_after = next(i for i in items_after if i["engine"] == "coze")
     assert coze_after["registered"] is False
@@ -460,9 +442,7 @@ async def test_admin_register_list_and_revoke_lifecycle(db_session, monkeypatch)
 async def test_admin_register_without_master_key_is_50002(db_session, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """无主密钥登记 → 50002（依赖未就绪），不是 4xx、不回落明文。"""
     rows = await _seed_roles(db_session)
-    resp = _app(db_session, rows["operator"]).post(
-        "/api/v1/admin/engines/keys/coze", json={"key": "sk-live"}
-    )
+    resp = _app(db_session, rows["operator"]).post("/api/v1/admin/engines/keys/coze", json={"key": "sk-live"})
     assert resp.status_code == 503 and resp.json()["code"] == 50002
     assert "ENGINE_KEY_MASTER_KEY" in resp.json()["message"]
 

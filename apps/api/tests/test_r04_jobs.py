@@ -124,12 +124,8 @@ async def test_list_jobs_filters_type_and_status(db_session) -> None:
     """type/status 过滤同时作用于 items 与 total（同一 _job_stmt）。"""
     _, user_id, _ = await _seed(db_session, sub="r04-filter")
     await _add_job(db_session, user_id=user_id, job_id="f-1", status="QUEUED", key="f1")
-    await _add_job(
-        db_session, user_id=user_id, job_id="f-2", status="SUCCEEDED", job_type="sync_account", key="f2"
-    )
-    await _add_job(
-        db_session, user_id=user_id, job_id="f-3", status="RUNNING", job_type="sync_account", key="f3"
-    )
+    await _add_job(db_session, user_id=user_id, job_id="f-2", status="SUCCEEDED", job_type="sync_account", key="f2")
+    await _add_job(db_session, user_id=user_id, job_id="f-3", status="RUNNING", job_type="sync_account", key="f3")
     client = _client(db_session, user_id)
 
     by_type = client.get("/api/v1/jobs", params={"type": "sync_account"}).json()["data"]
@@ -139,9 +135,7 @@ async def test_list_jobs_filters_type_and_status(db_session) -> None:
     by_status = client.get("/api/v1/jobs", params={"status": "RUNNING"}).json()["data"]
     assert by_status["total"] == 1 and by_status["items"][0]["jobId"] == "f-3"
 
-    both = client.get(
-        "/api/v1/jobs", params={"type": "sync_account", "status": "SUCCEEDED"}
-    ).json()["data"]
+    both = client.get("/api/v1/jobs", params={"type": "sync_account", "status": "SUCCEEDED"}).json()["data"]
     assert both["total"] == 1 and both["items"][0]["jobId"] == "f-2"
 
 

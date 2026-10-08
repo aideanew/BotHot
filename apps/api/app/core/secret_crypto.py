@@ -31,19 +31,13 @@ def _master_key(settings: Settings | None = None) -> bytes:
     """主密钥解析：32 字节 base64，缺失/畸形一律拒绝——绝不回落明文。"""
     raw = str(getattr(settings or get_settings(), "push_secret_master_key", "") or "")
     if not raw:
-        raise DependencyUnavailableError(
-            f"{_ENV_VAR_NAME} 未配置（需 32 字节密钥的 base64），无法加密或解密渠道密钥"
-        )
+        raise DependencyUnavailableError(f"{_ENV_VAR_NAME} 未配置（需 32 字节密钥的 base64），无法加密或解密渠道密钥")
     try:
         key = base64.b64decode(raw, validate=True)
     except (binascii.Error, ValueError) as exc:
-        raise DependencyUnavailableError(
-            f"{_ENV_VAR_NAME} 不是合法 base64，无法加密或解密渠道密钥"
-        ) from exc
+        raise DependencyUnavailableError(f"{_ENV_VAR_NAME} 不是合法 base64，无法加密或解密渠道密钥") from exc
     if len(key) != _KEY_BYTES:
-        raise DependencyUnavailableError(
-            f"{_ENV_VAR_NAME} 需 {_KEY_BYTES} 字节（AES-256），当前 {len(key)} 字节"
-        )
+        raise DependencyUnavailableError(f"{_ENV_VAR_NAME} 需 {_KEY_BYTES} 字节（AES-256），当前 {len(key)} 字节")
     return key
 
 
@@ -83,13 +77,9 @@ def decrypt_channel_secret(
     mk = master if master is not None else _master_key(settings)
     try:
         nonce_b64, ct_b64 = secret_ref.split(".", 1)
-        plaintext = AESGCM(mk).decrypt(
-            base64.b64decode(nonce_b64), base64.b64decode(ct_b64), channel_id.encode()
-        )
+        plaintext = AESGCM(mk).decrypt(base64.b64decode(nonce_b64), base64.b64decode(ct_b64), channel_id.encode())
     except (InvalidTag, LookupError, ValueError, binascii.Error, TypeError) as exc:
-        raise RequestInvalidError(
-            f"渠道 {channel_id} 的密钥不可解（密文损坏或主密钥已轮换）"
-        ) from exc
+        raise RequestInvalidError(f"渠道 {channel_id} 的密钥不可解（密文损坏或主密钥已轮换）") from exc
     return plaintext.decode()
 
 

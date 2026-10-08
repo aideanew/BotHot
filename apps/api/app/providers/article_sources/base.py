@@ -23,13 +23,13 @@ class ArticleDetail:
 
     url: str
     title: str
-    content_html: str        # 原始 HTML 正文（extractor 可直接消费）
-    content_text: str        # 纯文本正文（兜底用，extractor 优先用 html）
+    content_html: str  # 原始 HTML 正文（extractor 可直接消费）
+    content_text: str  # 纯文本正文（兜底用，extractor 优先用 html）
     author: str = ""
-    biz: str = ""            # 公众号 __biz（base64）
-    ghid: str = ""           # 公众号 gh_ ID
+    biz: str = ""  # 公众号 __biz（base64）
+    ghid: str = ""  # 公众号 gh_ ID
     publish_time: datetime | None = None
-    source: str = ""         # 来源平台名（dajiala/justoneapi/...）
+    source: str = ""  # 来源平台名（dajiala/justoneapi/...）
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,9 +58,7 @@ class ArticleSourceProvider(Protocol):
     name: str
     description: str
 
-    async def query_work_list(
-        self, identifier: str, page: int
-    ) -> tuple[list[dict[str, Any]], int | None]:
+    async def query_work_list(self, identifier: str, page: int) -> tuple[list[dict[str, Any]], int | None]:
         """获取公众号文章清单一页（page 从 1 起）。
 
         返回 (原始行列表, 上游 total)。行字段经 manifest._map_row 的别名消化。

@@ -84,17 +84,13 @@ class RedfoxClient:
         async with upstream_semaphore(UPSTREAM_NAME):
             return await self._http.post(url, **kwargs)
 
-    async def query_work_list(
-        self, biz: str, page: int
-    ) -> tuple[list[dict[str, Any]], int | None]:
+    async def query_work_list(self, biz: str, page: int) -> tuple[list[dict[str, Any]], int | None]:
         """公众号作品清单一页 `(原始行, 上游 total)`（biz=__biz，page 从 1 起）。
 
         无 Key → 显式失败（50002），绝不返回空清单冒充成功。
         """
         if not self._api_key:
-            raise DependencyUnavailableError(
-                "REDFOX_API_KEY 未配置：整号清单不可用（显式失败，不造数）"
-            )
+            raise DependencyUnavailableError("REDFOX_API_KEY 未配置：整号清单不可用（显式失败，不造数）")
         payload = await self._request(
             QUERY_WORK_LIST_PATH,
             {"bizInfo": biz, "offset": max(page - 1, 0) * PAGE_SIZE, "sortType": _SORT_LATEST},

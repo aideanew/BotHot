@@ -73,9 +73,7 @@ async def _seed_space(db_session: Any, sub: str, name: str) -> Any:
     user = User(sub=sub, email=f"{sub}@b27.local", nickname="B27")
     db_session.add(user)
     await db_session.flush()
-    space = await SpaceRepository(db_session).create(
-        user_id=user.id, name=name, langbot_kb_uuid=KB_UUID
-    )
+    space = await SpaceRepository(db_session).create(user_id=user.id, name=name, langbot_kb_uuid=KB_UUID)
     await db_session.flush()
     return space
 
@@ -117,8 +115,12 @@ async def test_persist_document_overwrite_purges_old_file(db_session: Any) -> No
     db_session.add(source)
     await db_session.flush()
     asset = ContentAsset(
-        source_id=source.id, external_id="p0-cache-001", url=URL_A,
-        title="覆盖写文章", content_hash="hash-old", content_markdown="# 旧正文",
+        source_id=source.id,
+        external_id="p0-cache-001",
+        url=URL_A,
+        title="覆盖写文章",
+        content_hash="hash-old",
+        content_markdown="# 旧正文",
     )
     db_session.add(asset)
     await db_session.flush()
@@ -126,15 +128,23 @@ async def test_persist_document_overwrite_purges_old_file(db_session: Any) -> No
     await DocumentRepository(db_session).set_langbot_file_id(doc.id, "lb-file-old")
     await db_session.commit()
 
-    extracted = ExtractedContent(title="覆盖写文章（已改）", author="测试公众号", publish_time=None,
-                                 paragraphs=["新正文段落一", "新正文段落二"], langbot_format="# 新正文")
-    article = ResolvedArticle(title=extracted.title, author=extracted.author,
-                              publish_time=None, content="正文", url=URL_A,
-                              biz="MjM5MjgwNTQ1MQ==")
-
-    out = await _svc(db_session, stub)._persist_document(
-        space.id, article, extracted, KB_UUID, "lb-file-new"
+    extracted = ExtractedContent(
+        title="覆盖写文章（已改）",
+        author="测试公众号",
+        publish_time=None,
+        paragraphs=["新正文段落一", "新正文段落二"],
+        langbot_format="# 新正文",
     )
+    article = ResolvedArticle(
+        title=extracted.title,
+        author=extracted.author,
+        publish_time=None,
+        content="正文",
+        url=URL_A,
+        biz="MjM5MjgwNTQ1MQ==",
+    )
+
+    out = await _svc(db_session, stub)._persist_document(space.id, article, extracted, KB_UUID, "lb-file-new")
 
     assert stub.deleted == [(KB_UUID, "lb-file-old")]
     assert await _doc_file_id(db_session, out.id) == "lb-file-new"

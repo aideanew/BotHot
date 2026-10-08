@@ -33,9 +33,7 @@ async def _seed(db_session):
     """用户+空间+源三件套。"""
     from app.repositories.user import SqlAlchemyUserStore
 
-    user = await SqlAlchemyUserStore(db_session).upsert_by_sub(
-        "sub-p2-ab004", "p2ab004@test.local", "P2-AB004"
-    )
+    user = await SqlAlchemyUserStore(db_session).upsert_by_sub("sub-p2-ab004", "p2ab004@test.local", "P2-AB004")
     space = await SpaceRepository(db_session).create(user_id=user.id, name="P2订阅空间")
     svc = SourceSubscriptionService(db_session)
     src = await svc.register_source(user.id, biz=BIZ_TEST)
@@ -70,9 +68,7 @@ async def test_p2_register_source_idempotent(db_session) -> None:  # type: ignor
     src2 = await svc.register_source(user.id, biz=BIZ_TEST)
     assert src2["sourceId"] == src1["sourceId"]
     rows = (
-        await db_session.execute(
-            select(Source).where(Source.type == "wechat_oa", Source.external_id == BIZ_TEST)
-        )
+        await db_session.execute(select(Source).where(Source.type == "wechat_oa", Source.external_id == BIZ_TEST))
     ).all()
     assert len(rows) == 1, "同 biz 应只有一条 source 行"
     await db_session.commit()
@@ -85,9 +81,7 @@ async def test_p2_register_source_accepts_mp_query_biz(db_session) -> None:  # t
     """profile_url 取 `?__biz=` / `?biz=` 参数：公众号文章链接可注册成正确锚点。"""
     user, space, src = await _seed(db_session)
     svc = SourceSubscriptionService(db_session)
-    result = await svc.register_source(
-        user.id, profile_url=f"https://mp.weixin.qq.com/s?__biz={BIZ_TEST}&mid=1"
-    )
+    result = await svc.register_source(user.id, profile_url=f"https://mp.weixin.qq.com/s?__biz={BIZ_TEST}&mid=1")
     assert result["biz"] == BIZ_TEST
     assert result["sourceId"] == src["sourceId"]
 
@@ -149,11 +143,7 @@ async def test_p2_subscribe_idempotent_no_double_job(db_session) -> None:  # typ
         )
     ).all()
     assert len(subs) == 1
-    jobs = (
-        await db_session.execute(
-            select(Job).where(Job.type == "sync_account", Job.user_id == user.id)
-        )
-    ).all()
+    jobs = (await db_session.execute(select(Job).where(Job.type == "sync_account", Job.user_id == user.id))).all()
     assert len(jobs) == 1, "幂等订阅不得建双 Job"
     await db_session.commit()
 
@@ -244,9 +234,7 @@ async def test_p2_subscribe_anchor_out_of_range_rejected(db_session, hour: int) 
         await svc.subscribe(user.id, space.id, src["sourceId"], sync_anchor_hour=hour)
     await db_session.rollback()
 
-    rows = (
-        await db_session.execute(select(SourceSubscription).where(SourceSubscription.user_id == user.id))
-    ).all()
+    rows = (await db_session.execute(select(SourceSubscription).where(SourceSubscription.user_id == user.id))).all()
     jobs = (await db_session.execute(select(Job).where(Job.user_id == user.id))).all()
     assert rows == [] and jobs == [], f"校验失败不得落库（hour={hour}）"
 
@@ -312,9 +300,7 @@ async def test_p2_r632_failed_first_sync_requeues(db_session) -> None:  # type: 
     await db_session.commit()
 
     # 再次触发同步（模拟 create_subscription 幂等返回后走 _create_sync_job）
-    job2 = await svc._create_sync_job(
-        user.id, space.id, src["sourceId"], r["subscriptionId"]
-    )
+    job2 = await svc._create_sync_job(user.id, space.id, src["sourceId"], r["subscriptionId"])
     assert job2.id == job_id, "应复用同一 Job 行（幂等键不变）"
     assert job2.status == "QUEUED", "终态 Job 应被复位为 QUEUED"
     # JobItem 应被重新填充
@@ -335,9 +321,7 @@ async def test_p2_r632_succeeded_first_sync_no_requeue(db_session) -> None:  # t
     await svc._job_repo.set_status(job_id, "SUCCEEDED")
     await db_session.commit()
 
-    job2 = await svc._create_sync_job(
-        user.id, space.id, src["sourceId"], r["subscriptionId"]
-    )
+    job2 = await svc._create_sync_job(user.id, space.id, src["sourceId"], r["subscriptionId"])
     assert job2.id == job_id
     assert job2.status == "SUCCEEDED", "成功的 Job 不应被复位"
     await db_session.commit()

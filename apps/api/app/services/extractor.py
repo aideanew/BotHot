@@ -29,15 +29,28 @@ BLOCK_TAG = {"p", "section", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6", "b
 CONTAINER_TAG = {"section", "div", "p", "figure"}
 VOID_TAG = {"br", "img", "hr", "input", "meta", "link", "source", "wbr"}
 NOISE_ID_CLASS_KEYWORDS = (
-    "qr_code", "qrcode", "js_pc_qr_code",  # 二维码区块
-    "reward_area", "reward-qrcode",  # 赞赏/打赏
-    "content_bottom_area", "rich_media_tool",  # 底部工具条
-    "ct_mpda_wap", "js_ad_link", "ad_banner",  # 广告
-    "wx_follow_nickname", "profile_container",  # 关注引导
+    "qr_code",
+    "qrcode",
+    "js_pc_qr_code",  # 二维码区块
+    "reward_area",
+    "reward-qrcode",  # 赞赏/打赏
+    "content_bottom_area",
+    "rich_media_tool",  # 底部工具条
+    "ct_mpda_wap",
+    "js_ad_link",
+    "ad_banner",  # 广告
+    "wx_follow_nickname",
+    "profile_container",  # 关注引导
 )
 NOISE_TEXT_KEYWORDS = (
-    "轻点阅读", "轻点上方", "阅读原文", "点个在看", "分享、点赞、在看",
-    "微信扫一扫关注该公众号", "长按识别二维码", "点击上方蓝字",
+    "轻点阅读",
+    "轻点上方",
+    "阅读原文",
+    "点个在看",
+    "分享、点赞、在看",
+    "微信扫一扫关注该公众号",
+    "长按识别二维码",
+    "点击上方蓝字",
     "点击名片",  # 名片卡引导（▼点击名片 ⭐标关注我们▼）
     "-End-",  # 文末终止标记（带两侧连字符，避免命中英文词中的 end）
 )
@@ -80,7 +93,7 @@ def count_words(text: str) -> int:
 
 
 def _is_noise_container(attrs: dict[str, str]) -> bool:
-    marker = f'{attrs.get("id", "")} {attrs.get("class", "")}'.lower()
+    marker = f"{attrs.get('id', '')} {attrs.get('class', '')}".lower()
     return any(keyword in marker for keyword in NOISE_ID_CLASS_KEYWORDS)
 
 
@@ -282,9 +295,7 @@ class ExtractorService:
     def extract(self, article: ResolvedArticle) -> ExtractedContent:
         parser = _CleaningParser()
         # 只喂 js_content 区段（复用 B-T5 定位逻辑），避免把页头导航计入
-        match = re.search(
-            r'<[^>]*id="js_content"[^>]*>(.*)', article.html or "", re.IGNORECASE | re.DOTALL
-        )
+        match = re.search(r'<[^>]*id="js_content"[^>]*>(.*)', article.html or "", re.IGNORECASE | re.DOTALL)
         body = match.group(1) if match else ""
         parser.feed(body)
         parser.close()

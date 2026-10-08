@@ -201,9 +201,7 @@ async def admin_list_space_docs(
     与写面同口径：无效空间 → 30004（404），不校验存在性会让「空间不存在」与
     「空间为空」无法区分。未登录 → 10001；非 admin → 10004/403。
     """
-    items, total = await svc.list_space_docs_any(
-        space_id, limit=limit, offset=offset, category=category
-    )
+    items, total = await svc.list_space_docs_any(space_id, limit=limit, offset=offset, category=category)
     body = success(data={"items": items, "total": total, "limit": limit, "offset": offset})
     return JSONResponse(status_code=200, content=body.model_dump())
 
@@ -233,9 +231,7 @@ async def admin_list_jobs(
 
     未登录 → 10001；非 admin → 10004/403。
     """
-    result = await svc.list_job_views_any(
-        status=status, job_type=type_, limit=limit, offset=offset
-    )
+    result = await svc.list_job_views_any(status=status, job_type=type_, limit=limit, offset=offset)
     body = success(data=result)
     return JSONResponse(status_code=200, content=body.model_dump())
 
@@ -290,6 +286,7 @@ async def admin_list_subscriptions(
 
 
 # ------------------------------------------------------------------ 批次 3 / T5.4 引擎 Key 登记
+
 
 class RegisterEngineKeyRequest(BaseModel):
     key: str = Field(min_length=1, max_length=1024, description="引擎 API Key 明文（仅用于加密落库）")
@@ -380,6 +377,7 @@ async def admin_revoke_engine_key(
 
 # ------------------------------------------------------------------ 批次 4 / T5.7 批量文档操作
 
+
 @router.post("/spaces/{space_id}/docs:delete", summary="跨用户管理操作：批量删文档")
 async def admin_delete_docs_batch(
     space_id: str,
@@ -433,6 +431,7 @@ async def admin_recategorize_docs_batch(
 
 # ------------------------------------------------------------------ 批次 5 / T6.2 推送通道
 
+
 class PushRequest(BaseModel):
     """推送请求。channel/external_user_id 必填；space_id/doc_id/message 至少一项非空。
 
@@ -460,9 +459,7 @@ async def admin_list_push_channels(
     未登录 → 10001；非 operator/admin → 10004/403。
     C.4：注册表为代码静态（无写路径），走读缓存 TTL=300s（Redis 不可达直穿）。
     """
-    channels = await get_or_set(
-        "admin:push:channels", 300, lambda: _wrap(registered_channels())
-    )
+    channels = await get_or_set("admin:push:channels", 300, lambda: _wrap(registered_channels()))
     body = success(data={"channels": channels})
     return JSONResponse(status_code=200, content=body.model_dump())
 
@@ -484,9 +481,7 @@ async def admin_list_discovery_channels(
     未登录 → 10001；非 operator/admin → 10004/403。
     C.4：注册表+配置读，走读缓存 TTL=120s（Redis 不可达直穿）。
     """
-    channels = await get_or_set(
-        "admin:discovery:channels", 120, lambda: _wrap(describe_channels(get_settings()))
-    )
+    channels = await get_or_set("admin:discovery:channels", 120, lambda: _wrap(describe_channels(get_settings())))
     body = success(data=channels)
     return JSONResponse(status_code=200, content=body.model_dump())
 
@@ -543,12 +538,14 @@ async def admin_push(
         payload.message,
     )
     if not result.delivered:
-        body = success(data={
-            "ok": False,
-            "channel": result.channel,
-            "delivered": False,
-            "reason": result.reason,
-        })
+        body = success(
+            data={
+                "ok": False,
+                "channel": result.channel,
+                "delivered": False,
+                "reason": result.reason,
+            }
+        )
         return JSONResponse(status_code=200, content=body.model_dump())
     body = success(data={"ok": True, "channel": result.channel, "delivered": True})
     return JSONResponse(status_code=200, content=body.model_dump())

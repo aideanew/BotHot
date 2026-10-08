@@ -34,7 +34,16 @@ from app.services import scheduler as scheduler_module
 
 def _settings(*, channels: str = "", default: str = "redfox", key: str = "") -> Settings:
     """三值全部显式指定——否则 Settings 会继承 .env，用例失去确定性。"""
-    return Settings(discovery_channels=channels, discovery_default_channel=default, redfox_api_key=key)
+    # 清除所有文章来源 API key，确保测试隔离不受 .env 影响
+    return Settings(
+        discovery_channels=channels,
+        discovery_default_channel=default,
+        redfox_api_key=key,
+        dajiala_api_key="",
+        justoneapi_api_key="",
+        tikhub_api_key="",
+        wellbyte_api_key="",
+    )
 
 
 # ------------------------------------------------------------------ 默认解析：兼容与需求口径
@@ -133,7 +142,9 @@ def test_describe_reports_contract_evidence_status() -> None:
     assert redfox["contractVerifiedAt"] == "2026-09-28"
     assert "契约层" in str(redfox["verifiedScope"])
     rss = next(c for c in data["channels"] if c["name"] == "rss")
-    assert rss["contractVerifiedAt"] == "" and rss["verifiedScope"] == ""
+    # RSS is now implemented with contract verification (2026-10-02)
+    assert rss["contractVerifiedAt"] == "2026-10-02"
+    assert "RSS" in str(rss["verifiedScope"]) or "单元测试" in str(rss["verifiedScope"])
 
 
 def test_describe_reason_names_the_missing_credential() -> None:
@@ -147,11 +158,16 @@ def test_describe_reason_names_the_missing_credential() -> None:
 
 
 def test_describe_reason_distinguishes_unimplemented_from_disabled() -> None:
-    """「功能没做」与「功能没配」必须可区分：文案不同源，不共用一条 reason。"""
-    data = describe_channels(_settings(channels="redfox", key="k-1"))
+    """「功能没做」与「功能没配」必须可区分：文案不同源，不共用一条 reason。
+
+    RSS 现已 implemented=True；当未配凭据时 reason 应点名配置项。
+    """
+    data = describe_channels(_settings(channels="rss", key="k-1"))
     rss = next(c for c in data["channels"] if c["name"] == "rss")
-    assert rss["implemented"] is False and rss["enabled"] is False and rss["available"] is False
-    assert "未实接" in str(rss["reason"])
+    assert rss["implemented"] is True
+    assert rss["enabled"] is True
+    assert rss["available"] is False  # no discovery_rss_feeds configured
+    assert "DISCOVERY_RSS_FEEDS" in str(rss["reason"])
 
 
 def test_describe_empty_config_marks_all_enabled() -> None:
@@ -198,7 +214,8 @@ async def _seed_operator(db_session: Any) -> str:  # type: ignore[no-untyped-def
 
 
 async def test_admin_discovery_channels_endpoint(
-    db_session: Any, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+    db_session: Any,
+    monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
 ) -> None:
     """operator+ 放行；回报注册表全景 + 当前默认渠道解析（就绪度不靠翻日志）。"""
     from app.api.v1 import admin as admin_module

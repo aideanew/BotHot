@@ -98,14 +98,10 @@ async def test_doc_must_belong_to_given_space(db_session) -> None:  # type: igno
     rows = await _seed(db_session)
     svc = _svc(db_session)
     with pytest.raises(Exception, match="不属于该空间"):  # type: ignore[misc]
-        await svc.push(
-            "web", external_user_id="wx-1", space_id=rows["space"], doc_id=rows["doc_b"]
-        )
+        await svc.push("web", external_user_id="wx-1", space_id=rows["space"], doc_id=rows["doc_b"])
 
 
-async def test_validation_failure_has_zero_side_effects(
-    db_session, monkeypatch: pytest.MonkeyPatch
-) -> None:  # type: ignore[no-untyped-def]
+async def test_validation_failure_has_zero_side_effects(db_session, monkeypatch: pytest.MonkeyPatch) -> None:  # type: ignore[no-untyped-def]
     """校验失败不得触达 provider——半成功推送是最坏的失败模式。"""
     rows = await _seed(db_session)
     provider = _RecordingProvider()
@@ -129,9 +125,7 @@ async def _seed(db_session: Any) -> dict[str, str]:
     owner = User(sub="r11-push-owner", email="r11-push-owner@r11.test", nickname="owner")
     second = User(sub="r11-push-second", email="r11-push-second@r11.test", nickname="second")
     admin = User(sub="r11-push-admin", email="r11-push-admin@r11.test", nickname="admin", role="admin")
-    operator = User(
-        sub="r11-push-operator", email="r11-push-operator@r11.test", nickname="operator", role="operator"
-    )
+    operator = User(sub="r11-push-operator", email="r11-push-operator@r11.test", nickname="operator", role="operator")
     plain = User(sub="r11-push-user", email="r11-push-user@r11.test", nickname="user")
     db_session.add_all([owner, second, admin, operator, plain])
     await db_session.flush()
@@ -191,11 +185,18 @@ async def test_push_channels_gate_and_read_side(db_session, monkeypatch: pytest.
 
     # 用 RecordingProvider 替换 web 以避免真实 Redis 连接
     provider = _RecordingProvider()
-    monkeypatch.setattr(push_pkg, "_PROVIDERS", {"web": provider, "feishu": push_pkg._PROVIDERS["feishu"],
-                           "dingtalk": push_pkg._PROVIDERS["dingtalk"],
-                           "wechat_work": push_pkg._PROVIDERS["wechat_work"],
-                           "webhook": push_pkg._PROVIDERS["webhook"],
-                           "wechat_clawbot": push_pkg._PROVIDERS["wechat_clawbot"]})
+    monkeypatch.setattr(
+        push_pkg,
+        "_PROVIDERS",
+        {
+            "web": provider,
+            "feishu": push_pkg._PROVIDERS["feishu"],
+            "dingtalk": push_pkg._PROVIDERS["dingtalk"],
+            "wechat_work": push_pkg._PROVIDERS["wechat_work"],
+            "webhook": push_pkg._PROVIDERS["webhook"],
+            "wechat_clawbot": push_pkg._PROVIDERS["wechat_clawbot"],
+        },
+    )
 
     assert _hit(_app(db_session, rows["user"]), "get", "/api/v1/admin/push/channels") == (403, 10004)
 
@@ -247,9 +248,7 @@ async def test_push_validation_errors_stay_10005(db_session, monkeypatch: pytest
 
 async def test_push_requires_login(db_session: Any) -> None:  # type: ignore[no-untyped-def]
     client = _app(db_session, None)
-    resp = client.post(
-        "/api/v1/admin/push", json={"channel": "web", "external_user_id": "wx-1", "message": "hi"}
-    )
+    resp = client.post("/api/v1/admin/push", json={"channel": "web", "external_user_id": "wx-1", "message": "hi"})
     assert resp.status_code == 401 and resp.json()["code"] == 10001
 
 
@@ -295,6 +294,10 @@ async def test_dispatch_delivers_and_returns_200(db_session, monkeypatch: pytest
     assert sent.external_user_id == "wx-1" and sent.message == "看新文" and sent.space_id == rows["space"]
 
     # 目标校验仍在分发前：非法目标不得触达 provider
-    _hit(client, "post", "/api/v1/admin/push", json={"channel": "web", "external_user_id": "wx-1",
-                                                     "space_id": SPACE_ID_MISSING, "message": "x"})
+    _hit(
+        client,
+        "post",
+        "/api/v1/admin/push",
+        json={"channel": "web", "external_user_id": "wx-1", "space_id": SPACE_ID_MISSING, "message": "x"},
+    )
     assert len(provider.pushed) == 1

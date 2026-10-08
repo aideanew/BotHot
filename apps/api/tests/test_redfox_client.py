@@ -127,9 +127,7 @@ async def test_business_error_mapping(code: int, cls: type[Exception], code_: in
 )
 async def test_charge_hint_only_on_3201(code: int, expect_charge_hint: bool) -> None:
     """充值提示只出现在 3201：鉴权失败提示用户去充值是错误引导；单价不写死在错误信息里。"""
-    client, _ = _client_with(
-        lambda _r: httpx.Response(200, text=json.dumps({"code": code, "msg": "m", "data": None}))
-    )
+    client, _ = _client_with(lambda _r: httpx.Response(200, text=json.dumps({"code": code, "msg": "m", "data": None})))
     with pytest.raises(AppError, match=str(code)) as exc_info:
         await client.query_work_list(BIZ, 1)
     assert ("充值" in str(exc_info.value)) is expect_charge_hint
@@ -138,9 +136,7 @@ async def test_charge_hint_only_on_3201(code: int, expect_charge_hint: bool) -> 
 
 async def test_unknown_business_code_maps_discovery_failed() -> None:
     """未知业务码 → 20004 DISCOVERY_FAILED（不吞不猜）。"""
-    client, _ = _client_with(
-        lambda _r: httpx.Response(200, text=json.dumps({"code": 9999, "msg": "??", "data": None}))
-    )
+    client, _ = _client_with(lambda _r: httpx.Response(200, text=json.dumps({"code": 9999, "msg": "??", "data": None})))
     with pytest.raises(DiscoveryFailedError, match="9999") as exc_info:
         await client.query_work_list(BIZ, 1)
     assert exc_info.value.code == 20004  # type: ignore[attr-defined]
@@ -150,9 +146,7 @@ async def test_unknown_business_code_maps_discovery_failed() -> None:
     "handler",
     [
         pytest.param(lambda _r: httpx.Response(502, text="bad gateway"), id="5xx"),
-        pytest.param(
-            lambda _r: (_ for _ in ()).throw(httpx.ConnectError("boom")), id="network"
-        ),
+        pytest.param(lambda _r: (_ for _ in ()).throw(httpx.ConnectError("boom")), id="network"),
     ],
 )
 async def test_transport_failures_map_dependency_unavailable(handler: Any) -> None:
@@ -165,12 +159,8 @@ async def test_transport_failures_map_dependency_unavailable(handler: Any) -> No
 @pytest.mark.parametrize(
     ("body", "fragment"),
     [
-        pytest.param(
-            {"code": 2000, "msg": "ok", "data": {}}, "data.list", id="missing-list"
-        ),
-        pytest.param(
-            {"code": 2000, "msg": "ok", "data": ["not-a-dict"]}, "data 对象", id="data-not-dict"
-        ),
+        pytest.param({"code": 2000, "msg": "ok", "data": {}}, "data.list", id="missing-list"),
+        pytest.param({"code": 2000, "msg": "ok", "data": ["not-a-dict"]}, "data 对象", id="data-not-dict"),
         pytest.param(None, "非 JSON", id="non-json"),
     ],
 )
@@ -209,9 +199,7 @@ async def test_total_extraction_is_defensive(total: Any, expected: int | None) -
 
 async def test_non_dict_rows_are_filtered() -> None:
     """list 中混入非对象行 → 过滤丢弃（解析前置的净行保证）。"""
-    body = json.dumps(
-        {"code": 2000, "msg": "ok", "data": {"list": [{"workUuid": "u-1"}, "junk", 42], "total": 1}}
-    )
+    body = json.dumps({"code": 2000, "msg": "ok", "data": {"list": [{"workUuid": "u-1"}, "junk", 42], "total": 1}})
     client, _ = _client_with(lambda _r: httpx.Response(200, text=body))
     rows, total = await client.query_work_list(BIZ, 1)
     assert rows == [{"workUuid": "u-1"}]

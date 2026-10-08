@@ -61,6 +61,4 @@ async def test_feed_sync_is_single_batch_update() -> None:
     ]
     fake = _FakeSession(topics)
     await run_scoring(fake, now=datetime(2026, 9, 30, 12, 0, tzinfo=UTC))
-    assert fake.feed_update_count == 1, (
-        f"C.2 应为 1 条批量 UPDATE，实际 {fake.feed_update_count}（N 次=回归）"
-    )
+    assert fake.feed_update_count == 1, f"C.2 应为 1 条批量 UPDATE，实际 {fake.feed_update_count}（N 次=回归）"

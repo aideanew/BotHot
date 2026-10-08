@@ -62,9 +62,7 @@ async def _delete(space, *, router: _StubRouter | None = None, kb=None) -> dict:
 @pytest.mark.asyncio
 async def test_builtin_delete_no_residue() -> None:
     """builtin 引擎删除：engineResidue=False（LangBot 实接删库）。"""
-    space = SimpleNamespace(
-        id="s1", user_id="u", engine="builtin", langbot_kb_uuid="kb-1", engine_kb_id=""
-    )
+    space = SimpleNamespace(id="s1", user_id="u", engine="builtin", langbot_kb_uuid="kb-1", engine_kb_id="")
 
     class _Kb:
         deleted: list[str] = []
@@ -81,9 +79,7 @@ async def test_builtin_delete_no_residue() -> None:
 @pytest.mark.asyncio
 async def test_unimplemented_engine_delete_has_residue() -> None:
     """非 builtin 未实接引擎（adapter 不可用）：engineResidue=True，PG 仍删除。"""
-    space = SimpleNamespace(
-        id="s1", user_id="u", engine="main", langbot_kb_uuid="", engine_kb_id="ext-kb"
-    )
+    space = SimpleNamespace(id="s1", user_id="u", engine="main", langbot_kb_uuid="", engine_kb_id="ext-kb")
     router = _StubRouter(adapter=None, available=False)  # adapter_for raises ValueError
     result = await _delete(space, router=router)
     assert result["engineResidue"] is True
@@ -93,9 +89,7 @@ async def test_unimplemented_engine_delete_has_residue() -> None:
 @pytest.mark.asyncio
 async def test_unimplemented_adapter_noop_has_residue() -> None:
     """非 builtin adapter 可取但 implemented=False（WC 降级 no-op）：engineResidue=True。"""
-    space = SimpleNamespace(
-        id="s1", user_id="u", engine="coze", langbot_kb_uuid="", engine_kb_id="ext-kb"
-    )
+    space = SimpleNamespace(id="s1", user_id="u", engine="coze", langbot_kb_uuid="", engine_kb_id="ext-kb")
     adapter = _StubAdapter(implemented=False)
     router = _StubRouter(adapter=adapter, available=True)
     result = await _delete(space, router=router)
@@ -106,9 +100,7 @@ async def test_unimplemented_adapter_noop_has_residue() -> None:
 @pytest.mark.asyncio
 async def test_implemented_engine_delete_no_residue() -> None:
     """非 builtin 已实接 adapter delete_kb 成功：engineResidue=False。"""
-    space = SimpleNamespace(
-        id="s1", user_id="u", engine="main", langbot_kb_uuid="", engine_kb_id="ext-kb"
-    )
+    space = SimpleNamespace(id="s1", user_id="u", engine="main", langbot_kb_uuid="", engine_kb_id="ext-kb")
     adapter = _StubAdapter(implemented=True)
     router = _StubRouter(adapter=adapter, available=True)
     result = await _delete(space, router=router)

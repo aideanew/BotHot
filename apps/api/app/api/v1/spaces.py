@@ -221,9 +221,7 @@ async def list_space_docs(
     `category=__uncategorized__` 表示「未分类」（资产无分类标签）；`total` 与 `items`
     走同一过滤谓词（仓库 _docs_stmt 单一来源），故分页后的 total 不会虚高。
     """
-    items, total = await svc.list_space_docs(
-        user_id, space_id, limit=limit, offset=offset, category=category
-    )
+    items, total = await svc.list_space_docs(user_id, space_id, limit=limit, offset=offset, category=category)
     body = success(data={"items": items, "total": total, "limit": limit, "offset": offset})
     return JSONResponse(status_code=200, content=body.model_dump())
 

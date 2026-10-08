@@ -92,9 +92,7 @@ def _annotate_session_security(routers: Sequence[APIRouter], schema: dict[str, A
                 continue
             # 过滤 HEAD/OPTIONS：FastAPI 自动补的这两个动词不进 OpenAPI
             methods = {m.lower() for m in route.methods if m not in ("HEAD", "OPTIONS")}
-            protected = _uses_session(route.dependant) or any(
-                (m, route.path) in MANUAL_SESSION_ROUTES for m in methods
-            )
+            protected = _uses_session(route.dependant) or any((m, route.path) in MANUAL_SESSION_ROUTES for m in methods)
             if not protected:
                 continue
             ops = schema.get("paths", {}).get(route.path, {})
@@ -103,9 +101,7 @@ def _annotate_session_security(routers: Sequence[APIRouter], schema: dict[str, A
                     ops[method]["security"] = [{SECURITY_SCHEME_NAME: []}]
 
 
-def _openapi_with_security(
-    app: FastAPI, routers: Sequence[APIRouter]
-) -> dict[str, Any]:
+def _openapi_with_security(app: FastAPI, routers: Sequence[APIRouter]) -> dict[str, Any]:
     """`FastAPI.openapi` 的包装：生成后再补安全方案标注。
 
     直接调类方法 `FastAPI.openapi(app)` 而非 `app.openapi()`，避免实例属性遮蔽后自引用
@@ -141,9 +137,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=exc.status_code, content=body.model_dump())
 
     @app.exception_handler(StarletteHTTPException)
-    async def _handle_starlette_http_exception(
-        _: Request, exc: StarletteHTTPException
-    ) -> JSONResponse:
+    async def _handle_starlette_http_exception(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         # T1.5.2（2026-09-22）405/404 信封收口：未注册路径/未注册动词由 Starlette 路由器
         # 抛 starlette.HTTPException（fastapi.HTTPException 之父类，MRO 不含子类 →
         # 上面的 fastapi 版处理器接不到，默认 {"detail": ...} 裸体曾泄漏到客户端）。
@@ -152,9 +146,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             body = failure(50001, str(exc.detail))
         else:
             body = failure(10005, str(exc.detail))
-        return JSONResponse(
-            status_code=exc.status_code, content=body.model_dump(), headers=exc.headers
-        )
+        return JSONResponse(status_code=exc.status_code, content=body.model_dump(), headers=exc.headers)
 
     # 未捕获异常的兜底不放这里：Starlette 会把 `Exception` 处理器挂到最外层
     # ServerErrorMiddleware（在 requestId 之外），改由 ErrorEnvelopeMiddleware 内层兜底。

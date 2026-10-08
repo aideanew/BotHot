@@ -87,6 +87,7 @@ export function usePagedList<T, P extends Record<string, unknown> = Record<strin
     } finally {
       setLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, shape, opts.fetcher, opts.filters, tick]);
 
   useEffect(() => {

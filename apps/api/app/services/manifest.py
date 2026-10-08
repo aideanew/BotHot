@@ -61,9 +61,7 @@ class WorkListProvider(Protocol):
     返回 `(原始行, 上游 total)`：`total` 供增量游标算缺口；上游缺失时为 `None`。
     """
 
-    async def query_work_list(
-        self, biz: str, page: int
-    ) -> tuple[list[dict[str, Any]], int | None]: ...
+    async def query_work_list(self, biz: str, page: int) -> tuple[list[dict[str, Any]], int | None]: ...
 
     async def aclose(self) -> None: ...
 
@@ -148,9 +146,7 @@ def _map_row(row: dict[str, Any]) -> dict[str, Any] | None:
         return None
     url = _first_str(row, _URL_KEYS)
     title = _first_str(row, _TITLE_KEYS)
-    content_hash = _first_str(row, _HASH_KEYS) or hashlib.sha256(
-        f"{url}|{title}".encode()
-    ).hexdigest()
+    content_hash = _first_str(row, _HASH_KEYS) or hashlib.sha256(f"{url}|{title}".encode()).hexdigest()
     publish_time: datetime | None = None
     for k in _TIME_KEYS:
         if k in row:
@@ -169,17 +165,13 @@ def _map_row(row: dict[str, Any]) -> dict[str, Any] | None:
 class ManifestSyncService:
     """清单同步编排（显式 flush，事务边界交调用方——与 SourceSubscriptionService 同口径）。"""
 
-    def __init__(
-        self, session: AsyncSession, provider: WorkListProvider, *, page_size: int | None = None
-    ) -> None:
+    def __init__(self, session: AsyncSession, provider: WorkListProvider, *, page_size: int | None = None) -> None:
         self._session = session
         self._provider = provider
         # 注入式页大小让增量游标可脱机断言；缺省取上游常量。
         self._page_size = page_size if page_size and page_size > 0 else _upstream_page_size()
 
-    async def sync_source(
-        self, source_id: str, biz: str, *, max_pages: int = DEFAULT_MAX_PAGES
-    ) -> ManifestSyncReport:
+    async def sync_source(self, source_id: str, biz: str, *, max_pages: int = DEFAULT_MAX_PAGES) -> ManifestSyncReport:
         """翻页拉取清单并幂等落库，直到「新增量已耗尽」。
 
         终止条件（任一命中即止，且始终受 `max_pages` 硬上限约束）：
@@ -252,9 +244,7 @@ class ManifestSyncService:
         # scalar() 的静态返回类型含 None（无行/无值），而 count() 在 GROUP BY 缺席时
         # 必然返回单行数值——先收窄 None 再转 int，避免 mypy arg-type 误报。
         total = await self._session.scalar(
-            select(func.count()).select_from(ArticleManifest).where(
-                ArticleManifest.source_id == source_id
-            )
+            select(func.count()).select_from(ArticleManifest).where(ArticleManifest.source_id == source_id)
         )
         return int(total) if total is not None else 0
 

@@ -40,9 +40,7 @@ async def read_current_version_async(engine: AsyncEngine) -> str | None:
 
     try:
         async with engine.connect() as conn:
-            row = (
-                await conn.execute(sqlalchemy.text("SELECT version_num FROM alembic_version"))
-            ).fetchone()
+            row = (await conn.execute(sqlalchemy.text("SELECT version_num FROM alembic_version"))).fetchone()
         return row[0] if row else None
     except Exception:  # noqa: BLE001  # 库不可达/无表 → 不可判定，交由就绪聚合降级
         return None

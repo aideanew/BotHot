@@ -62,9 +62,7 @@ class LangBotAdapter:
     async def create_kb(self, space_name: str) -> str:
         # 建库需 engine_id + embedding_uuid（LangBot 建库两参），由调用方（kb service）预取后传入；
         # 端口签名简化：LangBotAdapter 建库走 client.create_kb 原路径（经 kb service 编排）
-        raise NotImplementedError(
-            "LangBot 建库需 engine/embedding 预取，走 KnowledgeBaseService.ensure_kb 原路径"
-        )
+        raise NotImplementedError("LangBot 建库需 engine/embedding 预取，走 KnowledgeBaseService.ensure_kb 原路径")
 
     async def upload_file(self, kb_id: str, filename: str, content: str | bytes) -> str:
         return await self._client.upload_document(filename, content)
@@ -252,11 +250,7 @@ class EngineRouter:
 
     def available(self, engine: str) -> bool:
         """available = 配置了就绪 且 在开放名单 且 已实接（R1：三条件同口径，见 ENGINE_IMPLEMENTED）。"""
-        return (
-            self.configured(engine)
-            and self.allowlisted(engine)
-            and ENGINE_IMPLEMENTED.get(engine, False)
-        )
+        return self.configured(engine) and self.allowlisted(engine) and ENGINE_IMPLEMENTED.get(engine, False)
 
     def kb_id_for(self, space: Any) -> str:
         """空间当前引擎的 KB 标识（builtin 取 langbot_kb_uuid；非 builtin 取 engine_kb_id）。"""

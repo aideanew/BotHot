@@ -89,8 +89,13 @@ SAMPLE_FORWARD_REFERENCE_IN_BODY = """
 
 def _article_of(html: str) -> ResolvedArticle:
     return ResolvedArticle(
-        title=html and "样本标题", author="样本作者", publish_time="2024-06-12T01:00:00+00:00",
-        content="", url="https://mp.weixin.qq.com/s/xyz", biz="MjM5MjgwNTQ1MQ==", html=html,
+        title=html and "样本标题",
+        author="样本作者",
+        publish_time="2024-06-12T01:00:00+00:00",
+        content="",
+        url="https://mp.weixin.qq.com/s/xyz",
+        biz="MjM5MjgwNTQ1MQ==",
+        html=html,
     )
 
 
@@ -122,7 +127,7 @@ def test_various_footer_headers_truncate(header: str) -> None:
     """回指往期类标记变体一律终止正文。"""
     html = (
         f'<html><body><div id="activity-name">t</div><div id="js_content">'
-        f'<p>正文段落。</p><p>{header}</p><p>页脚条目标题</p></div></body></html>'
+        f"<p>正文段落。</p><p>{header}</p><p>页脚条目标题</p></div></body></html>"
     )
     assert _extract_of(html).paragraphs == ["正文段落。"]
 
@@ -164,9 +169,7 @@ def test_langbot_format_shape() -> None:
 def test_view_shape_camel_case() -> None:
     """契约视图：images 仅 {src, caption}（format 为内部字段不外泄）。"""
     view = _extract_of(SAMPLE_RICH).to_view()
-    assert set(view.keys()) == {
-        "title", "author", "publishTime", "paragraphs", "images", "wordCount", "langbotFormat"
-    }
+    assert set(view.keys()) == {"title", "author", "publishTime", "paragraphs", "images", "wordCount", "langbotFormat"}
     assert view["images"] == [{"src": "https://mmbiz.qpic.cn/mmbiz_jpg/abc/640?wx_fmt=jpeg", "caption": "养成循环图"}]
     assert view["publishTime"] == "2024-06-12T01:00:00+00:00"
 
@@ -181,9 +184,7 @@ def test_all_noise_article_maps_20003() -> None:
 
 def test_extractor_needs_html_field() -> None:
     """html 缺失（B-T5 旧产物兼容路径）→ 视为空文章 → 20003，而非静默成功。"""
-    article = ResolvedArticle(
-        title="t", author="a", publish_time=None, content="x", url="u", biz="b", html=""
-    )
+    article = ResolvedArticle(title="t", author="a", publish_time=None, content="x", url="u", biz="b", html="")
     with pytest.raises(ExtractQualityLowError):
         ExtractorService().extract(article)
 
@@ -204,9 +205,7 @@ def _endpoint_client(logged_in: bool = True) -> TestClient:
     from app.providers.source_resolver import WechatArticleFetcher as _F
     from app.services.resolver import SourceResolverService
 
-    app.dependency_overrides[get_resolver_service_internal] = lambda: SourceResolverService(
-        _F(client=http)
-    )
+    app.dependency_overrides[get_resolver_service_internal] = lambda: SourceResolverService(_F(client=http))
     return TestClient(app)
 
 

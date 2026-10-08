@@ -139,9 +139,7 @@ class LangBotClient:
 
     # -------------------------------------------------------------- 知识库生命周期
 
-    async def create_kb(
-        self, name: str, engine_plugin_id: str, embedding_model_uuid: str
-    ) -> str:
+    async def create_kb(self, name: str, engine_plugin_id: str, embedding_model_uuid: str) -> str:
         """建库 → kb uuid（LangRAG schema：index_type=chunk + 默认切分参数）。"""
         payload = {
             "name": name,
@@ -173,9 +171,7 @@ class LangBotClient:
         """触发异步 ingest → task/记录 id（轮询凭证）。"""
         data = await self._request("POST", f"/api/v1/knowledge/bases/{kb_uuid}/files", json={"file_id": file_id})
         task_id = (
-            data.get("task_id") or data.get("id") or data.get("data", {}).get("id")
-            if isinstance(data, dict)
-            else None
+            data.get("task_id") or data.get("id") or data.get("data", {}).get("id") if isinstance(data, dict) else None
         )
         return str(task_id or "")  # 部分 LangBot 版本无 task id：轮询走文件清单
 

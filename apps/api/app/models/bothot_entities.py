@@ -15,6 +15,7 @@ from .base import Base, TimestampMixin, gen_uuid
 
 # ── 1. 多渠道机器人配置 ──────────────────────────────────────────────
 
+
 class BotChannel(TimestampMixin, Base):
     """机器人渠道配置：飞书/钉钉/微信ClawBot/企业微信/Webhook 等。
 
@@ -48,6 +49,7 @@ class BotChannel(TimestampMixin, Base):
 
 
 # ── 2. 推送任务 ──────────────────────────────────────────────────────
+
 
 class PushTask(TimestampMixin, Base):
     """推送任务：定时推送或事件触发推送。
@@ -94,6 +96,7 @@ class PushTask(TimestampMixin, Base):
 
 # ── 3. 推送日志 ──────────────────────────────────────────────────────
 
+
 class PushLog(TimestampMixin, Base):
     """单次推送投递记录：成功/失败/内容摘要。
 
@@ -121,6 +124,7 @@ class PushLog(TimestampMixin, Base):
 
 
 # ── 4. 热点聚簇（融合 AIHOT） ────────────────────────────────────────
+
 
 class HotTopic(TimestampMixin, Base):
     """热点事件：多篇文章聚簇为一个事件，按热度排序。
@@ -170,12 +174,11 @@ class HotTopicArticle(TimestampMixin, Base):
     # 该文章在此事件中的相关度分数
     relevance_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
 
-    __table_args__ = (
-        UniqueConstraint("hot_topic_id", "asset_id", name="uq_hot_topic_asset"),
-    )
+    __table_args__ = (UniqueConstraint("hot_topic_id", "asset_id", name="uq_hot_topic_asset"),)
 
 
 # ── 5. 日报（融合 AIHOT） ────────────────────────────────────────────
+
 
 class DailyReport(TimestampMixin, Base):
     """每日热点日报：自动生成或手动触发。
@@ -200,12 +203,11 @@ class DailyReport(TimestampMixin, Base):
     # 生成方式：auto | manual
     generated_by: Mapped[str] = mapped_column(String(16), default="auto", nullable=False)
 
-    __table_args__ = (
-        UniqueConstraint("report_date", name="uq_daily_report_date"),
-    )
+    __table_args__ = (UniqueConstraint("report_date", name="uq_daily_report_date"),)
 
 
 # ── 6. Feed 流（融合 AIHOT） ─────────────────────────────────────────
+
 
 class FeedItem(TimestampMixin, Base):
     """Feed 流条目：供前端展示的信息流。
@@ -237,12 +239,11 @@ class FeedItem(TimestampMixin, Base):
 
     # upsert 语义的基础：同类型同引用只允许一行（feed_service 按此冲突覆盖更新；
     # 迁移 ab1004w2a 在 DB 侧同建，模型与迁移必须一致）
-    __table_args__ = (
-        UniqueConstraint("item_type", "ref_id", name="uq_feed_item_type_ref"),
-    )
+    __table_args__ = (UniqueConstraint("item_type", "ref_id", name="uq_feed_item_type_ref"),)
 
 
 # ── 7. 事件 outbox ────────────────────────────────────────────────────
+
 
 class PushEvent(TimestampMixin, Base):
     """事件 outbox 表：W2 落库，push_scheduler 轮询消费。

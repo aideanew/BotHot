@@ -51,7 +51,7 @@ class JobService:
         validate_transition(JOB_DOMAIN, job.status, new_status)  # 先校验后写库
         await self._repo.set_status(job_id, new_status, error)
         await self._commit()  # B-T8R：状态机写路径终点持久化
-        return (await self._require(job_id))
+        return await self._require(job_id)
 
     async def heartbeat(self, job_id: str, progress: int | None = None) -> None:
         """RUNNING 心跳：本卡不强制 RUNNING 才可心跳（worker 重试场景需宽容），
@@ -78,9 +78,7 @@ class JobService:
 
         user_id=None → 无归属约束（/admin 跨用户清单）。授权在路由层，本方法不做角色校验。
         """
-        jobs = await self._repo.list_by_user(
-            user_id, status=status, limit=limit, job_type=job_type, offset=offset
-        )
+        jobs = await self._repo.list_by_user(user_id, status=status, limit=limit, job_type=job_type, offset=offset)
         total = await self._repo.count_by_user(user_id, status=status, job_type=job_type)
         return jobs, total
 
@@ -99,9 +97,7 @@ class JobService:
         带 workerHeartbeatAt / updatedAt：STALL 判定的两个输入（R0.4 可观测性目标）。
         user_id=None → 跨用户（/admin/jobs）。
         """
-        jobs, total = await self.list_jobs(
-            user_id, status=status, limit=limit, job_type=job_type, offset=offset
-        )
+        jobs, total = await self.list_jobs(user_id, status=status, limit=limit, job_type=job_type, offset=offset)
         return {
             "items": [self._view(job) for job in jobs],
             "total": total,
@@ -122,9 +118,7 @@ class JobService:
         与 list_job_views 的差异仅在归属谓词；查询、分页、排序、视图组装共用单一实现，
         故 total 与过滤谓词天然一致。角色校验留在路由层（deps.require_roles）。
         """
-        return await self.list_job_views(
-            None, status=status, job_type=job_type, limit=limit, offset=offset
-        )
+        return await self.list_job_views(None, status=status, job_type=job_type, limit=limit, offset=offset)
 
     @staticmethod
     def _view(job: Job) -> dict[str, Any]:
@@ -136,9 +130,7 @@ class JobService:
             "status": job.status,
             "progress": job.progress,
             "error": job.error,
-            "workerHeartbeatAt": (
-                job.worker_heartbeat_at.isoformat() if job.worker_heartbeat_at else ""
-            ),
+            "workerHeartbeatAt": (job.worker_heartbeat_at.isoformat() if job.worker_heartbeat_at else ""),
             "createdAt": job.created_at.isoformat() if job.created_at else "",
             "updatedAt": job.updated_at.isoformat() if job.updated_at else "",
         }

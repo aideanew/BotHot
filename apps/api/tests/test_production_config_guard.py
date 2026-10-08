@@ -61,9 +61,7 @@ def test_dev_mode_ignores_production_redlines() -> None:
         ({"ENGINE_KEY_MASTER_KEY": ""}, "ENGINE_KEY_MASTER_KEY"),
     ],
 )
-def test_each_production_violation_is_reported(
-    monkeypatch: pytest.MonkeyPatch, env: dict[str, str], name: str
-) -> None:
+def test_each_production_violation_is_reported(monkeypatch: pytest.MonkeyPatch, env: dict[str, str], name: str) -> None:
     """逐条独立触发——漏报任意一项等于留一个上线口子。
 
     其余项显式给合格值（含两把合法 32 字节主密钥），确保本用例只坏那一项。

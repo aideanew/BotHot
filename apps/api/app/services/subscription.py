@@ -84,9 +84,7 @@ def _assert_subscription_settings(
         )
     # 判 `not in`（整数域内必然真）而非 `!=`：`True is 1` 会让 `sync_anchor_hour: true`
     # 这类 JSON 布尔值绕过范围校验（与 `0 in (0, 1)` 为真同源的 int/bool 混用陷阱）。
-    if sync_anchor_hour is not None and not (
-        SYNC_ANCHOR_HOUR_MIN <= int(sync_anchor_hour) <= SYNC_ANCHOR_HOUR_MAX
-    ):
+    if sync_anchor_hour is not None and not (SYNC_ANCHOR_HOUR_MIN <= int(sync_anchor_hour) <= SYNC_ANCHOR_HOUR_MAX):
         raise RequestInvalidError(
             f"固定同步时点取值非法：{sync_anchor_hour}（须在 {SYNC_ANCHOR_HOUR_MIN}~"
             f"{SYNC_ANCHOR_HOUR_MAX} 之间，表示每天该小时触发；不设置 = 按间隔滑动）"
@@ -162,14 +160,11 @@ class SourceSubscriptionService:
             )
         ).all()
         total = int(
-            (await self._session.scalar(
-                select(func.count()).select_from(Source).where(Source.type == source_type)
-            ))
+            (await self._session.scalar(select(func.count()).select_from(Source).where(Source.type == source_type)))
             or 0
         )
         return [
-            {"sourceId": r.id, "biz": r.external_id, "name": r.name, "url": r.url, "status": r.status}
-            for r in rows
+            {"sourceId": r.id, "biz": r.external_id, "name": r.name, "url": r.url, "status": r.status} for r in rows
         ], total
 
     async def update_source(self, source_id: str, *, name: str | None = None, url: str | None = None) -> dict[str, Any]:
@@ -306,11 +301,7 @@ class SourceSubscriptionService:
         if rows and owner is None:
             owners = {
                 u.id: u.nickname
-                for u in (
-                    await self._session.scalars(
-                        select(User).where(User.id.in_({r.user_id for r in rows}))
-                    )
-                ).all()
+                for u in (await self._session.scalars(select(User).where(User.id.in_({r.user_id for r in rows})))).all()
             }
             spaces = {
                 s.id: s.name
@@ -329,17 +320,21 @@ class SourceSubscriptionService:
             # 归属取 r.user_id 而非 owner：owner=None（admin 路径）时订阅可能属于
             # 任意用户，用调用方身份会把他人的最新 Job 静默过滤掉（latestJobId 恒空）。
             latest_job = (
-                await self._session.execute(
-                    select(Job)
-                    .where(
-                        Job.user_id == r.user_id,
-                        Job.type == "sync_account",
-                        Job.idempotency_key.like(f"sync_account:{r.id}%"),
+                (
+                    await self._session.execute(
+                        select(Job)
+                        .where(
+                            Job.user_id == r.user_id,
+                            Job.type == "sync_account",
+                            Job.idempotency_key.like(f"sync_account:{r.id}%"),
+                        )
+                        .order_by(Job.created_at.desc())
+                        .limit(1)
                     )
-                    .order_by(Job.created_at.desc())
-                    .limit(1)
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             discovered = await self._session.scalar(
                 select(func.count())
                 .select_from(ArticleManifest)
@@ -494,15 +489,11 @@ class SourceSubscriptionService:
             ("assets", ContentAsset),
             ("manifests", ArticleManifest),
         ):
-            n = await self._session.scalar(
-                select(func.count()).select_from(model).where(model.source_id == source_id)
-            )
+            n = await self._session.scalar(select(func.count()).select_from(model).where(model.source_id == source_id))
             out[key] = int(n or 0)
         return out
 
-    async def _get_owned_subscription(
-        self, user_id: str, space_id: str, subscription_id: str
-    ) -> SourceSubscription:
+    async def _get_owned_subscription(self, user_id: str, space_id: str, subscription_id: str) -> SourceSubscription:
         """订阅归属校验：空间须属本人且订阅须同属本人与该空间（不泄露存在性）。"""
         space = await self._space_repo.get_by_id(space_id)
         if space is None or space.user_id != user_id:
@@ -631,9 +622,7 @@ class SourceSubscriptionService:
         if source_type:
             stmt = stmt.where(Source.type == source_type)
         rows = (
-            await self._session.scalars(
-                stmt.order_by(Source.created_at, Source.id).limit(limit).offset(offset)
-            )
+            await self._session.scalars(stmt.order_by(Source.created_at, Source.id).limit(limit).offset(offset))
         ).all()
         count_stmt = select(func.count()).select_from(Source)
         if source_type:
@@ -642,17 +631,19 @@ class SourceSubscriptionService:
         items: list[dict[str, Any]] = []
         for r in rows:
             counts = await self._source_reference_counts(r.id)
-            items.append({
-                "sourceId": r.id,
-                "type": r.type,
-                "biz": r.external_id,
-                "name": r.name,
-                "url": r.url,
-                "status": r.status,
-                "subscriptionCount": counts["subscriptions"],
-                "assetCount": counts["assets"],
-                "manifestCount": counts["manifests"],
-            })
+            items.append(
+                {
+                    "sourceId": r.id,
+                    "type": r.type,
+                    "biz": r.external_id,
+                    "name": r.name,
+                    "url": r.url,
+                    "status": r.status,
+                    "subscriptionCount": counts["subscriptions"],
+                    "assetCount": counts["assets"],
+                    "manifestCount": counts["manifests"],
+                }
+            )
         return items, total
 
     # ------------------------------------------------------------------ jobs
@@ -802,9 +793,7 @@ class SourceSubscriptionService:
         await self._session.flush()
         return job
 
-    async def _compute_new_manifests(
-        self, source_id: str, subscription_id: str
-    ) -> list[ArticleManifest]:
+    async def _compute_new_manifests(self, source_id: str, subscription_id: str) -> list[ArticleManifest]:
         """Manifest Diff（T2.4）：本订阅**尚未入列且未入库**的 DISCOVERED 清单行。
 
         真差量口径（承 1.2 冻结「Diff 同步基准」）：
@@ -857,9 +846,7 @@ class SourceSubscriptionService:
             logger.info("P2 无新增 Manifest，JobItem 保持空，待 REDFOX_API_KEY 配置后接入")
             return 0
         for m in manifests:
-            item = await self._item_repo.create(
-                job_id=job_id, external_id=m.external_id, url=m.url or ""
-            )
+            item = await self._item_repo.create(job_id=job_id, external_id=m.external_id, url=m.url or "")
             await self._item_repo.set_status(item.id, "PENDING")
         return len(manifests)
 
@@ -880,7 +867,5 @@ class SourceSubscriptionService:
             run_token=run_token,
             manifests=manifests,
         )
-        logger.info(
-            "T2.4 增量入列 subscription=%s job=%s 新增=%d", sub.id, job.id, len(manifests)
-        )
+        logger.info("T2.4 增量入列 subscription=%s job=%s 新增=%d", sub.id, job.id, len(manifests))
         return len(manifests)

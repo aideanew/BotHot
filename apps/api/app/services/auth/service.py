@@ -76,9 +76,7 @@ class AuthService:
         """生成一次性 state 并构造 authorize 跳转地址。"""
         state = secrets.token_urlsafe(32)  # ≥16 字符（指南 §3 第 1 步）
         await self._state_store.put(state, self._settings.oidc_state_ttl_seconds)
-        return self._client.authorize_url(
-            state, self._settings.oidc_redirect_uri, self._settings.oidc_scopes
-        )
+        return self._client.authorize_url(state, self._settings.oidc_redirect_uri, self._settings.oidc_scopes)
 
     def _verify_userinfo_claims(self, info: dict) -> None:
         """校验 userinfo 的 iss/aud 声明（R5.1.1 / R6.2.1 fail-closed 化）。
@@ -96,22 +94,14 @@ class AuthService:
         actual_audience = info.get("aud")
         if expected_issuer:
             if actual_issuer is None:
-                raise SsoTokenExchangeError(
-                    f"userinfo 未返回 iss 声明（期望 {expected_issuer}），拒绝建立会话"
-                )
+                raise SsoTokenExchangeError(f"userinfo 未返回 iss 声明（期望 {expected_issuer}），拒绝建立会话")
             if str(actual_issuer) != expected_issuer:
-                raise SsoTokenExchangeError(
-                    f"userinfo iss 不匹配：期望 {expected_issuer}，实际 {actual_issuer}"
-                )
+                raise SsoTokenExchangeError(f"userinfo iss 不匹配：期望 {expected_issuer}，实际 {actual_issuer}")
         if expected_audience:
             if actual_audience is None:
-                raise SsoTokenExchangeError(
-                    f"userinfo 未返回 aud 声明（期望 {expected_audience}），拒绝建立会话"
-                )
+                raise SsoTokenExchangeError(f"userinfo 未返回 aud 声明（期望 {expected_audience}），拒绝建立会话")
             if str(actual_audience) != expected_audience:
-                raise SsoTokenExchangeError(
-                    f"userinfo aud 不匹配：期望 {expected_audience}，实际 {actual_audience}"
-                )
+                raise SsoTokenExchangeError(f"userinfo aud 不匹配：期望 {expected_audience}，实际 {actual_audience}")
 
     async def handle_callback(self, code: str, state: str) -> SessionRecord:
         """state 强校验 → 兑换 → 权威身份 → upsert → 建会话。
@@ -135,9 +125,7 @@ class AuthService:
                 )
                 await session.commit()
         else:
-            await self._user_store.upsert_by_sub(
-                sub, str(info.get("email", "")), str(info.get("nickname", ""))
-            )
+            await self._user_store.upsert_by_sub(sub, str(info.get("email", "")), str(info.get("nickname", "")))
         record = SessionRecord(
             session_id=secrets.token_urlsafe(32),
             sub=sub,

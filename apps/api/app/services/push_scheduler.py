@@ -114,19 +114,13 @@ class PushTaskScheduler:
             tasks = list(result.scalars().all())
 
             for task in tasks:
-                cron_due = (
-                    task.trigger_type == "cron"
-                    and task.next_run_at is not None
-                    and task.next_run_at <= now
-                )
+                cron_due = task.trigger_type == "cron" and task.next_run_at is not None and task.next_run_at <= now
                 if cron_due:
                     next_run = parse_cron_next(task.cron_expr, now)
                     if next_run is None:
                         task.status = "paused"
                         task.last_run_at = now
-                        logger.warning(
-                            "Task %s cron 解析失败，已暂停: %s", task.id, task.cron_expr
-                        )
+                        logger.warning("Task %s cron 解析失败，已暂停: %s", task.id, task.cron_expr)
                         continue
                     task.next_run_at = next_run
                 task.last_run_at = now
@@ -160,22 +154,16 @@ class PushTaskScheduler:
         for task in tasks:
             await self._execute_task_safe(task, now, event_payload=_extract_payload(event))
 
-    async def _execute_task_safe(
-        self, task: PushTask, now: datetime, event_payload: dict | None = None
-    ) -> None:
+    async def _execute_task_safe(self, task: PushTask, now: datetime, event_payload: dict | None = None) -> None:
         try:
             await self._execute_task(task, now, event_payload)
         except Exception as exc:
             logger.exception("Task %s 执行异常: %s", task.id, exc)
             await self._write_failure_log(task, str(exc))
 
-    async def _execute_task(
-        self, task: PushTask, now: datetime, event_payload: dict | None = None
-    ) -> None:
+    async def _execute_task(self, task: PushTask, now: datetime, event_payload: dict | None = None) -> None:
         async with self._session_factory() as db:
-            ch = (
-                await db.execute(select(BotChannel).where(BotChannel.id == task.bot_channel_id))
-            ).scalar_one_or_none()
+            ch = (await db.execute(select(BotChannel).where(BotChannel.id == task.bot_channel_id))).scalar_one_or_none()
 
             if ch is None or ch.status != "active":
                 logger.warning("Task %s: channel unavailable, skipping", task.id)
@@ -203,30 +191,26 @@ class PushTaskScheduler:
             # detached 对象），任务已删/暂停则只落日志不动任务。
             log_status = "success" if result.delivered else "failed"
             if not result.delivered and result.retryable:
-                task_row = (
-                    await db.execute(select(PushTask).where(PushTask.id == task.id))
-                ).scalar_one_or_none()
+                task_row = (await db.execute(select(PushTask).where(PushTask.id == task.id))).scalar_one_or_none()
                 if task_row is not None and task_row.status == "active":
                     new_count = int(task_row.retry_count or 0) + 1
                     if new_count > MAX_PUSH_RETRIES:
                         log_status = "dead"
                         task_row.status = "failed"
                         task_row.next_retry_at = None
-                        logger.warning(
-                            "Task %s 重试 %d 次仍失败，转死信终态", task.id, task_row.retry_count
-                        )
+                        logger.warning("Task %s 重试 %d 次仍失败，转死信终态", task.id, task_row.retry_count)
                     else:
                         backoff = RETRY_BACKOFF_BASE_SECONDS * (4 ** (new_count - 1))
                         task_row.retry_count = new_count
                         task_row.next_retry_at = now + timedelta(seconds=backoff)
                         logger.info(
                             "Task %s 第 %d 次投递失败（可重试），%ds 后重投",
-                            task.id, new_count, backoff,
+                            task.id,
+                            new_count,
+                            backoff,
                         )
             elif result.delivered:
-                task_row = (
-                    await db.execute(select(PushTask).where(PushTask.id == task.id))
-                ).scalar_one_or_none()
+                task_row = (await db.execute(select(PushTask).where(PushTask.id == task.id))).scalar_one_or_none()
                 if task_row is not None:
                     # 投递成功清零重试态（上次失败的退避计划作废）
                     task_row.retry_count = 0
@@ -309,6 +293,7 @@ async def persist_web_notification(db: AsyncSession, msg: PushMessage) -> None:
 
 def _extract_payload(event) -> dict:
     import json
+
     try:
         return json.loads(event.payload) if event.payload else {}
     except Exception:
