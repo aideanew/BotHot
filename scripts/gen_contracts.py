@@ -125,7 +125,7 @@ def generate() -> dict[str, str]:
             if name not in models:
                 raise SystemExit(f"[error] 模型 {name} 不存在于 app.models.{module_name}（域 {domain} 配置错误）")
             blocks.append(_entity_to_ts(name, models[name]))
-        note = f"backend/app/models/{module_name}.py（SQLAlchemy 模型内省）"
+        note = f"apps/api/app/models/{module_name}.py（SQLAlchemy 模型内省）"
         out[domain] = _render_domain(domain, blocks, note)
 
     # OpenAPI 请求模型（Pydantic 请求体）
@@ -138,7 +138,7 @@ def generate() -> dict[str, str]:
         if missing:
             raise SystemExit(f"[error] OpenAPI 缺少请求模型: {missing}（域 {domain}）")
         blocks = [_schema_to_ts(name, components[name]) for name in wanted]
-        note = "backend/app/main.py create_app().openapi()（Pydantic 请求模型）"
+        note = "apps/api/app/main.py create_app().openapi()（Pydantic 请求模型）"
         request_block = _render_domain(domain + " 请求", blocks, note).split("\n", 5)[-1]
         out[domain] = out[domain].rstrip("\n") + "\n\n" + request_block
     return out

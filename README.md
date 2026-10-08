@@ -15,7 +15,7 @@ BotHot 是从 AideanBot 全面升级而来的多渠道机器人推送与知识�
 
 > ✅ **当前实现状态**：渠道管理 API、推送任务模型、推送日志模型已建成。六种渠道的 PushProvider 均已实现真实投递（飞书/钉钉/企微/Webhook/站内通知已通，微信 ClawBot 需部署 ClawBot 服务后可用）。渠道密钥以 AES-256-GCM 落库（AAD 绑定渠道 id，`PUSH_SECRET_MASTER_KEY` fail-closed）。PushScheduler 以 60s 间隔在 backend 进程内运行（FastAPI lifespan），到期任务以 `FOR UPDATE SKIP LOCKED` 领取。
 >
-> ⚠️ **两处已知缺口**：① **站内通知仅投递侧** —— 前端尚无订阅（`frontend/` 全仓 grep `WebSocket|bothot:notifications` 零命中），通知发进无人接收的频道；② **无失败重试** —— 投递失败仅落 `PushLog(status=failed)`，无重试计数/退避。详见 [待办清单](docs/04_engineering/backlog.md) FE-005 / PUSH-009。
+> ✅ **缺口已闭环（2026-10-08）**：① 站内通知全链路（SSE 订阅 + 持久化落库 + 离线补投 history + 已读回执，FE-005/NOTIF-001）；② 投递重试（指数退避 + 死信终态，PUSH-009）。
 
 ### 2. 热点聚簇与日报（融合 AIHOT）
 - **热点聚簇**：多篇文章按主题聚簇为事件，按热度排序
@@ -136,8 +136,8 @@ postgres / redis  →  migrate（一次性 alembic upgrade head，restart: "no"�
 |---|---|---|
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | 是 | 默认 `bothot`（仅开发可直接用默认值） |
 | `APP_SECRET_KEY` | 是 | 应用密钥 |
-| `PUSH_SECRET_MASTER_KEY` | **是** | **渠道密钥 AES-256-GCM 主密钥**。须为 **32 字节密钥的 base64**；缺失/畸形时渠道加解密 **fail-closed 全部拒绝**（`backend/app/core/secret_crypto.py`） |
-| `ENGINE_KEY_MASTER_KEY` | **是** | **引擎 Key AES-256-GCM 主密钥**，同为 32 字节 base64 口径。与上者**分属不同泄露域、不同轮换周期，禁止复用同一值**（`backend/app/core/engine_keyring.py`） |
+| `PUSH_SECRET_MASTER_KEY` | **是** | **渠道密钥 AES-256-GCM 主密钥**。须为 **32 字节密钥的 base64**；缺失/畸形时渠道加解密 **fail-closed 全部拒绝**（`apps/api/app/core/secret_crypto.py`） |
+| `ENGINE_KEY_MASTER_KEY` | **是** | **引擎 Key AES-256-GCM 主密钥**，同为 32 字节 base64 口径。与上者**分属不同泄露域、不同轮换周期，禁止复用同一值**（`apps/api/app/core/engine_keyring.py`） |
 | `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` / `OIDC_REDIRECT_URI` | 是 | 主平台 SSO OIDC；`OIDC_REDIRECT_URI` 须命中主平台 `oidc_clients.redirect_uris` 白名单 |
 | `AIDEAN_ISSUER` / `AIDEAN_PUBLIC_URL` | 是 | 前者容器侧可达基址、后者浏览器侧 authorize 基址 —— **语义不同，不可混填** |
 | `OIDC_ISSUER_EXPECTED` / `OIDC_AUDIENCE_EXPECTED` | 生产必填 | userinfo 的 iss/aud 期望值（`APP_ENV=production` 时为空则拒启） |
@@ -198,15 +198,14 @@ postgres / redis  →  migrate（一次性 alembic upgrade head，restart: "no"�
 
 ```
 BotHot/
-├── backend/
-│   ├── app/
-│   │   ├── api/v1/                    # API 路由（9 个业务域）
+├── apps/api/
+│   │   ├── app/                    # API 路由（9 个业务域）
 │   │   ├── models/                    # 数据模型
 │   │   ├── services/                  # 业务服务
 │   │   ├── providers/                 # 外部服务适配器
 │   │   └── core/                      # 横切关注点
 │   └── alembic/                       # 数据库迁移
-├── frontend/
+├── apps/web/
 │   ├── app/                           # Next.js App Router 页面
 │   ├── components/                    # React 组件
 │   └── lib/api/                       # API 调用模块

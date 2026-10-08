@@ -70,7 +70,7 @@ PLAN 规划 → SPEC 规格 → APPROVE 批准 → IMPLEMENT 实施 → VERIFY �
 - **文章来源**：4 平台已接入（providers/article_sources/）—— Dajiala 极致了（发现+HTML详情）、JustOneAPI（发现+正文详情）、TikHub（发现+搜索，需充值）、Wellbyte 数井（搜索+URL驱动发现）；与 RedFox 共存于发现注册表，详情兜底协调器按成本排序
 - **热点**：全链路贯通——聚簇（TF-IDF，候选上限护栏 + 倒排剪枝）、**评分已接线**（worker 聚簇后评分 + 日报前兜底重算 + 每小时 hot_rescore 周期重评，Feed 分数同步回刷）、Feed 三类生产者、日报（LLM 摘要并行化 Semaphore(3) + 失败降级）；业务日界 = Asia/Shanghai
 - **测试**：连库用例真实执行（CI 有 postgres service + skip 门禁 + alembic 单头断言 + e2e/冒烟 job）；全量 **943 passed / 7 skipped**（隔离 PG 实测 2026-10-08，S0.1 锚定 `c56b642`；skip 构成 = LangBot/Redis 死口 5 条 + Windows 无 WSL 的 bash 探针 2 条，PG 不可达类 = 0；历史基线 848/2 为 v0.6 集成后、796/4 为 WD 复核时点）
-- **目录结构**：当前 backend/ + frontend/，目标 apps/api/ + apps/web/（见 project-structure-design.md）
+- **目录结构**：已迁移 `apps/api/` + `apps/web/`（2026-10-08 轻量迁移：路径级 git mv，import 未动；六边形 modules/ 重构显式推迟立项，见 TASK-PLAN-v0.9 S3 裁定）
 
 ## 关键约束
 

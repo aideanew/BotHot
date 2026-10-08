@@ -6,8 +6,8 @@
 .DEFAULT_GOAL := help
 
 # ─── 变量 ───────────────────────────────────────────
-BACKEND_DIR    := backend
-FRONTEND_DIR   := frontend
+BACKEND_DIR    := apps/api
+FRONTEND_DIR   := apps/web
 DOCKER_DIR     := docker
 COMPOSE_FILE   := $(DOCKER_DIR)/compose.yml
 PYTHON         := python3
@@ -136,8 +136,9 @@ guard-ports: ## 检查端口分配是否正确
 .PHONY: guard-structure
 guard-structure: ## 检查目录结构是否完整
 	@echo "检查目录结构..."
-	@test -d apps/api/src/modules && echo "✅ apps/api/src/modules/ 存在" || echo "⚠️  apps/api/src/modules/ 不存在"
-	@test -d apps/web/src/features && echo "✅ apps/web/src/features/ 存在" || echo "⚠️  apps/web/src/features/ 不存在"
+	@test -d apps/api/app && echo "✅ apps/api/app/ 存在" || echo "⚠️  apps/api/app/ 不存在"
+	@test -d apps/web/app && echo "✅ apps/web/app/ 存在" || echo "⚠️  apps/web/app/ 不存在"
+	@test -d packages/contracts/src && echo "✅ packages/contracts/src/ 存在" || echo "⚠️  packages/contracts/ 不完整"
 	@test -d docs/00_governance && echo "✅ docs/00_governance/ 存在" || echo "⚠️  docs/ 不完整"
 
 .PHONY: guard-versions

@@ -158,7 +158,8 @@ services:
     # 因镜像不存在而 pull 失败——错误显式，不会静默跑旧镜像。
     image: bothot-backend
     build:
-      context: ../backend
+      # 2026-10-08 轻量目录迁移：backend/ → apps/api/（原 ../backend）
+      context: ../apps/api
       # 显式覆盖 Docker 客户端 config.json 注入的宿主死代理（127.0.0.1:10809）
       # 构建期依赖安装走 PIP_INDEX_URL 国内镜像直连
       args:
@@ -186,7 +187,7 @@ services:
     # 锚点单点维护，避免三处漂移——漂移过一次就会在容器里指向宿主 127.0.0.1 的库）
     environment: &backend_env
       - APP_ENV=development
-      # W6 A.4：read_only 根文件树下禁止写 __pycache__，须禁字节码（backend/scheduler/worker 共用）
+      # W6 A.4：read_only 根文件树下禁止写 __pycache__，须禁字节码（apps/api/scheduler/worker 共用）
       - PYTHONDONTWRITEBYTECODE=1
       - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-bothot}:${POSTGRES_PASSWORD:-bothot}@postgres:5432/${POSTGRES_DB:-bothot}
       - REDIS_URL=redis://redis:6379/0
@@ -243,7 +244,7 @@ services:
       - LLM_API_KEY=${LLM_API_KEY:-}
       - LLM_MODEL=${LLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
       # 渠道密钥 AES-256-GCM 主密钥（ab1004w1a 迁移 + secret_crypto 运行时共用；
-      # 缺失时渠道加解密 fail-closed 拒绝——backend/migrate/scheduler/worker 四服务都经 backend_env 注入）
+      # 缺失时渠道加解密 fail-closed 拒绝——apps/api/migrate/scheduler/worker 四服务都经 backend_env 注入）
       - PUSH_SECRET_MASTER_KEY=${PUSH_SECRET_MASTER_KEY:-}
       # 检索重排（阶段 3.2.1，可选增强；base/key 留空回落 EMBEDDING_* 同供应商口径）
       - RERANK_ENABLED=${RERANK_ENABLED:-true}
@@ -288,7 +289,7 @@ services:
   migrate:
     # 一次性迁移（2026-09-23）：此前迁移只在部署手册里是**手工宿主步骤**
     # （`cd backend && python -m alembic upgrade head`），全新卷 `compose up -d` 会得到
-    # 零张表、backend/scheduler/worker 三进程同时崩溃。现收口为声明式一次性服务：
+    # 零张表、apps/api/scheduler/worker 三进程同时崩溃。现收口为声明式一次性服务：
     # `alembic upgrade head` 幂等（已是最新即空跑），失败则三个下游全部不启动，错误显式可见。
     #
     # 纠偏（2026-09-28 实测）：本服务 2026-09-28 前**从未被创建过**，但库并不落后——
@@ -321,7 +322,7 @@ services:
     # make_default_doc_reconciler）。不进 main.py 挂接，独立进程。
     #
     # **需挂 langbot_net**：文档状态推进要读 LangBot 文件清单（`langbot:5300`），
-    # 与 backend/worker 同双网归属。此前 scheduler 是纯 PG+RedFox 进程，未声明 networks
+    # 与 apps/api/worker 同双网归属。此前 scheduler 是纯 PG+RedFox 进程，未声明 networks
     # 时只落 default 网——2026-09-25 加文档推进后 `[Errno -2] Name or service not known`
     # 在 `_login` 处复现，非终态 doc 永远停在 INDEXED。漏声明会在 force-recreate 时静默复现。
     # 无 REDFOX_API_KEY 时会**空转**（每轮 claim 到订阅后同步失败、按基准间隔推进水位），
@@ -376,7 +377,7 @@ services:
     image: bothot-backend
     container_name: bothot-worker
     restart: unless-stopped
-    # W6 A.4 最小权限（与 backend/scheduler 同口径）
+    # W6 A.4 最小权限（与 apps/api/scheduler 同口径）
     logging: *default_logging
     <<: *hardened
     read_only: true
@@ -418,7 +419,7 @@ services:
       # 契约（packages/contracts）在 tsconfig paths 中被前端源码引用，next build 的类型
       # 检查需要其可见 → context 必须为仓库根（2026-09-30：原 ../frontend 下 build 必炸）
       context: ..
-      dockerfile: frontend/Dockerfile
+      dockerfile: apps/web/Dockerfile
       # 2026-09-09 A：构建期需经宿主代理出站，host 网络下容器可直接解析 host.docker.internal
       network: host
       # 显式覆盖 Docker 客户端 config.json 注入的宿主死代理（同 backend）

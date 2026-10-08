@@ -24,8 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: backend
-    # W5（2026-09-30）CI 真实化：此前本 job 无 postgres service——backend/tests/conftest.py:36
+        working-directory: apps/api
+    # W5（2026-09-30）CI 真实化：此前本 job 无 postgres service——apps/api/tests/conftest.py:36
     # 的默认 DSN 指向 localhost:5433，:98-99 在 PG 不可达 3 秒内 skip 全部连库用例。
     # 于是 CI 里 62 个 db_session 用例无一执行，「测试通过」是静默 skip 的假象。
     # 补 service 后连库用例真实运行；再由下方 skip 门禁锁死回归。
@@ -163,7 +163,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: frontend
+        working-directory: apps/web
     steps:
       - uses: actions/checkout@v4
       # N12：包管理器锁一 pnpm（仓库纪律为 pnpm-lock.yaml；此前 npm install 与
@@ -174,7 +174,7 @@ jobs:
       # 反复出现的机制性根源。锁精确补丁号，杜绝大版本浮标漂移。
       #
       # §六十一（N12d）**此处两次更正，顺序与解析方式都改过，保留痕迹**：
-      # 更正一（已作废）：N12b 原写「pnpm 版本改为读 frontend/package.json 的
+      # 更正一（已作废）：N12b 原写「pnpm 版本改为读 apps/web/package.json 的
       #   packageManager，此处不再传 version」——从未生效：`defaults.run.working-directory`
       #   只作用于 `run:` 步骤、**不作用于 `uses:` action**，`pnpm/action-setup` 在仓库根执行
       #   而根目录没有 package.json（monorepo）→ "No pnpm version is specified"。
@@ -189,7 +189,7 @@ jobs:
         id: pnpm
         shell: bash
         run: |
-          pm=$(grep -m1 '"packageManager"' "$GITHUB_WORKSPACE/frontend/package.json" \
+          pm=$(grep -m1 '"packageManager"' "$GITHUB_WORKSPACE/apps/web/package.json" \
             | sed -E 's/.*"packageManager"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' || true)
           case "$pm" in
             pnpm@[0-9]*\.[0-9]*\.[0-9]*)
@@ -210,9 +210,9 @@ jobs:
           run_install: false
       - uses: actions/setup-node@v4
         with:
-          node-version-file: frontend/.nvmrc
+          node-version-file: apps/web/.nvmrc
           cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          cache-dependency-path: apps/web/pnpm-lock.yaml
       # §六十一：运行时指纹从「打印」升级为「断言」——声明值与实际值不一致时以可读错误
       # 立即失败，而不是把含糊错误留给付下游 action（本次故障的报错即如此）。
       # 位置刻意排在两个 setup action 之后：它同时调 node 与 pnpm，两者须都已就位
@@ -220,7 +220,7 @@ jobs:
         shell: bash
         run: |
           echo "node=$(node -v) pnpm=$(pnpm -v) tz=$(date +%Z) os=$(uname -sr)"
-          exp_node=$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/frontend/.nvmrc")
+          exp_node=$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/apps/web/.nvmrc")
           act_node=$(node -v | sed 's/^v//')
           exp_pnpm=${{ steps.pnpm.outputs.version }}
           act_pnpm=$(pnpm -v)
@@ -240,7 +240,7 @@ jobs:
         run: pnpm exec tsc --noEmit
       # N12：补 vitest 单测门禁——此前 89 用例仅本地机检
       # N12b（2026-09-28）：加 --retry=2。t0263 的 findBy* 后立即断言 mock 调用存在
-      # 微任务竞态（详见 frontend/tests/t0263 注释）；重试兜底，同时该测试已改为
+      # 微任务竞态（详见 apps/web/tests/t0263 注释）；重试兜底，同时该测试已改为
       # waitFor 断言以消除竞态——重试只是第二道防线，不是唯一防线。
       - name: Unit tests (vitest)
         run: pnpm run test:unit -- --retry=2
@@ -250,25 +250,25 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vitest-logs
-          path: frontend/vitest-report/
+          path: apps/web/vitest-report/
           if-no-files-found: ignore
       - name: Build
         run: pnpm run build
         env:
           NEXT_PUBLIC_API_MOCK: "false"
       # ── WD（2026-09-30）：Playwright e2e 门禁 ────────────────────────────────
-      # 两套件 base URL 与运行前提互斥（见 frontend/playwright.config.ts 的双口径约定），
+      # 两套件 base URL 与运行前提互斥（见 apps/web/playwright.config.ts 的双口径约定），
       # 故分两步、并各自注明前置。
       #
       # ① mock UI e2e（**阻塞门禁**）：base 3456，产物必须由 `NEXT_PUBLIC_API_MOCK=true`
       #    烘焙——该变量在 build 期内联，运行时改 env 无效。
       #    ⚠️ 这里**不能**用 `pnpm run build`：package.json 的 `prebuild` 钩子在
       #    NEXT_PUBLIC_API_MOCK != "false" 时直接 exit 1（生产防误配守卫，见
-      #    frontend/package.json:11）。故走 `pnpm exec next build` 绕过 npm 生命周期钩子，
+      #    apps/web/package.json:11）。故走 `pnpm exec next build` 绕过 npm 生命周期钩子，
       #    只产出 e2e 用产物；生产产物仍由上方 `Build` 步骤（MOCK=false）负责。
       # ② 真后端 e2e（**非阻塞**）：需 ① Compose 栈（PG/Redis/LangBot 全起）
       #    ② 主平台 OIDC 白名单已登记 bothot redirect_uri ③ 真实公众号文章 URL
-      #    —— 三者 CI 均不具备（见 frontend/e2e/real-backend.spec.ts 头部前置说明）。
+      #    —— 三者 CI 均不具备（见 apps/web/e2e/real-backend.spec.ts 头部前置说明）。
       #    故以仓库变量 `E2E_REAL_BACKEND=1` 为闸，且 `continue-on-error: true`：
       #    前置落地后把变量置 1 即自动生效，在此之前既不空转也不阻塞主干。
       #
@@ -302,8 +302,8 @@ jobs:
         with:
           name: playwright-report
           path: |
-            frontend/playwright-report/
-            frontend/test-results/
+            apps/web/playwright-report/
+            apps/web/test-results/
           if-no-files-found: ignore
 
   compose:
@@ -326,7 +326,7 @@ jobs:
   #     「心跳新鲜度」就无从验起。
   #  3) 生成一次性测试主密钥（32 字节 base64）：`secret_crypto` / `engine_keyring` 在
   #     PUSH_SECRET_MASTER_KEY / ENGINE_KEY_MASTER_KEY 缺失时 fail-closed，
-  #     容器内渠道加解密全部拒绝（backend/app/core/secret_crypto.py:31-49）。
+  #     容器内渠道加解密全部拒绝（apps/api/app/core/secret_crypto.py:31-49）。
   #
   # 判据由 scripts/smoke.sh 定义：`/api/v1/system/health` 信封 code==0
   # + `process_heartbeats` 中 scheduler/worker 心跳 age <= 300s。

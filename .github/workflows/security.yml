@@ -71,7 +71,7 @@ env:
   #    SHY-downloader 七份第三方参考源码），**不是本项目代码**。不排除的后果不是"多几条
   #    噪音"，而是本项目自己的几十个文件被埋在 4000+ 个第三方文件里——门禁形同虚设。
   #    `langbot_plugins` 字面仍保留在列表中以备溯源（对齐原始指令措辞）。
-  SCAN_EXCLUDES: ".project,langbot_plugins,node_modules,.next,dist,build,coverage,.git,backend/.venv,frontend/.next,frontend/vitest-report,frontend/test-results,frontend/playwright-report"
+  SCAN_EXCLUDES: ".project,langbot_plugins,node_modules,.next,dist,build,coverage,.git,apps/api/.venv,apps/web/.next,apps/web/vitest-report,apps/web/test-results,apps/web/playwright-report"
 
 jobs:
   security:
@@ -111,7 +111,7 @@ jobs:
         id: pnpm
         shell: bash
         run: |
-          pm=$(grep -m1 '"packageManager"' "$GITHUB_WORKSPACE/frontend/package.json" \
+          pm=$(grep -m1 '"packageManager"' "$GITHUB_WORKSPACE/apps/web/package.json" \
             | sed -E 's/.*"packageManager"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' || true)
           case "$pm" in
             pnpm@[0-9]*\.[0-9]*\.[0-9]*)
@@ -131,9 +131,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version-file: frontend/.nvmrc
+          node-version-file: apps/web/.nvmrc
           cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          cache-dependency-path: apps/web/pnpm-lock.yaml
 
       - name: Prepare verdict dir
         shell: bash
@@ -154,7 +154,7 @@ jobs:
         # 若用默认行为，① 失败会让 ②③④ 全 skip —— 一次 PR 只暴露一层问题，
         # 修一轮等一轮 CI，四轮才能收敛。
         continue-on-error: true
-        working-directory: backend
+        working-directory: apps/api
         shell: bash
         run: |
           set -uo pipefail
@@ -162,7 +162,7 @@ jobs:
           echo "SCANNER_ERROR" > "$verdict"   # 先写最坏结果，任一步骤中断都不会留下"假绿"
 
           if ! pip install -e ".[dev]" > install.log 2>&1; then
-            echo "❌ 依赖安装失败（见 backend/install.log 尾部）"
+            echo "❌ 依赖安装失败（见 apps/api/install.log 尾部）"
             tail -30 install.log
             exit 0
           fi
@@ -236,7 +236,7 @@ jobs:
       - name: "② pnpm audit — Node 依赖漏洞"
         id: pnpm_audit
         continue-on-error: true
-        working-directory: frontend
+        working-directory: apps/web
         shell: bash
         run: |
           set -uo pipefail
@@ -244,7 +244,7 @@ jobs:
           echo "SCANNER_ERROR" > "$verdict"
 
           if ! pnpm install --frozen-lockfile --ignore-scripts > install.log 2>&1; then
-            echo "❌ pnpm 安装失败（见 frontend/install.log 尾部）"
+            echo "❌ pnpm 安装失败（见 apps/web/install.log 尾部）"
             tail -30 install.log
             exit 0
           fi
@@ -449,8 +449,8 @@ jobs:
             '''dist/''',
             '''build/''',
             '''coverage/''',
-            '''frontend/test-results/''',
-            '''frontend/playwright-report/''',
+            '''apps/web/test-results/''',
+            '''apps/web/playwright-report/''',
           ]
           TOML
 
@@ -552,10 +552,10 @@ jobs:
           name: security-reports
           if-no-files-found: ignore
           path: |
-            backend/pip-audit.json
-            backend/pip-audit-console.log
-            frontend/audit.json
-            frontend/audit-console.log
+            apps/api/pip-audit.json
+            apps/api/pip-audit-console.log
+            apps/web/audit.json
+            apps/web/audit-console.log
             trivy.json
             trivy-console.log
             gitleaks.json
