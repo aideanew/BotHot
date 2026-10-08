@@ -9,9 +9,12 @@
  *
  * 载荷契约（与 providers/push/web.py 发布体一一对应）：
  *   通知帧 {title, message, url, space_id, doc_id}；
+ *   （mock 态不建连——connectNotifications 的 MOCK_ENABLED 门）
  *   控制帧 {type: "service_unavailable" | ...}（含 type 键即控制帧，非通知）。
  * 心跳（": ping" 注释行）由 EventSource 自动忽略，不经 onmessage。
  */
+
+import { MOCK_ENABLED } from "./http";
 
 /** 后端 web provider 发布的站内通知载荷 */
 export interface AppNotification {
@@ -88,6 +91,12 @@ export interface NotificationHandlers {
  */
 export function connectNotifications(handlers: NotificationHandlers): () => void {
   if (typeof window === "undefined" || typeof EventSource === "undefined") {
+    return () => {};
+  }
+  // mock 态（演示数据）不建 SSE：EventSource 绕开 http.ts 的 MOCK 网关，会真打
+  // /api/v1 被 rewrite 代理到不存在的后端（2026-09-30 CI mock e2e 实证：代理失败
+  // → 500 → 浏览器 console error → trunk.spec afterEach 零错误断言红）。
+  if (MOCK_ENABLED) {
     return () => {};
   }
   const es = new EventSource(NOTIFICATIONS_ENDPOINT, { withCredentials: true });

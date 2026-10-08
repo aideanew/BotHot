@@ -112,7 +112,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          pytest tests/ -q -rs --junitxml=pytest-report.xml --cov=app --cov-report=term-missing --cov-fail-under=$COV_BASELINE 2>&1 | tee pytest-output.log
+          pytest tests/ -q -rs --junitxml=pytest-report.xml --cov=app --cov-report=term-missing --cov-fail-under="$COV_BASELINE" 2>&1 | tee pytest-output.log
           pytest_status=${PIPESTATUS[0]}
           python - <<'PY'
           import os

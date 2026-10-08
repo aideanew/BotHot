@@ -638,7 +638,29 @@ _SECURITY_YML = _REPO_ROOT / ".github" / "workflows" / "security.yml"
 _ROTATE_SH = _REPO_ROOT / "scripts" / "rotate_keys.sh"
 _ROTATION_SOP = _REPO_ROOT / "docs" / "07_release" / "key-rotation-sop.md"
 
-_BASH = shutil.which("bash")
+def _resolve_bash() -> str | None:
+    """返回真正可执行脚本的 bash 路径，不可用则返回 None（触发用例 skip）。
+
+    `shutil.which("bash")` 在 Windows 上会命中 WSL 启动器（system32/bash.exe），
+    但当机器上没有已注册 Linux 发行版时，`bash -c` 会以 `execvpe(/bin/bash) failed`
+    退出码 1 失败——「存在 ≠ 可用」。若只按 which 的返回值判断，本用例会在假阳性的
+    bash 上执行 `bash -c`，得到 returncode=1 而误判工作流语法有误（本地必红）。
+    这里做一次**功能探针**：实跑 `bash -c 'exit 0'`，非 0 或异常一律视同不可用。
+    与 Linux CI 的真实校验等价：能跑就跑（真绿），跑不了就明确 skip（绝不做假绿）。
+    """
+    cand = shutil.which("bash")
+    if cand is None:
+        return None
+    try:
+        probe = subprocess.run(
+            [cand, "-c", "exit 0"], capture_output=True, timeout=15
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return cand if probe.returncode == 0 else None
+
+
+_BASH = _resolve_bash()
 
 
 def _run_blocks(text: str) -> list[str]:
@@ -787,13 +809,25 @@ def test_rotate_keys_help_and_missing_dsn_are_side_effect_free() -> None:
     env = {k: v for k, v in os.environ.items() if k not in {"DATABASE_URL", "AIDEANBOT_TEST_PG_DSN"}}
 
     helped = subprocess.run(
-        [_BASH, str(_ROTATE_SH), "--help"], cwd=str(workdir), env=env, capture_output=True, text=True
+        [_BASH, str(_ROTATE_SH), "--help"],
+        cwd=str(workdir),
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     assert helped.returncode == 0, helped.stderr
     assert "--apply" in helped.stdout
 
     blocked = subprocess.run(
-        [_BASH, str(_ROTATE_SH)], cwd=str(workdir), env=env, capture_output=True, text=True
+        [_BASH, str(_ROTATE_SH)],
+        cwd=str(workdir),
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     assert blocked.returncode == 1, "缺 DATABASE_URL 必须失败，绝不能猜一个默认 DSN"
     assert "DATABASE_URL" in blocked.stderr

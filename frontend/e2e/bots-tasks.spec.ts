@@ -38,8 +38,10 @@ test.describe.serial("/bots 推送任务 e2e", () => {
 
     // 切到推送任务
     await page.getByRole("tab", { name: "推送任务" }).click();
-    // 任务列表区域加载（动态导入可能需要等待）
-    await expect(page.getByText(/暂无推送任务|新建任务/)).toBeVisible({ timeout: 10_000 });
+    // 任务列表区域加载（动态导入可能需要等待）。断言锚定「新建任务」按钮（恒存在）：
+    // 原 getByText(/暂无推送任务|新建任务/) 在空列表态命中按钮+空态文案两个节点，
+    // strict mode 直接 violation（2026-09-30 CI mock e2e 实证；本地从未跑过该套件）。
+    await expect(page.getByRole("button", { name: "+ 新建任务" })).toBeVisible({ timeout: 10_000 });
   });
 
   test("② 新建推送任务——Cron 编辑器联动", async ({ page }) => {
