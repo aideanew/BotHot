@@ -80,3 +80,17 @@ git branch --show-current     # 当前分支
 - **路径前缀替换的盲区**：`backend/`→`apps/api/` 覆盖不了
   `working-directory: backend`、`context: ../backend` 这类**无尾斜杠**形态。
   迁移后必查：`grep -rn "backend\b" 活配置`（词边界）。
+
+## 8. 防复发元纪律（2026-10-08 R5 沉淀，各条均有本仓实证）
+
+- **测试数随批次同步**：AGENTS.md 的全量测试数是批次快照，**每批收口时必须刷新**，
+  禁止跨批累积——943/7（S0.1）→967/5（S2.2）→968/4（S3）三代漂移即实证。
+  刷新时保留演进注释链（历史基线不删）。
+- **CHANGELOG 随批切段**：`Unreleased` 只承接**当前批次**条目，批收口时切段归档
+  （版本段或日期段）；跨批堆积 = 病史复发——Unreleased 一度累积 84 行横跨
+  v0.6/v0.6.5/S0-S3 三个批次，切段时需靠 git log 逐条考古归属。
+- **修复面以「全仓 grep 消费方」驱动**：改路径/改签名前，先 `grep -rn <旧值>`
+  枚举**全部消费方**（含 scripts/、Makefile、注释与提示文案），按消费方清单逐个修，
+  禁止按目录清单凭记忆修——S3 迁移修了 CI/Makefile/compose/Dockerfile/tsconfig，
+  却漏了 `scripts/gen_contracts.py` 与 `scripts/preflight.sh` 两个 `backend/` 消费方
+  （后者还被 Makefile:118 消费），死脚本潜伏至 R0 取证才暴露。
