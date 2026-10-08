@@ -190,8 +190,29 @@ class RedisFixedWindowCounter:
                 await client.expire(key, window_seconds)
             return int(count)
         except Exception:  # noqa: BLE001  Redis 抖动/不可达：fail-open，不影响业务
-            logger.warning("限流计数器 Redis 不可用，本轮 fail-open（不限流）", exc_info=True)
+            _warn_fail_open_throttled()
             return None
+
+
+# ── fail-open 告警节流（S0.3 / G3）─────────────────────────────
+# 为什么节流：incr_window 在**每个请求**的限流路径上，Redis 长时间不可用时
+# 原实现每请求一条 warning + traceback——全栈重复无信息增量，且噪音会淹没
+# 真正的问题信号。60s 窗口内同源仅首条带全栈；恢复后下一条即时告警
+# （窗口只在「持续异常」期间生效，不会延迟故障恢复的感知）。
+
+_FAILOPEN_WARN_INTERVAL = 60.0
+_FAILOPEN_LAST_WARN = 0.0
+
+
+def _warn_fail_open_throttled() -> None:
+    """Redis 不可达的 fail-open 告警：60s 窗口内仅首条 warning（带全栈）。"""
+    global _FAILOPEN_LAST_WARN
+    now = time.monotonic()
+    if now - _FAILOPEN_LAST_WARN < _FAILOPEN_WARN_INTERVAL:
+        logger.debug("限流计数器 Redis 不可用（节流窗口内，跳过重复告警）")
+        return
+    _FAILOPEN_LAST_WARN = now
+    logger.warning("限流计数器 Redis 不可用，本轮 fail-open（不限流）", exc_info=True)
 
 
 _counter: RateLimitCounter = RedisFixedWindowCounter()

@@ -850,3 +850,69 @@ def test_key_rotation_sop_is_documented() -> None:
         "只改 env",
     ):
         assert token in text, f"SOP 未提及 {token}"
+
+
+# ── S0.3：fail-open 告警节流（G3）─────────────────────────────
+
+class _ExplodingCounter:
+    """incr_window 恒抛——模拟 Redis 长时间不可达（每请求都走 except 分支）。"""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def incr_window(self, key: str, window_seconds: int) -> int | None:
+        self.calls += 1
+        raise ConnectionError("redis down")
+
+
+def test_fail_open_warning_throttled_within_window(monkeypatch, caplog) -> None:
+    """60s 窗口内连续 N 次 Redis 异常 → warning 恰好 1 条（首条带全栈）。"""
+    import logging as _logging
+
+    monkeypatch.setattr(sec, "_FAILOPEN_LAST_WARN", 0.0)
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(sec.time, "monotonic", lambda: clock["t"])
+
+    with caplog.at_level(_logging.WARNING, logger="app.core.security"):
+        for _ in range(10):
+            sec._warn_fail_open_throttled()
+
+    warnings = [r for r in caplog.records if r.levelno == _logging.WARNING]
+    assert len(warnings) == 1, f"窗口内应节流为 1 条，实际 {len(warnings)} 条"
+    assert warnings[0].exc_info is not None, "首条必须带全栈（故障现场只此一份）"
+
+
+def test_fail_open_warning_refires_after_window(monkeypatch, caplog) -> None:
+    """窗口（60s）过后再次异常 → 第二条告警即时出现（恢复感知不被延迟）。"""
+    import logging as _logging
+
+    monkeypatch.setattr(sec, "_FAILOPEN_LAST_WARN", 0.0)
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(sec.time, "monotonic", lambda: clock["t"])
+
+    with caplog.at_level(_logging.WARNING, logger="app.core.security"):
+        sec._warn_fail_open_throttled()  # 第 1 条
+        clock["t"] += 61.0  # 越过窗口
+        sec._warn_fail_open_throttled()  # 第 2 条
+
+    warnings = [r for r in caplog.records if r.levelno == _logging.WARNING]
+    assert len(warnings) == 2
+
+
+def test_rate_limit_fail_open_noise_throttled_end_to_end(monkeypatch, caplog) -> None:
+    """集成：Redis 恒不可达时连打 N 个请求 → warning 总数 ≤ 1（而非每请求一条）。"""
+    import logging as _logging
+
+    exploding = _ExplodingCounter()
+    sec.set_rate_limit_counter(exploding)
+    monkeypatch.setattr(sec, "_FAILOPEN_LAST_WARN", 0.0)
+    client = _client()
+
+    with caplog.at_level(_logging.WARNING, logger="app.core.security"):
+        for _ in range(6):
+            resp = client.get(CHAT_PATH)
+            assert resp.status_code != 429  # fail-open：绝不把不可用变成全站 429
+
+    assert exploding.calls == 6, "每个请求都应尝试计数（不做进程级短路，故障恢复即时生效）"
+    warnings = [r for r in caplog.records if r.levelno == _logging.WARNING]
+    assert len(warnings) <= 1, f"6 次请求只应 1 条告警，实际 {len(warnings)} 条"
