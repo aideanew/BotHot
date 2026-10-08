@@ -8,7 +8,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, TimestampMixin, gen_uuid
@@ -257,3 +257,45 @@ class PushEvent(TimestampMixin, Base):
     event_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     payload: Mapped[str] = mapped_column(Text, default="", nullable=False)
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+
+# ── 8. 站内通知持久化（离线补投底座 R1.2a） ──────────────────
+
+class Notification(TimestampMixin, Base):
+    """站内通知落库记录：web provider 离线补投的存储底座。
+
+    现状：providers/push/web.py 走 Redis pub/sub 是 fire-and-forget——用户不在线
+    （无 SSE 订阅者）时通知即永久丢失。本表把每条站内通知同时落库，配合待建的
+    GET /system/notifications/history（R1.2b）让前端重连时补投离线期间的通知；
+    SSE 实时侧不变，本表只做「离线兜底 + 已读回执」。
+
+    收件人锚 = sub（SSO 身份锚点，与 get_current_sub / 主频道 bothot:notifications:{sub} 一致）。
+    广播投递（发布侧无 external_user_id → broadcast 频道）落库时 sub="" 且 is_broadcast=True，
+    历史查询按 (sub == 当前用户 OR is_broadcast) 过滤即可覆盖定向 + 广播两类。
+
+    高性能：(sub, created_at) 复合索引支撑「按用户取最近 N 条倒序」热查询走索引。
+    拓展：channel_type 用 String(32) 不枚举，未来落其他渠道历史零迁移。
+    """
+
+    __tablename__ = "notifications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    # 收件人 SSO 锚（users.sub）；广播通知存 ""
+    sub: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    # 广播标记（True 时对所有人可见，sub 不参与过滤）
+    is_broadcast: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # 渠道类型快照：web（预留多渠道历史扩展位）
+    channel_type: Mapped[str] = mapped_column(String(32), default="web", nullable=False)
+    # 以下五字段与 web provider 发布载荷一一对应
+    title: Mapped[str] = mapped_column(String(256), default="", nullable=False)
+    message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    url: Mapped[str] = mapped_column(String(512), default="", nullable=False)
+    space_id: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    doc_id: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    # 已读回执（NULL=未读）
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # 历史查询热路：按用户 + 时间倒序（与迁移 ab1005w5a 同建，模型与迁移一致）
+    __table_args__ = (
+        Index("ix_notifications_sub_created", "sub", "created_at"),
+    )

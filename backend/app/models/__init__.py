@@ -7,6 +7,7 @@ from .bothot_entities import (
     FeedItem,
     HotTopic,
     HotTopicArticle,
+    Notification,
     PushLog,
     PushTask,
 )
@@ -45,4 +46,5 @@ __all__ = [
     "HotTopicArticle",
     "DailyReport",
     "FeedItem",
+    "Notification",
 ]
