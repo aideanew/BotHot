@@ -20,7 +20,7 @@
 #      （管道会把退出码换成 tail 的，2026-09-28 我因此产出过假绿）。
 #   2. 前端必须在 **TZ=UTC** 下跑，否则复现不了 CI（runner 是 UTC）。
 #   3. Python 工具优先走项目 venv —— Windows 上 ruff/mypy 常只在
-#      backend/.venv/Scripts 且未必进 PATH，依赖 PATH 会误报「工具缺失」。
+#      apps/api/.venv/Scripts 且未必进 PATH，依赖 PATH 会误报「工具缺失」。
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -29,10 +29,10 @@ LOG="$(mktemp -d)"
 FAIL=0
 
 # 铁律 3：venv 在 Windows 是 .venv/Scripts/python.exe，POSIX 是 .venv/bin/python
-if [ -x "$ROOT/backend/.venv/Scripts/python.exe" ]; then
-  PY="$ROOT/backend/.venv/Scripts/python.exe"
-elif [ -x "$ROOT/backend/.venv/bin/python" ]; then
-  PY="$ROOT/backend/.venv/bin/python"
+if [ -x "$ROOT/apps/api/.venv/Scripts/python.exe" ]; then
+  PY="$ROOT/apps/api/.venv/Scripts/python.exe"
+elif [ -x "$ROOT/apps/api/.venv/bin/python" ]; then
+  PY="$ROOT/apps/api/.venv/bin/python"
 else
   PY=python
 fi
@@ -46,7 +46,7 @@ parity_gate() {
   # node：与 .nvmrc 比对。补丁级差异只告警（本机不必装 CI 那个精确补丁号），
   # 主版本不符才阻断（vitest@5 只认 ^22.12.0 || ^24.0.0 || >=26.0.0）
   local exp_node act_node
-  exp_node=$(tr -d '[:space:]' < "$ROOT/frontend/.nvmrc")
+  exp_node=$(tr -d '[:space:]' < "$ROOT/apps/web/.nvmrc")
   act_node=$(node -v 2>/dev/null | sed 's/^v//' || true)
   if [ -z "$act_node" ]; then
     echo "❌ node 不可用"
@@ -60,9 +60,9 @@ parity_gate() {
     FAIL=1
   fi
 
-  # pnpm：与 frontend/package.json 的 packageManager 严格比对
+  # pnpm：与 apps/web/package.json 的 packageManager 严格比对
   local exp_pnpm act_pnpm
-  exp_pnpm=$(cd "$ROOT" && node -p "require('./frontend/package.json').packageManager.split('@')[1]" 2>/dev/null || echo "<解析失败>")
+  exp_pnpm=$(cd "$ROOT" && node -p "require('./apps/web/package.json').packageManager.split('@')[1]" 2>/dev/null || echo "<解析失败>")
   act_pnpm=$(pnpm -v 2>/dev/null || echo "<pnpm 缺失>")
   if [ "$act_pnpm" = "$exp_pnpm" ]; then
     echo "pnpm=$act_pnpm == packageManager ✅"
@@ -107,24 +107,24 @@ parity_gate() {
   # 会产出假绿或假红（§61.2 就是本机 ruff 0.16.5 把 CI 不报的 app/main.py:198 报成红）。
   # 故版本不对齐时直接判红，先修工具再谈门禁结论。
   local exp_ruff act_ruff exp_mypy act_mypy
-  exp_ruff=$(sed -n 's/.*"ruff==\(.*\)".*/\1/p' "$ROOT/backend/pyproject.toml" | head -1)
+  exp_ruff=$(sed -n 's/.*"ruff==\(.*\)".*/\1/p' "$ROOT/apps/api/pyproject.toml" | head -1)
   act_ruff=$("$PY" -m ruff --version 2>/dev/null | cut -d' ' -f2 || echo "<缺失>")
   if [ "$act_ruff" = "$exp_ruff" ]; then
     echo "ruff=$act_ruff == pyproject 钉版 ✅"
   else
     echo "❌ ruff 版本不符：pyproject 钉 $exp_ruff，本机 ${act_ruff:-<缺失>}"
     echo "   （0.12.x 与 0.16.x 的 I001 规则互斥，本机的 ruff 结论对 CI 无意义）"
-    echo "   修复：cd backend && ./.venv/Scripts/python.exe -m pip install -e \".[dev]\""
+    echo "   修复：cd apps/api && ./.venv/Scripts/python.exe -m pip install -e \".[dev]\""
     FAIL=1
   fi
 
-  exp_mypy=$(sed -n 's/.*"mypy==\(.*\)".*/\1/p' "$ROOT/backend/pyproject.toml" | head -1)
+  exp_mypy=$(sed -n 's/.*"mypy==\(.*\)".*/\1/p' "$ROOT/apps/api/pyproject.toml" | head -1)
   act_mypy=$("$PY" -m mypy --version 2>/dev/null | awk '{print $2}' || echo "<缺失>")
   if [ "$act_mypy" = "$exp_mypy" ]; then
     echo "mypy=$act_mypy == pyproject 钉版 ✅"
   else
     echo "❌ mypy 版本不符：pyproject 钉 $exp_mypy，本机 ${act_mypy:-<缺失>}"
-    echo "   修复：cd backend && ./.venv/Scripts/python.exe -m pip install -e \".[dev]\""
+    echo "   修复：cd apps/api && ./.venv/Scripts/python.exe -m pip install -e \".[dev]\""
     FAIL=1
   fi
 
@@ -141,12 +141,12 @@ parity_gate() {
 
 backend_gate() {
   hr "BACKEND: ruff check app tests"
-  ( cd "$ROOT/backend" && "$PY" -m ruff check app tests > "$LOG/ruff.log" 2>&1 )
+  ( cd "$ROOT/apps/api" && "$PY" -m ruff check app tests > "$LOG/ruff.log" 2>&1 )
   local rc=$?
   echo "ruff exit=$rc"; [ $rc -ne 0 ] && { cat "$LOG/ruff.log"; FAIL=1; }
 
   hr "BACKEND: mypy app"
-  ( cd "$ROOT/backend" && "$PY" -m mypy app > "$LOG/mypy.log" 2>&1 )
+  ( cd "$ROOT/apps/api" && "$PY" -m mypy app > "$LOG/mypy.log" 2>&1 )
   rc=$?
   echo "mypy exit=$rc"; [ $rc -ne 0 ] && { cat "$LOG/mypy.log"; FAIL=1; }
 }
@@ -156,18 +156,18 @@ frontend_gate() {
   # CI 以 `pnpm install --frozen-lockfile` 安装，声明漂移秒红；但 tsc/vitest 不读 lockfile，
   # 本地全绿也拦不住（8b1b5f2 首次推送即 CI 13s 红的教训）。--lockfile-only 只做解析校验，
   # 不下载包、不动 node_modules，漂移时以 ERR_PNPM_OUTDATED_LOCKFILE 非零退出。
-  ( cd "$ROOT/frontend" && pnpm install --frozen-lockfile --lockfile-only > "$LOG/pnpm-drift.log" 2>&1 )
+  ( cd "$ROOT/apps/web" && pnpm install --frozen-lockfile --lockfile-only > "$LOG/pnpm-drift.log" 2>&1 )
   local rc=$?
   echo "frozen-lockfile exit=$rc"; [ $rc -ne 0 ] && { cat "$LOG/pnpm-drift.log"; FAIL=1; }
 
   hr "FRONTEND: typecheck (tsc --noEmit)"
-  ( cd "$ROOT/frontend" && node node_modules/typescript/bin/tsc --noEmit > "$LOG/tsc.log" 2>&1 )
+  ( cd "$ROOT/apps/web" && node node_modules/typescript/bin/tsc --noEmit > "$LOG/tsc.log" 2>&1 )
   rc=$?
   echo "tsc exit=$rc"; [ $rc -ne 0 ] && { cat "$LOG/tsc.log"; FAIL=1; }
 
   hr "FRONTEND: test:unit (TZ=UTC，与 CI runner 同构)"
   # CI runner 是 UTC；本机是 UTC+8。只在 UTC+8 跑会漏掉时区耦合缺陷（§51 的教训）。
-  ( cd "$ROOT/frontend" && TZ=UTC node node_modules/vitest/vitest.mjs run > "$LOG/vitest.log" 2>&1 )
+  ( cd "$ROOT/apps/web" && TZ=UTC node node_modules/vitest/vitest.mjs run > "$LOG/vitest.log" 2>&1 )
   rc=$?
   echo "vitest exit=$rc"
   if [ $rc -ne 0 ]; then
