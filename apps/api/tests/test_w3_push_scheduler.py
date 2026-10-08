@@ -291,6 +291,65 @@ async def test_same_event_multiple_tasks(db_session: AsyncSession, channel, sche
     assert len(logs) == 2
 
 
+async def test_event_delivery_failure_no_reclaim(db_session, channel, scheduler_user):
+    """R1.2（S3.6）：outbox 消费失败分支端到端。
+
+    链路：emit → claim（consumed_at 置位）→ 派发 → webhook 投递失败（不可达端口）
+    → failed PushLog + 重试簿记 → **重投领取为空**（at-most-once 锚定：
+    consumed_at 在 claim 时已置，投递结果不影响事件生命周期，不产生重复投递）。
+    成功分支已有 test_event_full_pipeline / test_same_event_multiple_tasks 覆盖。
+    """
+    engine, _factory = _real_factory()
+    try:
+        await _purge_tables(engine, PushEvent, PushLog)
+    finally:
+        await engine.dispose()
+
+    task = PushTask(
+        name="event-fail-task",
+        bot_channel_id=channel.id,
+        trigger_type="event",
+        trigger_event="new_article",
+        content_template="fail: {doc_title}",
+        status="active",
+        created_by=scheduler_user.id,
+    )
+    db_session.add(task)
+    await db_session.commit()
+
+    await emit_event(db_session, "new_article", {"doc_title": "fail-doc"})
+    await db_session.commit()
+
+    factory = async_sessionmaker(bind=db_session.bind, expire_on_commit=False)
+    scheduler = PushTaskScheduler(factory)
+
+    # claim：事件被消费标记（投递尚未发生——at-most-once 的先标记语义）
+    events = await claim_pending_events(db_session)
+    assert len(events) == 1
+    assert events[0].consumed_at is not None
+
+    # 派发：channel 夹具 webhook_url 指向 localhost:9999 不可达端口
+    # → webhook provider 走 except Exception 分支，PushResult(delivered=False, retryable=True)
+    await scheduler._dispatch_event(events[0], datetime.now(UTC))
+
+    # 投递回执：failed PushLog 落库且错误信息非空
+    logs = (await db_session.execute(select(PushLog))).scalars().all()
+    assert len(logs) == 1
+    assert logs[0].status == "failed"
+    assert logs[0].error_message != ""
+
+    # 重试簿记：retryable 失败 → retry_count 推进 + next_retry_at 计划退避
+    # （跨会话读：refresh 强制回库，绕开本会话 identity map 的 fixture 期旧值——
+    #   同 test_cron_parse_failure_pauses_task:224 的既有口径）
+    await db_session.refresh(task)
+    assert task.retry_count == 1
+    assert task.next_retry_at is not None
+
+    # at-most-once 核心断言：事件已消费，重投领取为空（失败不回队）
+    again = await claim_pending_events(db_session)
+    assert again == []
+
+
 async def test_render_known_variables():
     result = render("hello {date} {time}", {})
     assert "hello" in result
