@@ -82,18 +82,23 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 EXPECTED_PROCESSES = int(os.environ.get("BOTHOT_PROCESS_COUNT", "4"))
 
 
-async def assert_pool_capacity() -> None:
+async def assert_pool_capacity(engine: AsyncEngine | None = None) -> None:
     """C.3 启动断言：进程数 × (pool_size + max_overflow) ≤ PG max_connections。
 
     超限则 raise RuntimeError 拒启（fail-fast）：4 进程 × (5+5)=40 远低于 PG 默认 100，
     但 pool 调大或多副本时必须拦截。PG 不可达时跳过（不阻断启动——连接故障由
     pool_pre_ping 在首查兜底，启动期断言不应比健康检查更严）。
+
+    engine 参数：scheduler/worker 进程自建引擎（create_engine_and_session），
+    传入自己的 engine 复用既有连接做 SHOW max_connections，避免为断言单独
+    建模块级连接；web 进程（main.lifespan）省略参数走模块级单例。
     """
     from sqlalchemy import text
 
+    target = engine if engine is not None else _engine
     capacity = EXPECTED_PROCESSES * (_DB_POOL_SIZE + _DB_MAX_OVERFLOW)
     try:
-        async with _engine.connect() as conn:
+        async with target.connect() as conn:
             max_conn = (await conn.execute(text("SHOW max_connections"))).scalar()
     except Exception:  # noqa: BLE001 PG 不可达：启动不断言失败（首查兜底）
         return

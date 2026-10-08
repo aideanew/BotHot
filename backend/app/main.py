@@ -237,7 +237,15 @@ def _assert_schema_current(settings) -> None:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    """应用生命周期：启动/停止推送调度器。"""
+    """应用生命周期：池容量守卫 → 启动/停止推送调度器。
+
+    S0.2（G2）：assert_pool_capacity 在启动期 fail-fast——进程数×池容量超
+    PG max_connections 时拒绝启动（R6.1.4 同款拒启语义）；PG 不可达时内部
+    跳过（连接故障交 pool_pre_ping 首查兜底，不比健康检查更严）。
+    """
+    from app.db import assert_pool_capacity
+
+    await assert_pool_capacity()
     await start_push_scheduler(get_session_factory())
     try:
         yield

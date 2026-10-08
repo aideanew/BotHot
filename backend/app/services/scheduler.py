@@ -580,9 +580,10 @@ async def _main() -> None:  # pragma: no cover - 进程入口
     configure_logging()
     settings = get_settings()
     assert_production_ready(settings)
-    from app.db import create_engine_and_session
+    from app.db import assert_pool_capacity, create_engine_and_session
 
     engine, factory = create_engine_and_session(settings.database_url)
+    await assert_pool_capacity(engine)  # S0.2：池容量守卫，超限拒启（fail-fast）
     stop = asyncio.Event()
     scheduler = IncrementalScheduler(factory, settings=settings)
     try:
