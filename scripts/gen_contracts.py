@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-BACKEND_DIR = PROJECT_ROOT / "backend"
+BACKEND_DIR = PROJECT_ROOT / "apps" / "api"
 CONTRACTS_DIR = PROJECT_ROOT / "packages" / "contracts" / "src"
 
 # 域 → (模型模块, SQLAlchemy 实体)
