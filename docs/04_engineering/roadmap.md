@@ -91,7 +91,7 @@ version: 1.0
 - [x] 容器与编排硬化 — `backend/Dockerfile`+`frontend/Dockerfile` 多阶段 + 非 root uid1000（`USER app`）+ `HEALTHCHECK`；`docker/compose.yml` 全服务 `logging.options`+`resources.limits`+read_only/tmpfs/cap_drop/no-new-privileges
 - [x] 运行期告警（三类）— `core/alerting.py` `run_alert_checks`（心跳缺失/Job 积压/推送连败），复用既有 push provider；接线 `push_scheduler.py:86-88`（`ALERTING_ENABLED` 未置真即短路，开发零副作用）
 - [x] 连接池容量守卫 — `db.py:85 assert_pool_capacity()`（进程数×池容量 ≤ PG max_connections，测试强制；启动 lifespan 自动调用待接）
-- [ ] 告警生产装配 — 代码就绪，`compose.yml` 尚未注入 `ALERTING_ENABLED`/`ALERT_CHANNEL`/`ALERT_TARGET`（剩余项 R1.3）
+- [x] 告警生产装配 — `compose.yml` 已注入 `ALERTING_ENABLED`/`ALERT_CHANNEL`/`ALERT_TARGET`/`ALERT_PUSH_FAIL_WINDOW`/`ALERT_JOB_BACKLOG` 五变量（默认关闭，`1eaa9b7`，S2.2 闭环；`docker/compose.yml:227-231`）
 - [ ] 治理脚本入 CI 强制步 — `check_docs_consistency.py`/`gen_contracts.py` 就绪，CI 尚未编排为门禁 step（剩余项 R1.4）
 
 ## v0.7 — 目录结构迁移
