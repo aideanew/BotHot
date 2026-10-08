@@ -5,15 +5,16 @@ title: BotHot 路线图
 status: active
 owner: product
 created: 2026-09-29
-updated: 2026-09-30
+updated: 2026-10-08
 version: 1.0
 ---
 
 # BotHot 路线图
 
-## 当前阶段：v0.6 — 前端管理页增强与工程加固
+## 当前阶段：v0.6.5 — 观测与安全运行时硬化（W6-W10）+ 通知持久化底座
 
-> v0.4/v0.5 已于 2026-09-30 交付；v0.6 由五路并行（WA-WB-WC-WD-WE）+ 集成审查完成
+> v0.4/v0.5 已于 2026-09-30 交付；v0.6 由五路并行（WA-WB-WC-WD-WE）+ 集成审查完成；
+> v0.6.5（W6-W10 观测/安全/硬化）已于 `main @ 8b1b5f2` 合并，CI 首跑修复至 `main @ 7bdb964`（2026-10-08 回填）
 
 **目标**：基于项目文档规范与工程结构规范，完成 BotHot 文档架构和目录架构的重新设计。
 
@@ -46,7 +47,7 @@ version: 1.0
 - [x] 渠道密钥 AES-256-GCM 落库 — `core/secret_crypto.py`（AAD 绑定 channel id，`PUSH_SECRET_MASTER_KEY` fail-closed）+ 存量迁移 `ab1004w1a`
 - [x] 调度器并发安全 — FOR UPDATE SKIP LOCKED 短锁领取 + 单任务异常隔离（`push_scheduler.py`）
 - [x] 事件触发推送（新文章/热点更新/日报生成）— PG outbox 表 `push_events`（`ab1004w3a`）：worker 进程 emit、backend 调度器 claim 消费；模板变量 `{space_name}/{doc_title}/{hot_topic}/{topic_count}`（`services/push_events.py` / `push_template.py`）
-- [ ] 推送日志查询与**重试**机制 — 日志查询已完成（`api/v1/bots.py`），**重试未实现**（无重试计数/退避；当前失败仅落 `PushLog(status=failed)`）
+- [x] 推送日志查询与**重试**机制 — 日志查询（`api/v1/bots.py`）+ 指数退避重试/死信（`services/push_scheduler.py` MAX_PUSH_RETRIES，PUSH-009，详见 v0.6）；重试簿记字段 `retry_count`/`next_retry_at` 由迁移 `ab1004w4a` 落库补齐
 
 ## v0.5 — AIHOT 热点功能融合 ✅（2026-09-30 集成审查通过）
 
@@ -76,6 +77,22 @@ version: 1.0
 - [x] 站内通知订阅侧（新增，FE-005）— 后端 SSE `system.py /notifications` + `NotificationBell`（WE）
 - [x] 事件模板变量自足 + 投递重试/退避/死信（新增，PUSH-009 主体）— WB（集成者补完）
 - [x] 热度评分接线与周期重评分（G1/G1b）— WA + 审查缝合
+
+## v0.6.5 — 观测与安全运行时硬化（W6-W10）✅（2026-10-08 回填）
+
+> 合并于 `main @ 8b1b5f2`；CI 首跑修复 `08c3935..7bdb964`。目标：结构化日志、指标暴露、
+> 存活/就绪探针、运行时安全中间件、容器与编排硬化、运行期告警。
+
+**任务**：
+- [x] 结构化日志双模（structlog）— `core/logging.py` `configure_logging()`（prod=JSON/dev=Console，ProcessorFormatter 单出口桥接防重复行，全仓唯一 stdlib `getLogger`）；启动安装 `main.py:249`
+- [x] Prometheus 指标 + `/metrics` — `core/metrics.py`（8 指标族）+ 纯 ASGI `MetricsMiddleware`（`main.py:259`）+ 独立 `metrics_router`（`main.py:264`，`include_in_schema=False` 不污染 OpenAPI 契约）
+- [x] 存活/就绪探针 + schema 守卫 — `core/schema_guard.py`（复用启动 alembic head 探测）；`/live`（`system.py:119`）/`/ready`（PG+Redis+schema，不一致返 503，`system.py:128`）
+- [x] 运行时安全中间件 — `core/security.py`：`RateLimitMiddleware`/`BodyLimitMiddleware`/`SecurityHeadersMiddleware`；经冻结接口 `install_security_middlewares(app)` 装配（`main.py:272-274`）
+- [x] 容器与编排硬化 — `backend/Dockerfile`+`frontend/Dockerfile` 多阶段 + 非 root uid1000（`USER app`）+ `HEALTHCHECK`；`docker/compose.yml` 全服务 `logging.options`+`resources.limits`+read_only/tmpfs/cap_drop/no-new-privileges
+- [x] 运行期告警（三类）— `core/alerting.py` `run_alert_checks`（心跳缺失/Job 积压/推送连败），复用既有 push provider；接线 `push_scheduler.py:86-88`（`ALERTING_ENABLED` 未置真即短路，开发零副作用）
+- [x] 连接池容量守卫 — `db.py:85 assert_pool_capacity()`（进程数×池容量 ≤ PG max_connections，测试强制；启动 lifespan 自动调用待接）
+- [ ] 告警生产装配 — 代码就绪，`compose.yml` 尚未注入 `ALERTING_ENABLED`/`ALERT_CHANNEL`/`ALERT_TARGET`（剩余项 R1.3）
+- [ ] 治理脚本入 CI 强制步 — `check_docs_consistency.py`/`gen_contracts.py` 就绪，CI 尚未编排为门禁 step（剩余项 R1.4）
 
 ## v0.7 — 目录结构迁移
 

@@ -60,10 +60,12 @@ PLAN 规划 → SPEC 规格 → APPROVE 批准 → IMPLEMENT 实施 → VERIFY �
 
 ## 当前项目状态
 
-- **版本**：v0.6（v0.4 推送 + v0.5 热点融合 + v0.6 语义接通/工程加固，2026-09-30 两轮五路并行交付集成审查通过）
+- **版本**：v0.6.5（v0.4 推送 + v0.5 热点融合 + v0.6 语义接通/工程加固 + v0.6.5 观测与安全运行时硬化 W6-W10，`main @ 8b1b5f2` 合并、CI 首跑修复至 `7bdb964`）
 - **后端**：FastAPI + SQLAlchemy 2.0 + Alembic，9 个业务域
 - **前端**：Next.js 14 App Router，10 个功能域
 - **推送**：6 渠道 Provider 真实投递（**站内通知全链路已通**——Redis pub/sub 投递侧 + SSE 订阅侧 `system.py /notifications` + 前端 `NotificationBell`；微信 ClawBot 需部署服务）；PushScheduler 60s 调度（SKIP LOCKED 短锁领取 + **投递重试/指数退避/死信终态**，重试态挂 PushTask）；Cron 完整 5 段式 + 简写兼容；**事件触发已实现且 payload 自足**（emit 时查库补模板变量快照）；渠道密钥 **AES-256-GCM**（fail-closed，双主密钥已纳入生产守卫）；旧 push_port 已删除
+- **观测与硬化**：structlog 双模日志（`core/logging.py`）+ Prometheus `/metrics`（`core/metrics.py`）+ `/live` `/ready` 探针（`core/schema_guard.py`，schema 不一致 503）+ 限流/体限/安全头中间件（`core/security.py`）+ 运行期告警三类（`core/alerting.py`，`ALERTING_ENABLED` 门）；Dockerfile 多阶段+uid1000+HEALTHCHECK，compose read_only/tmpfs/cap_drop/no-new-privileges
+- **通知持久化**：站内通知离线补投底座 `Notification` 表 + 迁移 `ab1005w5a`（存储层，写侧/读侧 history 待建 R1.2b/c/d）
 - **文章来源**：4 平台已接入（providers/article_sources/）—— Dajiala 极致了（发现+HTML详情）、JustOneAPI（发现+正文详情）、TikHub（发现+搜索，需充值）、Wellbyte 数井（搜索+URL驱动发现）；与 RedFox 共存于发现注册表，详情兜底协调器按成本排序
 - **热点**：全链路贯通——聚簇（TF-IDF，候选上限护栏 + 倒排剪枝）、**评分已接线**（worker 聚簇后评分 + 日报前兜底重算 + 每小时 hot_rescore 周期重评，Feed 分数同步回刷）、Feed 三类生产者、日报（LLM 摘要并行化 Semaphore(3) + 失败降级）；业务日界 = Asia/Shanghai
 - **测试**：连库用例真实执行（CI 有 postgres service + skip 门禁 + alembic 单头断言 + e2e/冒烟 job）；全量 848 passed / 2 skipped（隔离 PG 实测 2026-09-30，v0.6 集成后）

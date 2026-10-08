@@ -23,6 +23,16 @@
 
 ### Added
 
+- **观测与运行时硬化（W6-W10，`main @ 8b1b5f2`）**：structlog 双模日志（`core/logging.py`，
+  prod=JSON/dev=Console，启动 `main.py:249`）；Prometheus 指标 8 族 + `/metrics` 独立 router
+  `include_in_schema=False`（`core/metrics.py` + `MetricsMiddleware`）；`/live` `/ready` 探针 +
+  `core/schema_guard.py`（schema 不一致 503）；运行时安全中间件限流/体限/安全头
+  （`core/security.py`，经 `install_security_middlewares`）；两 Dockerfile 多阶段 + uid1000 +
+  HEALTHCHECK，compose 全服务 logging/limits/read_only/tmpfs/cap_drop/no-new-privileges；
+  运行期告警三类（`core/alerting.py`）
+- **站内通知持久化底座（R1.2a，2026-10-08）**：`Notification` 实体 + 迁移 `ab1005w5a`
+  （`sub` SSO 锚 + 广播标记 + `(sub, created_at)` 复合索引），作为离线补投存储层；
+  写侧落库/读侧 `/history`/前端补投待建 —— `backend/app/models/bothot_entities.py`
 - **CI 门禁补全（WD）**：`frontend` job 增 Playwright **mock UI e2e**（`PORT=3456`，**阻塞门禁**，
   产物以 `next build` + `NEXT_PUBLIC_API_MOCK=true` 生成）；新增 **`compose-smoke` job**
   （build backend 镜像 → 起核心服务 → 跑 `scripts/smoke.sh`：`/api/v1/system/health` +
@@ -32,6 +42,15 @@
   `ENGINE_KEY_MASTER_KEY` 等必填主密钥）+ 端口纪律表 —— `README.md`
 - **过时规划文档归档（WD）**：`当前任务规划.md` → `docs/09_archive/superseded/`（附归档标识头，
   说明其成文于 W1–W5 之前、约七成已过期）
+
+### Fixed
+
+- **CI 首跑红灯修复（`08c3935..7bdb964`）**：契约幽灵依赖清零 + 前端镜像 context 升根、
+  `security.yml` 解析即拒 + 加载期 env 白名单越界、mock 产物缓存复用 + 排序断言时间戳并列、
+  UP017 风格清零
+- **`test_security_middleware` 跨平台假阳性（R0.1，2026-10-08）**：`_BASH` 由 `shutil.which`
+  升级为功能探针（`bash -c 'exit 0'` 非 0 视同不可用→skip），并给子进程补 UTF-8 解码——
+  修复 Windows 无 WSL 下 2 例假阳性失败 —— `backend/tests/test_security_middleware.py`
 
 ### Changed
 

@@ -5,7 +5,7 @@ title: BotHot 待办清单
 status: active
 owner: product
 created: 2026-09-29
-updated: 2026-09-30
+updated: 2026-10-08
 ---
 
 # BotHot 待办清单
@@ -15,6 +15,9 @@ updated: 2026-09-30
 > **回填口径（WD，2026-09-30）**：本清单每一项的状态均以 `main @ 2fa95f0` 的**代码实证**为准，
 > 逐条附 `文件:行号`。铁律：**禁止把未实现写成已完成，也禁止把已实现留作未开始**——
 > 前者是本仓库的历史病史，后者同样制造假象（把已完成项当待办重复排期）。
+>
+> **工程硬化回填（W6-W10 + R1.2a，2026-10-08）**：`main @ 8b1b5f2` 已合并 W6-W10（观测/安全/硬化）、
+> `main @ 7bdb964` 含 CI 首跑修复；新增 OBS/SEC/OPS/ALERT/PERF/NOTIF 六组均以当前代码实证逐条附 `文件:行号`。
 
 ## ✅ 已完成（BotHot 新增能力）
 
@@ -115,6 +118,32 @@ updated: 2026-09-30
 
 ### FE-004：每日日报页面 ✅
 - `frontend/app/hot/daily/page.tsx`：`react-markdown` 真渲染（`:13`）、翻页（`:28`、`:155-161`）
+
+### OBS-001~003：结构化日志 + 指标 + 存活/就绪探针 ✅（W6，回填 2026-10-08）
+- **structlog 双模**：`backend/app/core/logging.py` `configure_logging()`（prod=JSON/dev=Console，ProcessorFormatter 单出口桥接防重复行，全仓唯一 stdlib `logging.getLogger`）；启动安装 `main.py:249`
+- **Prometheus 指标**：`backend/app/core/metrics.py`（8 指标族：http 时延/在途、db 池、jobs 状态、push 投递、聚簇时延）；`MetricsMiddleware`+`metrics_router`（`main.py:259/264`，`/metrics` `include_in_schema=False`）
+- **存活/就绪探针**：`core/schema_guard.py`（复用启动 alembic head 探测）+ `/live`（`system.py:119`）/`/ready`（PG+Redis+schema 不一致返 503，`system.py:128`）
+
+### SEC-001：运行时安全中间件 ✅（W7，回填 2026-10-08）
+- **三件套**：`backend/app/core/security.py` — `RateLimitMiddleware`（限流）/`BodyLimitMiddleware`（体限）/`SecurityHeadersMiddleware`（安全头）
+- **装配**：经 W6 冻结接口 `install_security_middlewares(app)`（`main.py:272-274`）
+
+### OPS-001：容器与编排运行时硬化 ✅（W6 A.4，回填 2026-10-08）
+- **Dockerfile**：`backend/Dockerfile`+`frontend/Dockerfile` 多阶段（builder/runtime）+ 非 root uid1000（`USER app`）+ `HEALTHCHECK`
+- **compose**：`docker/compose.yml` 全服务 `logging.options`（json-file）+ `resources.limits` + backend/scheduler/worker `read_only`/`tmpfs`/`cap_drop`/`no-new-privileges`
+
+### ALERT-001：运行期告警三类 🔧（W6 A.5，回填 2026-10-08）
+- **实现**：`backend/app/core/alerting.py` `run_alert_checks`（心跳缺失/Job 积压/推送连败）复用既有 push provider；接线 `push_scheduler.py:86-88`
+- **缺口**：`docker/compose.yml` 未注入 `ALERTING_ENABLED`/`ALERT_CHANNEL`/`ALERT_TARGET`（`ALERT_` grep=0）→ 生产态恒短路，功能就绪但未启用（待办 R1.3）
+
+### PERF-001：连接池容量守卫 🔧（W6 C.3.2，回填 2026-10-08）
+- **实现**：`backend/app/db.py:85 assert_pool_capacity()`（进程数×(pool_size+max_overflow) ≤ PG max_connections）
+- **现状**：定义 + 测试强制（`test_indexes.py:61`），启动 lifespan 尚未自动调用
+
+### NOTIF-001：站内通知持久化底座 🔧（R1.2a，2026-10-08 新增）
+- **实现**：`Notification` 实体（`backend/app/models/bothot_entities.py` 第 8 节）+ 迁移 `backend/alembic/versions/ab1005w5a_notifications.py`（单头 `ab1004w4a → ab1005w5a`）
+- **设计**：收件人锚=sub（SSO）；广播 `is_broadcast=True, sub=""`；`(sub, created_at)` 复合索引支撑离线补投热查询
+- **缺口**：仅存储层落地——写侧落库（web provider）、读侧 `GET /system/notifications/history`、前端重连补投（R1.2b/c/d）待建；SSE 实时侧不变
 
 ## 🔴 高优先级
 
