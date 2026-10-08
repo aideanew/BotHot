@@ -219,13 +219,18 @@ updated: 2026-10-08
 
 ## 🟢 低优先级
 
-### MIG-001：后端 apps/api/ 目录迁移 ⬜
-- **参考**：`project-structure-design.md` 阶段化迁移策略
-- **状态**：未开始（当前仍为 `backend/`；`apps/api/` 为 183 个 `.gitkeep` 空壳）
+### MIG-001：后端 apps/api/ 目录迁移 ✅
+- **S3 轻量迁移**（`ff6e9da`）：整体 `git mv backend/→apps/api/`（保 import 与历史，
+  375 rename；拒绝域级新旧并存的双源漂移方案，见 TASK-PLAN-v0.9 裁定）
+- **收尾**：183 个 `.gitkeep` 空壳清理；CI×2 / compose context / Makefile / Dockerfile
+  COPY / tsconfig paths 同步；`test_security_middleware.py` parents[2]→[3] 修复
+- **验证**：隔离 PG 全量 pytest 968 passed / 4 skipped 零回归；vitest 359 绿；tsc 零错
+- **显式排除**：六边形 `src/modules/<域>` DDD 重构（853 行设计）**不随迁移做**，
+  单独立项等拍板
 
-### MIG-002：前端 apps/web/ 目录迁移 ⬜
-- **参考**：`project-structure-design.md` 阶段化迁移策略
-- **状态**：未开始（当前仍为 `frontend/`）
+### MIG-002：前端 apps/web/ 目录迁移 ✅
+- **同 `ff6e9da`**：`git mv frontend/→apps/web/`，pnpm-workspace / tsconfig paths /
+  e2e 端口纪律（3200）复核通过
 
 ### DOC-001：README 更新 🔧
 - **已有**：功能说明 + 快速开始 + 部署指南

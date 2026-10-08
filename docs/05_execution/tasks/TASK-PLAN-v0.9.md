@@ -71,11 +71,12 @@ supersedes: docs/05_execution/tasks/TASK-PLAN-v0.8.md（S0 已收口，本版承
 - S2.2 告警启用（compose ALERT_ + 三类演练留证）
 - S2.3 BotBinding 死表处置（产品拍板）｜S2.4 真后端 e2e 解阻（OIDC 白名单）｜S2.5 Ragflow/Saas 实接（主平台排期）｜S2.6 embedding.py 接入或删（拍板）｜S2.7 推送日志分页+过滤（P2）
 
-### S3 v0.7 目录迁移（功能冻结后压轴）
-- S3.1 形态定稿（**第一步读 project-structure-design.md**，默认整体 git mv）
-- S3.2 backend→apps/api ｜ S3.3 frontend→apps/web ｜ S3.4 契约接线（index.ts 导出 6 域 + 前端消费 + gen_contracts 双向 diff 硬门禁）
-- S3.5 infra/CI 路径 + 清 .gitkeep + 全量门禁
-- S3.6 测试补全（聚簇/评分 20+ 例、outbox e2e；吸收参考 2.4.1/2.4.2）
+### S3 v0.7 目录迁移（功能冻结后压轴）——✅ 主体完成（2026-10-08，`ff6e9da`）
+- ✅ S3.1 形态定稿：**轻量迁移**（整体 git mv 保 import/历史；六边形 `src/modules/<域>` DDD 重构显式排除，单独立项等拍板）
+- ✅ S3.2 backend→apps/api ｜ ✅ S3.3 frontend→apps/web（375 rename；pnpm-workspace/tsconfig paths/e2e 3200 复核）
+- ⬜ S3.4 契约接线（index.ts 实测仍仅导出 common 三组——**未做**，转 backlog 独立跟进：6 域导出 + 前端消费 + gen_contracts 双向 diff 硬门禁）
+- ✅ S3.5 infra/CI 路径 + 清 183 个 .gitkeep + 全量门禁（隔离 PG pytest 968 passed/4 skipped + vitest 359 绿 + tsc 零错 + compose config 绿；实战教训沉淀至 collaboration-discipline.md §7，`8ba2512`）
+- 🔧 S3.6 测试补全：聚簇/评分已有（test_w2_cluster/w2_scorer/wa_hot_scoring 等）；**outbox e2e 仍缺**，随 S4.1 或后续批次补
 
 ### S4 v1.0 发布
 - S4.1 全量门禁（pytest/vitest/mock e2e/compose-smoke/security 四扫描）
