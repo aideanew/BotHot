@@ -14,7 +14,7 @@
  * 心跳（": ping" 注释行）由 EventSource 自动忽略，不经 onmessage。
  */
 
-import { MOCK_ENABLED } from "./http";
+import { MOCK_ENABLED, delay, mockRequest, request } from "./http";
 
 /** 后端 web provider 发布的站内通知载荷 */
 export interface AppNotification {
@@ -125,4 +125,58 @@ export function connectNotifications(handlers: NotificationHandlers): () => void
       /* 已关闭则忽略 */
     }
   };
+}
+
+// ── S1.4（R1.2）：通知历史拉取 + 已读回执 ──────────────────────
+// 离线补投前端侧：首连拉 history 与 SSE 增量合并；展开下拉时 markRead 服务端对账。
+
+/** 服务端历史条目（GET /system/notifications/history 的 item，SSE 帧字段 + 回执元数据） */
+export interface HistoryNotification extends AppNotification {
+  id: string;
+  is_broadcast: boolean;
+  read_at: string | null;
+  created_at: string;
+}
+
+/** 历史分页响应（C.1 冻结口径 {items,total,limit,offset} + unread_total 免二次拉取） */
+export interface NotificationHistoryPage {
+  items: HistoryNotification[];
+  total: number;
+  limit: number;
+  offset: number;
+  unread_total: number;
+}
+
+/**
+ * 拉取通知历史（倒序分页）。mock 态返回空页（与 connectNotifications 的
+ * MOCK 门语义一致：演示数据无真实通知历史）。
+ */
+export async function fetchHistory(limit = 20, offset = 0): Promise<NotificationHistoryPage> {
+  if (MOCK_ENABLED) {
+    return mockRequest<NotificationHistoryPage>({
+      items: [],
+      total: 0,
+      limit,
+      offset,
+      unread_total: 0,
+    });
+  }
+  return request<NotificationHistoryPage>(
+    `/api/v1/system/notifications/history?limit=${limit}&offset=${offset}`
+  );
+}
+
+/**
+ * 已读回执。id 单条 / before 批量（created_at <= before 的未读全标）二选一。
+ * 返回服务端实际标记数（越权 id 视同不存在 → 0）。
+ */
+export async function markRead(payload: { id?: string; before?: string }): Promise<number> {
+  if (MOCK_ENABLED) {
+    return mockRequest<number>(0);
+  }
+  const data = await request<{ updated: number }>("/api/v1/system/notifications/read", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  return data.updated;
 }

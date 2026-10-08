@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthContext";
-import { connectNotifications, type AppNotification } from "@/lib/api/notifications";
+import {
+  connectNotifications,
+  fetchHistory,
+  markRead,
+  type AppNotification,
+  type HistoryNotification,
+} from "@/lib/api/notifications";
 
 /**
  * 站内通知铃铛（WE 5.2b → W9 D.5 增强）
@@ -26,6 +32,8 @@ const LS_PREFIX = "bothot:unread:";
 interface BellItem extends AppNotification {
   id: number;
   receivedAt: number;
+  /** 服务端通知 id（历史条目携带；SSE 实时条目无——S1.4 合并去重锚点） */
+  serverId?: string;
 }
 
 function getLsKey(sub: string | undefined): string {
@@ -93,6 +101,36 @@ export default function NotificationBell() {
       recentRef.current.clear();
       return;
     }
+
+    // S1.4：首连拉历史（离线补投）——服务端条目与既有 items 按 serverId 合并去重；
+    // 未读数取 localStorage 与服务端 unread_total 的大者（双向防丢）。失败静默：
+    // 历史拉取不阻断 SSE 实时侧（实时侧可独立工作）。卸载后不 setState（防泄漏）。
+    let historyCancelled = false;
+    fetchHistory(MAX_ITEMS)
+      .then((page) => {
+        if (historyCancelled) return;
+        const mapped: BellItem[] = page.items.map((it: HistoryNotification) => ({
+          title: it.title,
+          message: it.message,
+          url: it.url,
+          space_id: it.space_id,
+          doc_id: it.doc_id,
+          id: ++idRef.current,
+          receivedAt: it.created_at ? Date.parse(it.created_at) : Date.now(),
+          serverId: it.id,
+        }));
+        setItems((prev) => {
+          const known = new Set(
+            prev.flatMap((p) => (p.serverId ? [p.serverId] : []))
+          );
+          const merged = [...prev, ...mapped.filter((m) => !known.has(m.serverId!))];
+          merged.sort((a, b) => b.receivedAt - a.receivedAt);
+          return merged.slice(0, MAX_ITEMS);
+        });
+        setUnread((u) => Math.max(u, page.unread_total));
+      })
+      .catch(() => {});
+
     const disconnect = connectNotifications({
       onNotification: (n) => {
         const now = Date.now();
@@ -126,7 +164,10 @@ export default function NotificationBell() {
         }
       },
     });
-    return disconnect;
+    return () => {
+      historyCancelled = true;
+      disconnect();
+    };
   }, [authed]);
 
   // 点击外部收起下拉
@@ -144,7 +185,11 @@ export default function NotificationBell() {
   const toggle = useCallback(() => {
     setOpen((o) => {
       const next = !o;
-      if (next) setUnread(0);
+      if (next) {
+        setUnread(0);
+        // S1.4：展开即批量已读回执（服务端对账；失败静默，下次展开重试）。
+        void markRead({ before: new Date().toISOString() }).catch(() => {});
+      }
       return next;
     });
   }, []);
