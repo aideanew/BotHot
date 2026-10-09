@@ -94,3 +94,18 @@ git branch --show-current     # 当前分支
   禁止按目录清单凭记忆修——S3 迁移修了 CI/Makefile/compose/Dockerfile/tsconfig，
   却漏了 `scripts/gen_contracts.py` 与 `scripts/preflight.sh` 两个 `backend/` 消费方
   （后者还被 Makefile:118 消费），死脚本潜伏至 R0 取证才暴露。
+
+## 9. 推送前门禁纪律（2026-10-09 CI mypy 红沉淀）
+
+- **推送前必跑 `bash scripts/preflight.sh`**（Makefile 有 `make preflight` 便捷入口），
+  parity + 后端 ruff/mypy + 前端 frozen-lockfile/tsc/vitest 一次到位——工具早已就绪，
+  本次 CI 红不是工具缺失而是**没跑**。
+- **任何后端 `app/` 文件改动，推送前必须另跑后端 pytest 全量**（约 7 分钟，后台跑）：
+  `cd apps/api && DATABASE_URL=... AIDEANBOT_TEST_PG_DSN=... ./.venv/Scripts/python.exe -m pytest tests/ -q`。
+  preflight 覆盖静态检查但不含 pytest，静态全绿救不了行为回归。
+- **实证**：CI run 37878354413 唯一失败 step = backend mypy——8ed9308 QA 批改了
+  `app/services/auth/service.py`（新增 fixture 短路分支）却未跑 mypy，`local`
+  变量在两分支类型冲突（dict vs dict|None）潜伏 4 天，跨 3 次推送才在 CI 暴露。
+  083a6ed 修复：异常分支改名 `local_snapshot`。
+- **并行会话交错作业时加倍适用**：别人的提交同样在推送链上，你跑的 preflight
+  保护的是整条待推链，不是你自己的 diff。

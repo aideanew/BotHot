@@ -12,6 +12,52 @@ import NotificationBell from "@/components/NotificationBell";
  * 界面铁律：全页唯一搜索框，全局常驻；对齐主平台的顶部布局。
  * 用户区：未登录显示"未登录"；登录态显示昵称 + 退出按钮。
  */
+
+/** 私有导航项统一样式（authed 态与原实现逐字一致） */
+const PRIVATE_NAV_CLASS =
+  "rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900";
+
+/**
+ * G3.4（二期登记项落地）：私有导航项的会话态三形态。
+ * authed → 正常 Link；guest → 锁形徽标按钮（点击触发 login()，与 G3.1 登录入口同源）；
+ * loading → 不渲染（避免判定中闪徽标）。admin 项不在此列：它是权限门（is_admin），
+ * 对游客展示无意义，保持隐藏。
+ */
+function PrivateNavItem({
+  href,
+  label,
+  status,
+  login,
+}: {
+  href: string;
+  label: string;
+  status: "loading" | "guest" | "authed";
+  login: () => void;
+}) {
+  if (status === "authed") {
+    return (
+      <Link href={href} className={PRIVATE_NAV_CLASS}>
+        {label}
+      </Link>
+    );
+  }
+  if (status === "guest") {
+    return (
+      <button
+        type="button"
+        onClick={login}
+        title={`登录后可见：${label}`}
+        aria-label={`登录后可见：${label}`}
+        className={`${PRIVATE_NAV_CLASS} inline-flex items-center gap-0.5 text-neutral-400`}
+      >
+        <span aria-hidden="true">🔒</span>
+        {label}
+      </button>
+    );
+  }
+  return null;
+}
+
 export default function TopBar() {
   const router = useRouter();
   const { status, me, login, logout } = useAuth();
@@ -56,22 +102,8 @@ export default function TopBar() {
           >
             空间
           </Link>
-          {status !== "guest" && (
-          <Link
-            href="/subscriptions"
-            className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
-          >
-            订阅
-          </Link>
-          )}
-          {status !== "guest" && (
-          <Link
-            href="/jobs"
-            className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
-          >
-            任务
-          </Link>
-          )}
+          <PrivateNavItem href="/subscriptions" label="订阅" status={status} login={login} />
+          <PrivateNavItem href="/jobs" label="任务" status={status} login={login} />
           <Link
             href="/public"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
@@ -84,22 +116,8 @@ export default function TopBar() {
           >
             问答
           </Link>
-          {status !== "guest" && (
-          <Link
-            href="/engines"
-            className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
-          >
-            引擎
-          </Link>
-          )}
-          {status !== "guest" && (
-          <Link
-            href="/bots"
-            className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
-          >
-            机器人
-          </Link>
-          )}
+          <PrivateNavItem href="/engines" label="引擎" status={status} login={login} />
+          <PrivateNavItem href="/bots" label="机器人" status={status} login={login} />
           <Link
             href="/hot"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"

@@ -242,3 +242,31 @@ updated: 2026-10-08
 ### DOC-002：CHANGELOG.md 编写 ✅
 - **W5**：建初版（Keep-a-Changelog 格式，全部条目归入 `Unreleased`）
 - **WD 变更**：切分 `v0.4` / `v0.5` 版本段（均标注 2026-09-30），保留空的 `Unreleased` 承接增量
+
+### AUTHGATE-001~002：未登录守卫二期登记项（2026-10-09 裁定）
+
+#### AUTHGATE-001：TopBar guest 锁形徽标 ✅
+- **状态**：已落地（`components/TopBar.tsx` `PrivateNavItem`）
+- **契约**：四私有导航项（订阅/任务/引擎/机器人）三形态——authed → 正常 Link；
+  guest → 🔒 锁形徽标按钮（`title="登录后可见：X"`，点击直连 `login()`，与 G3.1 登录入口同源）；
+  loading → 不渲染（判定中不闪徽标）。admin 项不参与：它是 `is_admin` 权限门，
+  对游客展示无意义，保持隐藏。
+- **测试**：`tests/topbar-guest-nav.spec.tsx` 三用例（guest 徽标+login 触发+admin 隐藏 /
+  authed 恢复链接 / loading 不渲染）
+- **语义说明**：与「不锁死导航」裁定不冲突——徽标是登录引导不是锁死；公共库/热点引流位不受影响
+
+#### AUTHGATE-002：middleware cookie 存在性预拦截 ⬜→关闭（裁定不实施）
+- **裁定**：维持 AuthGate 方案，**不引入 Next middleware**（2026-10-09，双向论证后关闭）
+- **反方（不实施）四条**：
+  ① **语义冲突**——middleware 只能 302 改 URL，与已裁定并 e2e 锁定的「原地渲染保留
+     URL 上下文」（`e2e/auth-gate.spec.ts` 断言 URL 保留 `/spaces$`）直接冲突；
+     302 到 `/?next=` 需新造登录回跳链路，复杂化 `login()` 的 SSO redirect 语义
+  ② **能力上限**——cookie 存在性 ≠ 会话有效性：过期会话（有 cookie）仍穿透 middleware，
+     最终仍依赖 AuthContext 失败回落 + AuthGate 切卡；middleware 只解决「完全无 cookie」
+     这半个问题，而 AuthGate 已优雅覆盖
+  ③ **双源漂移**——受保护路径清单出现两份（matcher + 各页 AuthGate），新增页面漏改
+     matcher 即行为不一致，正是 v0.9 已裁定的双源漂移模式
+  ④ **收益边际**——仅省一次骨架闪烁，UX 感知改善微小，不值上述三条成本
+- **正方留档**：服务端拦截可省一次 `/auth/me` 往返、路径清单集中一处——两者均被
+  现有方案以更低成本覆盖（骨架卡本身即反馈；路径清单由 AuthGate 包裹天然就近）
+- **如重启条件**：未来若做 SSR 化受保护页（服务端取数），预拦截才有结构性价值

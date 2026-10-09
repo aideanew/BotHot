@@ -27,6 +27,11 @@
 - **TopBar guest 态增强（G3.1）**：新增"登录"按钮（与首页引导卡同源 login()）；
   未登录隐藏私有导航入口（订阅/任务/引擎/机器人；admin 既有 is_admin 门不变），
   公共引流位（公共库/热点/空间/问答）保持可见。
+- **TopBar guest 私有项改锁形徽标（G3.4，二期登记项落地，2026-10-09）**：四私有导航项
+  guest 态从隐藏改为 🔒 徽标按钮（`title="登录后可见：X"`，点击触发 login()），
+  authed 恢复正常链接，loading 不渲染；admin 项维持 is_admin 门对游客隐藏。
+  `tests/topbar-guest-nav.spec.tsx` 3 用例锁定三形态。middleware cookie 预拦截
+  经双向论证裁定不实施（语义冲突/能力上限/双源漂移/收益边际，见 backlog AUTHGATE-002）。
 - **trunk.spec ① 断言同步**：散装跳首页废除后，改断言 AuthGate 锚点文案可见。
 
 ### Fixed
