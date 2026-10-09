@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   ApiError,
   getDocIngestStatus,
@@ -16,7 +15,6 @@ const PAGE_SIZE = 50;
 const INGEST_POLL_MS = 4000;
 
 export function useSpaceDetail(spaceId: string) {
-  const router = useRouter();
   const { status } = useAuth();
   const [space, setSpace] = useState<SpaceDetail | null>(null);
   const [docs, setDocs] = useState<SpaceDoc[] | null>(null);
@@ -134,10 +132,6 @@ export function useSpaceDetail(spaceId: string) {
   }, [docs]);
 
   useEffect(() => {
-    if (status === "guest") router.replace("/");
-  }, [status, router]);
-
-  useEffect(() => {
     if (status !== "authed") return;
     let cancelled = false;
     setSpace(null);
@@ -166,7 +160,7 @@ export function useSpaceDetail(spaceId: string) {
       .catch((err: unknown) => {
         if (cancelled) return;
         if (err instanceof ApiError && isAuthError(err.code)) {
-          router.replace("/");
+          // 会话过期掉落：停在此页，AuthGate 随 status→guest 自动切卡（G2.3）
           return;
         }
         if (err instanceof ApiError && (err.code === 30101 || err.code === 10102)) {
@@ -176,7 +170,7 @@ export function useSpaceDetail(spaceId: string) {
         setErrorMsg(err instanceof Error ? err.message : "加载失败");
       });
     return () => { cancelled = true; };
-  }, [status, spaceId, reloadTick, router]);
+  }, [status, spaceId, reloadTick]);
 
   return {
     space, docs, total, categories,

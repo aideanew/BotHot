@@ -10,6 +10,7 @@ import {
   recategorizeAdminSpaceDocsBatch,
 } from "@/lib/api";
 import { usePageTitle } from "@/components/usePageTitle";
+import AuthGate from "@/components/AuthGate";
 
 export default function AdminPage() {
   const {
@@ -27,12 +28,10 @@ export default function AdminPage() {
   } = useAdminData();
   usePageTitle("管理后台");
 
+  // G2.3（修正）：未登录/判定中 → AuthGate 统一卡。必须先于 isAdmin 判定——
+  // guest 态 isAdmin 恒为 false，若不分层会把游客误导入「权限不足」卡。
   if (status !== "authed") {
-    return (
-      <main className="mx-auto max-w-5xl px-4 py-10">
-        <div className="card p-10 text-center text-neutral-500">正在加载…</div>
-      </main>
-    );
+    return <AuthGate>{null}</AuthGate>;
   }
 
   if (!isAdmin) {
@@ -72,6 +71,7 @@ export default function AdminPage() {
   }
 
   return (
+    <AuthGate>
     <main className="mx-auto max-w-5xl px-4 py-8">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
@@ -158,5 +158,6 @@ export default function AdminPage() {
 
       <AdminOpsSection />
     </main>
+    </AuthGate>
   );
 }

@@ -10,6 +10,25 @@
 
 ## [Unreleased]
 
+### Added
+
+- **AuthGate 统一未登录守卫（G1-G4，2026-10-10）**：`components/AuthGate.tsx` 三态渲染
+  （loading=骨架 / guest=统一提示卡"尚未登录或会话已过期"+登录按钮 / authed=children）；
+  `tests/auth-gate.spec.tsx` 4 用例（含 authed→guest 掉落自动切卡锁定）；
+  `e2e/auth-gate.spec.ts` 9 受保护页矩阵（原地渲染断言 + 404 不混淆用例）。
+
+### Changed
+
+- **九页未登录形态收敛（G2）**：废除六形态散装（subscriptions/jobs 白屏 null、
+  engines/public/bots 无守卫裸调 API（guest 态发 401 请求）、spaces/chat/onboarding/
+  spaces/[id] 散装 `router.replace("/")`、admin loading-guest 不分致游客误见
+  "权限不足"卡）——全部统一为 AuthGate 原地卡片，保留 URL 上下文；
+  guest 态数据请求门补齐（engines/public/bots/onboarding 的 load effect 加 authed 门）。
+- **TopBar guest 态增强（G3.1）**：新增"登录"按钮（与首页引导卡同源 login()）；
+  未登录隐藏私有导航入口（订阅/任务/引擎/机器人；admin 既有 is_admin 门不变），
+  公共引流位（公共库/热点/空间/问答）保持可见。
+- **trunk.spec ① 断言同步**：散装跳首页废除后，改断言 AuthGate 锚点文案可见。
+
 ### Fixed
 
 - **Security 工作流双红灯修复（CI run 37749240003 实证）**：

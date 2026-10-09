@@ -38,10 +38,6 @@ export function useAdminData() {
   const isAdmin = status === "authed" && me?.is_admin === true;
 
   useEffect(() => {
-    if (status === "guest") router.replace("/");
-  }, [status, router]);
-
-  useEffect(() => {
     if (!isAdmin) return;
     let cancelled = false;
     setSpaces(null);

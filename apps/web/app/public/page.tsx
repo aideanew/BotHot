@@ -13,6 +13,8 @@ import { useCallback, useEffect, useState } from "react";
 import LoadingErrorShell from "@/components/LoadingErrorShell";
 import PublicLibraryPicker from "@/components/PublicLibraryPicker";
 import { usePageTitle } from "@/components/usePageTitle";
+import { useAuth } from "@/components/AuthContext";
+import AuthGate from "@/components/AuthGate";
 import {
   ApiError,
   listPublicSpaces,
@@ -23,6 +25,7 @@ import {
 
 export default function PublicPage() {
   usePageTitle("公共 AI 库");
+  const { status } = useAuth();
   const [publicSpaces, setPublicSpaces] = useState<PublicSpace[]>([]);
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [selectedSpaceId, setSelectedSpaceId] = useState("");
@@ -48,11 +51,14 @@ export default function PublicPage() {
     }
   }, []);
 
+  // G2.2：guest 态不发请求（原 guest 直调 API → 401 错误壳，现由 AuthGate 统一提示）
   useEffect(() => {
+    if (status !== "authed") return;
     void load();
-  }, [load]);
+  }, [status, load]);
 
   return (
+    <AuthGate>
     <main className="mx-auto max-w-5xl px-4 py-8">
       <div className="mb-6">
         <p className="eyebrow">PUBLIC LIBRARY</p>
@@ -121,5 +127,6 @@ export default function PublicPage() {
         </>
       </LoadingErrorShell>
     </main>
+    </AuthGate>
   );
 }

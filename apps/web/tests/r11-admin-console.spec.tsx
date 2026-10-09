@@ -199,10 +199,11 @@ describe("后台管理台：门禁", () => {
     expect(h.listAdminSpaceDocs).not.toHaveBeenCalled();
   });
 
-  it("会话判定未完成（guest）：跳回首页，不渲染管理台内容", () => {
+  it("会话判定未完成（guest）：原地渲染 AuthGate 统一卡，不渲染管理台内容", () => {
+    // G4（2026-10-10）：散装跳首页已废除，guest 态由 AuthGate 统一提示卡承接
     h.auth.status = "guest";
     render(createElement(AdminPage));
-    expect(h.router.replace).toHaveBeenCalledWith("/");
+    expect(screen.getByText("尚未登录或会话已过期")).toBeTruthy();
     expect(screen.queryByText("全部空间")).toBeNull();
   });
 

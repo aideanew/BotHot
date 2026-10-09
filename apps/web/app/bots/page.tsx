@@ -29,6 +29,7 @@ import {
 } from "@/lib/api/bots";
 import { usePageTitle } from "@/components/usePageTitle";
 import { useAuth } from "@/components/AuthContext";
+import AuthGate from "@/components/AuthGate";
 
 const PushTasksTab = dynamic(() => import("@/components/PushTasksTab"), {
   loading: () => <div className="py-12 text-center text-gray-500">加载推送任务...</div>,
@@ -53,7 +54,7 @@ const STATUS_LABELS: Record<string, string> = {
 export default function BotsPage() {
   // W4 4.1：页面拆为「推送渠道 / 推送任务」两个 Tab
   const [activeTab, setActiveTab] = useState<"channels" | "tasks">("channels");
-  const { me } = useAuth();
+  const { me, status } = useAuth();
   const [channels, setChannels] = useState<BotChannel[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -98,13 +99,16 @@ export default function BotsPage() {
     }
   }, [page]);
 
+  // G2.2：guest 态不发请求（AuthGate 渲染层拦截 + 此处数据门双保险）
   useEffect(() => {
+    if (status !== "authed") return;
     fetchChannels();
-  }, [fetchChannels]);
+  }, [fetchChannels, status]);
 
   useEffect(() => {
+    if (status !== "authed") return;
     listChannelTypes().then(setChannelTypes).catch(() => {});
-  }, []);
+  }, [status]);
 
   usePageTitle("机器人渠道管理");
 
@@ -205,6 +209,7 @@ export default function BotsPage() {
   };
 
   return (
+    <AuthGate>
     <div className="mx-auto max-w-5xl p-6">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">机器人渠道管理</h1>
@@ -509,5 +514,6 @@ export default function BotsPage() {
         </>
       )}
     </div>
+    </AuthGate>
   );
 }

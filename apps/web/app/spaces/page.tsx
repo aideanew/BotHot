@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   ApiError,
   createSpace,
@@ -13,6 +12,7 @@ import {
 import { useAuth } from "@/components/AuthContext";
 import { formatTime } from "@/components/DocStatusBadge";
 import { usePageTitle } from "@/components/usePageTitle";
+import AuthGate from "@/components/AuthGate";
 
 /**
  * 知识空间列表页（C-T3）
@@ -20,7 +20,6 @@ import { usePageTitle } from "@/components/usePageTitle";
  * 未登录访问跳回首页引导卡（与 C-T2 行为一致）。
  */
 export default function SpacesPage() {
-  const router = useRouter();
   const { status } = useAuth();
   usePageTitle("知识空间");
   const [spaces, setSpaces] = useState<Space[] | null>(null);
@@ -33,13 +32,6 @@ export default function SpacesPage() {
   const [newDescription, setNewDescription] = useState("");
   const [creatingBusy, setCreatingBusy] = useState(false);
   const [createError, setCreateError] = useState("");
-
-  // 未登录（含判定完成后的 guest）→ 跳回首页引导卡
-  useEffect(() => {
-    if (status === "guest") {
-      router.replace("/");
-    }
-  }, [status, router]);
 
   // 登录态加载列表
   useEffect(() => {
@@ -54,7 +46,7 @@ export default function SpacesPage() {
       .catch((err: unknown) => {
         if (cancelled) return;
         if (err instanceof ApiError && isAuthError(err.code)) {
-          router.replace("/");
+          // 会话过期掉落：停在此页，AuthGate 随 status→guest 自动切卡（G2.3）
           return;
         }
         setErrorMsg(err instanceof Error ? err.message : "加载失败");
@@ -63,16 +55,7 @@ export default function SpacesPage() {
     return () => {
       cancelled = true;
     };
-  }, [status, reloadTick, router]);
-
-  // 未登录跳转进行中
-  if (status !== "authed") {
-    return (
-      <main className="mx-auto max-w-5xl px-4 py-10">
-        <div className="card p-10 text-center text-neutral-500">正在加载…</div>
-      </main>
-    );
-  }
+  }, [status, reloadTick]);
 
   /** 新建空间（R0.5：/spaces 补 create 入口，与 delete 入口对称） */
   const handleCreateSpace = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -128,6 +111,7 @@ export default function SpacesPage() {
   };
 
   return (
+    <AuthGate>
     <main className="page-shell">
       <section className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div>
@@ -301,5 +285,6 @@ export default function SpacesPage() {
         </section>
       )}
     </main>
+    </AuthGate>
   );
 }

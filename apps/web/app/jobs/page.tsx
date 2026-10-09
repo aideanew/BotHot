@@ -12,6 +12,7 @@ import {
   networkPauseMessage,
 } from "@/lib/api";
 import { usePageTitle } from "@/components/usePageTitle";
+import AuthGate from "@/components/AuthGate";
 
 export default function JobsPage() {
   const {
@@ -25,11 +26,12 @@ export default function JobsPage() {
   } = useJobsList();
   usePageTitle("任务中心");
 
-  if (authStatus !== "authed") return null;
-
+  // G2.1：guest 态由 AuthGate 统一渲染提示卡（原 `return null` 整页白屏已废除）；
+  // hook 层 authStatus 门保证 guest 不发请求。
   const target = items.find((j) => j.jobId === pendingCancel);
 
   return (
+    <AuthGate>
     <main className="mx-auto max-w-5xl px-4 py-8">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -128,5 +130,6 @@ export default function JobsPage() {
         }}
       />
     </main>
+    </AuthGate>
   );
 }

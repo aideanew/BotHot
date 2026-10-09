@@ -14,7 +14,7 @@ import NotificationBell from "@/components/NotificationBell";
  */
 export default function TopBar() {
   const router = useRouter();
-  const { status, me, logout } = useAuth();
+  const { status, me, login, logout } = useAuth();
   const [keyword, setKeyword] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -56,18 +56,22 @@ export default function TopBar() {
           >
             空间
           </Link>
+          {status !== "guest" && (
           <Link
             href="/subscriptions"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
           >
             订阅
           </Link>
+          )}
+          {status !== "guest" && (
           <Link
             href="/jobs"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
           >
             任务
           </Link>
+          )}
           <Link
             href="/public"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
@@ -80,18 +84,22 @@ export default function TopBar() {
           >
             问答
           </Link>
+          {status !== "guest" && (
           <Link
             href="/engines"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
           >
             引擎
           </Link>
+          )}
+          {status !== "guest" && (
           <Link
             href="/bots"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
           >
             机器人
           </Link>
+          )}
           <Link
             href="/hot"
             className="rounded px-2 py-1 text-caption text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
@@ -131,7 +139,16 @@ export default function TopBar() {
             <span className="text-caption text-neutral-400">判定中…</span>
           )}
           {status === "guest" && (
-            <span className="text-caption text-neutral-400">未登录</span>
+            <>
+              <span className="text-caption text-neutral-400">未登录</span>
+              {/* G3.1：TopBar 直连 login()（mock 态写标记 reload / 真实态跳 SSO），与首页引导卡同源 */}
+              <button
+                onClick={login}
+                className="shrink-0 rounded-input bg-brand-500 px-2.5 py-1 text-caption text-white transition hover:bg-brand-600"
+              >
+                登录
+              </button>
+            </>
           )}
           {status === "authed" && me && (
             <>

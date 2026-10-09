@@ -50,14 +50,17 @@ test.describe.serial("mock 主干回归", () => {
     expect(consoleErrors, "console 不应出现 error").toEqual([]);
   });
 
-  test("① 未登录访问受保护页跳回首页引导卡", async ({ page }) => {
+  test("① 未登录访问受保护页显示统一 AuthGate 卡片", async ({ page }) => {
+    // G4（2026-10-10）：原断言为「URL 跳回首页」，散装重定向已废除——
+    // 全部受保护页统一原地渲染 AuthGate 卡（锚点文案 + 登录按钮），不跳转。
     await page.goto("/spaces");
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByText("尚未登录或会话已过期")).toBeVisible();
     await expect(page.getByRole("button", { name: /使用主平台账号登录/ })).toBeVisible();
+    await expect(page).toHaveURL(/\/spaces$/);
 
     await page.goto("/chat");
-    await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole("button", { name: /使用主平台账号登录/ })).toBeVisible();
+    await expect(page.getByText("尚未登录或会话已过期")).toBeVisible();
+    await expect(page).toHaveURL(/\/chat$/);
   });
 
   test("② 登录 → 首页已登录（昵称 + 退出）", async ({ page }) => {

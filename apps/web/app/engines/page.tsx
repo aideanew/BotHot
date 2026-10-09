@@ -12,6 +12,8 @@ import { useCallback, useEffect, useState } from "react";
 import EngineSwitcher from "@/components/EngineSwitcher";
 import LoadingErrorShell from "@/components/LoadingErrorShell";
 import { usePageTitle } from "@/components/usePageTitle";
+import { useAuth } from "@/components/AuthContext";
+import AuthGate from "@/components/AuthGate";
 import { ApiError, listEngines, listSpaces, type EngineItem, type Space } from "@/lib/api";
 
 function statusDot(e: EngineItem): { cls: string; label: string } {
@@ -23,6 +25,7 @@ function statusDot(e: EngineItem): { cls: string; label: string } {
 
 export default function EnginesPage() {
   usePageTitle("知识引擎");
+  const { status } = useAuth();
   const [engines, setEngines] = useState<EngineItem[]>([]);
   const [defaultEngine, setDefaultEngine] = useState("builtin");
   const [spaces, setSpaces] = useState<Space[]>([]);
@@ -50,13 +53,16 @@ export default function EnginesPage() {
     }
   }, []);
 
+  // G2.2：guest 态不发请求（原 guest 直调 API → 401 错误壳，现由 AuthGate 统一提示）
   useEffect(() => {
+    if (status !== "authed") return;
     void load();
-  }, [load]);
+  }, [status, load]);
 
   const selectedSpace = spaces.find((s) => s.id === selectedSpaceId) ?? null;
 
   return (
+    <AuthGate>
     <main className="mx-auto max-w-5xl px-4 py-8">
       <div className="mb-6">
         <p className="eyebrow">ENGINES</p>
@@ -135,5 +141,6 @@ export default function EnginesPage() {
         </>
       </LoadingErrorShell>
     </main>
+    </AuthGate>
   );
 }

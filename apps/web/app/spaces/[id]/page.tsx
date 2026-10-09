@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, use } from "react";
-import { useAuth } from "@/components/AuthContext";
+import AuthGate from "@/components/AuthGate";
 import { useSpaceDetail } from "@/components/useSpaceDetail";
 import { usePageTitle } from "@/components/usePageTitle";
 import SpaceHeaderPanel from "@/components/SpaceHeaderPanel";
@@ -18,6 +18,7 @@ export default function SpaceDetailPage({
   params: Promise<{ id: string }>;
 }) {
   return (
+    <AuthGate>
     <Suspense
       fallback={
         <main className="mx-auto max-w-5xl px-4 py-10">
@@ -27,12 +28,12 @@ export default function SpaceDetailPage({
     >
       <SpaceDetailContent params={params} />
     </Suspense>
+    </AuthGate>
   );
 }
 
 function SpaceDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { status } = useAuth();
   const {
     space, docs, total, categories,
     loadingMore, notFound, errorMsg,
@@ -41,14 +42,6 @@ function SpaceDetailContent({ params }: { params: Promise<{ id: string }> }) {
     loadMore, toggleSelected,
   } = useSpaceDetail(id);
   usePageTitle(space ? `${space.name}` : "空间详情");
-
-  if (status !== "authed") {
-    return (
-      <main className="mx-auto max-w-5xl px-4 py-10">
-        <div className="card p-10 text-center text-neutral-500">正在加载…</div>
-      </main>
-    );
-  }
 
   if (notFound) {
     return (

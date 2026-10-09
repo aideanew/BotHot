@@ -4,6 +4,7 @@ import { useSubscriptions } from "@/components/useSubscriptions";
 import SubscriptionCard from "@/components/SubscriptionCard";
 import { POLL_NET_FAIL_THRESHOLD, networkPauseMessage } from "@/lib/api";
 import { usePageTitle } from "@/components/usePageTitle";
+import AuthGate from "@/components/AuthGate";
 
 export default function SubscriptionPage() {
   const {
@@ -16,9 +17,10 @@ export default function SubscriptionPage() {
   } = useSubscriptions();
   usePageTitle("订阅管理");
 
-  if (status !== "authed") return null;
-
+  // G2.1：guest 态由 AuthGate 统一渲染提示卡（原 `return null` 整页白屏已废除）；
+  // hook 层 status 门保证 guest 不发请求。
   return (
+    <AuthGate>
     <main className="mx-auto max-w-5xl px-4 py-8">
       <div className="mb-6">
         <p className="eyebrow">SUBSCRIPTIONS</p>
@@ -96,5 +98,6 @@ export default function SubscriptionPage() {
         )}
       </section>
     </main>
+    </AuthGate>
   );
 }

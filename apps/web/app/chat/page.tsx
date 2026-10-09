@@ -13,6 +13,7 @@ import AskInputBar from "@/components/chat/AskInputBar";
 import ChatMessageList from "@/components/chat/ChatMessageList";
 import { useSseAsk } from "@/components/chat/useSseAsk";
 import { usePageTitle } from "@/components/usePageTitle";
+import AuthGate from "@/components/AuthGate";
 
 /**
  * 聊天页（C-T4，重写 C-T1 占位壳；R0.6.1 拆分为
@@ -41,15 +42,9 @@ function ChatPageInner() {
 
   const { messages, asking, input, setInput, ask, retry, reset } = useSseAsk({
     spaceId,
-    onUnauthorized: () => router.replace("/"),
+    // 会话过期掉落：停在此页，AuthGate 随 status→guest 自动切卡（G2.3），不再跳首页
+    onUnauthorized: () => {},
   });
-
-  // 未登录跳回首页引导卡
-  useEffect(() => {
-    if (status === "guest") {
-      router.replace("/");
-    }
-  }, [status, router]);
 
   // 登录态加载空间列表；?q= 记为首问（只记一次）
   useEffect(() => {
@@ -109,15 +104,6 @@ function ChatPageInner() {
     firstQuestionRef.current = null;
     setSpaceId(switchTarget);
     setSwitchTarget(null);
-  }
-
-  // 未登录跳转进行中
-  if (status !== "authed") {
-    return (
-      <main className="mx-auto max-w-3xl px-4 py-10">
-        <div className="card p-10 text-center text-neutral-500">正在加载…</div>
-      </main>
-    );
   }
 
   return (
@@ -217,6 +203,7 @@ function ChatPageInner() {
  */
 export default function ChatPage() {
   return (
+    <AuthGate>
     <Suspense
       fallback={
         <main className="mx-auto max-w-3xl px-4 py-10 text-center text-neutral-500">
@@ -226,5 +213,6 @@ export default function ChatPage() {
     >
       <ChatPageInner />
     </Suspense>
+    </AuthGate>
   );
 }

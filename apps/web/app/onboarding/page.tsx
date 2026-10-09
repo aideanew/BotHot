@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import {
+import { useRouter } from "next/navigation";import {
   ApiError,
   listEngines,
   createSpace,
@@ -10,6 +9,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/components/AuthContext";
 import { usePageTitle } from "@/components/usePageTitle";
+import AuthGate from "@/components/AuthGate";
 import StepIndicator from "@/components/onboarding/StepIndicator";
 import StepPanels from "@/components/onboarding/StepPanels";
 import { STEPS, type OnboardingProgress } from "@/components/onboarding/types";
@@ -89,17 +89,13 @@ export default function OnboardingPage() {
     setResumed(true);
   }, []);
 
-  // 未登录 → 回首页引导卡（不白屏）
+  // 引擎位列表（失败回落内置引擎单选项，不阻断第 1 步）；G2.3：guest 态不发请求
   useEffect(() => {
-    if (status === "guest") router.replace("/");
-  }, [status, router]);
-
-  // 引擎位列表（失败回落内置引擎单选项，不阻断第 1 步）
-  useEffect(() => {
+    if (status !== "authed") return;
     listEngines()
       .then((d) => setEngines(d.items))
       .catch(() => {});
-  }, []);
+  }, [status]);
 
   function save(next: OnboardingProgress) {
     setProgress(next);
@@ -142,17 +138,10 @@ export default function OnboardingPage() {
     router.push(progress ? `/chat?q=${encodeURIComponent("这个知识库里有哪些内容？")}` : "/chat");
   }
 
-  if (status !== "authed") {
-    return (
-      <main className="mx-auto max-w-3xl px-4 py-10">
-        <div className="card p-10 text-center text-neutral-500">正在加载…</div>
-      </main>
-    );
-  }
-
   const step = progress?.step ?? 1;
 
   return (
+    <AuthGate>
     <main className="mx-auto max-w-3xl px-4 py-10">
       <p className="eyebrow">GET STARTED</p>
       <h1 className="mt-1 text-title-lg font-semibold text-neutral-900">
@@ -193,5 +182,6 @@ export default function OnboardingPage() {
         断点记录保存在本浏览器本地；GET /api/v1/onboarding/steps 现为静态快照，按用户进度同步待后端化（大纲 5.2.4）。
       </p>
     </main>
+    </AuthGate>
   );
 }
