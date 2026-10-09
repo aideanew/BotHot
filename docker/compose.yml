@@ -235,7 +235,7 @@ services:
     # 零门禁存活探针（`/api/v1/system/health` 无鉴权无依赖，进程活着即 200），
     # 供 worker/scheduler 以 service_healthy 排序；镜像内无 curl，故用 python 自带 urllib
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3300/api/v1/system/health', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3300/api/v1/system/health', timeout=4)"]
       interval: 10s
       timeout: 5s
       retries: 12
