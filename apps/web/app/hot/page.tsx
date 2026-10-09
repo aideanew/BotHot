@@ -18,6 +18,7 @@ import {
 } from "@/lib/api/hot";
 import { usePageTitle } from "@/components/usePageTitle";
 import { useAuth } from "@/components/AuthContext";
+import AuthGate from "@/components/AuthGate";
 import Pagination from "@/components/Pagination";
 
 const ITEM_TYPE_LABELS: Record<string, string> = {
@@ -143,6 +144,7 @@ export default function HotPage() {
   const maxScore = topics.reduce((m, t) => Math.max(m, t.hot_score), 0);
 
   return (
+    <AuthGate>
     <div className="mx-auto max-w-4xl p-6">
       <div className="mb-6 flex items-start justify-between">
         <div>
@@ -363,5 +365,6 @@ export default function HotPage() {
         />
       )}
     </div>
+    </AuthGate>
   );
 }

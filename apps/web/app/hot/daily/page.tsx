@@ -19,6 +19,7 @@ import {
   type DailyReportDetail,
 } from "@/lib/api/hot";
 import { usePageTitle } from "@/components/usePageTitle";
+import AuthGate from "@/components/AuthGate";
 import Pagination from "@/components/Pagination";
 
 const ReactMarkdown = dynamic(() => import("react-markdown"), {
@@ -86,6 +87,7 @@ export default function DailyReportPage() {
   };
 
   return (
+    <AuthGate>
     <div className="mx-auto max-w-4xl p-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -191,5 +193,6 @@ export default function DailyReportPage() {
         </div>
       </div>
     </div>
+    </AuthGate>
   );
 }
