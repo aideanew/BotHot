@@ -42,44 +42,9 @@ x-hardened: &hardened
     - no-new-privileges:true
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: bothot-postgres
-    restart: unless-stopped
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:-bothot}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-bothot}
-      - POSTGRES_DB=${POSTGRES_DB:-bothot}
-      - TZ=Asia/Shanghai
-    ports:
-      - "5433:5432"
-    logging: *default_logging
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bothot}"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  redis:
-    image: redis:7-alpine
-    container_name: bothot-redis
-    restart: unless-stopped
-    logging: *default_logging
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-    ports:
-      - "6380:6379"
-    volumes:
-      - redisdata:/data
-
+  # ── 底座迁移说明（2026-10-09 共享基础设施合并）：postgres / redis 已从本栈移除，
+  #    统一由 E:\Code\Aidean\docker\shared-infra 提供（PG 宿主 5435 / Redis 宿主 6379）。
+  #    本栈经 host.docker.internal 访问：bothot 库 + Redis DB index 1。
   langbot_plugin_runtime:
     image: rockchin/langbot:latest
     container_name: bothot-langbot-plugin-rt
@@ -130,8 +95,8 @@ services:
       - http_proxy=${PROXY_HTTP:-http://host.docker.internal:10808}
       - https_proxy=${PROXY_HTTP:-http://host.docker.internal:10808}
       # 国内服务直连不走代理（分层网络规范 L4；space.langbot.app 市场为国外服务走代理）
-      - NO_PROXY=localhost,127.0.0.1,postgres,redis,host.docker.internal,.siliconflow.cn,api.siliconflow.cn,redfox.hk
-      - no_proxy=localhost,127.0.0.1,postgres,redis,host.docker.internal,.siliconflow.cn,api.siliconflow.cn,redfox.hk
+      - NO_PROXY=localhost,127.0.0.1,host.docker.internal,.siliconflow.cn,api.siliconflow.cn,redfox.hk
+      - no_proxy=localhost,127.0.0.1,host.docker.internal,.siliconflow.cn,api.siliconflow.cn,redfox.hk
     ports:
       - "5300:5300"
     volumes:
@@ -189,8 +154,8 @@ services:
       - APP_ENV=development
       # W6 A.4：read_only 根文件树下禁止写 __pycache__，须禁字节码（apps/api/scheduler/worker 共用）
       - PYTHONDONTWRITEBYTECODE=1
-      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-bothot}:${POSTGRES_PASSWORD:-bothot}@postgres:5432/${POSTGRES_DB:-bothot}
-      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+psycopg://bothot_rw:bothot_rw_2026@host.docker.internal:5435/bothot
+      - REDIS_URL=redis://host.docker.internal:6379/1
       # T1.5.1（G9，2026-09-22）：会话/state 存储切 Redis（多实例部署与会话持久前置）；
       # 宿主裸跑开发（无 redis_url 可达）时保持代码默认 memory，不写本键即可
       - SESSION_STORE_BACKEND=${SESSION_STORE_BACKEND:-redis}
@@ -260,13 +225,11 @@ services:
       # NO_PROXY 含 langbot（A-T5 容器级冒烟实证 2026-09-08）：内网别名从宿主代理
       # (10808) 视角不可解析，漏列会让 backend→LangBot 直连被劫持进代理后断连
       # （RemoteProtocolError）——此前真实 LangBot 测试均在宿主侧跑，未触达此路径。
-      - NO_PROXY=localhost,127.0.0.1,postgres,redis,backend,frontend,langbot,host.docker.internal,.siliconflow.cn,api.siliconflow.cn,redfox.hk
-      - no_proxy=localhost,127.0.0.1,postgres,redis,backend,frontend,langbot,host.docker.internal,.siliconflow.cn,api.siliconflow.cn,redfox.hk
+      - NO_PROXY=localhost,127.0.0.1,backend,frontend,langbot,host.docker.internal,.siliconflow.cn,api.siliconflow.cn,redfox.hk
+      - no_proxy=localhost,127.0.0.1,backend,frontend,langbot,host.docker.internal,.siliconflow.cn,api.siliconflow.cn,redfox.hk
     ports:
       - "3300:3300"
     depends_on:
-      postgres:
-        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     # 零门禁存活探针（`/api/v1/system/health` 无鉴权无依赖，进程活着即 200），
@@ -309,9 +272,7 @@ services:
         limits:
           memory: 256M
     environment: *backend_env
-    depends_on:
-      postgres:
-        condition: service_healthy
+    # postgres 底座已移除（shared-infra 常驻），无需再等其 healthcheck
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: ["python", "-m", "alembic", "upgrade", "head"]
@@ -342,8 +303,6 @@ services:
           memory: 384M
     environment: *backend_env
     depends_on:
-      postgres:
-        condition: service_healthy
       migrate:
         condition: service_completed_successfully
       # 文档状态推进直连 LangBot 文件清单；同 worker 只取 service_started（langbot 无
@@ -389,8 +348,6 @@ services:
           memory: 512M
     environment: *backend_env
     depends_on:
-      postgres:
-        condition: service_healthy
       migrate:
         condition: service_completed_successfully
       # 真实前置是 LangBot 而非 backend：worker 逐篇推 `langbot:5300`，backend 不是
@@ -454,8 +411,6 @@ services:
       - backend
 
 volumes:
-  pgdata:
-  redisdata:
   langbot_data:
   langbot_plugins:
 
