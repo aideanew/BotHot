@@ -226,16 +226,18 @@ class AuthService:
                 info = await self._client.userinfo(record.access_token)
             wallet = await self._client.wallet(record.sub)  # 实时查询，不落库
         except DependencyUnavailableError:
-            local = await self._local_profile(record.sub)
-            if local is None:
+            # mypy：不可与上方 fixture 短路分支的 local（已推断为 dict）同名，
+            # 此处 _local_profile 允许 None，需独立变量避免 [assignment] 冲突
+            local_snapshot = await self._local_profile(record.sub)
+            if local_snapshot is None:
                 raise
             return {
                 "user": {
                     "sub": record.sub,
-                    "email": local["email"],
-                    "nickname": local["nickname"],
+                    "email": local_snapshot["email"],
+                    "nickname": local_snapshot["nickname"],
                     "tier": "",
-                    "role": local["role"],
+                    "role": local_snapshot["role"],
                     # is_admin 取自本地 users.role，主平台不可达不影响判定
                     "is_admin": await self._is_admin(record.sub),
                 },
