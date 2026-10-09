@@ -204,7 +204,7 @@ services:
       - AIDEAN_PUBLIC_URL=${AIDEAN_PUBLIC_URL:-http://localhost:3000}
       - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-wechat-rag}
       # A-T18: SSO redirect_uri must hit Host-DB whitelist (oidc_clients.redirect_uris[1])
-      - OIDC_REDIRECT_URI=${OIDC_REDIRECT_URI:-http://localhost:3333/auth/aidean/callback}
+      - OIDC_REDIRECT_URI=${OIDC_REDIRECT_URI:-http://localhost:3200/auth/aidean/callback}
       - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-change-me}
       - LANGBOT_BASE_URL=http://langbot:5300
       - LANGBOT_API_KEY=${LANGBOT_API_KEY:-}
@@ -449,8 +449,7 @@ services:
       - BACKEND_ORIGIN=http://backend:3300
     ports:
       # 端口准则（AGENTS.md）：3000 归主平台，frontend 宿主侧统一 3200（容器内仍 3000）。
-      # 2026-10-08 手动测试临时改 3333（宿主 3200 被他项目占用）；测试完回填 3200。
-      - "3333:3000"
+      - "3200:3000"
     depends_on:
       - backend
 
