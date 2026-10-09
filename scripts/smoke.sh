@@ -22,8 +22,14 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
-COMPOSE_FILE="${COMPOSE_FILE:-docker/compose.yml}"
-COMPOSE="docker compose -f ${COMPOSE_FILE}"
+# COMPOSE_FILE 支持冒号分隔的多文件叠加（compose v2 原生语义，CI 冒烟用：
+# docker/compose.yml:docker/compose.ci.yml）；此时依赖 env 本身解析，不再追加 -f
+if [ -n "${COMPOSE_FILE:-}" ]; then
+  COMPOSE="docker compose"
+else
+  COMPOSE_FILE="docker/compose.yml"
+  COMPOSE="docker compose -f ${COMPOSE_FILE}"
+fi
 HEALTH_URL="${HEALTH_URL:-http://localhost:3300/api/v1/system/health}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-120}"      # 轮询总超时（秒）
 HEARTBEAT_MAX_AGE="${HEARTBEAT_MAX_AGE:-300}" # 与 compose 的 healthcheck --max-age 同口径

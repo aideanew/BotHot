@@ -1,0 +1,48 @@
+# CI 冒烟专用叠加（compose-smoke job 专用，勿在本地叠加）
+#
+# 存在理由（2026-10-09）：共享底座迁移（01f6892）把 postgres/redis 从主 compose
+# 移出、backend env 硬编码指向 host.docker.internal:5435/6379——该地址在 GitHub
+# runner 上不存在，compose-smoke 的「Start core services」引用已删除的
+# postgres/redis 服务也直接报 no such service。本文件在 CI 侧：
+#   1) 回补栈内 postgres/redis（与主 compose 移除前的口径一致：bothot/bothot/bothot）；
+#   2) 把 backend / migrate / scheduler / worker 的 DATABASE_URL / REDIS_URL
+#      覆盖为栈内地址（compose 对 environment 按变量名逐键合并，此处键覆盖主文件）；
+#   3) QA fixture 前缀显式置空（CI 无手测需求，生产守卫口径一致）。
+#
+# 用法（CI）：docker compose -f docker/compose.yml -f docker/compose.ci.yml ...
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=bothot
+      - POSTGRES_PASSWORD=bothot
+      - POSTGRES_DB=bothot
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bothot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+
+  backend:
+    environment:
+      - DATABASE_URL=postgresql+psycopg://bothot:bothot@postgres:5432/bothot
+      - REDIS_URL=redis://redis:6379/1
+      - QA_FIXTURE_TOKEN_PREFIX=
+
+  migrate:
+    environment:
+      - DATABASE_URL=postgresql+psycopg://bothot:bothot@postgres:5432/bothot
+      - REDIS_URL=redis://redis:6379/1
+
+  scheduler:
+    environment:
+      - DATABASE_URL=postgresql+psycopg://bothot:bothot@postgres:5432/bothot
+      - REDIS_URL=redis://redis:6379/1
+
+  worker:
+    environment:
+      - DATABASE_URL=postgresql+psycopg://bothot:bothot@postgres:5432/bothot
+      - REDIS_URL=redis://redis:6379/1

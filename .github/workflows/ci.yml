@@ -347,28 +347,32 @@ jobs:
   compose-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # 共享底座迁移（01f6892）后，主 compose 无 postgres/redis、backend env 指向
+    # host.docker.internal（runner 上不存在）——CI 用 compose.ci.yml 叠加回补栈内
+    # 底座并覆盖连接 env。所有 compose 命令必须带 -f 双文件，顺序不可反。
     steps:
       - uses: actions/checkout@v4
       - name: Validate compose config
-        run: docker compose -f docker/compose.yml config --quiet
+        run: docker compose -f docker/compose.yml -f docker/compose.ci.yml config --quiet
       - name: Generate ephemeral master keys
         run: |
           echo "PUSH_SECRET_MASTER_KEY=$(python3 -c 'import base64,os;print(base64.b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
           echo "ENGINE_KEY_MASTER_KEY=$(python3 -c 'import base64,os;print(base64.b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
       - name: Build backend image
-        run: docker compose -f docker/compose.yml build backend
+        run: docker compose -f docker/compose.yml -f docker/compose.ci.yml build backend
       - name: Start core services
         run: |
-          docker compose -f docker/compose.yml up -d \
+          docker compose -f docker/compose.yml -f docker/compose.ci.yml up -d \
             postgres redis langbot langbot_plugin_runtime migrate backend scheduler worker
-          docker compose -f docker/compose.yml ps
+          docker compose -f docker/compose.yml -f docker/compose.ci.yml ps
       - name: Smoke (health + scheduler/worker heartbeat)
         run: bash scripts/smoke.sh
         env:
           SKIP_UP: "1"
+          COMPOSE_FILE: "docker/compose.yml:docker/compose.ci.yml"
           # 显式非严格：CI 无 LangBot 业务配置，/health 允许 status=degraded；
           # 本 job 只对「HTTP 200 且信封 code==0」+ 心跳新鲜度负责。
           SMOKE_STRICT: "0"
       - name: Dump compose logs on failure
         if: failure()
-        run: docker compose -f docker/compose.yml logs --no-color --tail=200
+        run: docker compose -f docker/compose.yml -f docker/compose.ci.yml logs --no-color --tail=200

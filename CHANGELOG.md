@@ -329,3 +329,20 @@
 - **禁止把未实现或仅计划中的功能写进来**——本仓库的历史问题是文档虚报状态，
   条目须能被 `git log` 或代码实证核对。
 - 发布时把 `Unreleased` 段落改名成 `## [x.y.z] - YYYY-MM-DD`，并新增空的 `Unreleased`。
+
+### Fixed
+
+- **middleware mock 构建短路（2026-10-09，修 CI frontend job e2e 全红）**：全局认证守卫
+  middleware（01f6892 引入）硬查 `bothot_session` cookie，而 mock 态登录存 localStorage
+  无 cookie——mock 已登录用户也被 307 弹回首页。加 `NEXT_PUBLIC_API_MOCK` 构建期内联
+  判定，mock 产物整体跳过 middleware；真实态路由层守卫不变。
+- **compose-smoke 共享底座适配（2026-10-09，修 CI compose-smoke job）**：底座迁移后主
+  compose 无 postgres/redis、backend env 指向 runner 上不存在的 host.docker.internal；
+  新增 `docker/compose.ci.yml` CI 专用叠加（回补栈内 PG/Redis + 覆盖 backend/migrate/
+  scheduler/worker 连接 env），smoke.sh 支持 `COMPOSE_FILE` 多文件叠加。
+- **backend healthcheck 探针超时 2s→4s（2026-10-09）**：/health 的 LangBot 探测固定
+  等满 3s，探针 2s 客户端侧先超时致容器恒 unhealthy；4s 覆盖探测上限且低于 compose
+  层 5s。
+- **frontend 容器 CMD 摘除 runtime corepack 依赖（2026-10-09）**：`pnpm start` 触发
+  corepack 现场下载 pnpm，运行时坏代理 env 下 fetch 失败崩溃循环；改直用
+  `node_modules/.bin/next start`，runner 零外网依赖。

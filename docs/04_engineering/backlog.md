@@ -270,3 +270,13 @@ updated: 2026-10-08
 - **正方留档**：服务端拦截可省一次 `/auth/me` 往返、路径清单集中一处——两者均被
   现有方案以更低成本覆盖（骨架卡本身即反馈；路径清单由 AuthGate 包裹天然就近）
 - **如重启条件**：未来若做 SSR 化受保护页（服务端取数），预拦截才有结构性价值
+
+> **AUTHGATE-002 状态更新（2026-10-09 下午，CodingHeader 推翻裁定）**：middleware 已由
+> 并行会话实现入库（`01f6892`，全局认证守卫 + hot/daily 页 AuthGate 接入 `2766d17`），
+> 路由层与渲染层形成双层保护。本会话仅补两个 CI 实证缺陷：
+> ① mock 构建短路——mock 态登录存 localStorage 无 cookie，middleware 硬查 cookie 会把
+>    mock 已登录用户也 307 弹回首页（mock e2e 全红根因），已加 `NEXT_PUBLIC_API_MOCK`
+>    构建期内联判定，仅真实态生效；
+> ② compose-smoke 适配——共享底座在 runner 不存在，新增 `docker/compose.ci.yml` 叠加
+>    （回补栈内 PG/Redis + 覆盖四服务连接 env），smoke.sh 支持 COMPOSE_FILE 多文件叠加。
+> 「原地渲染保留 URL」契约在真实态被 redirect 语义取代，相关 e2e 断言以 mock 层为准。
