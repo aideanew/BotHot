@@ -36,6 +36,14 @@ services:
     environment:
       - DATABASE_URL=postgresql+psycopg://bothot:bothot@postgres:5432/bothot
       - REDIS_URL=redis://redis:6379/1
+    # 底座迁移时主 compose 删掉了 migrate 对 postgres 的依赖（迁移期本地底座常驻，
+    # 无竞态）；CI 里 postgres 是新拉的容器，必须等健康再跑 alembic——
+    # 2026-10-09 CI 实证：migrate 抢跑 connection refused → exit 1 → up 整体失败
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   scheduler:
     environment:
