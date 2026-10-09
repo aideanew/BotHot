@@ -159,6 +159,8 @@ services:
       # T1.5.1（G9，2026-09-22）：会话/state 存储切 Redis（多实例部署与会话持久前置）；
       # 宿主裸跑开发（无 redis_url 可达）时保持代码默认 memory，不写本键即可
       - SESSION_STORE_BACKEND=${SESSION_STORE_BACKEND:-redis}
+      # A-T024 QA 会话铸造（8ed9308 手测环境）：前缀从 docker/.env 注入，生产守卫要求其置空
+      - QA_FIXTURE_TOKEN_PREFIX=${QA_FIXTURE_TOKEN_PREFIX:-}
       # R6.2.3 补注：生产 HTTPS 环境须 SESSION_COOKIE_SECURE=true；开发期 HTTP 默认 false
       - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-false}
       # A-T21 裁决B实施（2026-09-11）：authorize 302（浏览器侧，需 localhost 可达）与
