@@ -4,6 +4,12 @@
 直接产出与 AuthService.handle_callback 等价的会话产物，以便对 BotHot
 自身的鉴权边界（cookie → sub → users 行 → role）做端到端测试。
 
+边界（A-T024，2026-10-09 补注）：本脚本铸造的 access_token = "qa-fixture-<sub>"
+假串，不能送主平台验。get_me 仅在命中 settings.qa_fixture_token_prefix（默认
+"qa-fixture-"）时才短路到本地 users 行；主平台在线时本短路为唯一可用途径。
+本前缀在生产环境必须显式置空（production_guard_violations 拒启）。
+使用本脚本后请优先重新走一次真接 SSO（确保主平台 oidc_clients 已登记本服务 client_id）。
+
 产物：stdout 打印 `sub=<sub> session_id=<id>` 行。
 """
 

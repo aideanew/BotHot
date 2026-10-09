@@ -187,8 +187,36 @@ class AuthService:
         有效（spaces/jobs 等域不受影响），此时把用户挡回登录页会与「会话有效」
         矛盾。有本地资料快照则回退 users 行并标记 wallet 不可查；无快照保持原
         错误语义（50002）。
+
+        QA fixture 短路（A-T024，2026-10-09）：qa_seed_sessions.py 铸造的 access_token
+        命中 settings.qa_fixture_token_prefix 时，**不进主平台**——直接取本地 users
+        行与 role，标 providerUnreachable:true / qaFixture:true。设计动机：不这么做
+        的话，主平台一旦在线（不再是网络不可达），fixture 假令牌走 userinfo 401 →
+        refresh → 主平台 invalid_client 或 invalid_grant → SsoTokenExchangeError（不在本
+        函数 except 里）→ 10003 直达前端 → QA 会话 100% 登录失败。本短路的合法性
+        由生产守卫卡位：QA_FIXTURE_TOKEN_PREFIX 必须显式置空才能上生产。
         """
         record = await self._require_session(session_id)
+        fixture_prefix = self._settings.qa_fixture_token_prefix
+        if fixture_prefix and record.access_token.startswith(fixture_prefix):
+            local = await self._local_profile(record.sub) or {
+                "email": record.email,
+                "nickname": record.nickname,
+                "role": "",
+            }
+            return {
+                "user": {
+                    "sub": record.sub,
+                    "email": local["email"],
+                    "nickname": local["nickname"],
+                    "tier": "",
+                    "role": local["role"],
+                    "is_admin": await self._is_admin(record.sub),
+                },
+                "wallet": {"balanceYuan": 0, "currency": "CNY", "available": False},
+                "providerUnreachable": True,
+                "qaFixture": True,
+            }
         try:
             try:
                 info = await self._client.userinfo(record.access_token)

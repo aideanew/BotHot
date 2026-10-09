@@ -80,8 +80,12 @@ USER node
 
 EXPOSE 3000
 
-# alpine busybox 自带 wget：探 SPA 首页返 2xx 即存活
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1
+# 健康探针（A-T024 配套 3.2，2026-10-09）：alpine busybox 自带 wget。
+# 旧版探 `/`（SSR 首页）+ start-period=20s/timeout=5s 导致前端在冷启动与首页拉库
+# 慢时连续 3 次失败而标 unhealthy（叙述与实际健康态分离、无功能影响但误导运维）。
+# 新方案：探 /api/health（前端本地零依赖路由，app/api/health/route.ts），并上调 start-period
+# 给 Next 生产启动留够时间，timeout 拉到8s 容忍 busybox 启链开销。
+HEALTHCHECK --interval=30s --timeout=8s --start-period=45s --retries=3 \
+    CMD wget -q -T 6 -O /dev/null http://127.0.0.1:3000/api/health || exit 1
 
 CMD ["pnpm", "start"]

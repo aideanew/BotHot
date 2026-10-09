@@ -455,6 +455,87 @@ async def test_me_provider_unreachable_degrades_to_local_profile(db_session) -> 
     assert await svc.current_sub("sid-unreachable") == "user-1"
 
 
+async def test_me_qa_fixture_token_shortcircuits_provider() -> None:
+    """A-T024（2026-10-09）：qa-fixture- 前缀 access_token 命中
+    settings.qa_fixture_token_prefix 默认值 → get_me 短路，即使伪 IdP 在线且会
+    401 也不发外部请求。返回 record 内嵌的 email/nickname + qaFixture:true。
+
+    缺陷背景：qa_seed_sessions.py 铸造的会话假令牌送主平台 userinfo → 401 →
+    refresh → invalid_client → SsoTokenExchangeError → 10003 直达前端，QA 会话
+    100% 打不开子平台。本测试锁定新行为。
+    """
+    svc, idp, _, session_store = _svc_bundle()
+    await session_store.create(
+        SessionRecord(
+            session_id="sid-qa-fixture",
+            sub="user-1",
+            email="qa@aidean.local",
+            nickname="QA 老板",
+            access_token="qa-fixture-user-1",
+            refresh_token="qa-fixture-refresh-user-1",
+            access_expires_at=time.time() + 3600,
+        ),
+        3600,
+    )
+    client = _client_with(svc)
+    client.cookies.set("bothot_session", "sid-qa-fixture")
+    resp = client.get("/api/v1/auth/me")
+
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["qaFixture"] is True
+    assert data["providerUnreachable"] is True
+    assert data["user"]["sub"] == "user-1"
+    assert data["user"]["email"] == "qa@aidean.local"
+    assert data["user"]["is_admin"] is False  # 无 DB 工厂 → _is_admin 一律 False
+    assert data["wallet"]["available"] is False
+    # 关键断言：fixture 短路绝不进主平台——idp.valid_access 从未包含 fixture 令牌
+    assert "qa-fixture-user-1" not in idp.valid_access
+
+
+async def test_me_qa_fixture_short_circuit_disabled_when_prefix_empty() -> None:
+    """A-T024 生产守卫侧影：qa_fixture_token_prefix="" → 短路失效 →
+    同一 fixture 令牌会走真主平台 → userinfo 401 → refresh 失败 → SsoTokenExchangeError → 10003。
+
+    本测试验证“守卫置空就真失效”，避免代码只在配置里声明而行为不一致。
+    """
+    offline_settings = Settings(  # type: ignore[call-arg]
+        _env_file=None,
+        oidc_redirect_uri=REDIRECT_URI,
+        session_cookie_secure=False,
+        qa_fixture_token_prefix="",
+    )
+    idp = FakeAideanIdP()
+    http = httpx.AsyncClient(transport=httpx.MockTransport(idp.handler))
+    client_impl = AideanProviderClient(ISSUER, CLIENT_ID, CLIENT_SECRET, client=http)
+    session_store = InMemorySessionStore()
+    svc = AuthService(
+        client_impl,
+        InMemorySsoStateStore(),
+        session_store,
+        InMemoryUserStore(),
+        offline_settings,
+    )
+    await session_store.create(
+        SessionRecord(
+            session_id="sid-qa-off",
+            sub="user-1",
+            email="qa@aidean.local",
+            nickname="QA",
+            access_token="qa-fixture-user-1",
+            refresh_token="qa-fixture-refresh-user-1",
+            access_expires_at=time.time() + 3600,
+        ),
+        3600,
+    )
+    tc = _client_with(svc)
+    tc.cookies.set("bothot_session", "sid-qa-off")
+    resp = tc.get("/api/v1/auth/me")
+    # 未短路 → userinfo 401 → refresh 失败 → SsoTokenExchangeError → 10003
+    assert resp.status_code == 401
+    assert resp.json()["code"] == 10003
+
+
 def test_logout_revokes_chain_and_clears_session() -> None:
     """logout：撤销 refresh 链（仅本产品）+ 会话删除 + 清 cookie；再访问 /me → 10001。"""
     svc, idp, _, session_store = _svc_bundle()

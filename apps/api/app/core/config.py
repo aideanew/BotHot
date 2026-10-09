@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     # 会话/state 存储后端（A 裁决 2026-09-07）：memory|redis；M1 开发期默认 memory，
     # M2 发布前切 redis 实测（redis_url 复用下方 Redis 段）
     session_store_backend: str = "memory"
+    # QA fixture 令牌前缀（A-T024，2026-10-09）：qa_seed_sessions.py 铸造 access_token 以此开头
+    # 时，get_me 短路跳过主平台 userinfo/refresh/wallet，直接取本地 users 行。
+    # 生产环境必须显式置空（否则 production_guard_violations 拒启）——非空 = 允许假令牌
+    # 绕过主平台鉴权，不可上生产。默认 "qa-fixture-" 保证本地/QA 无配置时亦可用。
+    qa_fixture_token_prefix: str = "qa-fixture-"
 
     # LangBot（机器人运行时 / RAG 引擎）
     langbot_base_url: str = "http://localhost:5300"
@@ -240,6 +245,10 @@ class Settings(BaseSettings):
             bad.append("PUSH_SECRET_MASTER_KEY 未配置（渠道密钥 AES 加解密，缺失即投递全拒）")
         if not self.engine_key_master_key:
             bad.append("ENGINE_KEY_MASTER_KEY 未配置（引擎 Key 登记加密，缺失即登记全拒）")
+        # A-T024（2026-10-09）：QA fixture 短路不得进生产。非空前缀 = 假令牌可绕过主平台
+        # 鉴权直接拿到本地 role/is_admin，与“SSO 信任边界 = aidean_issuer”相，生产必置空。
+        if self.qa_fixture_token_prefix:
+            bad.append("QA_FIXTURE_TOKEN_PREFIX 非空（生产环境必须显式置空以禁用 fixture 短路）")
         return bad
 
 

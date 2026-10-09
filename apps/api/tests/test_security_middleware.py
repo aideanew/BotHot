@@ -404,11 +404,15 @@ def test_production_guard_whitelists_known_dev_envs(app_env: str) -> None:
     assert settings.production_guard_violations() == []
 
 
-def test_production_guard_still_reports_all_seven_items() -> None:
-    """守卫条目数不变（白名单化只改闸门，不改判据集合）——防顺手削项。"""
+def test_production_guard_still_reports_all_eight_items() -> None:
+    """守卫条目数不变（白名单化只改闸门，不改判据集合）——防顺手削项。
+
+    2026-10-09 A-T024：新增 QA_FIXTURE_TOKEN_PREFIX 非空守卫（生产禁 fixture 短路）
+    属有意扩展，从 7 项 → 8 项。同名测试重命名确保下次拓展仍需显式确认。
+    """
     settings = Settings(_env_file=None, app_env="prod-eu")  # type: ignore[call-arg]
     violations = settings.production_guard_violations()
-    assert len(violations) == 7
+    assert len(violations) == 8
     for token in (
         "OIDC_CLIENT_SECRET",
         "SESSION_COOKIE_SECURE",
@@ -417,6 +421,7 @@ def test_production_guard_still_reports_all_seven_items() -> None:
         "OIDC_AUDIENCE_EXPECTED",
         "PUSH_SECRET_MASTER_KEY",
         "ENGINE_KEY_MASTER_KEY",
+        "QA_FIXTURE_TOKEN_PREFIX",
     ):
         assert any(token in item for item in violations), token
 

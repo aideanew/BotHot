@@ -18,6 +18,7 @@ import pytest
 from app.core.config import Settings, assert_production_ready
 
 # 守卫覆盖的 env 判据（与 core.config.production_guard_violations 一一对应）
+# A-T024（2026-10-09）：新增 QA_FIXTURE_TOKEN_PREFIX（生产禁 fixture 短路）
 GUARDED_ENV = (
     "OIDC_CLIENT_SECRET",
     "SESSION_COOKIE_SECURE",
@@ -26,6 +27,7 @@ GUARDED_ENV = (
     "OIDC_AUDIENCE_EXPECTED",
     "PUSH_SECRET_MASTER_KEY",
     "ENGINE_KEY_MASTER_KEY",
+    "QA_FIXTURE_TOKEN_PREFIX",
 )
 
 _VALID_PUSH_KEY = base64.b64encode(b"p" * 32).decode()
@@ -76,6 +78,7 @@ def test_each_production_violation_is_reported(monkeypatch: pytest.MonkeyPatch, 
             "OIDC_AUDIENCE_EXPECTED": "bothot",
             "PUSH_SECRET_MASTER_KEY": _VALID_PUSH_KEY,
             "ENGINE_KEY_MASTER_KEY": _VALID_ENGINE_KEY,
+            "QA_FIXTURE_TOKEN_PREFIX": "",
             **env,
         },
     )
@@ -84,10 +87,13 @@ def test_each_production_violation_is_reported(monkeypatch: pytest.MonkeyPatch, 
     assert name in violations[0], violations
 
 
-def test_production_all_default_is_seven_violation(monkeypatch: pytest.MonkeyPatch) -> None:
-    """生产照抄默认值 → 七项全中（含两把空主密钥——最常见的误配形态）。"""
+def test_production_all_default_is_eight_violation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """生产照抄默认值 → 八项全中（含两把空主密钥 + fixture 短路默认前缀——最常见的误配形态）。
+
+    A-T024（2026-10-09）：新增 QA_FIXTURE_TOKEN_PREFIX 默认非空守卫，从 7 → 8。
+    """
     settings = _prod(monkeypatch)
-    assert len(settings.production_guard_violations()) == 7
+    assert len(settings.production_guard_violations()) == 8
 
 
 def test_production_fully_configured_passes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -100,6 +106,7 @@ def test_production_fully_configured_passes(monkeypatch: pytest.MonkeyPatch) -> 
         OIDC_AUDIENCE_EXPECTED="bothot",
         PUSH_SECRET_MASTER_KEY=_VALID_PUSH_KEY,
         ENGINE_KEY_MASTER_KEY=_VALID_ENGINE_KEY,
+        QA_FIXTURE_TOKEN_PREFIX="",
     )
     assert settings.production_guard_violations() == []
     assert_production_ready(settings)
@@ -139,3 +146,4 @@ def test_assert_production_ready_raises_with_all_violations(monkeypatch: pytest.
     assert "OIDC_AUDIENCE_EXPECTED" in message
     assert "PUSH_SECRET_MASTER_KEY" in message
     assert "ENGINE_KEY_MASTER_KEY" in message
+    assert "QA_FIXTURE_TOKEN_PREFIX" in message  # A-T024
