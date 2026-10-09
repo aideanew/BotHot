@@ -87,4 +87,8 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=8s --start-period=45s --retries=3 \
     CMD node -e "require('http').get('http://127.0.0.1:3000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-CMD ["pnpm", "start"]
+# runtime 不经 corepack/pnpm（2026-10-09 实证修复）：CMD ["pnpm","start"] 会触发
+# corepack 现场联网下载 pnpm——容器运行时若带坏代理 env（实测 127.0.0.1:10809 /
+# MITM 自签证书），fetch 失败 → 容器崩溃循环。next 在 node_modules/.bin 内，
+# 直接以 node 运行，runner 阶段零外网依赖。
+CMD ["./node_modules/.bin/next", "start"]
