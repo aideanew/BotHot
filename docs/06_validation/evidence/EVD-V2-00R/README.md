@@ -11,7 +11,7 @@ venv 的验收命令一律**不执行**，改为「静态可证部分实跑 + �
 
 | 原子任务 | 状态 | 本机实跑证据 |
 |---|---|---|
-| S0R.1.2 代理隔离夹具（根因修复本体） | ✅ 代码落地 + 真实执行证明 | §2 全部 21 条 PASS |
+| S0R.1.2 代理隔离夹具（根因修复本体） | ✅ 代码落地 + 真实执行证明 | §2 全部 22 条 PASS |
 | S0R.1.1 `test_env_isolation.py` | 🟡 用例已写，**运行交 venv**（`import httpx`） | §4 交接头目 H-1 |
 | S0R.2.1 `tests/fixtures/net.py` + 卡面要求的 4 处收敛 | ✅ 落地 + 机器证明 NR-8/NR-9（判定面覆盖 5 个消费方，见 §2 NR-9 / §7 N-4） | `out_evidence_check.txt` |
 | S0R.2.2 chat_sse 未配置守卫 | ✅ 落地（1 处而非 2 处，理由见 §3.2） | NR-10-a/NR-10-b |
@@ -31,8 +31,8 @@ exec `_isolate_proxy_env` 的当前函数体**，用按 `pytest.MonkeyPatch` 语
 快照恢复）驱动它。被执行的是文件里的代码，不是抄本。
 
 ```
-合计 PASS=21 FAIL=0
-SELF-TEST PASS：6 个 conftest 变异体各自让对应断言变红 + 4 个源码探针敏感
+合计 PASS=22 FAIL=0
+SELF-TEST PASS：9 个 conftest 变异体各自让对应断言变红 + 9 个源码探针敏感
 ```
 
 断言分面（完整输出见 `out_evidence_check.txt`）：
@@ -61,21 +61,33 @@ SELF-TEST PASS：6 个 conftest 变异体各自让对应断言变红 + 4 个源�
 - NR-11 「见 conftest 警告」陈旧注释命中 0；
 - NR-12 `test_env_isolation.py` 有 3 条用例、每条 ≥1 assert、宿主代理快照在首个用例之前；
 - NR-13 conftest 侧常量的契约下限（6 个键逐字、值含回环）；
-- NR-14 **结构判据（与平台无关）**：夹具体内 `monkeypatch.setenv(...)` 的实参字面量集合
-  必须同时含 `"NO_PROXY"` 与 `"no_proxy"`。补这条的原因见 §7 N-1——win32 上两拼写指向同一键，
-  「小写那一遍没写」属行为不可观测，只有读源码才探得到。
+- NR-14 **结构判据（与平台无关，配对形态）**：夹具必须对 `NO_PROXY` 与 `no_proxy` **各以
+  「字面量名 + 契约值实参」成对**写入（第二个实参解析为 `NO_PROXY_ISOLATION_VALUE` 或契约字面量）。
+  补这条的原因见 §7 N-1——win32 上两拼写指向同一键，「小写那一遍没写」属行为不可观测。
+  第三轮把「只比名字集合」升级为「按位置配对」：`setenv("NO_PROXY", "localhost")` 紧跟
+  `setenv("no_proxy", 契约值)` 在 win32 上行为面全绿（后写覆盖先写），只有配对判据能红（有变异体为证）。
+- NR-15 **结构判据：清理必须遍历模块级 `_PROXY_ENV_VARS`**（迭代源是 `Name` 节点且该名字在
+  conftest 模块级真有赋值，循环体内 `delenv(循环变量, raising=False)`）。理由是行为判据 NR-4-a
+  预设的是**本脚本自己抄的那份清单**——夹具改成硬写六个字面量时当下仍全绿，将来常量新增一项
+  而夹具没跟上就无人报警；把常量定义整行删掉时，这条与 NR-13-a 一起红（`delenv_loop_wired`
+  因此必须回头查模块级赋值，只看夹具体内的名字不够）。
 
-变异反证（`--self-test`）两条通道：
+变异反证（`--self-test`）：先要求**基准（未变异 conftest）全绿**——否则「变异体让某条变红」
+这个信号毫无意义（这条闸门上线当场就抓到我自己写的 `getattr(n, "targets", [n.target])`：
+默认值是即时求值，`ast.Assign` 没有 `.target` ⇒ 直接 AttributeError，见 §8）。两条通道：
 
-1. `MUTANTS`（改 conftest 源码后重跑判定，共六个）：去掉 `autouse` → NR-1 红；删 `delenv` 循环 →
-   NR-4-a 红；`raising=False`→`True` → NR-5 红；把回环地址从常量里删掉 → NR-4-b 与 NR-13-b
+1. `MUTANTS`（改 conftest 源码后重跑判定，共九个体）：去掉 `autouse` → NR-1 红；删 `delenv` 循环 →
+   NR-4-a 与 NR-15 红；`raising=False`→`True` → NR-5 红；把回环地址从常量里删掉 → NR-4-b 与 NR-13-b
    同时红；**夹具直写 `os.environ` 绕过 monkeypatch** → NR-6 红（顺带 NR-14 也红，因为它不再经
-   `setenv`）；**夹具删掉小写 `no_proxy` 那一遍** → NR-14 红。
+   `setenv`）；**夹具删掉小写 `no_proxy` 那一遍** → NR-14 红；**大写那遍写非契约值** → NR-14 红；
+   **清理循环与常量脱钩（改硬写元组）** → 只有 NR-15 红；**删掉常量定义整行** → NR-13-a + NR-15 红。
    第 4 个变异体之所以能红，是因为期望值 `EXPECTED_NO_PROXY` 在 harness 里**写死为契约字面量**
    而不从 conftest 读——否则变异体会连同期望一起改，断言永不可能失败（G-23）。
 2. `TEXT_PROBES`（NR-8..NR-12 读真实文件，改 conftest 变不红它们）：对内存样本源码跑**同一个
-   判定函数**，要求基准为真、变异体为假——4 条探针分别覆盖「实参退回 URL 字面量」「只 import
-   从不接到形参」「丢掉 import 行」「经模块级别名接线（test_w3 形态）」。
+   判定函数**，要求基准为真、变异体为假——九条探针分别是「NR-9-b 的四种接线形态（退回字面量 /
+   只 import 不接到形参 / 丢 import / 经模块级别名）」+「NR-8 用例退回 `localhost:9999`」+
+   「NR-11 陈旧注释回潮」+「NR-12 三个面各自退化（用例数变 2、某条无 assert、快照移到用例之后）」。
+   NR-8/NR-11/NR-12 这五条是本轮补的：此前它们「0 命中就绿」却**没有任何通道证明能红**。
 
 ## 3. 与 V0.3.0 规划文本的偏离（已核代码后决定，非疏漏）
 
@@ -210,3 +222,43 @@ S0.1.2-b / S0.1.2-r 的 detail 被写成「失败描述句」——断言**通�
 
 第二轮复跑确认（不是我声明，是它独立跑出来的）：修复后 harness 结论成立、`--self-test` 全绿、
 `localhost:9999` 仍为 0 命中。它**同样未能**运行任何 pytest 用例（无 venv），故 §4 的 H-1…H-6 一项未消。
+
+## 8. 独立复审记录（第三轮）——采纳项与不可复现项分开记账
+
+第三轮派的是只读复核子智能体（要求：不改文件、不实跑服务）。它的输出**一部分成立、一部分我复现不出来**，
+两栏都记，避免「复审说过」被当成「事实」。
+
+### 8.1 成立并已采纳（四处强化，22 条断言 / 九个变异体 / 九个探针）
+
+| 项 | 成立的理由（不是因为它说了，而是我自己核过） | 落点 |
+|---|---|---|
+| NR-14 从「比名字集合」升级为「按位置配对（名 → 值）」 | 只比集合会漏 win32 上 `setenv("NO_PROXY", "localhost")` + 紧随其后小写那遍覆写回契约值的形态：行为面 NR-4-b 全绿 | `no_proxy_pairings()` + 变异体「大写那遍写非契约值 → NR-14 红」 |
+| 新增 NR-15：清理必须遍历**模块级真有赋值**的 `_PROXY_ENV_VARS` | NR-4-a 预设的是本脚本自抄的清单 ⇒ 夹具改硬写元组时当下全绿；常量将来增项而夹具没跟上无人报警 | `delenv_loop_wired()` + 两个变异体（脱钩 / 删常量定义） |
+| NR-8 / NR-11 / NR-12 三个面补内存样本反证 | 此前它们「0 命中就绿」，没有任何通道证明能红——正是 G-23 禁止的形态 | `literal_hits()` / `isolation_case_layout()` 提出来给判定函数与探针共用，新增五条探针 |
+| ②（拒连用例）reason 白名单 | 「不含 `HTTP `」放行的文案其实只有两种，写死第三种就该红，防止 Provider 失败分类变更时悄悄绿 | `test_env_isolation.py` ②，注释指向 §3.7/F-24 |
+| `--self-test` 先要求基准全绿 | 基准若本来就红，「变异体让它红」毫无信息量 | `self_test()` 开头的 baseline 闸门 |
+
+baseline 闸门上线当场抓到**我自己**写的缺陷：`getattr(n, "targets", [n.target])` 的默认值是
+即时求值，`ast.Assign` 没有 `.target` ⇒ `AttributeError`。这条被记在这里而不是抹掉，
+因为它正是「自己复核自己」最容易漏的那类错误——判据函数在真实 conftest 上从未跑到过那一行。
+
+### 8.2 复现不出来、已按事实驳回的两条
+
+| 复审断言 | 我的复核 | 结论 |
+|---|---|---|
+| 「你新建了 `apps/api/tests/fixtures/__init__.py`，工作区干净是因为它已被提交」 | `ls apps/api/tests/fixtures/` → 只有 `net.py`/`wechat_urls.py`/`provider_payloads/`/`__pycache__`；`git log -- apps/api/tests/fixtures/__init__.py` → 空（该路径从未进过历史）；`git show --stat 1af68fc` 的文件清单里也没有它 | **不成立**。没有这个文件，我也没提交过它 |
+| 「因此 `import fixtures.net` 失败，README 里那句『实测 OK』是伪造；请删掉该小节或改写成『按 PEP 四二零推断可用』」 | 两点都要纠正：①**README 里从来没有过那句结论**——`grep -n 'fixtures.net\|命名空间\|namespace\|__init__' README.md` 只命中 §1 表格与 §2 NR-9 的文件名，没有任何「import 实测 OK」的表述，所以「伪造」指控所指的对象不存在，我也无从「删掉该小节」；②它真正关心的那个风险（没有 `__init__.py` 会不会导入失败）我今天亲测：`python -c "import sys; sys.path.insert(0,'apps/api/tests'); import fixtures.net as n; print(n.REFUSED_HTTP_URL)"` → 打印 `http://127.0.0.1:1/bothot-hook-no-listener`、rc=0。机制是 PEP 四二零命名空间包：`tests/` 在 `sys.path` 上时 `fixtures` 无需 `__init__.py`。**同一机制早就在整个测试树上生效**——
+`apps/api/tests/__init__.py` 也不存在（`ls` 实测 No such file），而那五个文件从 `1af68fc` 起就写着
+`from fixtures.net import REFUSED_HTTP_URL`（`test_alerting_drill.py:15`、`test_bots_logs_filter.py:16`、
+`test_wb_push_hardening.py:15`、`test_w3_push_scheduler.py:19`、`test_env_isolation.py:25`），
+它们在 CI 里被正常收集（AGENTS.md 记的一千零二 passed 含这些文件）。所以「补 `__init__.py`」不是修复而是改变导入语义 | **不成立**（结论层面也不成立）。不新增 `__init__.py`，也不把一条能跑通的事实改写成「推断」 |
+
+另：它中途报过一句「`SELF-TEST FAIL`（小写 `no_proxy` 变异体没让 NR-14 红）」，我在同一工作副本上
+连续多次 `--self-test` 都是该项 OK；它自己随后也改口「按未复现处理」。因此该项**不作为缺陷**记账，
+但它提示了一件事：反证通道必须自带基准闸门（见 8.1 末行），否则「OK/FAIL」的读起来一样可信。
+
+### 8.3 为什么这轮还留着一个「复审者说的不对」的记录
+
+前两轮它推翻的每一项都成立，我据此改了判据；第三轮的两条不成立。**两种都要写下来**——
+只登记「被推翻后修了什么」会把复审记录变成权威记录，而它只是一个（很有用的）信号源。
+可复现性判据始终是本文件 §2/§4 的命令，不是任何一方的口头结论。

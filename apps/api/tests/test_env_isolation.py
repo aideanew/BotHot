@@ -55,6 +55,12 @@ async def test_refused_url_fails_as_connection_error_not_http_status() -> None:
     assert result.delivered is False
     reason = result.reason or ""
     assert "HTTP " not in reason, f"请求未直达目标（疑被代理接走）：reason={reason!r}"
+    # 「未抵达」只有两种产出形态（webhook.py:48-51）：连接层异常，或连接超时。
+    # 宿主对回环闭包端口是 DROP 而非 REJECT（EVD-V2-00R §3.7 / 事实 F-24），故不能只认「拒连」那一种；
+    # 出现第三种文案说明 Provider 的失败分类变了，必须显式复核而不是让它悄悄绿。
+    assert reason.startswith(("webhook 推送异常", "webhook 请求超时")), (
+        f"reason 既非连接异常也非超时，Provider 失败分类已变更：reason={reason!r}"
+    )
     assert result.retryable is True, f"拒连应可重试（webhook.py:52）：reason={reason!r}"
 
 

@@ -7,15 +7,19 @@ sqlalchemy / httpx / dotenv（实测 `python -c "import httpx"` → ModuleNotFou
 **当前函数体**（剥掉装饰器，注入按 pytest.MonkeyPatch 语义实现的替身）。被执行的是文件
 里的真实代码，不是抄本——改了函数体，这里的结论就会变。
 
-`--self-test` 提供 G-23 反证，走两条通道：
-① MUTANTS——把夹具改成 6 种「看起来还在但已失效」的 conftest 变异体（去掉 autouse /
+`--self-test` 提供 G-23 反证，先要求**基准（未变异的 conftest）全绿**（否则「变异体让 X 变红」
+这个信号没有意义），再走两条通道：
+① MUTANTS——把夹具改成 9 种「看起来还在但已失效」的 conftest 变异体（去掉 autouse /
    删掉 delenv 循环 / 换 raising=True / 换 NO_PROXY 值 / 直写 os.environ 绕过 monkeypatch /
-   不再写小写 no_proxy），逐条确认对应断言**变红**；
+   不再写小写 no_proxy / 大写那遍写非契约值 / 清理循环与常量脱钩 / 把常量定义整行删掉），
+   逐条确认对应断言**变红**；
 ② TEXT_PROBES——文件结构类判据（NR-8..NR-12 读真实文件，改 conftest 变不红它）在**内存样本**
-   上跑同一判定函数，要求基准为真、变异体为假。
+   上跑同一判定函数，要求基准为真、变异体为假（9 条：NR-9-b 四种接线形态 + NR-8 字面量回潮 +
+   NR-11 陈旧注释回潮 + NR-12 三个面各自退化）。
 
 win32 特有的一条：`os.environ` 键大小写不敏感，「有没有写小写 no_proxy」在行为层不可观测，
-故 NR-14 用结构判据（夹具体内两种拼写各一次 setenv）兜住——这也是第 6 个变异体的捕手。
+故 NR-14 用结构判据（两种拼写各以「字面量名 + 契约值实参」**成对**出现）兜住；NR-15 则钉住
+「清理必须遍历模块级 `_PROXY_ENV_VARS`」——常量与夹具脱钩时行为面（NR-4-a）是探不到的。
 """
 
 from __future__ import annotations
@@ -161,25 +165,107 @@ class sandbox:
                 os.environ[n] = v
 
 
-def setenv_spellings(node: ast.AST) -> list[str]:
-    """夹具里 `X.setenv("…")` 的实参字面量清单。
+# `setenv(名, 值)` 里「值」允许的两种形态：引用 conftest 常量，或直接落契约字面量。
+CONTRACT_VALUE_EXPRS = {"NO_PROXY_ISOLATION_VALUE", repr(EXPECTED_NO_PROXY)}
 
-    win32 的 `os.environ` 键大小写不敏感 ⇒ 「读回 `no_proxy` 是否等于契约值」这一半
-    **行为观测无法分辨夹具到底有没有写小写键**（删掉那行也照样绿，复审 N-1）。
-    故补一条与平台无关的结构判据：两种拼写必须各写一次。
+
+def no_proxy_pairings(node: ast.AST) -> tuple[bool, str]:
+    """NR-14 的加强形态：名字与值必须**成对**出现，而不只是「字面量集合里都有」。
+
+    只比名字集合会漏掉 win32 上的一类真实回归：把大写那遍写成 `setenv("NO_PROXY", "localhost")`，
+    紧随其后的小写那遍又把同一个键覆写成契约值 ⇒ 行为面（NR-4-b）全绿，但「大写那一遍已经废了」。
+    故此处按位置取 (第一个实参, 第二个实参) 配对判定，而不是只比名字的集合。
     """
-    names: list[str] = []
+    seen: dict[str, str] = {}
     for call in ast.walk(node):
         if (
             isinstance(call, ast.Call)
             and isinstance(call.func, ast.Attribute)
             and call.func.attr == "setenv"
-            and call.args
+            and len(call.args) >= 2
             and isinstance(call.args[0], ast.Constant)
             and isinstance(call.args[0].value, str)
         ):
-            names.append(call.args[0].value)
-    return names
+            seen.setdefault(call.args[0].value, ast.unparse(call.args[1]))
+    bad = [
+        f"{n}→{seen.get(n, '（未写）')!r}"
+        for n in ("NO_PROXY", "no_proxy") if seen.get(n) not in CONTRACT_VALUE_EXPRS
+    ]
+    pairing = "、".join(f"{k}→{v}" for k, v in sorted(seen.items())) or "无"
+    return not bad, f"配对={pairing}" + (f"｜不合格={bad}" if bad else "")
+
+
+def delenv_loop_wired(node: ast.AST, tree: ast.Module) -> tuple[bool, str]:
+    """清理动作必须「遍历 `_PROXY_ENV_VARS` 常量」，且 `delenv(<循环变量>, raising=False)`。
+
+    行为判据（NR-4-a）预设的是**本脚本自己抄的那份清单**，所以「夹具改成硬写六个字面量」在当下
+    照样绿——将来常量新增一项（如新代理变量）而夹具没跟上时，无人报警。这条结构判据把
+    「单一真值来源」钉住。
+    两个细节都是被反证逼出来的（不做反证就不会发现）：
+    - 只查「循环源码里出现 `_PROXY_ENV_VARS` 这个名字」不够：把常量定义整行删掉后名字还在，
+      运行时才 NameError ⇒ 必须同时确认它是 **conftest 模块级真实赋值过的名字**；
+    - 迭代源必须是 `Name` 节点，元组字面量（哪怕内容与常量一模一样）不算接线。
+    """
+    assigned: set[str] = set()
+    for n in tree.body:
+        # getattr 的默认值是**即时求值**的，写成 getattr(n, "targets", [n.target]) 会在
+        # ast.Assign 上 AttributeError（它只有 targets）——所以按节点类型分支取目标。
+        if isinstance(n, ast.Assign):
+            targets = n.targets
+        elif isinstance(n, ast.AnnAssign):
+            targets = [n.target]
+        else:
+            continue
+        assigned.update(t.id for t in targets if isinstance(t, ast.Name))
+    if "_PROXY_ENV_VARS" not in assigned:
+        return False, "conftest 模块级没有 `_PROXY_ENV_VARS` 的赋值（夹具无从引用）"
+    for loop in ast.walk(node):
+        if not (isinstance(loop, ast.For) and isinstance(loop.iter, ast.Name)
+                and loop.iter.id == "_PROXY_ENV_VARS"):
+            continue
+        target = ast.unparse(loop.target)
+        for call in ast.walk(loop):
+            if (
+                isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Attribute)
+                and call.func.attr == "delenv"
+                and call.args
+                and ast.unparse(call.args[0]) == target
+                and any(k.arg == "raising" and ast.unparse(k.value) == "False" for k in call.keywords)
+            ):
+                return True, f"遍历模块级 _PROXY_ENV_VARS，循环体内 delenv({target}, raising=False) 就位"
+        break
+    return False, "找不到「遍历模块级 _PROXY_ENV_VARS + delenv(循环变量, raising=False)」的循环"
+
+
+def literal_hits(texts: dict[str, str], needle: str) -> list[str]:
+    """在「名字→源码」映射里找包含式命中（NR-8/NR-11 的判据本体，便于用内存样本反证）。"""
+    return sorted(name for name, text in texts.items() if needle in text)
+
+
+def tests_tree_texts() -> dict[str, str]:
+    return {str(p.relative_to(ROOT)): p.read_text(encoding="utf-8") for p in TESTS.rglob("*.py")}
+
+
+def isolation_case_layout(text: str) -> dict[str, tuple[bool, str]]:
+    """`test_env_isolation.py` 的三条结构判据（NR-12-a/b/c），按面返回便于逐面反证。"""
+    tree = ast.parse(text)
+    cases = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name.startswith("test_")]
+    counts = {n.name: sum(isinstance(x, ast.Assert) for x in ast.walk(n)) for n in cases}
+    # 快照只有在「任何用例定义之前」的模块级求值才等于收集期宿主环境；放进用例里就晚了。
+    # 两种赋值形态（Assign / AnnAssign）都要认，否则判定会因写法而假红。
+    snap_line = next(
+        (n.lineno for n in tree.body
+         if isinstance(n, (ast.Assign, ast.AnnAssign)) and "_HOST_PROXY_VARS_AT_COLLECT" in ast.unparse(n)),
+        None,
+    )
+    first_case_line = min((n.lineno for n in cases), default=0)
+    return {
+        "a": (len(cases) == 3, f"用例={list(counts)}"),
+        "b": (bool(counts) and all(c > 0 for c in counts.values()), str(counts) or "无用例"),
+        "c": (snap_line is not None and snap_line < first_case_line,
+              f"快照 :{snap_line}、首个用例 :{first_case_line}"),
+    }
 
 
 def webhook_url_wired_to_constant(text: str) -> tuple[bool, str]:
@@ -284,7 +370,8 @@ def main() -> int:
     check("NR-7 清理代理不影响 AIDEANBOT_TEST_PG_DSN", dsn_kept == "postgresql+psycopg://x:y@127.0.0.1:5547/z", f"夹具后={dsn_kept!r}")
 
     # ── NR-8/NR-9：同形端口假设清零 + 地址常量单点 ──────────────────────────────
-    hits = sorted(str(p.relative_to(ROOT)) for p in TESTS.rglob("*.py") if "localhost:9999" in p.read_text(encoding="utf-8"))
+    tree_texts = tests_tree_texts()
+    hits = literal_hits(tree_texts, "localhost:9999")
     check("NR-8 tests 全树无 localhost:9999 字面量", hits == [], f"命中={hits}")
 
     net_src = (TESTS / "fixtures" / "net.py").read_text(encoding="utf-8")
@@ -324,25 +411,15 @@ def main() -> int:
           "_PG_URL_SOURCE" in imported and "SKIP_UNSET_REASON" in imported, f"import 行={imported!r}")
 
     # ── NR-11/NR-12：陈旧注释与新用例结构 ──────────────────────────────────────
-    stale = sorted(str(p.relative_to(ROOT)) for p in TESTS.rglob("*.py") if "conftest 警告" in p.read_text(encoding="utf-8"))
+    stale = literal_hits(tree_texts, "conftest 警告")
     check("NR-11 「见 conftest 警告」陈旧注释清零", stale == [], f"残留={stale}")
 
-    iso = ast.parse((TESTS / "test_env_isolation.py").read_text(encoding="utf-8"))
-    cases = [n for n in iso.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name.startswith("test_")]
-    assert_counts = {n.name: sum(isinstance(x, ast.Assert) for x in ast.walk(n)) for n in cases}
-    # 快照只有在「任何用例定义之前」的模块级求值才等于收集期宿主环境；放进用例里就晚了。
-    # 用 AnnAssign 声明（带类型标注）——两种赋值形态都要认，否则判定会因写法而假红。
-    snap_line = next(
-        (n.lineno for n in iso.body
-         if isinstance(n, (ast.Assign, ast.AnnAssign)) and "_HOST_PROXY_VARS_AT_COLLECT" in ast.unparse(n)),
-        None,
-    )
-    first_case_line = min((n.lineno for n in cases), default=0)
-    snapshot_first = snap_line is not None and snap_line < first_case_line
-    check("NR-12-a test_env_isolation 有 3 条用例", len(cases) == 3, f"用例={list(assert_counts)}")
-    check("NR-12-b 每条用例至少 1 个 assert（无空断言）", all(c > 0 for c in assert_counts.values()), str(assert_counts))
-    check("NR-12-c 宿主代理快照在模块级、用例定义之前（收集期即夹具运行前）", snapshot_first,
-          f"快照 :{snap_line}、首个用例 :{first_case_line}")
+    # 直接按路径读，不用 tree_texts 的键——relative_to 的分隔符随平台变（win32 反斜杠、CI 正斜杠），
+    # 拿它当字典键会让本脚本在非 win32 上 KeyError。
+    layout = isolation_case_layout((TESTS / "test_env_isolation.py").read_text(encoding="utf-8"))
+    check("NR-12-a test_env_isolation 有 3 条用例", layout["a"][0], layout["a"][1])
+    check("NR-12-b 每条用例至少 1 个 assert（无空断言）", layout["b"][0], layout["b"][1])
+    check("NR-12-c 宿主代理快照在模块级、用例定义之前（收集期即夹具运行前）", layout["c"][0], layout["c"][1])
 
     # ── NR-13：conftest 侧常量的契约下限 ────────────────────────────────────────
     check("NR-13-a _PROXY_ENV_VARS 覆盖大小写 6 个键",
@@ -351,10 +428,13 @@ def main() -> int:
           "127.0.0.1" in ns["NO_PROXY_ISOLATION_VALUE"] and ns["NO_PROXY_ISOLATION_VALUE"] == EXPECTED_NO_PROXY,
           f"实测={ns['NO_PROXY_ISOLATION_VALUE']!r}")
 
-    # ── NR-14：两种拼写都写（win32 行为观测分辨不了的那一半，复审 N-1）────────────
-    spelled = setenv_spellings(fn)
-    check("NR-14 夹具对 NO_PROXY 与 no_proxy 各写一次（结构判据，与平台无关）",
-          {"NO_PROXY", "no_proxy"} <= set(spelled), f"setenv 实参={sorted(spelled)}")
+    # ── NR-14：两种拼写各以「字面量名 + 契约值实参」成对写入（win32 行为面分辨不了的那一半）──
+    paired, pair_detail = no_proxy_pairings(fn)
+    check("NR-14 夹具对 NO_PROXY 与 no_proxy 各写一次、值取契约常量（配对判据，与平台无关）", paired, pair_detail)
+
+    # ── NR-15：清理必须遍历 _PROXY_ENV_VARS 常量（单一真值来源，防「夹具与常量脱钩」漂移）──
+    wired, wired_detail = delenv_loop_wired(fn, tree)
+    check("NR-15 清理循环以 _PROXY_ENV_VARS 为迭代源且 delenv(循环变量, raising=False)", wired, wired_detail)
 
     print("\n".join(CHECKS))
     for line in FAILURES:
@@ -371,20 +451,53 @@ def main() -> int:
 
 MUTANTS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     ("去掉 autouse", "@pytest.fixture(autouse=True)", "@pytest.fixture", ("NR-1",)),
-    ("删掉 delenv 循环体", "        monkeypatch.delenv(_name, raising=False)", "        pass", ("NR-4-a",)),
+    ("删掉 delenv 循环体", "        monkeypatch.delenv(_name, raising=False)", "        pass", ("NR-4-a", "NR-15")),
     ("delenv 改 raising=True", "monkeypatch.delenv(_name, raising=False)", "monkeypatch.delenv(_name, raising=True)", ("NR-5",)),
     ("NO_PROXY 值去掉回环", 'NO_PROXY_ISOLATION_VALUE = "127.0.0.1,localhost,::1"', 'NO_PROXY_ISOLATION_VALUE = "localhost"', ("NR-4-b", "NR-13-b")),
     ("夹具直写 os.environ 而非经 monkeypatch", 'monkeypatch.setenv("NO_PROXY", NO_PROXY_ISOLATION_VALUE)',
      'os.environ["NO_PROXY"] = NO_PROXY_ISOLATION_VALUE', ("NR-6",)),
     # win32 上删掉小写那行，行为观测（NR-4-b）不会红——NR-14 是它唯一的捕手
     ("夹具不再写小写 no_proxy", 'monkeypatch.setenv("no_proxy", NO_PROXY_ISOLATION_VALUE)', "pass", ("NR-14",)),
+    # 配对判据的捕手：大写那遍写了错值，但小写那遍随后把同一个键覆写成契约值
+    # ⇒ win32 上 NR-4-b 仍绿（键折叠、后写覆盖先写），只有 NR-14 能红
+    ("大写 NO_PROXY 写了非契约值（小写那遍把它盖回来）", 'monkeypatch.setenv("NO_PROXY", NO_PROXY_ISOLATION_VALUE)',
+     'monkeypatch.setenv("NO_PROXY", "localhost")', ("NR-14",)),
+    # 行为面（NR-4-a）预设的是本脚本自己抄的清单，所以「夹具改成硬写六个字面量」在当下不会红；
+    # 将来常量新增一项而夹具没跟上就无人报警 ⇒ NR-15 是唯一的捕手
+    ("清理循环与 _PROXY_ENV_VARS 常量脱钩", "for _name in _PROXY_ENV_VARS:",
+     'for _name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):',
+     ("NR-15",)),
+    # 把常量整个删掉：exec 前缀时 KeyError ⇒ 必须由 evaluate 兜住并判红（NR-13-a/NR-15），
+    # 不能让 harness 自己崩掉（崩了就没有「哪条断言红」的可核对信号）
+    ("删掉 _PROXY_ENV_VARS 常量定义",
+     '_PROXY_ENV_VARS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")',
+     "pass", ("NR-13-a", "NR-15")),
 )
 
 
 # 第二条反证通道：文件结构类判据（NR-8/NR-9/NR-11/NR-12/NR-10）读的是仓库里的真实文件，
 # 不能用「改 conftest」来变红，故改为对**内存中的样本源码**跑同一个判定函数——
 # 基准必须成立、变异体必须不成立，否则那条判据是空洞的（G-23）。
-TEXT_PROBES: tuple[tuple[str, str, str, object], ...] = (
+#
+# NR-12 用的内存样本：三条用例 + 模块级代理快照，形状与 test_env_isolation.py 同构。
+# 刻意不用真文件当基准（判据本身要读真文件，基准得由本脚本自己造），变异体靠字符串改写生成。
+_ISO_BASE = (
+    "_HOST_PROXY_VARS_AT_COLLECT: tuple[str, ...] = ()\n"
+    "\n"
+    "\n"
+    "def test_a() -> None:\n"
+    "    assert True\n"
+    "\n"
+    "\n"
+    "async def test_b() -> None:\n"
+    "    assert True\n"
+    "\n"
+    "\n"
+    "async def test_c() -> None:\n"
+    "    assert True\n"
+)
+
+TEXT_PROBES: tuple[tuple[str, object, object, object], ...] = (
     (
         "NR-9-b 实参退回 URL 字面量",
         'from fixtures.net import REFUSED_HTTP_URL\n\nf = P(webhook_url=REFUSED_HTTP_URL)\n',
@@ -409,6 +522,38 @@ TEXT_PROBES: tuple[tuple[str, str, str, object], ...] = (
         'from fixtures.net import REFUSED_HTTP_URL\n\n_A = "http://x"\n\nf = P(webhook_url=_A)\n',
         lambda t: webhook_url_wired_to_constant(t)[0],
     ),
+    # ── 第三轮补：NR-8/NR-11/NR-12 原先「0 命中就绿」却无通道证明它们能红 ──────────
+    (
+        "NR-8 用例退回 localhost:9999 字面量",
+        {"a.py": "URL = REFUSED_HTTP_URL\n", "b.py": "URL = REFUSED_HTTP_URL\n"},
+        {"a.py": "URL = REFUSED_HTTP_URL\n", "b.py": 'URL = "http://localhost:9999/hook"\n'},
+        lambda texts: literal_hits(texts, "localhost:9999") == [],
+    ),
+    (
+        "NR-11 陈旧注释「见 conftest 警告」回潮",
+        {"t.py": "# 未设则 skip，原因见 conftest SKIP_UNSET_REASON\n"},
+        {"t.py": "# 未设则 skip，原因见 conftest 警告\n"},
+        lambda texts: literal_hits(texts, "conftest 警告") == [],
+    ),
+    (
+        "NR-12-a 用例数退化为 2 条",
+        _ISO_BASE,
+        _ISO_BASE.replace("async def test_c() -> None:\n    assert True\n", ""),
+        lambda t: isolation_case_layout(t)["a"][0],
+    ),
+    (
+        "NR-12-b 某条用例一条 assert 都没有",
+        _ISO_BASE,
+        _ISO_BASE.replace("def test_a() -> None:\n    assert True", "def test_a() -> None:\n    pass"),
+        lambda t: isolation_case_layout(t)["b"][0],
+    ),
+    (
+        "NR-12-c 宿主代理快照移到用例之后（收集期原貌丢失）",
+        _ISO_BASE,
+        _ISO_BASE.replace("_HOST_PROXY_VARS_AT_COLLECT: tuple[str, ...] = ()\n\n\n", "")
+        + "_HOST_PROXY_VARS_AT_COLLECT: tuple[str, ...] = ()\n",
+        lambda t: isolation_case_layout(t)["c"][0],
+    ),
 )
 
 
@@ -416,6 +561,11 @@ def self_test() -> int:
     """G-23 反证：每个变异体都必须让对应断言变红，否则那条断言是空洞的。"""
     src = CONF.read_text(encoding="utf-8")
     rc = 0
+    # 基准必须先全绿：变异体若「红了」但其实基准也红，那个 OK 就没有意义。
+    baseline = evaluate(src)
+    if baseline:
+        print(f"BAD 基准（未变异 conftest）就有红项：{sorted(baseline)}——self-test 的结论不可用，先修 main()")
+        rc = 1
     for label, needle, replacer, expected_red in MUTANTS:
         if needle not in src:
             print(f"BAD {label}：conftest 里找不到 {needle!r}，变异体构造失败")
@@ -446,11 +596,23 @@ def evaluate(conftest_src: str) -> list[str]:
     fn = fixture_node(tree)
     prefix_mod = load_sibling("prove_dsn_policy")
     ns = prefix_mod.exec_prefix(Path("apps/api/tests/conftest.py"), {}, src_text=conftest_src)
+    # 变异体可能把常量本身删掉（复审三-4 的 `del _PROXY_ENV_VARS` 形态）：那正是 NR-13-a/NR-15
+    # 该报的红，不能让 harness 先 KeyError 崩掉——崩了就没有「哪条断言红了」这个可核对的信号。
+    try:
+        proxy_const = tuple(ns["_PROXY_ENV_VARS"])
+    except KeyError:
+        proxy_const = ()
+        red.append("NR-13-a")
+    try:
+        iso_const = str(ns["NO_PROXY_ISOLATION_VALUE"])
+    except KeyError:
+        iso_const = ""
+        red.append("NR-13-b")
     seed = {
         "os": os,
         "pytest": type("_P", (), {"fixture": lambda *a, **k: (lambda f: f), "MonkeyPatch": object}),
-        "_PROXY_ENV_VARS": ns["_PROXY_ENV_VARS"],
-        "NO_PROXY_ISOLATION_VALUE": ns["NO_PROXY_ISOLATION_VALUE"],
+        "_PROXY_ENV_VARS": proxy_const,
+        "NO_PROXY_ISOLATION_VALUE": iso_const,
     }
     kw = decorator_kwargs(fn) if fn is not None else {}
     if kw.get("autouse") != "True":
@@ -483,10 +645,13 @@ def evaluate(conftest_src: str) -> list[str]:
             red.append("NR-5")
         except Exception:  # noqa: BLE001
             red.append("NR-5")
-    if "127.0.0.1" not in ns["NO_PROXY_ISOLATION_VALUE"]:
+    if "127.0.0.1" not in iso_const and "NR-13-b" not in red:
         red.append("NR-13-b")
-    if fn is not None and {"NO_PROXY", "no_proxy"} - set(setenv_spellings(fn)):
-        red.append("NR-14")
+    if fn is not None:
+        if not no_proxy_pairings(fn)[0]:
+            red.append("NR-14")
+        if not delenv_loop_wired(fn, tree)[0]:
+            red.append("NR-15")
     return red
 
 

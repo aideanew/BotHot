@@ -1,5 +1,5 @@
 # make evidence-check 等价链实跑（本机无 make：Windows + git-bash，which make → not found；逐条命令即 Makefile:173-183 的 recipe）
-# 时间 2026-10-12T20:13:38+08:00｜HEAD=884572d+工作区未提交改动（本次提交即其内容）｜Python 3.11.9｜win32 cp936 控制台、无 PYTHONIOENCODING
+# 时间 2026-10-12T20:36:00+08:00｜HEAD=7136df7+工作区未提交改动（本次提交即其内容）｜Python 3.11.9｜win32 cp936 控制台、无 PYTHONIOENCODING
 
 ########## python docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py
 PASS S0.1.2-a `_DEFAULT_PG_URL` 已删除 :: grep -c 命中 0
@@ -141,29 +141,38 @@ PASS NR-10-a 冒烟首行守卫：未配置 DSN → skip 而非 error :: 首条�
 PASS NR-10-b 守卫所需符号已从 conftest 导入 :: import 行='from conftest import PG_URL, SKIP_UNSET_REASON, _PG_URL_SOURCE'
 PASS NR-11 「见 conftest 警告」陈旧注释清零 :: 残留=[]
 PASS NR-12-a test_env_isolation 有 3 条用例 :: 用例=['test_proxy_env_is_cleared_for_every_case', 'test_refused_url_fails_as_connection_error_not_http_status', 'test_host_proxy_state_is_not_inherited']
-PASS NR-12-b 每条用例至少 1 个 assert（无空断言） :: {'test_proxy_env_is_cleared_for_every_case': 3, 'test_refused_url_fails_as_connection_error_not_http_status': 3, 'test_host_proxy_state_is_not_inherited': 1}
+PASS NR-12-b 每条用例至少 1 个 assert（无空断言） :: {'test_proxy_env_is_cleared_for_every_case': 3, 'test_refused_url_fails_as_connection_error_not_http_status': 4, 'test_host_proxy_state_is_not_inherited': 1}
 PASS NR-12-c 宿主代理快照在模块级、用例定义之前（收集期即夹具运行前） :: 快照 :35、首个用例 :40
 PASS NR-13-a _PROXY_ENV_VARS 覆盖大小写 6 个键 :: 实测=('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy')
 PASS NR-13-b NO_PROXY_ISOLATION_VALUE 含回环地址 :: 实测='127.0.0.1,localhost,::1'
-PASS NR-14 夹具对 NO_PROXY 与 no_proxy 各写一次（结构判据，与平台无关） :: setenv 实参=['NO_PROXY', 'no_proxy']
+PASS NR-14 夹具对 NO_PROXY 与 no_proxy 各写一次、值取契约常量（配对判据，与平台无关） :: 配对=NO_PROXY→NO_PROXY_ISOLATION_VALUE、no_proxy→NO_PROXY_ISOLATION_VALUE
+PASS NR-15 清理循环以 _PROXY_ENV_VARS 为迭代源且 delenv(循环变量, raising=False) :: 遍历模块级 _PROXY_ENV_VARS，循环体内 delenv(_name, raising=False) 就位
 
-合计 PASS=21 FAIL=0
+合计 PASS=22 FAIL=0
 结论：代理隔离夹具真实执行有效、同形端口假设清零、chat_sse 守卫到位。
 边界（刻意不由本脚本判定）：test_env_isolation.py 的三条用例需 venv+httpx 真实运行；连库全量 failed=0 需隔离 PG——均交 STEP-00R S0R.1.3/S0R.3.2（人工/有依赖环境）。
 rc=0
 
 ########## python docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py --self-test
 OK  去掉 autouse → 应变红 ['NR-1']｜实际红项=['NR-1']
-OK  删掉 delenv 循环体 → 应变红 ['NR-4-a']｜实际红项=['NR-4-a']
-OK  delenv 改 raising=True → 应变红 ['NR-5']｜实际红项=['NR-4-a(异常 KeyError)', 'NR-5']
+OK  删掉 delenv 循环体 → 应变红 ['NR-4-a', 'NR-15']｜实际红项=['NR-15', 'NR-4-a']
+OK  delenv 改 raising=True → 应变红 ['NR-5']｜实际红项=['NR-15', 'NR-4-a(异常 KeyError)', 'NR-5']
 OK  NO_PROXY 值去掉回环 → 应变红 ['NR-4-b', 'NR-13-b']｜实际红项=['NR-13-b', 'NR-4-b']
 OK  夹具直写 os.environ 而非经 monkeypatch → 应变红 ['NR-6']｜实际红项=['NR-14', 'NR-6']
 OK  夹具不再写小写 no_proxy → 应变红 ['NR-14']｜实际红项=['NR-14']
+OK  大写 NO_PROXY 写了非契约值（小写那遍把它盖回来） → 应变红 ['NR-14']｜实际红项=['NR-14']
+OK  清理循环与 _PROXY_ENV_VARS 常量脱钩 → 应变红 ['NR-15']｜实际红项=['NR-15']
+OK  删掉 _PROXY_ENV_VARS 常量定义 → 应变红 ['NR-13-a', 'NR-15']｜实际红项=['NR-13-a', 'NR-15', 'NR-4-a']
 OK  NR-9-b 实参退回 URL 字面量：基准=True（应 True）｜变异体=False（应 False）
 OK  NR-9-b 只 import 从不接到形参：基准=True（应 True）｜变异体=False（应 False）
 OK  NR-9-b 丢掉 import 行：基准=True（应 True）｜变异体=False（应 False）
 OK  NR-9-b 经模块级别名接线（test_w3 形态）：基准=True（应 True）｜变异体=False（应 False）
-SELF-TEST PASS：6 个 conftest 变异体各自让对应断言变红 + 4 个源码探针敏感
+OK  NR-8 用例退回 localhost:9999 字面量：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-11 陈旧注释「见 conftest 警告」回潮：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-12-a 用例数退化为 2 条：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-12-b 某条用例一条 assert 都没有：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-12-c 宿主代理快照移到用例之后（收集期原貌丢失）：基准=True（应 True）｜变异体=False（应 False）
+SELF-TEST PASS：9 个 conftest 变异体各自让对应断言变红 + 9 个源码探针敏感
 rc=0
 
 # 结论：7 次调用全部 rc=0（等价于 make evidence-check 在本机 rc=0）
