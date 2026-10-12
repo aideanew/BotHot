@@ -41,7 +41,14 @@ cd apps/api && pytest tests/test_notification_frame_id.py tests/test_notificatio
 根因 `apps/api/tests/test_notification_frame_id.py:19` 导入了未使用的 `AsyncMock` ⇒ **F401**；
 删该导入后同一条 job 走完 ruff/mypy/pytest ⇒ **本卡新增的三层 6 例首次被真实执行并通过**。
 
-**仍未闭合**：① pytest 的 passed/skipped 具体数字（日志层需鉴权）；② `compose-smoke` 结论；
+**观测边界（重要）**：上表全部结论来自**未认证 REST 的一次成功解析窗口**（2026-10-12 07:19–07:25Z）。
+其后 GitHub 返回 403 `API rate limit exceeded` ⇒ **无法确认 `compose-smoke` 的最终结论，
+也无法确认随后两个纯文档 sha 的 run 结果**，本卡不把这些写成绿。
+重算前提：先看 `curl -o /dev/null -w "%{http_code}"` 为 200 且响应含 `workflow_runs` 键，再读结论
+（否则解析失败会被误读成"没有正在跑的 run"——见 `findings.md §D-14`）。
+
+**仍未闭合**：① pytest 的 passed/skipped 具体数字（日志层需鉴权）；② `compose-smoke` 及后续两个纯文档
+sha 的 run 最终结论（限流后不可知，见上"观测边界"）；
 ③ 连库用例的**逐条**执行状态——但方向性证据已有：`.github/workflows/ci.yml:33-41` 给 backend job
 挂了真 `postgres:16` service（runner 内映射宿主 5433，与本机的隔离 PG 实例无关，不触犯"绝不碰 5433"），
 且 CI 有专门的 "skip gate" 步骤断言 skip 构成 ⇒ 本卡的落库层 2 例**属真执行而非 skip** 的可能性高，
