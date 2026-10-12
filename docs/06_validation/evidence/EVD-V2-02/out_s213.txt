@@ -1,11 +1,11 @@
 # STEP-02 S2.1.3 执行留档（kb._biz_from_url 委托解析层）
-# 时间 2026-10-12T21:35:54+08:00｜HEAD=78e3378+工作区未提交改动｜3.11.9 Windows｜PYTHONIOENCODING=utf-8
-# 本机依赖实测：structlog / sqlalchemy 皆无（kb.py:22-25 模块级导入）⇒ 通道 D 只能证明「收集期即失败」，用例本身交 CI
+# 时间 2026-10-12T22:25:53+08:00｜HEAD=c10b229+工作区未提交改动（第二轮复审处置批）｜Python 3.11.9｜win32｜全链 PYTHONIOENCODING=utf-8
+# 本机依赖实测：structlog / sqlalchemy 皆无（kb.py:22-25 模块级导入）⇒ D 段只能证明「收集期即失败」，用例本身交 CI（J-5）
+# A/B/C/F/G 用的是**同一版** prove_biz_delegation.py（BD-7 认别名 + 三档退出码 + 三通道 _parses 闸门之后）
+# 每段 `$` 行就是**逐字可重跑**的单行命令（本文档不再对命令做折行排版）
 
-########## A 改前红重放（不改工作区 kb.py：把 NEW_BODY 换回 OLD_BODY 写成临时副本再 exec）
-$ python -c "import sys,pathlib; sys.path.insert(0,'docs/06_validation/evidence/EVD-V2-02'); import prove_biz_delegation as P;
-  src=P.KB.read_text(encoding='utf-8'); assert P.NEW_BODY in src;
-  tmp=P.KB.with_name('_kb_prefix_replay.py'); tmp.write_text(src.replace(P.NEW_BODY,P.OLD_BODY),encoding='utf-8'); P.KB=tmp; rc=P.main(); tmp.unlink(); sys.exit(rc)"
+########## A 改前红重放（不动工作区 kb.py：把 NEW_BODY 换回 OLD_BODY 写成临时副本再 exec）
+$ python -c "import sys; sys.path.insert(0,'docs/06_validation/evidence/EVD-V2-02'); import prove_biz_delegation as P; src=P.KB.read_text(encoding='utf-8'); assert P.NEW_BODY in src; tmp=P.KB.with_name('_kb_prefix_replay.py'); tmp.write_text(src.replace(P.NEW_BODY,P.OLD_BODY),encoding='utf-8'); P.KB=tmp; rc=P.main(); tmp.unlink(); print('replay 临时文件已删除：', not tmp.exists()); sys.exit(rc)"
 目标：apps/api/app/services/_kb_prefix_replay.py 的 _biz_from_url（按 AST 取出后真实 exec）
 
 FAIL BD-1 长链解出号主 biz（改前红：旧实现返回空串） :: "_biz_from_url(LONG_A)=''"
@@ -14,7 +14,7 @@ FAIL BD-3 与 parse_wechat_url(...).biz 恒等（口径单点，6 个样本） :
 PASS BD-4 短链伪 biz= 向后兼容（旧实现能解，委托后不许退化）
 FAIL BD-5 `%3D%3D` 与 `==` 同值（前提：样本确有差异，否则失去判定力） :: "enc→'' raw→''"
 FAIL BD-6 脏类型归零且不抛（None/bytes/int；旧实现只对 int 抛 AttributeError，对 None 与 bytes 静默返回空串——实测，非推断） :: '抛=[(\'42\', "AttributeError: \'int\' object has no attribute \'decode\'")] 非空=[]'
-FAIL BD-7 函数体内确有对 parse_wechat_url 的调用 :: '调用点 0 处'
+FAIL BD-7 函数体内确有对 parse_wechat_url 的调用 :: '调用点 0 处、别名 无'
 FAIL BD-8 委托源必须是 app.services.article_identity :: ['urllib.parse', 'urllib.parse.parse_qs', 'urllib.parse.urlparse']
 FAIL BD-9 kb 侧无第二份 URL 解析（parse_qs/urlparse/urllib 导入归零） :: ['parse_qs', 'urlparse', 'import:urllib.parse']
 PASS BD-10 无 except 兜底（不许把失败伪造成身份）
@@ -32,7 +32,7 @@ FAIL BD-11 无残留参数字面量（不许半委托） :: ['biz']
   FAIL BD-11 无残留参数字面量（不许半委托）
 边界：本脚本只证明委托接线与解析口径；`test_kb_longlink_ingest.py` 的 pytest 实跑需 structlog+sqlalchemy（kb.py:22-25 模块级导入，本机皆无，实测收集期 ModuleNotFoundError），交 EVD-V2-02 §5 J-1/J-5。
 replay 临时文件已删除： True
-rc=1 （预期 1）
+rc=1 （预期 1 = 有判据红；与「目标缺失」那档 INCONCLUSIVE=2 分得开，见 C 段首行）
 
 ########## B 改后绿（工作区真实 kb.py）
 $ python docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py
@@ -54,8 +54,9 @@ PASS BD-11 无残留参数字面量（不许半委托）
 边界：本脚本只证明委托接线与解析口径；`test_kb_longlink_ingest.py` 的 pytest 实跑需 structlog+sqlalchemy（kb.py:22-25 模块级导入，本机皆无，实测收集期 ModuleNotFoundError），交 EVD-V2-02 §5 J-1/J-5。
 rc=0 （预期 0）
 
-########## C 三条反证通道
+########## C 三条反证通道 + 三档档位自证（_strip_target 只作用于内存副本，工作树未被改动）
 $ python docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py --self-test
+OK   档位自证：绿 rc=0 / 目标缺失 rc=2（INCONCLUSIVE） / 有判据红 rc=1 三档分得开
 OK   基准：未变形的 kb.py 判据全绿
 OK   退回旧实现：只读 biz（D-01b 本体复活） → 致红 ['BD-1', 'BD-11', 'BD-2', 'BD-3', 'BD-5', 'BD-6', 'BD-7', 'BD-8', 'BD-9']
 OK   取错字段：返回 mid → 致红 ['BD-1', 'BD-2', 'BD-3', 'BD-4', 'BD-5']
@@ -63,6 +64,7 @@ OK   篡改返回值：把 base64 尾巴削掉 → 致红 ['BD-1', 'BD-2', 'BD-3
 OK   半委托：委托但空串时回退到本地再解析一次 → 致红 ['BD-11', 'BD-6', 'BD-9']
 OK   except 兜底伪造身份（失败静默变假数据） → 致红 ['BD-10']
 OK   BD-7 调用被删（只剩导入）：好样本判真 / 坏样本判假
+OK   BD-7 别名链造假（改名的导入没被调用，调的是本地假函数）：好样本判真 / 坏样本判假
 OK   BD-8 委托到别的模块：好样本判真 / 坏样本判假
 OK   BD-9 第二份解析回潮：好样本判真 / 坏样本判假
 OK   BD-10 except 兜底回潮：好样本判真 / 坏样本判假
@@ -70,19 +72,88 @@ OK   BD-11 参数字面量回潮：好样本判真 / 坏样本判假
 OK   等价重构 关键字实参形式 → 判据全绿
 OK   等价重构 模块属性调用形式 → 判据全绿
 OK   等价重构 先取局部变量再返回 → 判据全绿
+OK   等价重构 改名导入后调用（import … as pw） → 判据全绿
+OK   等价重构 转绑局部变量后调用 → 判据全绿
 
-SELF-TEST PASS：5 个函数体变异各自让指定判据变红 + 5 个判据样本对敏感 + 3 个等价写法不假红
+SELF-TEST PASS：5 个函数体变异各自让指定判据变红 + 6 个判据样本对敏感 + 5 个等价写法不假红
 rc=0 （预期 0）
 
-########## D 真实 pytest 收集（证明本机只能走 A/B/C）
+########## D 真实 pytest 收集（证明本机只能走 A/B/C/F）
 $ cd apps/api && PYTHONPATH=. python -m pytest tests/test_kb_longlink_ingest.py -q --noconftest
+
+=================================== ERRORS ====================================
+______________ ERROR collecting tests/test_kb_longlink_ingest.py ______________
 ImportError while importing test module 'D:\Code\AideanBotHot\apps\api\tests\test_kb_longlink_ingest.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\importlib\__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_kb_longlink_ingest.py:45: in <module>
+    from app.services.kb import _biz_from_url
+app\services\kb.py:22: in <module>
+    import structlog
 E   ModuleNotFoundError: No module named 'structlog'
+============================== warnings summary ===============================
+C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\site-packages\_pytest\config\__init__.py:1464
+  C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\site-packages\_pytest\config\__init__.py:1464: PytestConfigWarning: Unknown config option: asyncio_mode
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+ERROR tests/test_kb_longlink_ingest.py
 !!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
-rc=2 （预期 2 = 收集期失败，非用例失败；rc 取 pytest 退出码本身，不是管道尾状态）
+1 warning, 1 error in 0.80s
+rc=2 （预期 2 = 收集期失败，不是用例失败；rc 取 pytest 退出码本身，不是管道尾状态。决定性行是 `app\services\kb.py:22: in <module> import structlog`）
 
 ########## E 卡面 S2.1.3 验收命令按字面跑（本机无 uv，用同解释器代跑）
 $ cd apps/api && PYTHONPATH=. python -m pytest tests/test_article_identity.py -q --noconftest -k biz
+.....                                                                    [100%]
+============================== warnings summary ===============================
+C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\site-packages\_pytest\config\__init__.py:1464
+  C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\site-packages\_pytest\config\__init__.py:1464: PytestConfigWarning: Unknown config option: asyncio_mode
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 5 passed, 9 deselected, 1 warning in 0.17s
-rc=0
+rc=0 （预期 0）
 # 注意：该命令选中的是 S2.1.2 的解析层用例，不覆盖本步交付物（kb 委托）——卡面命令指向的文件与 S2.1.3 的交付不一致，已登记为任务书缺陷。
+
+########## F 用例第二条锚的判定力实测（第二轮复审 id 2 的处置依据；用 heredoc 以免内外引号互相打断）
+$ python - <<'PY'
+import sys
+sys.path.insert(0, 'docs/06_validation/evidence/EVD-V2-02')
+import prove_biz_delegation as h
+biz = h.load_biz(h.KB.read_text(encoding='utf-8'))
+from fixtures.wechat_urls import LONG_A, LONG_A_TRACKING, LONG_B, OFFSITE, SHORT_1, BIZ_A
+from app.services.article_identity import parse_wechat_url as P
+cases = [(LONG_A, BIZ_A), (LONG_A_TRACKING, BIZ_A), (LONG_B, BIZ_A), (OFFSITE, ""), (SHORT_1, "")]
+print("F-1 五个字面期望 vs 磁盘 kb.py 的真实执行：", ["OK" if biz(u) == e else "MISMATCH" for u, e in cases])
+print("F-2 五个字面期望 vs 解析层直接调用：", ["OK" if P(u).biz == e else "MISMATCH" for u, e in cases])
+kb_empty = lambda u: ""
+print("F-3 只把 kb 侧换成恒返回空串 → 恒等式红条数 =", sum(1 for u, e in cases if kb_empty(u) != P(u).biz),
+      "| 字面锚红条数 =", sum(1 for u, e in cases if kb_empty(u) != e))
+both_empty = lambda u: ""
+print("F-4 两侧共同退化（都恒返回空串）→ 恒等式红条数 =", sum(1 for u, e in cases if both_empty(u) != both_empty(u)),
+      "| 字面锚红条数 =", sum(1 for u, e in cases if both_empty(u) != e))
+PY
+F-1 五个字面期望 vs 磁盘 kb.py 的真实执行： ['OK', 'OK', 'OK', 'OK', 'OK']
+F-2 五个字面期望 vs 解析层直接调用： ['OK', 'OK', 'OK', 'OK', 'OK']
+F-3 只把 kb 侧换成恒返回空串 → 恒等式红条数 = 3 | 字面锚红条数 = 3
+F-4 两侧共同退化（都恒返回空串）→ 恒等式红条数 = 0 | 字面锚红条数 = 3
+rc=0 （预期 0）
+# 结论：恒等式锚抓「kb 侧与解析侧分叉」，字面锚抓「两侧共同退化」——F-3 两者都红 3 条，F-4 恒等式 0 红（空过）而字面锚仍红 3 条 ⇒ 两条锚必须同时存在。
+
+########## G 仓库静态自检（E/F/I/W/UP/B 机检子集；本轮先红后绿的记录见 README §4.5）
+$ python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py apps/api/tests/test_kb_longlink_ingest.py apps/api/tests/test_article_identity.py docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py
+=== apps\api\tests\test_kb_longlink_ingest.py ===
+  无违规（E/F/I/W/UP/B 机检子集）
+=== apps\api\tests\test_article_identity.py ===
+  无违规（E/F/I/W/UP/B 机检子集）
+=== docs\06_validation\evidence\EVD-V2-02\prove_biz_delegation.py ===
+  无违规（E/F/I/W/UP/B 机检子集）
+
+合计违规 0 条。注：CI 的 ruff/mypy 为终判，本表只降提交风险。
+rc=0 （预期 0 = 无违规。本机无 ruff，CI 的 `ruff check app tests` 才是终判，见 §5 J-2）

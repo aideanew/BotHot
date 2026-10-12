@@ -16,7 +16,8 @@ named 'structlog'`，rc=2）⇒ 下面的用例只能在有依赖的环境里真
 
 验收口径（卡面 S2.1.3「补测试」+ 本步补充，全部为本机实测行为）：
 1. `_biz_from_url(LONG_A)` 非空且等于 `BIZ_A`；
-2. 与 `parse_wechat_url(...).biz` **恒等**（口径单点，不允许两处各说各话）；
+2. 与 `parse_wechat_url(...).biz` **恒等**（口径单点，不允许两处各说各话），且每条参数化用例
+   另带一个字面期望值——恒等式单独不够：委托实现下它天然成立，外链/短链两侧又都是空串。
 3. 短链伪 `biz=` 仍解得出（保持既有语义，向后兼容）；
 4. `%3D%3D` 与 `==` 两种书写同值；
 5. `None`/bytes/int 一律归零且不抛。旧实形的实测行为并不一致：`urlparse(None)` 走
@@ -30,8 +31,6 @@ from urllib.parse import quote
 
 import pytest
 
-from app.services.article_identity import parse_wechat_url
-from app.services.kb import _biz_from_url
 from fixtures.wechat_urls import (
     BIZ_A,
     LONG_A,
@@ -42,6 +41,9 @@ from fixtures.wechat_urls import (
     SHORT_WITH_FAKE_BIZ_PARAM,
 )
 
+from app.services.article_identity import parse_wechat_url
+from app.services.kb import _biz_from_url
+
 
 def test_long_link_yields_non_empty_biz() -> None:
     """改前红的那一条：长链的号主身份不得再是空串。"""
@@ -49,9 +51,21 @@ def test_long_link_yields_non_empty_biz() -> None:
     assert _biz_from_url(LONG_B) == BIZ_A, f"同号主另一篇：{_biz_from_url(LONG_B)!r}"
 
 
-@pytest.mark.parametrize("url", [LONG_A, LONG_A_TRACKING, LONG_B, OFFSITE, SHORT_1])
-def test_delegation_is_the_single_source_of_truth(url: str) -> None:
-    """`_biz_from_url` 必须与 `parse_wechat_url(url).biz` 恒等——口径只有一处定义。"""
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [(LONG_A, BIZ_A), (LONG_A_TRACKING, BIZ_A), (LONG_B, BIZ_A), (OFFSITE, ""), (SHORT_1, "")],
+    ids=["long_a", "long_a_tracking", "long_b", "offsite", "short_1"],
+)
+def test_delegation_is_the_single_source_of_truth(url: str, expected: str) -> None:
+    """两条独立的锚：字面期望值 + 与 `parse_wechat_url(...).biz` 恒等。
+
+    恒等式只能抓「kb 侧与解析侧分叉」，抓不到两侧**共同退化**：本机实测把两边都换成
+    恒返回 `""` 后，5 条恒等式全绿，而字面期望锚红 3 条（LONG_A / LONG_A_TRACKING / LONG_B）。
+    另外 OFFSITE 与 SHORT_1 两侧本来就是空串，单看这一对是 `"" == ""`（复审报告 id 2，
+    两条锚的分工实测在 `out_s213.txt` F 段）。
+    下表五个期望值取自磁盘 kb.py 的真实执行（EVD-V2-02 通道 C），不是推断。
+    """
+    assert _biz_from_url(url) == expected, f"{url[:48]!r}… → {_biz_from_url(url)!r}，期望 {expected!r}"
     assert _biz_from_url(url) == parse_wechat_url(url).biz, (
         f"kb 侧与解析侧口径分叉：kb={_biz_from_url(url)!r} vs parse={parse_wechat_url(url).biz!r}"
     )

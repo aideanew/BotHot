@@ -1,7 +1,9 @@
 # EVD-V2-02 — STEP-02 S2.1.1/S2.1.2/S2.1.3 文章身份解析与委托（本机执行账）
 
 起始基线：`main@b69123f`（STEP-00R 第三轮采纳项入库后）；S2.1.1/S2.1.2 的交付提交是
-`78e3378`（其父为 `1470b77`，即 STEP-00R 第四轮处置）；S2.1.3 在 `78e3378` 之后的工作区。
+`78e3378`（其父为 `1470b77`，即 STEP-00R 第四轮处置）；S2.1.3 的交付提交是 `c10b229`
+（父 `78e3378`，`git rev-parse --short c10b229^` 可复核）；§4.4/§4.5 的处置批在 `c10b229`
+之后的工作区，本文件与 `out_s213.txt` 的sha在提交后由提交说明承接（不在证据里伪造未来 sha）。
 > 第二轮复审 F2 指出本行原写「基线 `main@b69123f` → 本包改动」会让人以为工作树直接接在
 > `b69123f` 上；`out_run.txt` 头部的 `HEAD=b69123f+工作区未提交改动` 同理，是**采集当时**的
 > 事实快照，不是本包的父提交。两处均已改为带父提交的写法。
@@ -9,7 +11,7 @@
 依赖实测（`python -c "import X"`，逐一）：**有** pytest 9.1.1、dotenv、anyio；
 **无** sqlalchemy、structlog、httpx、pytest-asyncio、coverage；PATH 上**无** `uv`/`ruff`/`make`/`mypy`。
 ⇒ 卡面验收命令 `uv run pytest --cov=app.services.article_identity --cov-fail-under=100`
-在本机不可复现（两个原因：没有 uv，也没有 pytest-cov），本包用下面两条**等价**通道替代，
+在本机不可复现（两个原因：没有 uv，也没有 pytest-cov），本包用 §2 的**三条等价**通道替代，
 并把缺口登记在 §5。
 
 > 与 EVD-V2-00R 的一条口径差：本包**不需要** AST 剔除三方 import。
@@ -75,8 +77,14 @@ PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-02/prove_biz_de
 #    不 mv、不改工作树，命令与输出都在 out_s213.txt A 段）
 
 PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py --self-test
-# → SELF-TEST PASS：5 个函数体变异各自让指定判据变红 + 5 个判据样本对敏感 + 3 个等价写法不假红
+# → 首行「OK 档位自证：绿 rc=0 / 目标缺失 rc=2（INCONCLUSIVE） / 有判据红 rc=1 三档分得开」
+# → SELF-TEST PASS：5 个函数体变异各自让指定判据变红 + 6 个判据样本对敏感 + 5 个等价写法不假红
 ```
+
+**三档退出码**（第二轮复审 B3/B4：目标函数被整个删掉时，原先也打印一份 FAIL 清单、rc=1，
+读者会把它当成普通的红基线——「没测到」冒充「测出红」）。现在 `0` 全绿 / `1` 有判据红 /
+`2` INCONCLUSIVE（`_biz_from_url` 不存在，判据无从判定），且 self-test 第一道闸门用
+内存里删掉该函数的副本（`_strip_target`，不动工作树）**实测**三档互不相同。
 
 判据分三面：行为面 BD-1…BD-6（长链出号主、与解析侧恒等、伪 `biz=` 不退化、`%3D%3D` 同值、
 脏类型统一归零）、结构面 BD-7…BD-9（真有调用、委托源必须是 `app.services.article_identity`、
@@ -85,6 +93,23 @@ kb 侧不留第二份解析）、反面 BD-10/BD-11（不许 `except` 兜底伪�
 却同时让 BD-9/BD-11 转红、并把 BD-6 的 int 抛错路径**带回来**——这正是「只测行为」抓不到的形态。
 反证通道自身也修过两处：多行变异体原先用**不含缩进**的锚，替换后首行变 8 空格、根本解析不了，
 于是结构判据以 `IndentationError` 冒充「致红」；已加 `_parses()` 闸门单独立判 FAIL（复审 D 类）。
+第二轮复审 3c 指出该闸门原先**只盖住 MUTANTS/EQUIVS 两条通道**，PROBES 直接把样本喂给判定函数，
+坏样本自己解析不了时抛的是未捕获的 SyntaxError——同一个失效模式在第三条通道里还活着；
+现三条通道都过闸门。
+
+**BD-7 认别名**（第二轮复审 3e）：判定原先只认裸名 `parse_wechat_url` 与 `模块.parse_wechat_url`，
+于是 `from … import parse_wechat_url as pw` / `p = parse_wechat_url; p(url)` 这两种**行为完全正确**的
+重构被判成缺陷——正是「假红门禁被人当噪音关掉」的失效形态。现由 `_delegate_aliases()` 只认
+三条绑定途径（`from 委托源 import … as A`、`A = 委托名`、`B = A` 传递到不动点），
+同时补一条坏样本「别名链造假：改名导入没被调用，调的是本地假函数」证明放开后判据仍不可空过，
+并把那两种写法钉成 EQUIVS（`PROBES` 5→6、`EQUIVS` 3→5 即由此而来）。
+
+**用例侧的第二条锚**（第二轮复审 id 2）：`test_delegation_is_the_single_source_of_truth`
+原先只写「kb 侧 == 解析侧」，这是同义反复——委托实现下它天然成立，且 `OFFSITE`/`SHORT_1`
+两侧都是空串。现每条参数化用例另带一个字面期望（五个值取自磁盘 kb.py 的真实执行，非推断），
+两条锚各自的判定力本机实测过（命令见 `out_s213.txt` F 段）：把 kb 侧单独换成恒返回 `""`
+⇒ 恒等式与字面锚同时红 3 条；把两侧**共同**换成恒返回 `""`（模拟解析层退化）⇒ 恒等式 5 条全绿
+（空过），字面锚仍红 3 条。所以两条锚缺一不可：恒等式抓分叉，字面值抓共同退化。
 
 ## 3. 「改前红」现在是可重放的，不再只是推断
 
@@ -157,6 +182,38 @@ Q-10 引用的知识文档路径 `docs/08_knowledge/RSS分析/output_claude.md:2
 `+` 的问题本身我复现成立、已按 §4.1 修；但这条「旁证」不采信，也不写进任何结论。
 （同类事件见 `EVD-V2-00R/README.md` §8.2——复审是信号源，不是权威。）
 
+### 4.4 S2.1.3（`c10b229`）复审处置——本轮两份报告合并记账
+
+S2.1.3 交付后收到**两份**独立验证报告，编号体系不同：一份按 A–G 分组（下文 id 记作「A–G 报告」），
+一份按表格行 1a–6 + Top-priorities 序号（下文 id 记作「1a–6 报告」）。纪律不变：**每条先在本机复现，
+复现出来才改**。1a–6 报告的裁决表共 **23 行：19 行 PASS、4 行 DEFECT**——逐行为
+`id 2`（用例同义反复）、`3c`（`_parses` 闸门漏盖 PROBES）、`3e`（BD-7 假红）、`3f`（采样上限，
+复审自判「按设计、文档已界定范围」）；PASS 的 19 行含 A 段红态重放、B/C 段数字、D 段 rc 归属、
+E 段卡面命令、`78e3378` 副本逐字节一致、范围与禁改路径。成立并已修的三项（加 A–G 报告的 B3/B4 共四项）：
+
+| id（出处） | 复审意见 | 复现 | 落点 |
+|---|---|---|---|
+| 3e（1a–6） | BD-7 假红：`from … import parse_wechat_url as pw` 与 `p = parse_wechat_url; p(url)` 两种**行为完全正确**的重构被判成缺陷 | 按复审给的构造改 `NEW_BODY` → `evaluate()` 返回 `['BD-7']` | `_delegate_aliases()` 认三条绑定途径；两种写法钉成 `EQUIVS`（3→5）；另加坏样本「别名链造假」（`PROBES` 5→6）证明放开后仍不可空过 |
+| 3c（1a–6） | `_parses()` 闸门只盖住 MUTANTS/EQUIVS，PROBES 直接把样本喂判定函数 ⇒ 坏样本自己解析不了时抛未捕获 SyntaxError 冒充「判到假」 | 造一条缩进错的坏样本 → `self_test` 崩在 SyntaxError | 三条通道都过闸门，解析不了的样本单列 FAIL「样本无法解析」 |
+| B3/B4（A–G） | `_biz_from_url` 被整个删掉时仍打印一份 FAIL 清单、rc=1 ⇒「没测到」冒充「测出红」，与红基线无法区分 | 内存里删掉函数后跑 `main()` → rc=1 | 三档退出码 `0/1/2`，`2`=INCONCLUSIVE；`self_test` 首道闸门用 `_strip_target()` **实测**三档互不相同（C 段首行） |
+| id 2（1a–6） | `test_delegation_is_the_single_source_of_truth` 是同义反复，且 `OFFSITE`/`SHORT_1` 两侧都是空串 ⇒ 对该二例即使 kb 恒返回 `""` 也绿 | 参数化逐个驱动：`""` 侧 `"" == ""` 成立 | 每条参数化另带一个字面期望（五个值取自磁盘 kb.py 真实执行）；两条锚的分工实测在 F 段（F-3 都红 3 条；F-4 共同退化时恒等式 0 红、字面锚仍红 3 条） |
+
+复现不成立（两项）与「成立但无需动作」（一项）：
+
+| id（出处） | 复审意见 | 我的处置 |
+|---|---|---|
+| A5（A–G） | 旧实现对 bytes 抛 `ValueError` | 不采信：`parse_qs(urlparse(b"...").query)` → `{b'__biz': [b'AAA']}`，旧实现对 bytes 返回 `''`；复审把 `parse_qs` 直接喂了整条 URL。BD-6 的措辞（「None 与 bytes 静默空串，只有 int 抛」）维持 |
+| D 类（A–G） | 「先委托、空串时再本地覆写」的形态 11 条判据全绿 | 不采信：实测该形态红 `BD-9`/`BD-11`（并带回 BD-6 的 int 抛错路径）——这正是「半委托」那条变异体的内容 |
+| 3f（1a–6） | 采样上限：只喂 6–7 个 URL，中转里藏特殊分支可绕过行为面 | 复审自己判为「按设计、文档已界定范围」，不动作；BD 面是**接线与口径**门禁，不是全域等价性证明（§7 已写明通道 C 不能证明什么） |
+
+### 4.5 本轮自查（未等复审，本机 `g24_static_check.py`）
+
+| 文件 | 规则 | 复现 | 处置 |
+|---|---|---|---|
+| `tests/test_kb_longlink_ingest.py` | I001 import 段序 | g24 报「`from fixtures.wechat_urls` 应排在 `app.services.kb` 之前」 | 按仓库真实段序（stdlib → 第三方 `fixtures` → 本地 `app`，锚 `tests/test_article_identity.py:34` 与 `:46`）重排，`out_s213.txt` G 段复跑 0 违规。**教训**：第一轮复审 Q-26 修的正是同一条 I001，新文件又犯一次 ⇒ §5 J-2（CI `ruff check app tests`）不是可选项，本机静态自检只能降险、不能定判 |
+| `prove_biz_delegation.py` | F401 死导入 | `git show c10b229:… \| grep -c ModuleType` → 1（只在 import 行出现，全文件未使用） | 删除该行；G 段复跑 0 违规 |
+| `prove_article_identity.py:520` | E501（141 > 120 列） | g24 报出 | **不修**：`docs/**` 不在 CI lint 面（CI 只 `ruff check app tests`），且该文件 `:37` 已有 `# ruff: noqa: E501`——g24 不解析 noqa 所以仍报。前例见 §4.1 Q-27 |
+
 ## 5. 交人工 / 有依赖环境的项目
 
 | # | 项 | 为什么本机不能做 | 命令 |
@@ -170,10 +227,16 @@ Q-10 引用的知识文档路径 `docs/08_knowledge/RSS分析/output_claude.md:2
 ## 6. 范围与偏离声明
 
 - 本包交付 **S2.1.1 + S2.1.2 + S2.1.3**；S2.1.4/S2.1.5 未做（`asset.py` 零改动，
-  第二轮复审 G 段独立确认）。S2.1.3 对 `kb.py` 的改动**只有一个 hunk**：
+  复审 G 段独立确认）。S2.1.3 对 `kb.py` 的改动**只有一个 hunk**：
   `git diff 78e3378 -- apps/api/app/services/kb.py` → `3 insertions(+), 5 deletions(-)`，
   且都在 `_biz_from_url` 函数体内（`kb.py:587-591`）；`_find_source_by_anchor`（`kb.py:343`）
   的调用点、`_article_key`、LIKE 兜底一律未动，分属 S2.1.4/S2.1.5。
+  两点读数口径要注意：①「一个 hunk」是**默认上下文**下的 `git diff`，加 `-U0` 会因
+  docstring/导入块与 return 行之间的空行而拆成 2 个 hunk；②`grep -c '^-'` 数出来是 6，
+  因为把 `--- a/…` 文件头也算进去了——以 numstat 的 `3/5` 为准。
+- **本轮处置批（§4.4/§4.5）没有再动 `kb.py`**：`git diff c10b229 -- apps/api/app/services/kb.py`
+  为空；改动面只有 `prove_biz_delegation.py`（判据与档位）、`test_kb_longlink_ingest.py`
+  （用例的第二条锚 + import 段序）、本 README 与 `out_s213.txt`（重新整份生成，A–G 七段）。
 - 新增文件都在卡面「允许修改」或「证据路径」内：`tests/test_kb_longlink_ingest.py` 是卡面
   允许路径；`prove_biz_delegation.py`、`out_s213.txt`、`block_article_identity_plugin.py` 与本
   README 落在证据路径 `docs/06_validation/evidence/EVD-V2-02/`。
@@ -193,3 +256,7 @@ Q-10 引用的知识文档路径 `docs/08_knowledge/RSS分析/output_claude.md:2
   那条 If 的两条弧，但那不是本脚本的门禁项，别把它读成「分支覆盖 100%」。
 - 三条反证通道各自的方向：变异体证明「改坏会红」，样本对证明「判据能假」，等价重构证明
   「换写法不假红」。缺任意一条，另两条的结论都不完全可信。
+- 读 `out_s213.txt` 的 rc 要分档：`0` 全绿 / `1` 有判据红（真红基线）/ `2` **INCONCLUSIVE**
+  （目标函数不在文件里，判据压根没跑）。把 2 当成 1 读，就是把「没测到」读成「测出红」。
+- F 段的 F-3/F-4 是**判定力模拟**：用 `lambda u: ""` 顶替实现来问「这条锚会不会空过」，
+  不是对磁盘代码的执行——对磁盘代码的真实执行只有 F-1/F-2 与 B 段。两者的结论不可互换。
