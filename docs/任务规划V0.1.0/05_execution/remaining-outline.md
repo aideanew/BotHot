@@ -224,6 +224,7 @@ id 需在 `:187` **之前**用 Python 生成，写入 `PushMessage`（可能需�
 | **G-21 → TASK-042** | **调度侧 web 通知全部落为广播** ⇒ 任何登录用户可见他人定时通知 | 实测：`push_scheduler.py:181-191` 构造 `PushMessage` **不设 `external_user_id`**（对照 `bots.py:332` 传 `ch.user_id`）⇒ `web.py` 频道恒取 `broadcast` 分支、`persist_web_notification:290-291` 恒 `is_broadcast=True, sub=“”` | `apps/api/app/services/push_scheduler.py`（需先裁决「调度是否本意广播」） | **MUST（数据可见性，优先级高于 S4 收口）** |
 | **G-22 → TASK-043** | **孤儿帧窗口**：帧在 `:194` 外发、事务在 `:247` 提交、落库走 savepoint ⇒ 提交失败时“有帧无行”，下一轮换 id | 复算：`grep -n "result = await provider.push\|await db.commit\|begin_nested" apps/api/app/services/push_scheduler.py` ⇒ 194 / 247 / 286 | 需裁决：①发布挂到提交之后（改投递语义）②接受并写进文档（前端保留内容窗口去重兜底） | MUST（裁决项，非编码项） |
 | **G-20 → TASK-040** | 卡片的**允许修改/禁止修改**两段之间存在**未定义空档**：既没授权也没禁止的路径，默认语义是什么？没人写过 | TASK-017 允许 = `NotificationBell.tsx` + 其测试，禁止 = `apps/api/**`、`packages/**`，而它**必须**改的 `apps/web/lib/api/notifications.ts:61-71` 两段都没列 ⇒ 该卡在自己的授权面内**结构性做不到**（R.6.1.3） | `docs/任务规划V0.1.0/05_execution/tasks/*.md` 卡模板 + 一次全量交叉核查 | **MUST**（建议默认语义定为"**未列出即禁止**"，并把这条写进模板与 `collaboration-discipline.md`） |
+| **G-23 → TASK-044** | **"实测"标签不构成时效声明**：断言当下状态的文档表行，会被记录该断言之后的提交证伪，而全仓无任何门禁能发现（G-18 的文档侧推广） | 第四轮复审实证：R.16.0 标题"当前真实状态（实测，非推断）"下三行同步后全假——`HEAD=origin/main=60e5723`（实为更晚的 HEAD）、`porcelain` 14 改 2 未跟踪（实为 0 行）、`git ls-files docs/任务规划V0.1.0 \| wc -l` = 0（实为已跟踪）。已就地改写为"同步**前**快照 + 重算方式"列 | 体例入 `collaboration-discipline.md`：凡"当前/现状"表行必须二选一——写成**可重算命令**，或显式钉 **"（当时）"**；禁用裸"实测"作为时效背书 | MUST（纪律类，与 G-18 同批裁决） |
 
 > R.12 排期建议：G-5/G-6/G-9/G-12 四项是**门禁自身的有效性**问题——门禁不可信时，其余卡片"验收通过"都打折。
 > 故建议 R.12 与 R.6 并行、**先于** R.3/R.5 的大规模编码。
@@ -286,18 +287,23 @@ id 需在 `:187` **之前**用 Python 生成，写入 `PushMessage`（可能需�
 
 ## R.16 与 GitHub 同步的前置条件（用户新增要求："全部完成后…保证双端一致"）
 
-### R.16.0 当前真实状态（实测，非推断）
+### R.16.0 同步**前**的状态快照（采集时点：口径判定之前；已由 R.16.4 取代，读作历史）
 
-| 事实 | 证据 |
+> ⚠ 本节五行是"决策时输入"，不是"现状"。同步执行后前三行即刻失效
+> ——这正是 R.16.4"递归注记"记下的同一形态（G-18）在本文档另一处的复现。
+> **现状一律现场重算**，判据见 R.16.4 的一致判据行。
+
+| 事实（采集当时） | 重算方式 |
 |---|---|
-| `main` 与 `origin/main` **同一个 commit**，ahead=0 / behind=0 | `git rev-parse HEAD` = `git rev-parse origin/main` = `60e5723…`；`git rev-list --left-right --count origin/main...HEAD` → `0  0` |
-| **本轮所有改动都未提交**（14 改 + 2 未跟踪） | `git status --porcelain` → 13 行 ` M` + `?? .gitleaks.toml` + `?? docs/任务规划V0.1.0/` |
-| **整个计划目录（42 个文件）是未跟踪的** | `git ls-files docs/任务规划V0.1.0 \| wc -l` → **0**；`find … -type f \| wc -l` → **42** |
-| 远端是干净 HTTPS + 仓库级代理 | `git config --get remote.origin.url` / `--get http.proxy`（`http://127.0.0.1:10808`） |
-| 仓库为 **public** | `adr-0010-externalize-connection-strings.md:15` 自述"仓库为 public" |
+| 当时 `main` 与 `origin/main` **同一个 commit**，ahead=0 / behind=0 | `git rev-list --left-right --count origin/main...HEAD`（当时 → `0  0`） |
+| 当时**本轮改动全部未提交**（14 改 + 2 未跟踪） | 当时 `git status --porcelain` → 13 行 ` M` + `?? .gitleaks.toml` + `?? docs/任务规划V0.1.0/`；**现已为 0 行**（口径 A 已执行） |
+| 当时**整个计划目录未被 git 跟踪** | `git ls-files docs/任务规划V0.1.0 \| wc -l`（当时 → **0**；现已跟踪，同一命令可重算）；文件数 `find docs/任务规划V0.1.0 -type f \| wc -l` |
+| 远端是干净 HTTPS + 仓库级代理 | `git config --get remote.origin.url` / `--get http.proxy`（`http://127.0.0.1:10808`）——**不受同步影响，仍为真** |
+| 仓库为 **public** | `adr-0010-externalize-connection-strings.md:15` 自述"仓库为 public"——**不受同步影响，仍为真** |
 
-⇒ **"双端一致"此刻平凡成立（都是 60e5723），所以它不是现状，而是一个待执行的意图**：
+⇒ 采集当时的判断是：**"双端一致"平凡成立，所以它不是现状，而是一个待执行的意图**；
 要么"把本轮成果推上去"，要么"什么都不推、保持对齐"。两者互斥，必须先选。
+（该判断已被 R.16.4 记录为"口径 A 已执行"。）
 
 ### R.16.1 三种"一致"及其各自的硬前置
 
@@ -350,7 +356,7 @@ git remote -v ; git config --get http.proxy
 
 | 项 | 实测 |
 |---|---|
-| 提交范围 | 起点 `60e5723`（同步前 `origin/main`）⇒ 按卡片分组提交（S0 安全 / 守卫 / 构建 / 门禁 / 文档漂移 / S4 编码 / 计划入库 / 证据重算 / 同步记录） |
+| 提交范围 | 起点 `60e5723`（同步前 `origin/main`）⇒ 按卡片分组提交（S0 安全 / 守卫 / 构建 / 门禁 / 文档漂移 / S4 编码 / 计划入库 / 证据重算 / 同步记录 / 本节改写）。**计数不写死**：`git rev-list --count 60e5723..HEAD`。分组枚举是叙述性的，不声称穷举——"记录这次同步"的提交本身会追加，故任何写死的批次数都即刻过时。 |
 | 双端一致判据 | **判据而非快照**：`git fetch origin && git rev-list --left-right --count origin/main...HEAD` → `0	0`，且 `git ls-remote origin refs/heads/main` 与 `git rev-parse HEAD` 同值。**本节不写死哈希**——写死即自证过时（见下方"递归注记"）。 |
 | 推送方式 | 每轮均先 `git fetch` 确认远端未移动 ⇒ **fast-forward，无 force**；未碰 `-u/--force-with-lease` |
 | 提交前门禁 | 三档告警 0；`grep -c "^+.*口令值"` = 0（口令仅以 `-` 删除行出现在摘除明文的提交里，属既有历史内容）；暂存区无 `.pyc`/`__pycache__`/`*.local.toml`；无 token 串、无本机用户路径 |
@@ -369,3 +375,11 @@ git remote -v ; git config --get http.proxy
 处置：把证据从**快照**（哈希/计数）换成**可重算命令**（上表"双端一致判据"行），
 本节因此对"之后又加了几个提交"免疫。代价是本节不再自带具体哈希，
 需现场执行判据命令才能取值——这是"文档会过时"这一物理约束下唯一稳定形态。
+
+**免疫的边界（第三轮复审 G-23）**：改写后复审者推翻过一次"整份文档免疫"的强读法——
+本节免疫≠R.16.0 免疫。R.16.0 曾以"当前真实状态（实测，非推断）"为题写死
+"HEAD=origin/main=60e5723 / porcelain 14 改 2 未跟踪 / 计划目录 0 个被跟踪文件"，
+这三行被同步动作本身全部证伪。已处置：R.16.0 改标题为"同步**前**的状态快照"、
+逐行标注采集时点，并把值位换成**重算方式**列。教训一般化：
+**"实测"这个词不构成时效声明**——凡断言当下状态的表行，要么写成可重算命令，
+要么显式钉住"当时"；否则它会在下一次提交里变成一条假的事实。
