@@ -1,0 +1,44 @@
+{
+  "_shape_source": "形状来源 Wellbyte｜envelope：app/providers/article_sources/wellbyte.py:6「响应统一 {code, message, data, meta:{endpoint, cache_hit, elapsed_ms, request_id, credits_charged}}」，_CODE_OK=0 见 :52，失败读 message 见 :320-325；meta 五个子键**代码一处都不读**（全文件无 meta 访问）⇒ 保留仅为形状忠实，值属推断；行路径：:136-147 data(dict)→MsgList(dict)→Msg(list)，:140-141 注释是 TC-A4-04 的层级教训「**不是** data.data.MsgList（首轮看错层级）」，与 docs/06_validation/evidence/channeltest-20260929/README.md:169 一致；行键：:153-162 读 AppMsg.ContentUrl/Title/Digest/CreateTime 与 BaseInfo.DateTime（:160-162 与 justoneapi 同法，epoch 秒）；docstring :13「ContentUrl(带 sessionid)」⇒ 本样本的 ContentUrl 刻意携带 sessionid，供 STEP-01 S1.3.1 的追踪参数剥离用例；标识：:270-278 data.AccountInfo.UserName（startswith(\"gh_\") 守卫），docstring :13-14「传文章 URL 即返回 ghid——biz→gh_ 映射零成本路径」，活体 TC-A4-04 见 :248-251 与 README.md:167-168（gh_b9465228558d）；端点与请求：:121-127 POST /v1/wechat_mp/user/account_history_articles_v2，body {url: <文章 URL>}（**入参是文章 URL 而非 ghid** ⇒ D-05 标识错位）；:118-119 page>1 返回空（D-06）；:170-176 详情端点禁用（422 三连拒 TC-A4-05/06/07）⇒ 无详情样本；registry.py:245-250 verified_scope=发现活体实测 78cr。刻意不含：AppMsg.MsgId/ItemIndex（仅 STEP-03:36 假设，代码与活体记录均无）。合成声明：除 gh_ 与时间戳外均为占位值。",
+  "code": 0,
+  "message": "",
+  "data": {
+    "AccountInfo": {
+      "UserName": "gh_b9465228558d",
+      "NickName": "占位号名"
+    },
+    "MsgList": {
+      "Msg": [
+        {
+          "AppMsg": {
+            "Title": "示例标题一",
+            "Digest": "列表摘要（占位）",
+            "ContentUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000001&idx=1&sn=aaaa1111&sessionid=1790659200&chksm=f2b6330c",
+            "CreateTime": 1790659200
+          },
+          "BaseInfo": {
+            "DateTime": 1790659200
+          }
+        },
+        {
+          "AppMsg": {
+            "Title": "示例标题二",
+            "Digest": "列表摘要（占位）",
+            "ContentUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000002&idx=1&sn=bbbb2222&sessionid=1790745600",
+            "CreateTime": 1790745600
+          },
+          "BaseInfo": {
+            "DateTime": 1790745600
+          }
+        }
+      ]
+    }
+  },
+  "meta": {
+    "endpoint": "account_history_articles_v2",
+    "cache_hit": false,
+    "elapsed_ms": 1200,
+    "request_id": "00000000-0000-0000-0000-000000000000",
+    "credits_charged": 78
+  }
+}

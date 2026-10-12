@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+形状来源 Atom 1.0｜命名空间：app/providers/article_sources/rss.py:233 ns={atom: http://www.w3.org/2005/Atom}，
+  feed 识别见 :168-169（<feed> + atom ns）；entry 读取项：title(:243)、
+  link@rel/@href 循环取 rel="alternate"（:246-249，rel 缺省按 alternate 处理）、
+  published 否则 updated（:250-255）、id(:256)、summary(:257)。
+  ⚠ 解析器**不读** atom:author、category、content ⇒ 本样本刻意不含（含了即猜测）。
+  emit 的 dict 键见 :264-274，"publishTime" 同样原样透传(:269)——但 Atom 用 ISO 8601，
+  能被 manifest.py:114 fromisoformat 解出 ⇒ D-04 只打击 RSS 2.0 的 RFC 822 分支。
+结构与日期串：与 apps/api/tests/test_rss_provider.py:47-66 的 ATOM_SAMPLE 同形
+  （:51 feed/updated=2026-10-02T12:00:00+08:00；:56 published=2026-10-01T09:00:00+08:00；
+   :63 published=2026-10-02T10:00:00+08:00；link@href+rel="alternate" 见 :54/:61）。
+刻意差异：entry[1] **只有 updated、没有 published**，用于覆盖 :250-255 的回退分支
+  （既有 ATOM_SAMPLE 两条都带 published，该分支无测试——与 D-04 同一类夹具缺口）。
+活体来源：registry.py:156-157 verified_scope="单元测试：RSS 2.0 / Atom 解析 + 字段映射 + 分页语义"。
+镜像源口径：link 用 mp.weixin.qq.com 长链 ⇒ 属 C-03 折中方案里「公众号镜像源」
+  （RSSHub/WeRSS/feeddd 类），入库层可通过；外链类见 rss2.xml。
+-->
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>占位源：公众号镜像</title>
+  <link href="https://example.invalid/" rel="alternate"/>
+  <updated>2026-10-02T12:00:00+08:00</updated>
+  <id>urn:uuid:00000000-0000-0000-0000-000000000000</id>
+  <entry>
+    <title>示例条目一</title>
+    <link href="https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&amp;mid=2650000001&amp;idx=1&amp;sn=aaaa1111" rel="alternate"/>
+    <id>atom-001</id>
+    <published>2026-10-01T09:00:00+08:00</published>
+    <updated>2026-10-01T11:30:00+08:00</updated>
+    <summary>摘要是占位值，用于 digest 映射</summary>
+  </entry>
+  <entry>
+    <title>示例条目二（仅 updated，覆盖 published 回退分支）</title>
+    <link href="https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&amp;mid=2650000002&amp;idx=1&amp;sn=bbbb2222" rel="alternate"/>
+    <id>atom-002</id>
+    <updated>2026-10-02T10:00:00+08:00</updated>
+    <summary>摘要是占位值，用于 digest 映射</summary>
+  </entry>
+</feed>

@@ -1,0 +1,8 @@
+=== apps\api\tests\conftest.py ===
+  无违规（E/F/I/W/UP/B 机检子集）
+=== apps\api\tests\test_w3_push_scheduler.py ===
+  无违规（E/F/I/W/UP/B 机检子集）
+=== apps\api\tests\fixtures\wechat_urls.py ===
+  无违规（E/F/I/W/UP/B 机检子集）
+
+合计违规 0 条。注：CI 的 ruff/mypy 为终判，本表只降提交风险。

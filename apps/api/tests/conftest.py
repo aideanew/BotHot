@@ -1,14 +1,18 @@
 """pytest 共享夹具（B-T4 起有连库测试）。
 
 - Windows 下 psycopg async 要求 Selector 事件循环，统一在 import 时设置；
-- PG 夹具连真实本地 PG:5433（迁移已应用）；不可达（如 Docker 引擎故障）
-  则 skip 并标注原因，引擎恢复后由 A 直接复跑补验收；
-- R6.4.5（F-21）/ D23 隔离根治：连库目标按 `环境变量 > backend/.env > 默认生产库`
-  三级解析。优先读 `AIDEANBOT_TEST_PG_DSN` 指向独立测试库，避免与部署中的
-  scheduler/worker 共库竞态；三级都未命中才回退默认 DSN 并告警。
-- 测试库初始化（一次性）：`createdb bothot_test` 后
-  `DATABASE_URL=...5433/bothot_test alembic upgrade head`，再把该 DSN 写入
-  `backend/.env` 的 `AIDEANBOT_TEST_PG_DSN`（.env 已被 .gitignore 覆盖，不入库）。
+- 连库目标按 `环境变量 AIDEANBOT_TEST_PG_DSN > apps/api/.env 同名键` **两级**解析；
+  两级都未命中即判定「未配置」，连库夹具直接 skip 并报原因——不再猜一个库连。
+  D-12：旧实现有第三级回退——硬编码一个指向 :5433/bothot 的生产形态 DSN 常量（含口令
+  字面量）且只告警不拒绝，未设变量时测试真实写入生产形态库；测试用固定时钟
+  （落在真实过去），部署中的 scheduler 会把测试订阅当到期任务认领并推进水位、
+  worker 对测试占位链接发起真实 HTTP 抓取（D23）。宁 skip 不写生产。
+- 「未配置」时 `PG_URL` 取一个必然拒连的地址：下游 9 个连库模块各自
+  `os.environ.get(AIDEANBOT_TEST_PG_DSN, 生产字面量)` 独立判定，只把本模块置空
+  并不能阻止它们直连 :5433（清单见 docs/06_validation/evidence/EVD-V2-00/README.md）。
+- 取得测试库：`bash scripts/test-env.sh up && eval "$(bash scripts/test-env.sh env)"`
+  （PG 16@宿主 5547 / Redis@宿主 6390，拒绝复用 5433/5435/6379/6380），
+  再 `cd apps/api && alembic upgrade head`。
 - 隔离策略：每个用例一个引擎连接 + 外层事务，用例结束统一回滚，零残留。
 """
 
@@ -17,7 +21,6 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
-import warnings
 from pathlib import Path
 
 if sys.platform == "win32":
@@ -33,49 +36,51 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
     create_async_engine,
 )
 
-_DEFAULT_PG_URL = "postgresql+psycopg://bothot:bothot@localhost:5433/bothot"
+_TEST_PG_ENV_VAR = "AIDEANBOT_TEST_PG_DSN"
+# 端口 1 需 root 才能监听 ⇒ 本机不可能有 PG 监听其上，连接立即被拒——各连库夹具据此 skip。
+_REFUSED_PG_URL = "postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset"
+SKIP_UNSET_REASON = (
+    "AIDEANBOT_TEST_PG_DSN 未设置：连库用例需要独立测试库。"
+    '准备命令：bash scripts/test-env.sh up && eval "$(bash scripts/test-env.sh env)"'
+)
 _BACKEND_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
 
 def _resolve_test_pg_url() -> tuple[str, str]:
-    """解析连库目标，返回 (dsn, 来源)。
+    """解析连库目标，返回 (dsn, 来源)；来源为 "unset" 时 dsn 为空串。
 
-    第三级不是「顺手用生产库」，而是**显式告警**：与部署中的 scheduler/worker 共库时，
+    刻意不设「顺手用生产库」的第三级回退：与部署中的 scheduler/worker 共库时，
     测试用的是固定时钟（落在真实过去），线上守护进程会把测试订阅当成到期任务真实
     消费——scheduler 认领并推进水位、worker 对测试占位链接发起真实 HTTP 抓取（D23）。
     """
-    explicit = os.environ.get("AIDEANBOT_TEST_PG_DSN")
+    explicit = (os.environ.get(_TEST_PG_ENV_VAR) or "").strip()
     if explicit:
-        return explicit, "env:AIDEANBOT_TEST_PG_DSN"
+        return explicit, f"env:{_TEST_PG_ENV_VAR}"
     if _BACKEND_ENV_FILE.is_file():
-        from_env = dotenv_values(_BACKEND_ENV_FILE).get("AIDEANBOT_TEST_PG_DSN")
+        from_env = (dotenv_values(_BACKEND_ENV_FILE).get(_TEST_PG_ENV_VAR) or "").strip()
         if from_env:
             return from_env, f"file:{_BACKEND_ENV_FILE.name}"
-    return _DEFAULT_PG_URL, "default"
+    return "", "unset"
 
 
 PG_URL, _PG_URL_SOURCE = _resolve_test_pg_url()
+if _PG_URL_SOURCE == "unset":
+    PG_URL = _REFUSED_PG_URL
 
-# 下游 7 个连库用例各自 `os.environ.get("AIDEANBOT_TEST_PG_DSN", 生产库)` 独立判定；
+# 下游 9 个连库用例各自 `os.environ.get(_TEST_PG_ENV_VAR, 生产库)` 独立判定；
 # 若只在本模块解析而不回写，它们仍会直连生产库，隔离形同虚设。setdefault 保证
 # 显式环境变量优先级不变，.env 命中时统一向下游广播同一 DSN。
-os.environ.setdefault("AIDEANBOT_TEST_PG_DSN", PG_URL)
-
-if _PG_URL_SOURCE == "default":
-    warnings.warn(
-        "AIDEANBOT_TEST_PG_DSN 未设置（环境变量与 backend/.env 均未命中），"
-        "回退默认生产库 DSN。若 scheduler/worker 正在部署中，测试会被线上守护进程"
-        "消费（D23）。请在 backend/.env 设置 AIDEANBOT_TEST_PG_DSN 指向独立测试库。",
-        stacklevel=1,
-    )
+os.environ.setdefault(_TEST_PG_ENV_VAR, PG_URL)
 
 
 @pytest.fixture
 async def db_session() -> AsyncIterator[AsyncSession]:
-    """真实 PG 会话（外层事务回滚隔离）；PG 不可达 → 3 秒内判定并 skip。
+    """真实 PG 会话（外层事务回滚隔离）；未配置测试库 → skip 报原因，PG 不可达 → 3 秒内判定并 skip。
 
     A 实测教训：无超时连接在 PG 宕机时整套测试挂死——connect_timeout 强制 ≤3s。
     """
+    if _PG_URL_SOURCE == "unset":
+        pytest.skip(SKIP_UNSET_REASON)
     engine = create_async_engine(PG_URL, pool_pre_ping=True, connect_args={"connect_timeout": 3})
     try:
         async with engine.connect() as connection:
@@ -94,6 +99,6 @@ async def db_session() -> AsyncIterator[AsyncSession]:
                 if transaction.is_active:
                     await transaction.rollback()
     except Exception as exc:  # 连接失败（引擎故障/未启动）
-        pytest.skip(f"PG:5433 不可达（{type(exc).__name__}），Docker 引擎恢复后复跑本用例")
+        pytest.skip(f"测试 PG 不可达（{type(exc).__name__}），环境恢复后复跑本用例")
     finally:
         await engine.dispose()

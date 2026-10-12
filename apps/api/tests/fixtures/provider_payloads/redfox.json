@@ -1,0 +1,36 @@
+{
+  "_shape_source": "形状来源 RedFox｜请求体与响应包裹：app/providers/redfox/client.py:3-5（R8 活体实测 2026-09-28：POST /story/api/gzh/data/queryWorkList，body {bizInfo,offset,sortType}，响应 {code:2000,data:{list,total}}）；顶层键 code/data/msg 见 .docs/03_solution/solutions/r8-redfox对接活体实测与剩余任务方案大纲-20260928.md:49「total 位于 data.total（非顶层）；顶层只有 code/data/msg」；_CODE_OK=2000 见 client.py:56，PAGE_SIZE=20 见 :51；行字段口径 app/services/manifest.py:13-17（workUuid 32 位小写 hex、workUrl 且**无 url 键**、title、summary、publishTime 为无时区北京时间串、readCount/likeCount）；list[0] 逐字段取自活体行字面量 apps/api/tests/test_manifest_sync.py:218-225；列表不含正文（content 恒 null）见 .docs/06_validation/reports/M0能力实证总报告.md:35；registry.py:142-143 verified_scope=契约层（请求体/响应字段/分页/错误码），端到端未验证。合成声明：list[1] 为同口径合成行（活体仅存档 list[0] 的形状），两行 ⇒ len(rows)=2 < PAGE_SIZE=20 ⇒ 供 manifest.py:217-218 的「末页」判定用例。",
+  "code": 2000,
+  "msg": "success",
+  "data": {
+    "list": [
+      {
+        "workUuid": "d5e2a9e08485478ab949a6ce39a0c75f",
+        "workUrl": "https://mp.weixin.qq.com/s?__biz=MzA5NDQ2MjkzOQ%3D&mid=1",
+        "title": "实测样本",
+        "summary": "广域库列表摘要（正文需直抓文章页）",
+        "publishTime": "2026-09-27 07:42:00",
+        "readCount": 1024,
+        "likeCount": 33,
+        "author": "合成作者",
+        "bizInfo": "MzA5NDQ2MjkzOQ==",
+        "content": null,
+        "sourceUrl": null
+      },
+      {
+        "workUuid": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+        "workUrl": "https://mp.weixin.qq.com/s?__biz=MzA5NDQ2MjkzOQ%3D&mid=2&idx=1&sn=1122334455667788",
+        "title": "同号第二篇（合成行，用于同号多处长链断言）",
+        "summary": "与 list[0] 同 biz、不同 mid ⇒ D-01 的坍缩对",
+        "publishTime": "2026-09-26 08:00:00",
+        "readCount": 512,
+        "likeCount": 7,
+        "author": "合成作者",
+        "bizInfo": "MzA5NDQ2MjkzOQ==",
+        "content": null,
+        "sourceUrl": null
+      }
+    ],
+    "total": 173
+  }
+}

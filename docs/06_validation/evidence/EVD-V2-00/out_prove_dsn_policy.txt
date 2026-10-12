@@ -1,0 +1,25 @@
+PASS S0.1.2-a `_DEFAULT_PG_URL` 已删除 :: grep -c 命中 0
+PASS S0.1.2-b 生产形态字面量不再出现在 conftest :: conftest 仍含口令字面量
+PASS S0.1.2-c env 层解析 :: PG_URL=postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_test
+PASS S0.1.2-d env 层来源标注 :: env:AIDEANBOT_TEST_PG_DSN
+PASS S0.1.2-e 广播值=配置值（下游 9 处回退点被该环境变量屏蔽） :: _broadcast='postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_test'
+PASS S0.1.2-f 未配置返回空串 :: '',unset
+PASS S0.1.2-g 未配置时 PG_URL=拒连地址 :: postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset
+PASS S0.1.2-h 未配置时广播值=拒连地址（非生产形态） :: _broadcast='postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'
+PASS S0.1.2-i 拒连地址不含部署端口 :: postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset
+PASS S0.1.2-j skip 原因含「未设置」 :: AIDEANBOT_TEST_PG_DSN 未设置：连库用例需要独立测试库。准备命令：bash scripts/test-env.sh up && eval "$(bash scripts/test-env.sh env)"
+PASS S0.1.2-k skip 原因不含「不可达」（避免触中 ci.yml:148 的 PG-不可达门禁）
+PASS S0.1.2-l 纯空白 env 视为未配置 :: '',unset
+PASS S0.1.2-m .env 层解析并广播该值 :: postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_from_env_file,file:.env,broadcast='postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_from_env_file'
+PASS S0.1.2-n .env 空值视为未配置
+PASS S0.1.2-o 下游自带默认回退点=9（其中生产形态 9）；旧注释称 7 :: 存在非生产形态默认值，需复核
+  INFO 回退点 test_docs_batch.py:45 生产形态=True
+  INFO 回退点 test_idempotency_lock.py:48 生产形态=True
+  INFO 回退点 test_job_worker.py:37 生产形态=True
+  INFO 回退点 test_manifest_sync.py:39 生产形态=True
+  INFO 回退点 test_persistence.py:32 生产形态=True
+  INFO 回退点 test_process_heartbeat.py:40 生产形态=True
+  INFO 回退点 test_scheduler.py:41 生产形态=True
+  INFO 回退点 test_w2_worker.py:27 生产形态=True
+  INFO 回退点 test_w3_push_scheduler.py:46 生产形态=True
+ALL PASS (15 断言，回退点 9 个已列举)

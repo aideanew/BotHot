@@ -1,0 +1,47 @@
+{
+  "_shape_source": "形状来源 JustOneAPI｜envelope：app/providers/article_sources/justoneapi.py:6「响应统一包裹 {code, message, data, recordTime, requestId}」，_CODE_OK=0 见 :47，失败读 message 见 :300-305；行路径：:117-127 data(dict)→MsgList(dict)→Msg(list)，注释 :121「嵌套结构：data.MsgList.Msg = 文章列表」；行键：:133-143 读 AppMsg.ContentUrl/Title/Digest/CreateTime 与 BaseInfo.DateTime（:140 注释「CreateTime 是 Unix 时间戳」，:141 两处共用 isinstance(int|float) 守卫 ⇒ DateTime 的单位口径**继承自该守卫而非活体样本**）；账号/分页键：docstring :10-12 活体口径「data.MsgList.Msg[10 条]，每条 AppMsg{Title,Digest,ContentUrl,CreateTime,UpdateTime}／data.AccountInfo{UserName(gh_),NickName,HeadImgUrl,Signature}／data.PagingInfo{Offset,IsEnd}」；端点与请求：:104-109 POST /api/weixin/get-account-history-articles/v2（form 编码 token+ghid），:101-102 page>1 返回空（游标需上页 Offset，无法预构 ⇒ D-06）；活体用例：registry.py:197-199「发现(history/v2 ghid)=活体实测 TC-A3-01」；gh_b9465228558d 取自 docs/06_validation/evidence/channeltest-20260929/README.md:119。刻意不含：AppMsg.MsgId / ItemIndex——它们只出现在 docs/任务规划V0.2.0/steps/STEP-03-渠道行契约归一.md:36 的**假设**里，代码与活体记录均无（D-03：行内无任何 _ID_KEYS 命中）。合成声明：除 gh_ 与时间戳外均为占位值。",
+  "code": 0,
+  "message": "",
+  "data": {
+    "MsgList": {
+      "Msg": [
+        {
+          "AppMsg": {
+            "Title": "示例标题一",
+            "Digest": "列表摘要（占位）",
+            "ContentUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000001&idx=1&sn=aaaa1111",
+            "CreateTime": 1790659200,
+            "UpdateTime": 1790662800
+          },
+          "BaseInfo": {
+            "DateTime": 1790659200
+          }
+        },
+        {
+          "AppMsg": {
+            "Title": "示例标题二",
+            "Digest": "列表摘要（占位）",
+            "ContentUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000002&idx=1&sn=bbbb2222",
+            "CreateTime": 1790745600,
+            "UpdateTime": 1790749200
+          },
+          "BaseInfo": {
+            "DateTime": 1790745600
+          }
+        }
+      ]
+    },
+    "AccountInfo": {
+      "UserName": "gh_b9465228558d",
+      "NickName": "占位号名",
+      "HeadImgUrl": "https://example.invalid/head.png",
+      "Signature": "占位功能介绍"
+    },
+    "PagingInfo": {
+      "Offset": 0,
+      "IsEnd": true
+    }
+  },
+  "recordTime": 1790749260,
+  "requestId": "00000000-0000-0000-0000-000000000000"
+}

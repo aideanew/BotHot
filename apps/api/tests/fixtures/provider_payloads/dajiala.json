@@ -1,0 +1,19 @@
+{
+  "_shape_source": "形状来源 Dajiala｜envelope：app/providers/article_sources/dajiala.py:249-251（读顶层 code 与 msg，_CODE_OK=0 见 :46，非 0 走 :263-270 _business_error）；**data 直接是数组**：:102-104 `data=payload.get(\"data\")` 且 `isinstance(data, list)` 否则报「缺 data 数组」；行键：:112-119 只读 url/title/digest/post_time，:116 注释「post_time 是 Unix 时间戳（如 1790659200）」并以 str() 写入 row.publish_time；端点与请求体：:94-101 POST /fbmain/monitor/v3/post_condition，body {key,verifycode:\"\",ghid}；活体用例：docs/06_validation/evidence/channeltest-20260929/README.md:49-55（TC-A1-02，post_condition 按 ghid 返回 url/title/digest/post_time=1790659200）+ registry.py:174-176「发现(post_condition ghid/nickname)=活体实测 TC-A1-02/09」。刻意不含：README:53 记录的 cost_money/remain（代码从不读，且其在响应中的层级未确认 ⇒ 写进来就是猜测）；行内**无任何 id 键**（D-03 实证，manifest.py:51 _ID_KEYS 全部落空 ⇒ _map_row 返回 None）。合成声明：两条行的 title/digest/url 为合成占位，键名/层级/时间单位才是本样本的断言对象。",
+  "code": 0,
+  "msg": "",
+  "data": [
+    {
+      "url": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000001&idx=1&sn=aaaa1111",
+      "title": "示例：同号第一篇",
+      "digest": "列表摘要（合成占位值）",
+      "post_time": 1790659200
+    },
+    {
+      "url": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000002&idx=1&sn=bbbb2222",
+      "title": "示例：同号第二篇",
+      "digest": "列表摘要（合成占位值）",
+      "post_time": 1790745600
+    }
+  ]
+}

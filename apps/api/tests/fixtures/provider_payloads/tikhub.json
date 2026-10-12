@@ -1,0 +1,27 @@
+{
+  "_shape_source": "形状来源 TikHub｜⚠ 全部为契约级推断，非活体：registry.py:223-226「发现(fetch_account_articles v2)=契约级（OpenAPI 在案，TC-A2-02b 402 未实测）」，客户端注释 :192「v2 端点响应形状未实测，按 TikHub 统一结构推断」⇒ 消费本样本的用例必须带 xfail(strict=True)（STEP-03 S3.2.3），端点定谳属 U-04（STEP-04 S4.5.1，读 api.tikhub.io/openapi.json）。envelope：:256-280 _handle_response **从不读业务 code**（只按 HTTP 状态判定：402 余额不足 :260-264、404 记 warn 后返回 None :267-269、>=400 抛错 :270-271）⇒ 本样本刻意不含 code/message，含了就是猜测。行路径：:125-131 注释「data.data = 文章列表（微信原始结构）」，取 `data.get(\"data\") or data.get(\"articles\")`——`data.articles` 回退分支无任何外部佐证，故本样本只给 data.data。行键：:138-148 读 app_msg_ext_info.{content_url,title,digest} 与 comm_msg_info.create_time（:145 注释 Unix 时间戳），空 url 行被丢弃（:149-150）。端点漂移（D-15）：代码 :114 实际 POST /api/v1/wechat_mp/web/fetch_account_articles，而 :10 docstring 与 README.md:110 记的活体端点是 /api/v1/wechat_mp/v2/fetch_account_articles，且 web/* 旧端点 registry.py:227 自述「活体实测已下线 TC-A2-04 404」⇒ 本样本对应**请求形状**而非已确认的存在端点。刻意不含：comm_msg_info.id（仅 STEP-03:36 假设）。合成声明：所有值为占位。",
+  "data": {
+    "data": [
+      {
+        "app_msg_ext_info": {
+          "content_url": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000001&idx=1&sn=aaaa1111",
+          "title": "示例标题一",
+          "digest": "列表摘要（占位）"
+        },
+        "comm_msg_info": {
+          "create_time": 1790659200
+        }
+      },
+      {
+        "app_msg_ext_info": {
+          "content_url": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000002&idx=1&sn=bbbb2222",
+          "title": "示例标题二",
+          "digest": "列表摘要（占位）"
+        },
+        "comm_msg_info": {
+          "create_time": 1790745600
+        }
+      }
+    ]
+  }
+}

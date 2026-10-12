@@ -35,6 +35,14 @@ from app.services.push_template import render, validate_template
 # 此前 created_by="test-user" 无对应 users 行，PG 外键一律拒绝）。
 _TEST_USER_SUB = "w3-scheduler-test-user"
 
+# S0.2.1：投递失败类用例的前提不能写成「某个端口恰好空闲」。旧值
+# http://localhost:9999/test 在该端口被任意返回 2xx 的服务占用时，webhook provider
+# 走 `200 <= status < 300` 分支返回 delivered=True（app/providers/push/webhook.py:39-40），
+# PushLog 不再落 failed → test_event_delivery_failure_no_reclaim 假失败（D-12 实测 1 failed）。
+# 端口 1 非 root 无法监听 ⇒ httpx 必抛 ConnectError → provider 的 except Exception 分支
+# 恒定返回 delivered=False / retryable=True（webhook.py:50-51），与本机端口占用解耦。
+_REFUSED_WEBHOOK_URL = "http://127.0.0.1:1/bothot-hook-no-listener"
+
 _PG_DSN = os.environ.get("AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot")
 
 
@@ -71,7 +79,7 @@ async def channel(db_session: AsyncSession):
     ch = BotChannel(
         name="test-channel",
         channel_type="webhook",
-        webhook_url="http://localhost:9999/test",
+        webhook_url=_REFUSED_WEBHOOK_URL,
         secret_enc="",
         extra_config="{}",
         status="active",
@@ -144,7 +152,7 @@ async def test_concurrent_claim_no_duplicate():
             ch = BotChannel(
                 name="w3-concurrent-channel",
                 channel_type="webhook",
-                webhook_url="http://localhost:9999/test",
+                webhook_url=_REFUSED_WEBHOOK_URL,
                 status="active",
             )
             seed.add(ch)
@@ -325,7 +333,7 @@ async def test_event_delivery_failure_no_reclaim(db_session, channel, scheduler_
     assert len(events) == 1
     assert events[0].consumed_at is not None
 
-    # 派发：channel 夹具 webhook_url 指向 localhost:9999 不可达端口
+    # 派发：夹具 webhook_url 指向保留端口 1（必然拒连，不依赖本机端口是否空闲）
     # → webhook provider 走 except Exception 分支，PushResult(delivered=False, retryable=True)
     await scheduler._dispatch_event(events[0], datetime.now(UTC))
 
