@@ -61,9 +61,17 @@ PLAN 规划 → SPEC 规格 → APPROVE 批准 → IMPLEMENT 实施 → VERIFY �
 
 ## 当前项目状态
 
-- **版本**：v0.6.5（v0.4 推送 + v0.5 热点融合 + v0.6 语义接通/工程加固 + v0.6.5 观测与安全运行时硬化 W6-W10，`main @ 8b1b5f2` 合并、CI 首跑修复至 `7bdb964`）
+- **版本**：**v1.0.0**（X-12：原写 v0.6.5，落后一个大版本）。
+  证据：`git tag -l` → `v1.0.0`；tag 落在 `c19fe87`（2026-10-08，
+  "docs(release): v1.0.0 账本终稿"）；`CHANGELOG.md:45` 有 `## [v1.0.0] - 2026-10-08` 段。
+  当前 `main` 已领先 tag **15 个提交**（`git rev-list --count v1.0.0..HEAD`）至 `60e5723`，
+  故"已发布 v1.0.0 + 主干继续前进"两者不矛盾；写版本号时以 tag 为准，不以 v0.x 叙事为准。
 - **后端**：FastAPI + SQLAlchemy 2.0 + Alembic，9 个业务域
-- **前端**：Next.js 14 App Router，10 个功能域
+- **前端**：**Next.js 15** App Router（X-02 更正），10 个功能域
+  - 证据：`apps/web/package.json:27` `"next": "^15.5.24"`、`:28` `"react": "^19.0.0"`；
+    运行时锚 `apps/web/.nvmrc` = `24.21.0`、`package.json:7` `engines.node >= 24.0.0`
+    （同一条漂移在 `docs/02_requirements/product-requirements.md:134` 与
+    `docs/04_engineering/conventions.md` §5.2 各自出现，已一并更正）。
 - **推送**：6 渠道 Provider 真实投递（**站内通知全链路已通**——Redis pub/sub 投递侧 + SSE 订阅侧 `system.py /notifications` + 前端 `NotificationBell`；微信 ClawBot 需部署服务）；PushScheduler 60s 调度（SKIP LOCKED 短锁领取 + **投递重试/指数退避/死信终态**，重试态挂 PushTask）；Cron 完整 5 段式 + 简写兼容；**事件触发已实现且 payload 自足**（emit 时查库补模板变量快照）；渠道密钥 **AES-256-GCM**（fail-closed，双主密钥已纳入生产守卫）；旧 push_port 已删除
 - **观测与硬化**：structlog 双模日志（`core/logging.py`）+ Prometheus `/metrics`（`core/metrics.py`）+ `/live` `/ready` 探针（`core/schema_guard.py`，schema 不一致 503）+ 限流/体限/安全头中间件（`core/security.py`）+ 运行期告警三类（`core/alerting.py`，`ALERTING_ENABLED` 门）；Dockerfile 多阶段+uid1000+HEALTHCHECK，compose read_only/tmpfs/cap_drop/no-new-privileges
 - **通知持久化**：站内通知离线补投底座 `Notification` 表 + 迁移 `ab1005w5a`（存储层，写侧/读侧 history 待建 R1.2b/c/d）

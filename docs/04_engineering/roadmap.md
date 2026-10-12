@@ -115,12 +115,28 @@ version: 1.0
 - [ ] database/migrations/ 和 infra/docker/ 迁移（**裁定不迁移**：alembic 留 apps/api/alembic、compose 留 docker/，移动只破坏 CI/alembic.ini 无收益）
 - [x] 迁移后全量测试（隔离 PG 968 passed/4 skipped + vitest 359 绿 + tsc 零错，`ff6e9da`）
 
-## v1.0 — 正式发布
+## v1.0 — 正式发布 ✅ 已发布（2026-10-08）
 
-> 预计开始：2026-10-04
+> X-11 更正：本节四项此前**全部未勾**，而 `git tag -l` 已有 `v1.0.0`、
+> `CHANGELOG.md:45` 有 `## [v1.0.0] - 2026-10-08` 段、且 tag **已在远端**
+> （`git ls-remote --tags origin` → `refs/tags/v1.0.0^{} = c19fe87…`）。
+> 台账与代码库状态长期不一致 = 任何人读 roadmap 都会以为 v1.0 还没发。
+> 逐项判定（**只勾有证据的**，证据不足者保留未勾并写明缺什么）：
 
 **任务**：
-- [ ] 全量测试通过（后端单元 + 前端构建 + e2e + docker compose 冒烟）
-- [ ] README 更新（功能说明 + 部署指南）
-- [ ] CHANGELOG.md 编写
-- [ ] 推送到 GitHub aideanew/BotHot
+- [x] CHANGELOG.md 编写 —— 证据 `CHANGELOG.md:45` `## [v1.0.0] - 2026-10-08`（含 Added/Fixed 分节）
+- [x] 推送到 GitHub aideanew/BotHot —— 证据 `git ls-remote --tags origin` 返回
+      `8ecf322 refs/tags/v1.0.0`（annotated tag 对象）解引用到 `c19fe87`（tag 提交），
+      本地克隆即来自该远端（HEAD `60e5723`，`main` 领先 tag 15 个提交）
+- [x] README 更新（功能说明 + 部署指南）—— README 具备架构图 / 端口规范 / 本地开发 / 部署段；
+      **但**本节勾项在发布时点上是"形式完成"：README 内仍留 `Next.js 14`、`cd backend`、`cd frontend`
+      三处漂移（X-02/X-09），已于 2026-10-12 的 TASK-019 更正，证据改为
+      `README.md` 架构图行与「本地开发」段现文。⇒ 勾保留，但**"已更新"不等于"已对"**，
+      这正是 X 类漂移的成因，后续同类条目须附内容级证据。
+- [ ] 全量测试通过（后端单元 + 前端构建 + e2e + docker compose 冒烟）—— **不勾，证据不足**
+      - 已有证据：tag 提交信息「测试数 974→1002（远端批并入复测）」、计划 §2.3 记录 CI run
+        `37906907637` success。
+      - 缺口径：这两条都是**二手数字**（无本地复跑、未逐项区分单测/构建/e2e/冒烟）。
+        本项含 `docker compose 冒烟`，本机无 docker，无法证伪也无法证实。
+      - 收口方式：待 TASK-021/冒烟批次给出**四段各自**的命令与退出码
+        （`pytest`、`pnpm build`、`pnpm test:e2e`、`bash scripts/smoke.sh`），再勾。

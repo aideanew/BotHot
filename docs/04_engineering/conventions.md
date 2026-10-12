@@ -81,15 +81,21 @@ docs(architecture): 更新系统架构设计文档
 ## 4. 测试规范
 
 ### 4.1 后端
-- 单元测试：`tests/unit/modules/<domain>/`
-- 集成测试：`tests/integration/modules/<domain>/`
-- 测试文件命名：`test_<module>.py`
-- 覆盖率目标：core/ 和 application/ 层 > 80%
+- 单元测试：`apps/api/tests/test_*.py`（**扁平一层目录**，不按 domain 分子目录）
+  - 证据：`ls apps/api/tests` → 76 项全为 `test_*.py` + `conftest.py`，无 `unit/`/`integration/` 子目录。
+  - 命名即域标签：`test_be02_engine_routing.py`、`test_w3_push_scheduler.py`、`test_backchannel_logout.py`。
+  - 原规范 `tests/unit/modules/<domain>/` 与 `tests/integration/modules/<domain>/`（X-08）**从未落地**，
+    按此新建子目录会让 pytest 采集路径与 CI 的 `--junitxml` skip 门禁口径错位。
+- 测试文件命名：`test_<module>.py`（沿用）
+- 覆盖率目标：core/ 和 application/ 层 > 80%（沿用；实测口径见 `docs/06_validation/`）
 
 ### 4.2 前端
-- 单元测试：与组件同目录 `*.spec.tsx`
-- e2e 测试：`e2e/*.spec.ts`
-- 框架：Vitest（单元） + Playwright（e2e）
+- 单元测试：`apps/web/tests/*.spec.ts` / `*.spec.tsx`（**集中在 `tests/`，不与组件同目录**）
+  - 证据：`apps/web/vitest.config.ts:25` `include: ["tests/**/*.spec.ts", "tests/**/*.spec.tsx"]`；
+    实测 22 个 `*.spec.tsx` 全在 `apps/web/tests/`，组件目录内 `*.spec.tsx` 为 0。
+  - 原规范"与组件同目录"（X-08 同族）会导致新写的用例**不被 vitest 采集**而静默不跑。
+- e2e 测试：`apps/web/e2e/*.spec.ts`（Playwright，与单测分目录，正确）
+- 框架：Vitest（单元，`environment: happy-dom`，见 vitest.config.ts:26） + Playwright（e2e）
 
 ## 5. 依赖管理
 
@@ -100,28 +106,61 @@ docs(architecture): 更新系统架构设计文档
 
 ### 5.2 前端
 - 包管理：pnpm
-- Node 版本：22
+- Node 版本：**24**（`.nvmrc` = `24.21.0`；`apps/web/package.json:7` `engines.node >= 24.0.0`）
+  - 原规范写 22（X-03）——按 22 跑 `pnpm install` 会被 engines 判定不满足。
 - 锁文件：pnpm-lock.yaml 必须提交
 
 ## 6. 环境变量规范
 
 ### 6.1 敏感信息
 - AK/SK：**不写入 .tf/.py 文件**，通过环境变量传入
-- 渠道密钥：**现状（2026-09-30 代码实证）= base64 过渡态**
-  - 证据：`backend/app/services/push_scheduler.py:191-199` `_decrypt_secret()` 直接
-    `base64.b64decode` 读取存量密文（无完整性校验、无密钥管理）。
-  - **目标形态 = AES-256-GCM**：AAD 绑定 `bot_channel.id`（密文无法跨渠道搬移，
-    换渠道解密必失败）；主密钥经环境变量 `PUSH_SECRET_MASTER_KEY` 传入（32 字节原始
-    密钥的 base64，缺失/畸形一律 fail-closed，不回落明文）。
-  - 迁移路径：AES 加解密实现（`backend/app/core/secret_crypto.py`，并行任务 W1 在途、
-    尚未提交）落地后，读侧需兼容存量 base64 密文（双读），存量密钥完成重加密后删除
-    base64 过渡路径。
+- 渠道密钥：**现状（2026-10-12 代码实证）= AES-256-GCM 已落地并已接线**（X-04 更正）
+  - 实现：`apps/api/app/core/secret_crypto.py`（模块首行 docstring 即 "渠道密钥 AES-256-GCM 加解密"），
+    密文形态 `b64(nonce).b64(ct+tag)`，AAD 绑定 `bot_channel.id`（`:80` `channel_id.encode()`），
+    主密钥 `PUSH_SECRET_MASTER_KEY` = 32 字节密钥的 base64，缺失/畸形 fail-closed（`:30-40`）。
+  - 接线证据（非死代码）：写侧 `apps/api/app/api/v1/bots.py:34` import，
+    读侧 `apps/api/app/services/push_scheduler.py:181-183` 每渠道投递时调
+    `decrypt_channel_secret(ch.id, ch.secret_enc)` / `decrypt_extra_config(...)`。
+  - 引擎 Key 是**另一套**同族实现：`apps/api/app/core/engine_keyring.py`
+    （AES-256-GCM，AAD 绑引擎名，主密钥 `ENGINE_KEY_MASTER_KEY`），
+    由 `apps/api/app/services/engine_keys.py:18` 使用。规范上两者不共用主密钥。
+  - **迁移形态 = 数据迁移重加密，不是"双读兼容"**（此处规范原文与实现方式不同，已按实更正）：
+    原规范设想"读侧兼容存量 base64（双读），重加密后再删过渡路径"；实际落地的是
+    `apps/api/alembic/versions/ab1004w1a_secret_aes.py`——逐行把不含 `.` 的存量 base64
+    解出明文后用 AES 重加密（`:46-49` 选行、`:89` 逐行写回），
+    并且**主密钥缺失即中止迁移**（docstring `:38-42`：静默跳过会让存量行永久停留在
+    fail-closed 不可读状态，比迁移期显式报错更难排查）。
+    ⇒ 因此读侧 `decrypt_channel_secret` 是 **AES-only 且正确**的：迁移后不存在 base64 存量行。
+    `extra_config` 相反，走的是"`{` 前缀判定"的**兼容读**（`secret_crypto.py:126-142`），
+    因其存量形态是明文 JSON 而非 base64，两者口径不同属有意设计，见 `CHANGELOG.md` S2.1 条目。
+  - ⚠ 残留**卫生问题**（非功能缺陷）：`secret_crypto.py:93` `decrypt_legacy_base64()` 全仓
+    **零调用方**，`is_aes_ciphertext()` 仅出现在 `apps/api/tests/test_w1_push_domain.py`。
+    留着的风险不是"漏解密"，而是将来有人把它当"兼容读"接回读侧，等于把已废除的
+    base64 伪加密重新变成可用路径 ⇒ 应删除或降级为迁移脚本内部私有实现。
+    取证 SQL（需连库，本机无 PG）：
+    `select count(*) from bot_channels where secret_enc <> '' and secret_enc not like '%.%';`
+    期望 **0**（迁移已收敛）；非 0 才说明存在迁移漏网行。
 - OIDC Client Secret：通过环境变量传入
 
 ### 6.2 环境变量命名
-- 前缀：`BOTHOT_`
-- 格式：`BOTHOT_<SECTION>_<KEY>`
-- 示例：`BOTHOT_DB_URL`, `BOTHOT_REDIS_URL`, `BOTHOT_OIDC_CLIENT_ID`
+- **现状（2026-10-12 实证）= 无前缀**（X-05 更正）。原规范要求的
+  `BOTHOT_` 前缀 + `<SECTION>` 分段命名（含 `…_DB_URL` / `…_REDIS_URL` / `…_OIDC_CLIENT_ID` 三个示例）
+  **从未生效**，按它起变量名会得到 Settings 读不到的键。
+- 机制证据：`apps/api/app/core/config.py:14`
+  `model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")`
+  —— pydantic-settings **没有** `env_prefix`，故字段名即大写环境变量名。
+- 真实名字（据 config.py 字段 + compose/env 模板）：
+  `DATABASE_URL`(`:20`)、`REDIS_URL`(`:23`)、`AIDEAN_ISSUER`(`:30`)、`AIDEAN_PUBLIC_URL`(`:31`)、
+  `OIDC_CLIENT_ID`(`:32`)、`OIDC_CLIENT_SECRET`(`:33`)、`OIDC_REDIRECT_URI`(`:35`)、
+  `SESSION_STORE_BACKEND`(`:55`)、`LANGBOT_BASE_URL`(`:63`)、`EMBEDDING_API_BASE`(`:74`)，
+  以及不经 Settings 的两个主密钥 `PUSH_SECRET_MASTER_KEY`、`ENGINE_KEY_MASTER_KEY`。
+- 唯一带前缀者：`BOTHOT_PROCESS_COUNT`，证据 `apps/api/app/db.py:82`
+  `int(os.environ.get("BOTHOT_PROCESS_COUNT", "4"))` —— 它绕过 Settings 直接读 `os.environ`，
+  前缀是**例外**而非规范。
+- **改名代价要算清**：把上述变量统一加前缀需同时改 `config.py` 字段、`docker/compose.yml`、
+  `docker/.env.example`、`Makefile`、CI env、`scripts/rotate_keys.sh`，且与已发布部署形态耦合
+  ⇒ 本规范条目**按实况改写为"无前缀"**，不改代码；如未来要立前缀规范，另开任务并出迁移方案。
+- 格式（沿用，仍然生效的部分）：全大写 + 下划线；秘密类必须经环境注入，禁写入仓库任何文件。
 
 ## 7. 文档规范
 
@@ -135,16 +174,34 @@ docs(architecture): 更新系统架构设计文档
 
 ## 8. Docker 规范
 
-- Dockerfile 用多阶段构建
-- 后端镜像基于 `python:3.12-slim`
-- 前端镜像基于 `node:22-alpine`
-- Docker Compose 配置在 `infra/docker/compose.yml`
-- `.env.example` 提供所有环境变量模板
+- Dockerfile 用多阶段构建（`apps/api/Dockerfile:8 builder` / `:35 runtime`；
+  `apps/web/Dockerfile:16 builder` / `:61 runner`）
+- 基础镜像**版本锚**（三处必须同源，改一处就要改三处）：
+  - 后端 `python:3.12-slim` — `apps/api/Dockerfile:5` `ARG BASE_IMAGE=python:3.12-slim`
+    与 `docker/compose.yml:132` `${BASE_IMAGE:-python:3.12-slim}`
+  - 前端 `node:24-alpine`（X-03 更正：规范原值差两个大版本，详见 §2.3 清单）—
+    `apps/web/Dockerfile:13` `ARG BASE_IMAGE=node:24-alpine` 与
+    `docker/compose.yml:390` `${BASE_IMAGE:-node:24-alpine}`；
+    `compose.yml:388-389` 明确记录了"compose 侧曾用 20 静默覆盖 Dockerfile 的 24 锚"这一事故，
+    故**镜像源开关走 build args、锚值只在 Dockerfile 的 ARG 默认里**，不要在 FROM 上写死 tag。
+- Docker Compose 配置在 **`docker/compose.yml`**（X-06：原规范 `infra/docker/compose.yml`
+  不存在——`ls infra/docker/compose.yml` 无此路径）。v0.7 已**裁定不迁移**，理由见
+  `docs/04_engineering/roadmap.md` v1.0 前置项："移动只破坏 CI/alembic.ini，无收益"。
+  CI 以 `docker/compose.yml` + `docker/compose.ci.yml` 双文件叠加使用。
+- `.env.example` 提供所有环境变量模板（实际路径 `docker/.env.example`；
+  compose 以"第一个 config 文件的所在目录"为项目目录自动加载它）
 
 ## 9. 安全规范
 
 - Cookie：HttpOnly + SameSite=Lax
-- CORS：白名单制，不开放 0.0.0.0/0
+- CORS：**不设 CORS**（X-07：原规范"CORS 白名单制，不开放 0.0.0.0/0"与实现相反）
+  - 机制：前端 `apps/web/next.config.mjs:9-15` 用 rewrites 把 `/api/v1/:path*`
+    代理到 `BACKEND_ORIGIN ?? http://localhost:3300` ⇒ 浏览器**同源**访问，无跨域请求。
+  - 实现证据：`grep -rn "CORSMiddleware|allow_origins" apps/api/app --include=*.py` → **零命中**。
+  - 裁定依据与后果：`apps/api/app/core/security.py:440-441` 明确写"**不含 CORS**……
+    加 `Access-Control-Allow-Origin` 只扩大攻击面"；裁定出处为 TASK-PLAN-v0.9 §0.2。
+  - 规范动作：**禁止**在后端引入 `CORSMiddleware`。若未来确有跨域需求（如第三方嵌入），
+    必须先出 ADR 裁决来源白名单与凭据策略，再改本条。
 - SQL 注入：ORM 参数化查询，禁用字符串拼接 SQL
 - XSS：前端输出转义，禁用 dangerouslySetInnerHTML
 - 权限：路由层 require_roles 门禁

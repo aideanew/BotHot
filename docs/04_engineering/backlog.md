@@ -54,7 +54,8 @@ updated: 2026-10-08
 
 ### PUSH-008：事件触发推送 ✅
 - **实现**：PG outbox 表 `push_events` —— `apps/api/app/models/bothot_entities.py:243`（表名 `:250`）
-- **迁移**：`backend/alembic/versions/ab1004w3a_push_events.py`
+- **迁移**：`apps/api/alembic/versions/ab1004w3a_push_events.py`
+  （路径校正 2026-10-12：原写 `backend/…`，该目录已由 S3 `ff6e9da` 整体 `git mv` 为 `apps/api/`）
 - **生产侧**（worker 进程）：文章入库 / 聚簇完成 / 日报生成 → 事件落库（`apps/api/app/services/push_events.py`）
 - **消费侧**（backend 进程）：`push_scheduler` 扫描未消费事件，复用 `_execute_task` 投递（at-most-once）
 - **模板变量**：`{space_name}/{doc_title}/{hot_topic}/{topic_count}` —— `apps/api/app/services/push_template.py`
@@ -129,7 +130,8 @@ updated: 2026-10-08
 - **装配**：经 W6 冻结接口 `install_security_middlewares(app)`（`apps/api/app/main.py:272-274`）
 
 ### OPS-001：容器与编排运行时硬化 ✅（W6 A.4，回填 2026-10-08）
-- **Dockerfile**：`backend/Dockerfile`+`frontend/Dockerfile` 多阶段（builder/runtime）+ 非 root uid1000（`USER app`）+ `HEALTHCHECK`
+- **Dockerfile**：`apps/api/Dockerfile` + `apps/web/Dockerfile`（路径校正 2026-10-12，原写
+  `backend/`+`frontend/`，已由 `ff6e9da` 迁移）多阶段（builder/runtime）+ 非 root uid1000（`USER app`）+ `HEALTHCHECK`
 - **compose**：`docker/compose.yml` 全服务 `logging.options`（json-file）+ `resources.limits` + backend/scheduler/worker `read_only`/`tmpfs`/`cap_drop`/`no-new-privileges`
 
 ### ALERT-001：运行期告警三类 ✅（W6 A.5 + S2.2 启用，2026-10-08 闭环）
@@ -149,9 +151,18 @@ updated: 2026-10-08
 - **S0.2 接线**：main/scheduler/worker 三入口启动期调用（engine 参数化），fail-fast 拒启；`5fe5a4f`
 
 ### NOTIF-001：站内通知持久化全链路 ✅（R1.2，2026-10-08 四链路闭环）
-- **存储层（R1.2a）**：`Notification` 实体（`apps/api/app/models/bothot_entities.py` 第 8 节）+ 迁移 `backend/alembic/versions/ab1005w5a_notifications.py`（单头 `ab1004w4a → ab1005w5a`）
+- **存储层（R1.2a）**：`Notification` 实体（`apps/api/app/models/bothot_entities.py` 第 8 节）+ 迁移 `apps/api/alembic/versions/ab1005w5a_notifications.py`（单头 `ab1004w4a → ab1005w5a`；路径校正 2026-10-12，原写 `backend/…`）
 - **写侧（R1.2b）**：`push_scheduler.persist_web_notification`（savepoint 落库，失败不阻断投递回执；广播/定向判定与 web.py 频道同源）—— `1e7202c`
 - **读侧（R1.2c）**：`GET /system/notifications/history`（`{items,total,limit,offset,unread_total}`，`sub==me OR is_broadcast`）+ `PUT /system/notifications/read`（单条 id / 批量 before，越权归零）—— `1e7202c`
+- **⚠ 本条 ✅ 的边界（2026-10-12 实证，四条链路本身确实闭环，但覆盖面有缺口）**：
+  写侧函数 `persist_web_notification` 全仓**只有一个调用点** ——
+  `apps/api/app/services/push_scheduler.py:222`（调度器投递路径，即 Cron / 事件触发）。
+  两条**直投** API 不经它：`apps/api/app/api/v1/bots.py:341`（`POST /{channel_id}/test` 一键测试）
+  与 `apps/api/app/api/v1/bots.py:624`（`POST /tasks/{task_id}/run` 手动立即触发）——
+  二者只 `provider.push()` + 记 `PushLog`，**不写 `notifications` 表**。
+  ⇒ 手动/测试发出的站内通知**不进离线补投历史**，而"手动"是 REQ-F-001 明列的第三种触发方式。
+  本条 ✅ 因此只断言"四链路各自打通"，不断言"所有投递入口都落库"。
+  修复需改代码 → 按 TASK-019 卡片纪律**只回报不改**，已登记为待指派缺口（见计划 G-1）。
 - **前端（R1.2d）**：`notifications.ts fetchHistory/markRead`（mock 态空页降级）+ `NotificationBell` 首连历史合并（serverId 去重）+ 展开批量已读对账 —— `9385991`
 - **测试**：`apps/api/tests/test_notification_history.py`（8 例连库：savepoint 回滚/可见性/分页窗口/已读三分支）；vitest 359 全绿零回归
 - **遗留待办**：SSE 实时帧与历史条目的展示侧无 id 互通（SSE 帧无 serverId，仅内容窗口去重）——量级触发后再补帧内 id
@@ -196,7 +207,8 @@ updated: 2026-10-08
   WD 复核实测 `796 passed, 4 skipped`，其中 PG 不可达类 skip = 0
 
 ### TEST-002：Playwright e2e 测试 🔧
-- **现状**：`frontend/e2e/trunk.spec.ts`（mock 主干 9 条路径）+ `frontend/e2e/real-backend.spec.ts`（4 条）
+- **现状**：`apps/web/e2e/trunk.spec.ts`（mock 主干 9 条路径）+ `apps/web/e2e/real-backend.spec.ts`（4 条）
+  （路径校正 2026-10-12：原写 `frontend/e2e/…`，`ff6e9da` 已 `git mv frontend/→apps/web/`）
 - **WD 变更**：
   - mock 套件**已入 CI**（`frontend` job，PORT=3456，**阻塞门禁**）
   - real-backend 由无条件 `test.skip(true, …)`（**死断言**，套件永不可执行）改为**环境闸**

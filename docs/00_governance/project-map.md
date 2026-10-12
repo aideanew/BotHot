@@ -58,11 +58,22 @@ version: 1.2
 
 | 分类 | 用途 | 状态 |
 |---|---|---|
-| `04_planning/` | 发布计划 | 🔲 预留 |
-| `05_execution/` | 任务跟踪 | 🔲 预留 |
-| [06_validation/](../06_validation/) | 验证与测试 | ✅ **已启用**——已有实测证据：[`evidence/channeltest-20260929/`](../06_validation/evidence/channeltest-20260929/README.md)（4 平台文章来源活体实测，TC 编号逐条可对）+ `acceptance/`、`test-results/` |
-| `07_release/` | 发布记录 | 🔲 预留 |
-| `08_knowledge/` | 知识库 | 🔲 预留 |
+| `04_planning/` | 发布计划 | ⚠ **目录存在但为空壳**——`ls docs/04_planning` 只有空目录 `releases/`，
+**没有 `current-plan.md`**。而 25 张任务卡的 frontmatter 一律写
+`plan: docs/04_planning/current-plan.md`（`grep -h '^plan:' …/tasks/*.md | sort | uniq -c`
+→ 25 次同一路径）⇒ **全部为悬空引用**。当前计划实体的真实位置是
+`docs/任务规划V0.1.0/04_planning/current-plan.md`。收口需二选一并留证据：
+把计划发布到卡片所指路径，或改 25 张卡的 `plan:` 字段。此项需人工裁决（见 TASK-019 回报段） |
+| `05_execution/` | 任务跟踪 | ✅ **已启用**——`docs/05_execution/tasks/` 有 4 份历史任务计划
+（TASK-PLAN-v0.6 / v0.7 / v0.8 / v0.9）。原标"🔲 预留"与目录实况不符；
+注意本目录放的是**历史**任务计划，当前计划在 `04_planning/current-plan.md`（该文件缺失，见上一行） |
+| [06_validation/](../06_validation/) | 验证与测试 | ✅ **已启用**——顶层有 `acceptance/`、`evidence/`、
+`test-results/`；活体证据 [`evidence/channeltest-20260929/`](../06_validation/evidence/channeltest-20260929/README.md)
+（4 平台文章来源活体实测，TC 编号逐条可对） |
+| `07_release/` | 发布记录 | 🟡 **部分启用**——实际文件只有 `key-rotation-sop.md`（密钥轮换 SOP，
+即 TASK-001 的落点文档）；`release-notes/` 与 `release-records/` 为仅含 `.gitkeep` 的空目录。
+原标"🔲 预留"与目录实况不符，但发布记录本身尚未产出 |
+| `08_knowledge/` | 知识库 | ✅ **已启用**——有 `meetings/`、`retrospectives/`、`technical-notes/` 三个子目录 |
 | `09_archive/` | 归档 | 🔲 预留 |
 
 ---

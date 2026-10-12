@@ -218,7 +218,18 @@ docker compose -f docker/compose.yml
 
 ## 9. 目标目录架构（详见 project-structure-design.md）
 
-当前项目使用 `backend/` + `frontend/` 扁平结构。目标是迁移到规范化的 `apps/` 结构：
+**目录结构迁移已完成**（2026-10-12 校正：原句"当前项目使用 `backend/` + `frontend/` 扁平结构"
+已失真——`ls -d backend frontend` → **No such file or directory**，实际是
+`apps/api/` + `apps/web/`；迁移动作本身记在 `docs/04_engineering/backlog.md` S3 条目，
+commit `ff6e9da`「整体 `git mv backend/→apps/api/`（保 import 与历史）」）。
+
+注意区分两层命名，**它们不同源且都不算漂移**：
+- **目录/包路径** = `apps/api/`、`apps/web/`（已迁移）
+- **compose 服务名 / 运行时角色称谓** = `backend`、`frontend`、`scheduler`、`worker`
+  （`docker/compose.yml` 里定义，本文上方拓扑图用的是这层）
+
+下节所列 `apps/api/src/...`、`packages/` 等**目标态仍未落地**，属设计稿而非现状
+（现状即上方两行），引用时请以本段为准。
 
 ```text
 BotHot/

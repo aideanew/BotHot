@@ -40,7 +40,7 @@ Redis 7            ├─ REST API (port 3300)
                    ├─ Subscription Scheduler (订阅同步)
                    └─ Job Worker (文章入库)
 LangBot 5300  ←  知识引擎 (RAG)
-Frontend (Next.js 14 / Node 24)  →  port 3200
+Frontend (Next.js 15 / Node 24)  →  port 3200
 ```
 
 ### 端口规范
@@ -87,17 +87,27 @@ docker compose -f docker/compose.yml ps
 
 ### 本地开发
 
+> 目录是 `apps/api` 与 `apps/web`（X-09 更正：本文此前给出的两个目录名均已失效，
+> `ls -d backend frontend` → **No such file or directory**；权威定义见
+> `Makefile:9 BACKEND_DIR := apps/api`、`Makefile:10 FRONTEND_DIR := apps/web`）。
+> 推荐直接用 Makefile 目标，端口与依赖安装方式随之同源。
+
 ```bash
-# 后端
-cd backend
-pip install -e ".[dev]"
+# 依赖
+make install-backend   # cd apps/api && pip install -e ".[dev]"
+make install-frontend  # cd apps/web && pnpm install
+
+# 后端（3300）
+cd apps/api
 alembic upgrade head
 uvicorn app.main:app --reload --port 3300
 
-# 前端
-cd frontend
+# 前端（3200）
+cd apps/web
 pnpm install
 pnpm dev  # 自动在 3200 端口启动
+
+# 或一步到位：make dev-backend / make dev-frontend（Makefile:25、:29）
 ```
 
 ## 部署指南（Docker Compose）

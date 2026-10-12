@@ -53,7 +53,24 @@ BotHot 后端识别出 **9 个业务域**，前端识别出 **10 个功能域**�
 ## 二、功能需求清单
 
 ### REQ-F-001：多渠道机器人推送
-- **实现状态**：✅ 六种渠道 Provider 已实现真实投递（飞书/钉钉/企微/Webhook/站内通知已通，微信 ClawBot 需部署服务）；PushScheduler 在 backend 进程内 60s 调度；事件触发待实现
+- **实现状态**：✅ 六种渠道 Provider 已实现真实投递（飞书/钉钉/企微/Webhook/站内通知已通，微信 ClawBot 需部署服务）；PushScheduler 在 backend 进程内 60s 调度；**事件触发已实现**（X-10 更正：原写"事件触发待实现"，与代码不符）
+  - 生产侧证据（outbox 落库）：`apps/api/app/services/feed_service.py:140/:158/:174`
+    在 article 入库 / 热点聚簇 / 日报生成三个落点各自调用
+    `emit_event(session, EVENT_*, {...})`，常量 `:43-45` = `new_article`/`hot_topic_update`/`daily_report`，
+    与 `apps/api/app/services/push_events.py:26` `VALID_EVENT_TYPES` 完全一致；
+    `push_events.py:75` 以 `PushEvent(...)` 与业务**同事务**落库（payload 由 `_hydrate_payload`
+    查库补齐模板变量快照，消费侧渲染零额外查询）。
+  - 消费侧证据：`apps/api/app/services/push_scheduler.py:85` 每轮 `_claim_and_dispatch_events(now)`
+    → `:131-141` `claim_pending_events` 领取 → `:143-155` 按
+    `trigger_type == "event" AND trigger_event == event.event_type` 匹配任务并投递。
+  - 与规范同源：`AGENTS.md`「事件触发已实现且 payload 自足」与本更正一致（此前只有本文档落后）。
+  - ⚠ **本需求未闭环的一处（2026-10-12 实证，暂无任务认领）**：站内通知落库函数
+    `persist_web_notification` 全仓**只有一个调用点** —— `push_scheduler.py:222`（调度器投递路径）。
+    两条**直投** API 绕过它：`bots.py:341`（`POST /{channel_id}/test` 一键测试，路由 `:315`）与
+    `bots.py:624`（`POST /tasks/{task_id}/run` 手动立即触发，路由 `:598`），二者只调
+    `provider.push()` 并记 `PushLog`，**不写 `notifications` 表**。
+    ⇒ 同一渠道走"Cron/事件"会进离线补投历史、走"手动/测试"则**永久不进历史**，
+    而"手动"正是本需求「触发方式」明列的第三种。修复属代码改动，本文档只登记不一致，不改实现。
 - **渠道**：飞书、钉钉、企业微信、微信 ClawBot、通用 Webhook、站内通知
 - **触发方式**：定时（Cron）、事件触发（新文章/热点更新/日报）、手动
 - **管理**：渠道 CRUD、推送任务 CRUD、推送日志查询、一键测试
@@ -131,7 +148,10 @@ BotHot 后端识别出 **9 个业务域**，前端识别出 **10 个功能域**�
 
 ### REQ-C-001：技术栈
 - 后端：Python 3.12 + FastAPI + SQLAlchemy 2.0 + Alembic
-- 前端：Next.js 14 + TypeScript + Tailwind CSS + pnpm
+- 前端：Next.js **15** + React 19 + TypeScript + Tailwind CSS + pnpm
+  （X-02 更正：版本号一律以实跑代码为准，不沿用文档旧值。证据 `apps/web/package.json:27`
+  `"next": "^15.5.24"`、`:28` `"react": "^19.0.0"`；Node 锚 `.nvmrc` = `24.21.0` +
+  `package.json:7` `engines.node >= 24.0.0`）
 - 数据库：PostgreSQL 16
 - 缓存：Redis 7
 - 知识引擎：LangBot
