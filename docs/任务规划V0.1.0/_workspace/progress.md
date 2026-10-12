@@ -92,3 +92,7 @@ cd apps/web && pnpm install --frozen-lockfile && pnpm run typecheck && pnpm run 
 | T38 | 建 **6 个 EVD 证据包** | `EVD-002/004/005/016/018/019/README.md`；EVD-018 负向测试 rc=1 证明门禁有鉴别力（且限定在 ✅ 区块 + 4 种后缀） |
 | T39 | TASK-016/017 卡片口径收口 | 016 步骤全 `[x]` + 三条"本机不可证"标注 + 新暴露 3 项；017 判"授权面内做不到"（G-20） |
 | T40 | 全门禁复跑 | 三档 35/**47**/44、告警全 0（EVD 的 `<已脱敏>` 占位形状被放行，正是占位 regexes 的用途）；TOML ok；`preflight docs` rc=0；`cdc` rc=0；scoped shape rc=1；口令值 0 命中 |
+| T41 | 按卡片分 8 组提交（逐路径 `git add`，禁 `-A`） | 每组提交前扫新增行：口令值 0、DSN 形状仅出现在 EVD 的脱敏引用里；无 `.pyc`/scratch |
+| T42 | 提交后重算守卫三档并落档 | tracked 与 worktree 因守卫配置入库而**重合为 47/告警 0**，history 升为 59/告警 0，反事实 59→告警 1（仍仅 01f6892）；EVD-004 附"提交后复算"段 |
+| T43 | `git fetch` 确认远端未移动（`0 8`）⇒ fast-forward 推送 `60e5723..6b50f6e` | `ls-remote` == 本地 HEAD、`ahead/behind = 0/0`、工作树干净 ⇒ **双端一致达成** |
+| T44 | 记 R.16.4 同步事实（含作者标识用命令级 env 覆盖、未写 git config） | 未闭合项如实列：**TASK-001 轮换无证据**、验收绝大多数只能 CI 判——"一致"不等于"CI 绿" |

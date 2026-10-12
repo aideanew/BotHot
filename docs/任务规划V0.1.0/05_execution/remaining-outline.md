@@ -343,3 +343,23 @@ git add <逐个路径> ; git diff --cached --stat ; git diff --cached --name-onl
 # 4) 代理与远端复核（确认 URL 内无 token）
 git remote -v ; git config --get http.proxy
 ```
+
+其余瓶颈都在人侧，不由代码解决。
+
+## R.16.4 同步已于 2026-10-12 执行（口径 A：提交并推送）
+
+| 项 | 实测 |
+|---|---|
+| 提交数 | `60e5723..6b50f6e` **8 个提交**，按卡片分组（S0 安全 / 守卫 / 构建 / 门禁 / 文档漂移 / S4 编码 / 计划入库 / 证据重算） |
+| 双端一致 | `git ls-remote origin refs/heads/main` = 本地 `git rev-parse HEAD` = `6b50f6eb1fa0…`；`rev-list --left-right --count` → **0  0**；`git status --porcelain` → **空** |
+| 推送方式 | 先 `git fetch` 确认远端未移动（`0 8`）⇒ **fast-forward，无 force** |
+| 提交前门禁 | 三档告警 0；`grep -c "^+.*口令值"` = 0（口令仅以 `-` 删除行出现在摘除明文的提交里，属既有历史内容）；暂存区无 `.pyc`/`__pycache__`/`*.local.toml`；无 token 串、无本机用户路径 |
+| 作者标识 | 本机 `user.name/user.email` 为空 ⇒ 按仓库既有作者 `CodingHeader <coderheader@github.com>` 以**命令级 env 覆盖**提交，**未写入任何 git config** |
+
+**推送后仍未闭合的两件事（不属"一致"判据，但影响真实安全状态）**：
+1. **TASK-001 口令轮换至今无证据**——历史里那条凭据是否失效未知，仓库为 public，
+   且现在多了一个"这里曾有条凭据"的公开审计线索 ⇒ 轮换是唯一实质处置，需人工执行。
+2. **8 个提交的验收项大多只能在 CI 判**（见 R.14 与 6 份 EVD 的 ⚪ ci-only 栏）：
+   gitleaks 真二进制四条命令 + 双 fixture、`docker compose config` 两条断言、
+   `pytest` 全链（含新增 `test_notification_frame_id.py` 三层 6 例）、`pnpm` 前端链、`actionlint`。
+   **"双端一致"不等于"CI 绿"**——本机物理上给不出后者的结论。
