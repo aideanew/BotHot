@@ -8,6 +8,10 @@
 | tracked | `python docs/任务规划V0.1.0/_workspace/gitleaks_replay.py tree` | 命中 **35** → **告警 0** |
 | tracked+untracked（权威档，含守卫配置自己） | `… worktree` | 候选 5001 路径 → 命中 **46** → **告警 0** |
 | history（93 commit 增量行） | `… history` | 命中 **44** → **告警 0** |
+> **提交后复算（本仓已入库守卫配置与计划目录）**：`tracked` 与 `worktree` 两档**重合为 47 命中 / 告警 0**，
+> `history` 因新增 7 个提交而升到 **59 命中 / 告警 0**；反事实跑同步为 59 → **告警 1**（仍只有 01f6892 那一行）。
+> 摘除明文的提交本身不产生告警——复现器与 gitleaks 都只看新增行。下面表格是**提交前**的采集值，保留作过程证据。
+
 | 配置可解析 | `python -c "import tomllib,pathlib;tomllib.loads(pathlib.Path('.gitleaks.toml').read_text(encoding='utf-8'))"` | TOML ok |
 | 口令值不再出现在工作树 | `grep -rnF "$PW" . --exclude-dir=.git`（`$PW` 库外赋值） | **0 命中** |
 
