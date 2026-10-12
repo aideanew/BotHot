@@ -1,0 +1,21 @@
+{
+  "$comment": "采集域错误映射冻结稿。唯一源仍是 apps/api/app/core/errors.py 的 ERROR_CODES + 子类 http_status（F-17）；本文件只声明『哪个失败路径映射到哪个既有码』，不新增码位（N-06）。STEP-01 用测试断言本表每一行与 errors.py 一致。",
+  "error_body": {
+    "shape": { "code": "int", "message": "str", "data": "null" },
+    "source": "apps/api/app/core/errors.py AppError + 全局异常处理器（与现有 success()/error 包装一致）"
+  },
+  "paths": [
+    { "path": "长链/短链 URL 非 mp.weixin.qq.com", "where": "source_resolver.py:61", "code": 10006, "name": "MALFORMED_URL", "http": 400, "job_item": "永久失败（STEP-09 将其纳入 _is_permanent_error）", "ui": "入库失败：链接不受支持" },
+    { "path": "URL 无法识别为文章", "where": "source_resolver", "code": 20001, "name": "SOURCE_URL_UNRECOGNIZED", "http": 400, "job_item": "永久失败", "ui": "入库失败：无法识别的链接" },
+    { "path": "正文抽取失败（非图集）", "where": "extractor / kb._resolve_with_retry", "code": 20002, "name": "EXTRACT_FAILED", "http": 502, "job_item": "可重试；STEP-10 开关开时转详情兜底", "ui": "抓取失败，稍后重试" },
+    { "path": "抽取质量低", "where": "quality", "code": 20003, "name": "EXTRACT_QUALITY_LOW", "http": 422, "job_item": "永久失败（兜底开时先试兜底）", "ui": "正文质量不足" },
+    { "path": "发现渠道调用失败 / 渠道未就绪", "where": "providers/article_sources/*、registry", "code": 20004, "name": "DISCOVERY_FAILED", "http": 502, "job_item": "不建 Job；scheduler 回滚半成品、推进水位（现有语义不变）", "ui": "管理端渠道面板 lastError" },
+    { "path": "上游限频", "where": "providers/*", "code": 20005, "name": "RATE_LIMITED_UPSTREAM", "http": 429, "job_item": "可重试，退避", "ui": "上游繁忙" },
+    { "path": "入库 LangBot 失败", "where": "kb.ingest_url", "code": 30003, "name": "INGEST_FAILED", "http": 502, "job_item": "可重试", "ui": "入库失败，稍后重试" },
+    { "path": "付费预算耗尽 / Redis 不可用 fail-closed", "where": "STEP-10 paid_call_budget", "code": 50002, "name": "DEPENDENCY_UNAVAILABLE", "http": 503, "job_item": "可重试（次日）", "ui": "今日付费额度已用尽" },
+    { "path": "清单状态非法迁移", "where": "STEP-04 状态机", "code": 30005, "name": "JOB_STATE_INVALID", "http": 409, "job_item": "—（编程错误，测试兜住）", "ui": "—" },
+    { "path": "未登录访问采集接口", "where": "deps.require_roles", "code": 10001, "name": "UNAUTHENTICATED", "http": 401, "ui": "跳转登录" },
+    { "path": "非 operator/admin 访问 admin 采集接口；user 访问他人订阅", "where": "admin.py require_roles('operator')；subscriptions.py 归属校验", "code": 10004, "name": "FORBIDDEN", "http": 403, "ui": "无权限态" }
+  ],
+  "removed_failure_path": { "path": "长链入库 MultipleResultsFound → 500 INTERNAL_ERROR", "fixed_by": "STEP-02", "regression_test": "tests/test_kb_longlink_ingest.py::test_multi_source_no_crash" }
+}

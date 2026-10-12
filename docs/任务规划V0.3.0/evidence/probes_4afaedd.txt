@@ -1,0 +1,22 @@
+# 四探针复跑 @main 4afaedd（2026-10-12 18:0x CST；隔离 PG16@127.0.0.1:5547/bothot_test，迁移单头 ab1005w5b）
+# 探针源码：docs/任务规划V0.2.0/evidence/probe_*.py（未改动，复制到 tests/ 跑完即删）
+
+P-1 probe_row_mapping.py（不连库）
+  dajiala -> None
+  justoneapi -> None
+  redfox -> {'external_id': 'aaaa…', 'url': 'https://mp.weixin.qq.com/s/x', …, 'publish_time': 2026-09-27 07:42+08:00}
+  rss -> {'external_id': 'https://ex.com/a', …, 'publish_time': None}     ← RFC 822 pubDate 解析失败
+  atom -> {'external_id': 'tag:b', …, 'publish_time': 2026-10-12 07:00 UTC}
+
+P-2 probe_reenqueue_loop.py
+  manifest.external_id= aaaaaaaaaaaaaaaaaaaaaaaa9b451f8b asset.external_id= RealToken9b451f8b
+  已 READY 入库后 Diff 仍判为新增篇数 = 1
+
+P-3 probe_longlink_collision.py
+  PROBE fetch_count= 1 A.hitCache= False B.hitCache= True same_doc= True
+
+P-4 probe_multisource_crash.py
+  PROBE2 EXC MultipleResultsFound Multiple rows were found when one or none was required
+
+结论：4afaedd 相对 61739f0 未改 apps/api/app/**（git diff --stat 61739f0 HEAD -- apps/api/app 为空），
+四个 P0 全部按原样复现；STEP-00 只动测试侧，未触及缺陷本体（符合其卡片边界）。
