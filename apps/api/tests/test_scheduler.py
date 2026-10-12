@@ -659,9 +659,10 @@ async def test_run_once_reconciles_docs_when_no_due_subscriptions() -> None:
     engine, factory = _factory()
     try:
         recon = _StubReconciler([3])
-        # 时钟取远早于任何订阅 created_at 的时刻：本套件共用线上 PG（未设
-        # AIDEANBOT_TEST_PG_DSN，见 conftest 警告），他人的订阅 next_run_at 都在
-        # 2026 年后，远早时钟下全部「未到期」——「无到期订阅」这一前提才不随线上
+        # 时钟取远早于任何订阅 created_at 的时刻：连库目标按 AIDEANBOT_TEST_PG_DSN 两级
+        # 解析（未设则 skip，原因见 conftest SKIP_UNSET_REASON），指向共用库时他人订阅的
+        # next_run_at 都在
+        # 2026 年后，远早时钟下全部「未到期」——「无到期订阅」这一前提才不随库内
         # 数据漂移（2026-09-26 实测：线上有一条 next_run_at=2026-09-27 的锚定订阅，
         # 2030 时钟下它到期，`== 0` 断言必败）。
         sched = _scheduler(factory, _Clock(datetime(2000, 1, 1, tzinfo=UTC)), _StubRunner())

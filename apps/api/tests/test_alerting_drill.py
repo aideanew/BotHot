@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
+from fixtures.net import REFUSED_HTTP_URL
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -97,7 +98,7 @@ async def test_drill_all_three_alerts_fire(
     ch = BotChannel(
         name=f"alert-drill-{stamp}",
         channel_type="webhook",
-        webhook_url="http://localhost:9999/drill",
+        webhook_url=REFUSED_HTTP_URL,
         secret_enc="",
         extra_config="{}",
         status="active",

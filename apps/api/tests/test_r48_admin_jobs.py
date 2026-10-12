@@ -282,8 +282,9 @@ async def test_admin_list_subscriptions_all_spaces_with_owner(db_session) -> Non
     resp = client.get(ADMIN_SUBS)
     assert resp.status_code == 200, resp.text
     items = resp.json()["data"]["items"]
-    # 本套件共用线上 PG（未设 AIDEANBOT_TEST_PG_DSN，见 conftest 警告）：全系统清单
-    # 会带回其他环境的订阅行，故按本用例种子的 sub id 定位，不断言绝对条数。
+    # 连库目标按 AIDEANBOT_TEST_PG_DSN 两级解析（未设则 skip，原因见 conftest
+    # SKIP_UNSET_REASON）；若该变量指向与他人共用的库，全系统清单会带回其他环境的订阅
+    # 行，故本用例按自己种子的 sub id 定位，不断言绝对条数。
     item = next(i for i in items if i["subscriptionId"] == rows["sub"])
     assert item["subscriptionId"] == rows["sub"]
     assert item["sourceName"] == "R48 测试号" and item["biz"] == "biz-r48"

@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import pytest
+from fixtures.net import REFUSED_HTTP_URL
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.bots import list_push_logs
@@ -24,7 +25,7 @@ async def _seed_channel(db: AsyncSession) -> BotChannel:
     ch = BotChannel(
         name="logs-filter-channel",
         channel_type="webhook",
-        webhook_url="http://localhost:9999/test",
+        webhook_url=REFUSED_HTTP_URL,
         secret_enc="",
         extra_config="{}",
         status="active",

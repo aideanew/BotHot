@@ -22,6 +22,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+if hasattr(sys.stdout, "reconfigure"):  # 缺省 UTF-8：Windows 控制台按 GBK 编码打印 ⇒ 会抛 UnicodeEncodeError
+    sys.stdout.reconfigure(encoding="utf-8")  # ty: ignore[unresolved-attribute]
+
 ROOT = Path(__file__).resolve().parents[4]
 CONF = ROOT / "apps" / "api" / "tests" / "conftest.py"
 VAR = "AIDEANBOT_TEST_PG_DSN"
@@ -113,7 +116,7 @@ def main() -> int:
     check("S0.1.2-a `_DEFAULT_PG_URL` 已删除", "_DEFAULT_PG_URL" not in src,
           f"grep -c 命中 {src.count('_DEFAULT_PG_URL')}")
     check("S0.1.2-b 生产形态字面量不再出现在 conftest", "bothot:bothot@localhost:5433" not in src,
-          "conftest 仍含口令字面量")
+          f"字面量命中 {src.count('bothot:bothot@localhost:5433')} 处（期望 0）")
 
     tmp = Path(tempfile.mkdtemp(prefix="evdv200-"))
     fake_tests = tmp / "apps" / "api" / "tests" / "conftest.py"
@@ -162,7 +165,7 @@ def main() -> int:
           f"_broadcast={ns_blank['_broadcast']!r}")
     check("S0.1.2-r 三种入口的广播值均非空串（下游永远不会读到 \"\"）",
           all(n["_broadcast"] for n in (ns_unset, ns_empty, ns_blank)),
-          "广播值为空串/None")
+          "｜".join(f"{n['_broadcast']!r}" for n in (ns_unset, ns_empty, ns_blank)))
     ns_padded = exec_prefix(fake_tests, {VAR: f"  {test_dsn}  "})
     check("S0.1.2-s 带空白的配置广播为剥离后的值",
           ns_padded["_broadcast"] == test_dsn, f"_broadcast={ns_padded['_broadcast']!r}")

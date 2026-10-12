@@ -169,6 +169,18 @@ guard-versions: ## 检查版本锚点一致性（fail-closed）
 	if [ "$$rc" -ne 0 ]; then echo "❌ 版本锚点不一致"; exit 1; fi; \
 	echo "✅ 版本锚点一致"
 
+# ─── 证据门禁（STEP-00R S0R.4.1）────────────────────────────────
+.PHONY: evidence-check
+evidence-check: ## 复跑仓库内全部 stdlib 证据证明（不装依赖、不起服务）
+	@set -e; \
+		echo "── S0.1.2 连库 DSN 两级解析 + 拒连广播 ──"; python docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py; \
+		echo "── S0.1.2 变异反证（断言必须能红）──"; python docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py --self-test; \
+		echo "── S0.3.2 Provider 样本形状 ↔ 真实读取路径 ──"; python docs/06_validation/evidence/EVD-V2-00/prove_provider_shapes.py; \
+		echo "── G-24 静态自检（ruff 子集 + 规则可捕获性）──"; python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py; python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py --self-test; \
+		echo "── S0R.1 测试出站代理隔离 ──"; python docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py; \
+		echo "── S0R.1 变异反证 ──"; python docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py --self-test; \
+		echo "✅ evidence-check 全部通过"
+
 # ─── 清理 ───────────────────────────────────────────
 .PHONY: clean
 clean: ## 清理构建产物

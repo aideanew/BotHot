@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 import pytest
-from conftest import PG_URL
+from conftest import PG_URL, SKIP_UNSET_REASON, _PG_URL_SOURCE
 from fastapi.testclient import TestClient
 from test_repositories import _make_user
 
@@ -1184,6 +1184,12 @@ async def test_ask_real_full_chain_smoke() -> None:
     （LLM_API_KEY 缺省回落 EMBEDDING_API_KEY——同供应商同 Key）。断言 delta 非占位
     拼装：answer_len>0 且语义含"麻籽"。
     """
+    # S0R.2.2：本冒烟自起引擎（下方两处 create_async_engine(PG_URL)），不经 db_session
+    # 夹具，因而拿不到夹具的「未配置 → skip」保护；未设 DSN 时会对拒连地址建引擎并在
+    # try 之前抛错，报成 error 而非 skip。守卫置于函数首行——两处引擎构造同属本函数，
+    # 一处即覆盖（放第二处不可达）。置于 LangBot 可达性探测之前：省一次无谓 socket。
+    if _PG_URL_SOURCE == "unset":
+        pytest.skip(SKIP_UNSET_REASON)
     import asyncio
 
     if sys.platform == "win32":

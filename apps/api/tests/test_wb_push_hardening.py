@@ -12,6 +12,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
+from fixtures.net import REFUSED_HTTP_URL
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -76,7 +77,7 @@ async def wb_channel(db_session: Any, wb_user):
     ch = BotChannel(
         name=f"wb-channel-{os.urandom(3).hex()}",
         channel_type="webhook",
-        webhook_url="http://localhost:9999/hook",
+        webhook_url=REFUSED_HTTP_URL,
         secret_enc="",
         extra_config="{}",
         status="active",

@@ -16,6 +16,7 @@ import os
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from fixtures.net import REFUSED_HTTP_URL
 from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import (
@@ -35,13 +36,17 @@ from app.services.push_template import render, validate_template
 # 此前 created_by="test-user" 无对应 users 行，PG 外键一律拒绝）。
 _TEST_USER_SUB = "w3-scheduler-test-user"
 
-# S0.2.1：投递失败类用例的前提不能写成「某个端口恰好空闲」。旧值
-# http://localhost:9999/test 在该端口被任意返回 2xx 的服务占用时，webhook provider
-# 走 `200 <= status < 300` 分支返回 delivered=True（app/providers/push/webhook.py:39-40），
-# PushLog 不再落 failed → test_event_delivery_failure_no_reclaim 假失败（D-12 实测 1 failed）。
-# 端口 1 非 root 无法监听 ⇒ httpx 必抛 ConnectError → provider 的 except Exception 分支
-# 恒定返回 delivered=False / retryable=True（webhook.py:50-51），与本机端口占用解耦。
-_REFUSED_WEBHOOK_URL = "http://127.0.0.1:1/bothot-hook-no-listener"
+# S0.2.1 → S0R.1：投递失败类用例的前提不能写成「某个端口恰好空闲」，也不能只换成
+# 「必然空闲的端口」——V0.3.0 实跑证明后者不充分：宿主进程环境存在 http/https 代理时，
+# webhook.py:33 的 `httpx.AsyncClient`（默认 trust_env=True）会把发往 127.0.0.1:1 的请求
+# 交给代理并回 HTTP 404，而 webhook.py:46 只对 ≥500 判可重试 ⇒ retry_count 不推进 ⇒
+# test_event_delivery_failure_no_reclaim 仍红（证据
+# docs/任务规划V0.3.0/evidence/proxy_rootcause_4afaedd.txt：§C 有代理=404/retryable=False，
+# §D 清代理=拒连/retryable=True 且同文件 11/11 通过）。拒连不可能产生 HTTP 状态码，
+# 所以「看到状态码」本身就是「请求没直达目标」的铁证。据此：地址常量收敛到
+# fixtures/net.py 一处，代理清理由 conftest 的 _isolate_proxy_env autouse 夹具负责，
+# 两者缺一失败形态都不可控。生产侧 trust_env 行为属未裁决项 U-08，本卡不改 app/**。
+_REFUSED_WEBHOOK_URL = REFUSED_HTTP_URL
 
 _PG_DSN = os.environ.get("AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot")
 

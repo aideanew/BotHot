@@ -74,6 +74,28 @@ if _PG_URL_SOURCE == "unset":
 # 处解析口径——PG_URL 即下游所见值。
 os.environ[_TEST_PG_ENV_VAR] = PG_URL
 
+# ── 出站环境隔离（STEP-00R S0R.1.2）──────────────────────────────────────────
+# 实测教训（docs/任务规划V0.3.0/evidence/proxy_rootcause_4afaedd.txt §B–§D）：S0.2.1 把
+# webhook 投递目标改指保留拒连地址 http://127.0.0.1:1 之后，用例**仍然失败**。宿主进程环境
+# 里有 http/https 代理时，`webhook.py:33` 的 `httpx.AsyncClient`（默认 trust_env=True）会把
+# 发往 127.0.0.1 的请求交给代理，代理回 HTTP 404；而 `webhook.py:46` 只对 ≥500 判可重试
+# ⇒ retry_count 不推进 ⇒ 断言红。拒连不可能产生 HTTP 状态码，「404」本身就是请求没直达
+# 目标的铁证。所以测试出站必须与宿主代理设置解耦：autouse 逐用例清除代理变量并把回环
+# 地址列入 NO_PROXY（比 session 级更严——用例内自行 setenv 也不会泄漏给下一个用例）。
+# 生产侧 trust_env 是否应绕开内网目标属行为决策，登记为 U-08 且本卡禁止改 app/**（N-02），
+# 故这里只在测试侧隔离。将来若有用例必须走真实代理，另开卡处理。
+_PROXY_ENV_VARS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
+NO_PROXY_ISOLATION_VALUE = "127.0.0.1,localhost,::1"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_proxy_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """清除 6 个代理变量并设置 NO_PROXY，使测试出站只取决于本机监听状态。"""
+    for _name in _PROXY_ENV_VARS:
+        monkeypatch.delenv(_name, raising=False)
+    monkeypatch.setenv("NO_PROXY", NO_PROXY_ISOLATION_VALUE)
+    monkeypatch.setenv("no_proxy", NO_PROXY_ISOLATION_VALUE)
+
 
 @pytest.fixture
 async def db_session() -> AsyncIterator[AsyncSession]:
