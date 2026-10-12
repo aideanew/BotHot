@@ -14,6 +14,11 @@ docs/
 database/
 infra/
 scripts/
+# 第三方参考源码（LangBot/MediaCrawler/firecrawl/wandao 等，实测 131M）与文档源稿归档
+# （.docs/，4.7M）均不参与任何镜像构建；根 context=.. 会整目录上传，不显式排除即进上下文。
+# 注意 `docs/` 一行不匹配 `.docs/`（前导点不是通配符），故必须各列一行。
+.project/
+.docs/
 
 # 通用产物/缓存
 **/node_modules
