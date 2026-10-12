@@ -154,8 +154,10 @@ services:
       - APP_ENV=development
       # W6 A.4：read_only 根文件树下禁止写 __pycache__，须禁字节码（apps/api/scheduler/worker 共用）
       - PYTHONDONTWRITEBYTECODE=1
-      - DATABASE_URL=postgresql+psycopg://bothot_rw:bothot_rw_2026@host.docker.internal:5435/bothot
-      - REDIS_URL=redis://host.docker.internal:6379/1
+      # ADR-0010 / REQ-NF-002：连接串禁止内嵌明文口令，必须由 docker/.env 或进程环境注入。
+      # `:?` 语义 = 缺失时 `docker compose config` 直接报错退出，而不是静默连到错误的库。
+      - DATABASE_URL=${DATABASE_URL:?DATABASE_URL 未设置：在 docker/.env 或环境中填写}
+      - REDIS_URL=${REDIS_URL:?REDIS_URL 未设置：在 docker/.env 或环境中填写}
       # T1.5.1（G9，2026-09-22）：会话/state 存储切 Redis（多实例部署与会话持久前置）；
       # 宿主裸跑开发（无 redis_url 可达）时保持代码默认 memory，不写本键即可
       - SESSION_STORE_BACKEND=${SESSION_STORE_BACKEND:-redis}
