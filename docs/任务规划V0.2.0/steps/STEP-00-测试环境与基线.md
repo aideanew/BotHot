@@ -40,3 +40,32 @@ S0.1.3 产出 junit 且 failed=0（S0.2.1 修复后）；skip 仅限 LangBot/Red
 
 ## 风险
 - 删除默认 DSN 后，本地开发者若习惯不设变量直接跑，会看到大量 skip——这正是期望行为（宁 skip 不写生产）；在 EVD-V2-00 与 `docs/04_engineering/conventions.md` 补一句使用说明（后者属 STEP-11）。
+
+---
+
+## 执行记录（2026-10-12，Agent 侧完成度＝部分）
+
+| 子任务 | 状态 | 实际落点与偏差 |
+|---|---|---|
+| S0.1.1 | 🟡 部分 | 脚本已写并通过 6 条**不启服务**的验收（`bash -n`、`env`、端口护栏 rc=2、非法子命令 rc=64）。`up/down` 需 docker，与「不实际启动服务」约束冲突 ⇒ **未执行**，卡片验收命令（`up && … && psql -c 'select 1'`）本机未满足。 |
+| S0.1.2 | ✅ 达成（口径已改） | 卡片原写「把 `PG_URL` 置空 + 删常量」不足以闭合 D-12：`tests/` 另有 **9 处**模块级 `os.environ.get(VAR, 生产字面量)`（卡片依据只提 conftest）与 **1 处** `from conftest import PG_URL`（共 10 个消费者）。现实现为两级解析 + 未配置时广播**保留地址 `127.0.0.1:1`**（端口 1 非 root 不可监听 ⇒ 必拒连），广播用**无条件赋值**（`setdefault` 在「键存在但空串」时是空操作，会把空串漏给下游）。证明：`EVD-V2-00/prove_dsn_policy.py` 20/20 + `--self-test` 变异反证。 |
+| S0.1.3 | ⏳ 交 CI | 本机无 venv 且禁启服务 ⇒ 连库 pytest 只能由 CI postgres job 判；结论回填至 EVD §5/§8。 |
+| S0.2.1 | ✅ | 采卡片许可的第二方案（webhook_url → `http://127.0.0.1:1/…`），两处夹具替换。**卡片反证无效**：`python -m http.server 9999` 返回 501，而 `webhook.py:46` 判 `>=500` 为可重试 ⇒ 改前也 PASS，构造不出「改前 FAIL」；能致假绿的是 **2xx** 监听者。见 EVD §6.2。 |
+| S0.3.1 | ✅ | 10 个常量（验收 ≥6）。 |
+| S0.3.2 | ✅（验收命令需修订） | 目录为 **8 个文件**（5 JSON + 2 XML + `README.md`），卡片写的 `wc -l` = 7 已不成立 ⇒ 修订为 = 8。JSON 样本刻意**不含**注记键（形状忠实），prose 迁至同目录 `README.md`；`prove_provider_shapes.py` 断言「主路径读取键缺失即 FAIL」（实测 redfox 3/3、dajiala 5/5、justoneapi 10/10、tikhub 8/13、wellbyte 10/10）。 |
+
+### 本卡暴露、但不属本卡修复范围的缺陷（已移交，详见 EVD-V2-00 §8）
+1. **`_ID_KEYS` 交集空**：Dajiala/JustOneAPI/TikHub/Wellbyte 归一化行键与 `manifest.py:51` 无交集
+   ⇒ 清单**永不入库**且只计 `skipped`、不报错不告警。成本量级为**每号每轮 1–2 次调用**
+   （`manifest.py:217` 的 `len(rows) < size` 首页即止 + 四家 `page>1` 返回空），
+   不是早期记录的「最多 20 次」——该错误结论已在 EVD §6.3 更正。属 STEP-03。
+2. `test_alerting_drill.py:100`、`test_bots_logs_filter.py:27`、`test_wb_push_hardening.py:79`
+   仍是 `localhost:9999` 同形假设 ⇒ 建议新增 **S0.2.3**。
+3. `test_chat_sse.py:1208`/`:1272` 建引擎不在 try 内 ⇒ 特定组合下**报错而非 skip**。
+4. 三个证明脚本未进 CI ⇒ 夹具头 60+ 条 `file:line` 引用无门禁，会静默腐坏。
+5. 陈旧注释：`test_r48_admin_jobs.py:285`、`test_scheduler.py:663` 仍称「见 conftest 警告」；
+   `ci.yml:28-32` 仍描述「conftest 默认 DSN 指 5433」的旧行为（改 `.github/**` 需另行授权）。
+
+### 已推翻的本卡早期结论（保留痕迹，勿复用）
+- 「Windows 缺 tzdata ⇒ 项目依赖缺口」：**错**。`uv.lock:865-868` 中 psycopg 3.3.5 依赖
+  `tzdata (marker sys_platform=='win32')` ⇒ 按锁安装即得；本机崩是因本会话无 venv。
