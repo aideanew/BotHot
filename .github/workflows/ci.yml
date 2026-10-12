@@ -96,6 +96,13 @@ jobs:
       # 脚本以 __file__ 定位仓库根，任意 cwd 可跑；alembic head 探测 fail-open 不阻断。
       - name: Contract drift gate (gen_contracts --check)
         run: python "$GITHUB_WORKSPACE/scripts/gen_contracts.py" --check
+      # roadmap v0.6.5 未勾项「治理脚本入 CI 强制步」：check_docs_consistency.py 早就在仓库里，
+      # 但**没有任何调用点**（roadmap:95 记的是同一件事），文档里的 `file:line` 引用一直靠自觉。
+      # 脚本纯 stdlib（argparse/re/sys/pathlib），不需要 venv 依赖；它校验两件事：
+      #   ① backlog.md 里引用的路径存在 ② 声称的行号 ≤ 文件实际行数（拦幻觉行号）。
+      # 判失败即红：文档引用腐坏 = 后来人按图索骥找不到代码，等价于门禁失效。
+      - name: Docs reference consistency gate (check_docs_consistency)
+        run: python "$GITHUB_WORKSPACE/scripts/check_docs_consistency.py"
       # W5：skip 门禁。解析 junitxml 的 skipped 用例，两条判据：
       #   1) 「PG 不可达」类 skip 一律判失败——直接锁死本 job 要防的那类静默回归；
       #   2) skip 总数 > 基线阈值 SKIP_BASELINE 判失败。
@@ -318,6 +325,13 @@ jobs:
 
   compose:
     runs-on: ubuntu-latest
+    # ADR-0010：compose.yml 改为 ${DATABASE_URL:?}/${REDIS_URL:?}，插值发生在 **解析期**，
+    # 与 compose.ci.yml 的服务 environment 覆盖无关（后者按变量名逐键合并、在插值之后生效）。
+    # 因此本 job 必须提供这两个变量，否则 `config` 直接非 0 退出——这正是 :? 的设计行为。
+    # 值不含 userinfo（user:pass@），本 job 不连库，仅作占位。
+    env:
+      DATABASE_URL: postgresql+psycopg://bothot@postgres:5432/bothot
+      REDIS_URL: redis://redis:6379/1
     steps:
       - uses: actions/checkout@v4
       - name: Validate compose config
@@ -347,6 +361,11 @@ jobs:
   compose-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # 同上：仅满足 compose.yml 的解析期插值。运行时真值由 compose.ci.yml 按服务逐键覆盖
+    # 提供（bothot/bothot@postgres:5432），这里的占位不会进入容器 env。
+    env:
+      DATABASE_URL: postgresql+psycopg://bothot@postgres:5432/bothot
+      REDIS_URL: redis://redis:6379/1
     # 共享底座迁移（01f6892）后，主 compose 无 postgres/redis、backend env 指向
     # host.docker.internal（runner 上不存在）——CI 用 compose.ci.yml 叠加回补栈内
     # 底座并覆盖连接 env。所有 compose 命令必须带 -f 双文件，顺序不可反。

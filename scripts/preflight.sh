@@ -178,16 +178,29 @@ frontend_gate() {
   fi
 }
 
+docs_gate() {
+  hr "DOCS: 文档路径引用一致性（backlog.md 里的 file:line 是否真实存在）"
+  # 纯 stdlib 脚本，不需要 venv 依赖 —— 是唯一在裸机上也能跑的门禁，
+  # 所以放在最后：即使 ruff/mypy/pnpm 缺失导致前几段红，这一段仍能给结论。
+  # 判据：路径不存在 或 声称行号 > 文件实际行数 都算红（后者防幻觉行号）。
+  ( cd "$ROOT" && "$PY" scripts/check_docs_consistency.py > "$LOG/docs-consistency.log" 2>&1 )
+  local rc=$?
+  echo "check_docs_consistency exit=$rc"
+  [ $rc -ne 0 ] && { cat "$LOG/docs-consistency.log"; FAIL=1; }
+}
+
 case "$MODE" in
   backend)  backend_gate ;;
   frontend) frontend_gate ;;
   parity)   parity_gate ;;
+  docs)     docs_gate ;;
   all)
     parity_gate
     backend_gate
     frontend_gate
+    docs_gate
     ;;
-  *) echo "用法: bash scripts/preflight.sh [backend|frontend|parity|all]"; exit 2 ;;
+  *) echo "用法: bash scripts/preflight.sh [backend|frontend|parity|docs|all]"; exit 2 ;;
 esac
 
 echo
