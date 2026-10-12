@@ -37,6 +37,11 @@ class WebPushProvider:
                 "space_id": message.space_id,
                 "doc_id": message.doc_id,
             }
+            # TASK-016：id 由调度器在投递前自铸，与 notifications 行同值（前端据此去重）。
+            # 缺该字段时**不写 null**——直投路径（bots.py 测试推送/run-now）不落库，
+            # 无 id 可读，前端据"字段缺失"退回内容窗口去重，语义比收到一个假 id 清楚。
+            if message.notification_id:
+                notification["id"] = message.notification_id
 
             # 发布到用户专属频道
             channel = (

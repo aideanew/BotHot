@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.metrics import PUSH_DELIVERIES_TOTAL
 from app.core.secret_crypto import decrypt_channel_secret, decrypt_extra_config
+from app.models.base import gen_uuid
 from app.models.bothot_entities import BotChannel, Notification, PushLog, PushTask
 from app.providers.push import PushMessage, make_push_provider
 from app.services.cron_expr import parse_cron_next
@@ -172,9 +173,15 @@ class PushTaskScheduler:
             variables = dict(event_payload) if event_payload else {}
             content = render(task.content_template or "BotHot 推送通知", variables)
 
+            # TASK-016：web 帧与落库行必须同 id，而 Notification.id 是 Python 侧默认值
+            # （bothot_entities.py:283 default=gen_uuid；迁移 ab1005w5a:30 的 DDL 无 server_default），
+            # 取回它要等 flush ⇒ 只能在此处提前自铸，同灌发布载荷与落库行。
+            notification_id = gen_uuid() if ch.channel_type == "web" else ""
+
             push_msg = PushMessage(
                 message=content,
                 title=task.name,
+                notification_id=notification_id,
                 webhook_url=ch.webhook_url,
                 # AES 密文 AAD 绑定 channel id；不可解时抛 RequestInvalidError，
                 # 由 _execute_task_safe 捕获写 failed PushLog（fail-closed，绝不静默空密钥投递）
@@ -272,11 +279,14 @@ async def persist_web_notification(db: AsyncSession, msg: PushMessage) -> None:
     - 广播：sub=""，is_broadcast=True（历史查询按 sub==me OR is_broadcast 覆盖两类）。
     savepoint 语义：落库失败仅回滚本通知行并 warning（通知历史可容忍单条缺失），
     绝不影响同事务内的 PushLog/渠道计数（投递回执优先）。
+    id 口径（TASK-016）：优先复用调度器预铸的 msg.notification_id，使 SSE 实时帧与表行同 id；
+    调用方未预铸（如直投）时退回 ORM 默认路径自铸，此时该行没有对应的实时帧，不影响一致性。
     """
     try:
         async with db.begin_nested():
             db.add(
                 Notification(
+                    id=msg.notification_id or gen_uuid(),
                     sub=msg.external_user_id or "",
                     is_broadcast=not msg.external_user_id,
                     channel_type="web",

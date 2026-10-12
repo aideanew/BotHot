@@ -30,6 +30,9 @@ class PushMessage:
     webhook_url: str = ""
     secret: str = ""
     extra_config: str = "{}"
+    # TASK-016：web 渠道实时帧与 notifications 行共用同一个 id（前端按 id 去重）。
+    # 空串=未预生成（非 web 渠道、或直投路径不经落库），其他 Provider 一律忽略本字段。
+    notification_id: str = ""
 
 
 @dataclass(frozen=True)
