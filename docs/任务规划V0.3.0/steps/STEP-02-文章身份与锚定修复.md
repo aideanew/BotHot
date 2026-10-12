@@ -42,7 +42,8 @@ P-3 输出 `fetch_count=2 B.hitCache=False same_doc=False`、P-4 输出 `PROBE2 
 **交付**：`test_article_identity.py`：`parse_wechat_url` 对 LONG_A/LONG_B 解析出相同 biz、不同 mid；`__biz` URL 编码（%3D%3D）可解；LONG_A_TRACKING 与 LONG_A 解析出同 (biz,mid,idx)；SHORT_1 得 token（=SHORT_TOKEN_1）；SHORT_WITH_FAKE_BIZ_PARAM 仍解析出 biz（保持 test_p0_asset_cache 现有语义，`__biz` 优先于 `biz`）；MALFORMED_LONG 的 mid 为空；OFFSITE 返回 host≠微信
 
 **执行步骤**：
-1. [ ] 只写测试，模块不存在 ⇒ ImportError 即红
+1. [x] 只写测试，模块不存在 ⇒ ImportError 即红（本机实测见 `EVD-V2-02/README.md` §3：
+   「改前红」现已做成可重放命令，用 `sys.meta_path` 只拦该模块名，不删文件）
 
 **验收命令**：
 ```bash
@@ -54,9 +55,9 @@ cd apps/api && uv run pytest tests/test_article_identity.py -q  # 改前红
 **交付**：`article_identity.py`：`WechatUrlParts(biz, mid, idx, sn, short_token, host)` + `parse_wechat_url(url)`；`idx` 缺省 '1'；纯函数、零 IO
 
 **执行步骤**：
-1. [ ] 实现
-2. [ ] S2.1.1 转绿
-3. [ ] 覆盖率 100%
+1. [x] 实现（S2.1.1/S2.1.2 已交付，见文末执行记录；S2.1.3 起未做）
+2. [x] S2.1.1 转绿（本机真实 pytest `14 passed`，`--noconftest`，见 EVD-V2-02 §2 通道 A）
+3. [x] 覆盖率 100%（`sys.settrace` 语句覆盖 27/27；卡面 `--cov-fail-under=100` 本机不可复现 ⇒ J-1）
 
 **验收命令**：
 ```bash
@@ -237,3 +238,31 @@ eval "$(bash scripts/test-env.sh env)" && cd apps/api && uv run pytest tests/tes
 
 ## 回滚
 `git revert <sha>`；无数据影响。
+
+## 执行记录（S2.1.1 + S2.1.2，基线 `main@b69123f`）
+
+状态：**部分完成**。S2.1.1/S2.1.2 已交付并经第一轮独立复审处置完毕；
+S2.1.3/S2.1.4/S2.1.5/S2.2/S2.3 未做（不提前改 `kb.py`/`asset.py`，复审 Q-22 独立确认零改动）。
+
+交付：`apps/api/app/services/article_identity.py`、`apps/api/tests/test_article_identity.py`（14 条用例）、
+`docs/06_validation/evidence/EVD-V2-02/{README.md, prove_article_identity.py, block_article_identity_plugin.py}`。
+
+证据（每条可由他人复跑）：
+- 真实 pytest：`cd apps/api && PYTHONPATH=. python -m pytest tests/test_article_identity.py -q --noconftest` → `14 passed`
+- 改前红重放：见 EVD-V2-02 §3 两条命令（红 `Interrupted: 1 error during collection` / 绿 `14 passed`）
+- 纯 stdlib 证明：`prove_article_identity.py` → `合计 PASS=12 FAIL=0`、`PI-11 27/27=100.0%`
+- 反证：`--self-test` → `12 个实现变异体各自让指定用例变红 + 17 个判据样本对敏感 + 4 个等价重构不假红`
+
+偏离与补充登记（D-01 起，均需人工追认；不同意可单独 revert 文档，代码结论不受影响）：
+
+| id | 内容 | 性质 |
+|---|---|---|
+| D-01 | 实现超出卡面字面的两条口径：`+` 按字面加号解析（防同一 base64 `__biz` 的两种书写裂成两条资产）、非 `str` 入参归零返回（`Source.url` 可为 NULL/脏类型，bytes 会产出 `b''` 型 host 使下游比较静默判错） | 行为增量，卡面未规定 |
+| D-02 | 用例由卡面 7 条增至 14 条（补 host 折叠、冻结性、`+`、非 str、外链带微信参数、idx 缺省两处、`__biz` 优先） | 覆盖面增量 |
+| D-03 | 新增 S2.2 待定项三条：短链带 `__biz` 时 biz 与 short_token **同时非空**（规范键须声明优先级）、外链带微信参数照解（与 `kb._biz_from_url` 既有行为一致，加 host 闸门会波及所有非微信源 ⇒ 不擅改，已钉成用例）、`idx=%20`/参数名大小写/`/S/` 大写路径属未实测口径 | 口径未定，交 ADR-0011 |
+| D-04 | 验收命令等价替换：本机有 pytest 9.1.1 但无 `uv`/`pytest-cov`/`sqlalchemy` ⇒ 卡面 `uv run pytest --cov...` 改由「真实 pytest（`--noconftest`）」+「stdlib 语句覆盖」两条通道承担，原命令登记为 J-1 | 环境等价，非降低标准 |
+| D-05 | 本卡文件自身被修改（勾选 + 本节），不在「允许修改」清单内；证据包新增两文件落在「证据路径」目录 | 越路径，申报待批 |
+
+交接头目：J-1 卡面覆盖率门禁命令、J-2 `ruff check app tests` 终判（本机无 ruff，I001 已按仓库真实段序修正但属推断）、
+J-3 三条未实测口径需真实抓取样本、J-4 连库全量回归（S2.3）。
+

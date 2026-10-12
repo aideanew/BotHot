@@ -1,0 +1,89 @@
+# STEP-02 S2.1.1/S2.1.2 本机执行原始留档（不启服务、不装依赖）
+# 时间 2026-10-12T21:20:51+08:00｜HEAD=b69123f+工作区未提交改动｜Python 3.11.9｜win32｜全链带 PYTHONIOENCODING=utf-8
+# 通道 A：真实 pytest 9.1.1（本机无 sqlalchemy ⇒ 必须 --noconftest，本用例不消费 conftest 夹具）
+
+########## A1 改前红重放：-p 只拦 app.services.article_identity 这一个模块名
+rc=2
+=================================== ERRORS ====================================
+_______________ ERROR collecting tests/test_article_identity.py _______________
+ImportError while importing test module 'D:\Code\AideanBotHot\apps\api\tests\test_article_identity.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\importlib\__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+apps\api\tests\test_article_identity.py:45: in <module>
+    from app.services.article_identity import WechatUrlParts, parse_wechat_url
+docs\06_validation\evidence\EVD-V2-02\block_article_identity_plugin.py:35: in find_spec
+    raise ModuleNotFoundError(f"BLOCKED for S2.1.1 red-check: {fullname}", name=fullname)
+E   ModuleNotFoundError: BLOCKED for S2.1.1 red-check: app.services.article_identity
+C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\site-packages\_pytest\config\__init__.py:1464
+
+########## A2 改后绿：同一份用例、去掉 -p
+rc=0
+..............                                                           [100%]
+C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\site-packages\_pytest\config\__init__.py:1464
+  
+14 passed, 1 warning in 0.08s
+
+########## B1 纯 stdlib 证明
+目标实现：apps/api/app/services/article_identity.py
+目标用例：apps/api/tests/test_article_identity.py
+
+OK   PI-1 实现只依赖白名单标准库（无三方、无 IO 库）
+OK   PI-2 实现体零 IO（无 open/session/execute/httpx 等名字）
+OK   PI-3 实现无 global 写、无属性写（纯函数可并发复用）
+OK   PI-4 WechatUrlParts 字段序 = (biz, mid, idx, sn, short_token, host)
+OK   PI-5 WechatUrlParts 冻结（身份不可就地篡改）
+OK   PI-6 idx 的缺省值为 '1'（常量或内联字面量两种写法都接受）
+OK   PI-7 交付口径逐条落到真实用例名（卡面 S2.1.1/S2.1.2 + 本步补充，共 14 条）
+OK   PI-8 用例文件不 import pytest（本机无依赖也能跑）
+OK   PI-9 夹具经 PEP 420 命名空间包真实解析（tests/fixtures 无 __init__.py）
+OK   PI-10 真实执行 14 个用例全部通过
+       用例明细：14 passed / 0 failed
+OK   PI-11 实现语句覆盖 27/27 = 100.0%（卡面 S2.1.2 要求 100%）
+OK   PI-12 每条用例体内都含 assert/raise（防空壳用例，共 14 条）
+
+合计 PASS=12 FAIL=0
+rc=0
+
+########## B2 反证 --self-test
+反证：12 个实现变异体 + 17 个判据样本对
+
+OK   基准：14 个用例全绿
+OK   退化成 kb.py 旧行为：只读 biz、不读 __biz（D-01b 本体） → 致红 ['test_biz_takes_precedence_over_short_biz_param', 'test_long_links_share_biz_but_differ_mid', 'test_malformed_long_link_has_empty_mid', 'test_plus_sign_in_biz_is_literal_not_space', 'test_wechat_params_on_foreign_host_are_still_parsed']
+OK   biz 优先级倒置（两种都读，但伪 biz 抢先） → 致红 ['test_biz_takes_precedence_over_short_biz_param']
+OK   query 改裸切分（不再百分号解码） → 致红 ['test_encoded_biz_param_decodes_to_same_value', 'test_plus_sign_in_biz_is_literal_not_space']
+OK   `+` 退回表单口径（裸 + 被还原成空格） → 致红 ['test_plus_sign_in_biz_is_literal_not_space']
+OK   非 str 守卫被删（bytes 直送 urlparse ⇒ b'' 型 host） → 致红 ['test_non_string_input_yields_empty_parts_without_raising']
+OK   擅自给解析加 host 闸门（非微信源的 biz 全变空串，越界改动） → 致红 ['test_wechat_params_on_foreign_host_are_still_parsed']
+OK   idx 缺省值被清空 → 致红 ['test_idx_defaults_to_one_when_absent']
+OK   mid 读成 id（长链畸形态的真实诱因） → 致红 ['test_long_links_share_biz_but_differ_mid', 'test_malformed_long_link_has_empty_mid', 'test_wechat_params_on_foreign_host_are_still_parsed']
+OK   短链 token 分支被旁路 → 致红 ['test_host_case_folding_keeps_short_token', 'test_short_link_with_fake_biz_param_still_yields_biz', 'test_short_link_yields_token']
+OK   值对象不再冻结 → 致红 ['test_parse_returns_frozen_parts']
+OK   host 不做大小写折叠 → 致红 ['test_host_case_folding_keeps_short_token']
+OK   sn 恒为空串（身份组成部分被吞） → 致红 ['test_long_links_share_biz_but_differ_mid', 'test_tracking_params_do_not_change_identity', 'test_wechat_params_on_foreign_host_are_still_parsed']
+OK   PI-1 白名单依赖：真实样本判真 / 坏样本判假
+OK   PI-2 零 IO（open）：真实样本判真 / 坏样本判假
+OK   PI-2 零 IO（session.execute）：真实样本判真 / 坏样本判假
+OK   PI-2 零 IO（__import__ 动态逃逸）：真实样本判真 / 坏样本判假
+OK   PI-2 零 IO（eval 动态逃逸）：真实样本判真 / 坏样本判假
+OK   PI-3 纯函数（global 写）：真实样本判真 / 坏样本判假
+OK   PI-3 纯函数（属性写）：真实样本判真 / 坏样本判假
+OK   PI-4 字段序：真实样本判真 / 坏样本判假
+OK   PI-4 缺类：真实样本判真 / 坏样本判假
+OK   PI-5 冻结：真实样本判真 / 坏样本判假
+OK   PI-6 缺省值漂移：真实样本判真 / 坏样本判假
+OK   PI-6 常量被删：真实样本判真 / 坏样本判假
+OK   PI-8 用例 import pytest：真实样本判真 / 坏样本判假
+OK   PI-9 夹具名写错：真实样本判真 / 坏样本判假
+OK   PI-9 引用了夹具里不存在的名字：真实样本判真 / 坏样本判假
+OK   PI-12 用例体被掏空（无 assert/raise）：真实样本判真 / 坏样本判假
+OK   PI-7：逐个删除 14 个用例名，判据每次都转假
+OK   等价重构 PI-6 允许把 _DEFAULT_IDX 内联成字面量（常量删除 + 用法改写，两步一起才等价） → 判据全真、用例全绿
+OK   等价重构 PI-2 允许把短链切片写成 removeprefix → 判据全真、用例全绿
+OK   等价重构 PI-4 允许字段注写成带引号的等价形式（顺序不动） → 判据全真、用例全绿
+OK   等价重构 PI-7/PI-12 允许用例改用中间变量再断言（判定不动） → 判据全真、用例全绿
+
+SELF-TEST PASS：12 个实现变异体各自让指定用例变红 + 17 个判据样本对敏感 + 4 个等价重构不假红
+rc=0
