@@ -1,5 +1,5 @@
 # make evidence-check 等价链实跑（本机无 make：Windows + git-bash，which make → not found；逐条命令即 Makefile:173-183 的 recipe）
-# 时间 2026-10-12T19:22:09+08:00｜HEAD=86269a2+工作区未提交改动（本次提交即其内容）｜Python 3.11.9
+# 时间 2026-10-12T19:42:36+08:00｜HEAD=5c8552b+工作区未提交改动（本次提交即其内容）｜Python 3.11.9｜win32 cp936 控制台、无 PYTHONIOENCODING
 
 ########## python docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py
 PASS S0.1.2-a `_DEFAULT_PG_URL` 已删除 :: grep -c 命中 0
@@ -130,19 +130,19 @@ PASS NR-2 夹具为函数级 scope（缺省或 'function'） :: scope=缺省
 PASS NR-3 夹具定义在 DSN 广播之后（不改广播语义） :: 广播 :75、夹具 :92
 PASS NR-4-a 脏环境下 6 个代理变量被清空 :: 残留=[]
 PASS NR-4-b NO_PROXY 与 no_proxy 均写成契约值 :: NO_PROXY='127.0.0.1,localhost,::1' no_proxy='127.0.0.1,localhost,::1'（期望 '127.0.0.1,localhost,::1'）
-PASS NR-6 undo() 后宿主原貌恢复（夹具不是永久改环境） :: undo 后 NO_PROXY=None
+PASS NR-6 undo() 后宿主原貌恢复（夹具经 monkeypatch 而非直写 os.environ） :: undo 后 NO_PROXY='internal.example' no_proxy='internal.example' HTTP_PROXY='http://127.0.0.1:10808'｜宿主原貌 = 'internal.example' / 'internal.example' / 代理 URL（win32 大小写合并，见常量注释）
 PASS NR-5 无代理的干净环境调用夹具不抛异常 :: delenv(raising=False) 生效
 PASS NR-7 清理代理不影响 AIDEANBOT_TEST_PG_DSN :: 夹具后='postgresql+psycopg://x:y@127.0.0.1:5547/z'
 PASS NR-8 tests 全树无 localhost:9999 字面量 :: 命中=[]
 PASS NR-9-a fixtures/net.py 导出 REFUSED_HTTP_URL 且端口为 1 :: 值='http://127.0.0.1:1/bothot-hook-no-listener'
-PASS NR-9-b 4 个消费方均改为引用该常量 :: 未引用=[]
-PASS NR-9-c test_w3 旧常量收敛为别名（单一真值） :: 见 tests/test_w3_push_scheduler.py:44 区
+PASS NR-9-b 4 个消费方均把该常量接到 webhook_url 实参上（AST） :: 未接线=无｜test_alerting_drill.py:import=True、实参行=[101] test_bots_logs_filter.py:import=True、实参行=[28] test_wb_push_hardening.py:import=True、实参行=[80] test_w3_push_scheduler.py:import=True、实参行=[87, 160]
+PASS NR-9-c test_w3 旧常量收敛为别名（单一真值：本文件不再自带 URL 字面量） :: 别名在 tests/test_w3_push_scheduler.py:49
 PASS NR-10-a 冒烟首行守卫：未配置 DSN → skip 而非 error :: 首条可执行语句=If :1191（守卫已就位）
 PASS NR-10-b 守卫所需符号已从 conftest 导入 :: import 行='from conftest import PG_URL, SKIP_UNSET_REASON, _PG_URL_SOURCE'
 PASS NR-11 「见 conftest 警告」陈旧注释清零 :: 残留=[]
 PASS NR-12-a test_env_isolation 有 3 条用例 :: 用例=['test_proxy_env_is_cleared_for_every_case', 'test_refused_url_fails_as_connection_error_not_http_status', 'test_host_proxy_state_is_not_inherited']
 PASS NR-12-b 每条用例至少 1 个 assert（无空断言） :: {'test_proxy_env_is_cleared_for_every_case': 3, 'test_refused_url_fails_as_connection_error_not_http_status': 3, 'test_host_proxy_state_is_not_inherited': 1}
-PASS NR-12-c 宿主代理快照在模块级、用例定义之前（收集期即夹具运行前） :: 快照 :31、首个用例 :34
+PASS NR-12-c 宿主代理快照在模块级、用例定义之前（收集期即夹具运行前） :: 快照 :35、首个用例 :40
 PASS NR-13-a _PROXY_ENV_VARS 覆盖大小写 6 个键 :: 实测=('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy')
 PASS NR-13-b NO_PROXY_ISOLATION_VALUE 含回环地址 :: 实测='127.0.0.1,localhost,::1'
 
@@ -156,5 +156,10 @@ OK  去掉 autouse → 应变红 ['NR-1']｜实际红项=['NR-1']
 OK  删掉 delenv 循环体 → 应变红 ['NR-4-a']｜实际红项=['NR-4-a']
 OK  delenv 改 raising=True → 应变红 ['NR-5']｜实际红项=['NR-4-a(异常 KeyError)', 'NR-5']
 OK  NO_PROXY 值去掉回环 → 应变红 ['NR-4-b', 'NR-13-b']｜实际红项=['NR-13-b', 'NR-4-b']
-SELF-TEST PASS：4 个变异体各自让对应断言变红
+OK  夹具直写 os.environ 而非经 monkeypatch → 应变红 ['NR-6']｜实际红项=['NR-6']
+OK  NR-9-b 实参退回 URL 字面量：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-9-b 只 import 从不接到形参：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-9-b 丢掉 import 行：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-9-b 经模块级别名接线（test_w3 形态）：基准=True（应 True）｜变异体=False（应 False）
+SELF-TEST PASS：5 个 conftest 变异体各自让对应断言变红 + 4 个源码探针敏感
 rc=0

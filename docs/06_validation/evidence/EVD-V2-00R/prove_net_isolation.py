@@ -7,8 +7,12 @@ sqlalchemy / httpx / dotenv（实测 `python -c "import httpx"` → ModuleNotFou
 **当前函数体**（剥掉装饰器，注入按 pytest.MonkeyPatch 语义实现的替身）。被执行的是文件
 里的真实代码，不是抄本——改了函数体，这里的结论就会变。
 
-`--self-test` 提供 G-23 反证：把夹具改成 4 种「看起来还在但已失效」的变异体（去掉
-autouse / 删掉 delenv 循环 / 换 raising=True / 换 NO_PROXY 值），逐条确认对应断言**变红**。
+`--self-test` 提供 G-23 反证，走两条通道：
+① MUTANTS——把夹具改成 5 种「看起来还在但已失效」的 conftest 变异体（去掉 autouse /
+   删掉 delenv 循环 / 换 raising=True / 换 NO_PROXY 值 / 直写 os.environ 绕过 monkeypatch），
+   逐条确认对应断言**变红**；
+② TEXT_PROBES——文件结构类判据（NR-8..NR-12 读真实文件，改 conftest 变不红它）在**内存样本**
+   上跑同一判定函数，要求基准为真、变异体为假。
 """
 
 from __future__ import annotations
@@ -33,6 +37,14 @@ VAR = "AIDEANBOT_TEST_PG_DSN"
 # 契约字面量：夹具必须把回环地址排除在代理之外。刻意写死而不是读 conftest 的常量——
 # 否则「把常量改成 localhost」这类变异体会跟着一起改，断言就永远不可能失败（G-23）。
 EXPECTED_NO_PROXY = "127.0.0.1,localhost,::1"
+# Windows 的 os.environ 键大小写不敏感（CPython 在 win32 上按 upper() 归一，实测
+# `os.environ['NO_PROXY']='A'; os.environ['no_proxy']='B'` 后只剩一个条目）。夹具在两个
+# 平台上都仍然正确（覆写两次、undo 复原宿主值），但「宿主本没有小写 no_proxy ⇒ undo 后应
+# 消失」这一条在 win32 上不可观测——它与 NO_PROXY 是同一个键，undo 只能复原成宿主原值。
+# 分档写明，而不是假装判据跨平台一致（Linux CI 上仍要求 None）。
+_HOST_NO_PROXY = "internal.example"
+POST_UNDO_NO_PROXY = _HOST_NO_PROXY if sys.platform == "win32" else None
+POST_UNDO_HTTP_PROXY = "http://127.0.0.1:10808"
 PROXY_VARS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
 CONSUMERS = (
     "test_alerting_drill.py",
@@ -143,6 +155,34 @@ class sandbox:
                 os.environ[n] = v
 
 
+def webhook_url_wired_to_constant(text: str) -> tuple[bool, str]:
+    """NR-9-b 的判据：常量不只是「出现在文件里」，而是真的接到 `webhook_url=` 形参上。
+
+    弱判据（子串包含）会让「import 了却没用」「又写回字面量」两种回归都探不到，
+    故此处走 AST：①必须有 `from fixtures.net import REFUSED_HTTP_URL`；
+    ②收集该常量的别名（含 `_REFUSED_WEBHOOK_URL = REFUSED_HTTP_URL` 这类模块级别名）；
+    ③必须存在 `webhook_url=<常量或别名>` 的关键字实参。
+    """
+    tree = ast.parse(text)
+    imported = any(
+        isinstance(n, ast.ImportFrom)
+        and (n.module or "").endswith("fixtures.net")
+        and any(a.name == "REFUSED_HTTP_URL" for a in n.names)
+        for n in ast.walk(tree)
+    )
+    aliases = {"REFUSED_HTTP_URL"}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Assign) and isinstance(n.value, ast.Name) and n.value.id in aliases:
+            aliases.update(t.id for t in n.targets if isinstance(t, ast.Name))
+    sites = [
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, ast.keyword) and n.arg == "webhook_url" and isinstance(n.value, ast.Name)
+        and n.value.id in aliases
+    ]
+    return imported and bool(sites), f"import={imported}、实参行={sorted(sites)}"
+
+
 def main() -> int:
     src = CONF.read_text(encoding="utf-8")
     prefix_mod = load_sibling("prove_dsn_policy")
@@ -177,20 +217,28 @@ def main() -> int:
     # ── NR-4：真执行——脏环境调用后代理全清、NO_PROXY 为契约值 ────────────────────
     with sandbox():
         for name in PROXY_VARS:
-            os.environ[name] = "http://127.0.0.1:10808"
-        os.environ["NO_PROXY"] = "internal.example"
+            os.environ[name] = POST_UNDO_HTTP_PROXY
+        os.environ["NO_PROXY"] = _HOST_NO_PROXY
         mp = FakeMonkeyPatch()
         fixture(mp)  # ty: ignore[not-callable]
         leaked = [n for n in PROXY_VARS if n in os.environ]
         np_val, np_low = os.environ.get("NO_PROXY"), os.environ.get("no_proxy")
         mp.undo()
-        restored = os.environ.get("NO_PROXY"), os.environ.get("internal_present")
+        # 取样必须在 sandbox 退出**之前**：`sandbox.__exit__` 自己会把环境还原一遍，
+        # 若在块外断言，测到的是 sandbox 的还原而不是夹具 undo 的还原——那条断言永远不可能红（G-23）。
+        post_undo = (
+            os.environ.get("NO_PROXY"),
+            os.environ.get("no_proxy"),
+            os.environ.get("HTTP_PROXY"),
+        )
     check("NR-4-a 脏环境下 6 个代理变量被清空", leaked == [], f"残留={leaked}")
     check("NR-4-b NO_PROXY 与 no_proxy 均写成契约值",
           np_val == EXPECTED_NO_PROXY and np_low == EXPECTED_NO_PROXY,
           f"NO_PROXY={np_val!r} no_proxy={np_low!r}（期望 {EXPECTED_NO_PROXY!r}）")
-    check("NR-6 undo() 后宿主原貌恢复（夹具不是永久改环境）",
-          "NO_PROXY" not in os.environ, f"undo 后 NO_PROXY={os.environ.get('NO_PROXY')!r}")
+    check("NR-6 undo() 后宿主原貌恢复（夹具经 monkeypatch 而非直写 os.environ）",
+          post_undo == (_HOST_NO_PROXY, POST_UNDO_NO_PROXY, POST_UNDO_HTTP_PROXY),
+          f"undo 后 NO_PROXY={post_undo[0]!r} no_proxy={post_undo[1]!r} HTTP_PROXY={post_undo[2]!r}"
+          f"｜宿主原貌 = {_HOST_NO_PROXY!r} / {POST_UNDO_NO_PROXY!r} / 代理 URL（win32 大小写合并，见常量注释）")
 
     # ── NR-5：干净环境调用不得抛（delenv 必须 raising=False）──────────────────────
     with sandbox():
@@ -216,17 +264,20 @@ def main() -> int:
     refused = re.search(r'REFUSED_HTTP_URL\s*=\s*"([^"]+)"', net_src)
     check("NR-9-a fixtures/net.py 导出 REFUSED_HTTP_URL 且端口为 1",
           bool(refused) and refused.group(1).startswith("http://127.0.0.1:1/"), f"值={refused.group(1) if refused else None!r}")
-    consumers_ok, missing = True, []
+    bad, report = [], []
     for fname in CONSUMERS:
-        text = (TESTS / fname).read_text(encoding="utf-8")
-        if "REFUSED_HTTP_URL" not in text or "from fixtures.net import" not in text:
-            consumers_ok = False
-            missing.append(fname)
-    check("NR-9-b 4 个消费方均改为引用该常量", consumers_ok, f"未引用={missing}")
+        ok, why = webhook_url_wired_to_constant((TESTS / fname).read_text(encoding="utf-8"))
+        report.append(f"{fname}:{why}")
+        if not ok:
+            bad.append(fname)
+    check("NR-9-b 4 个消费方均把该常量接到 webhook_url 实参上（AST）", not bad,
+          f"未接线={bad or '无'}｜" + " ".join(report))
     w3 = (TESTS / "test_w3_push_scheduler.py").read_text(encoding="utf-8")
-    check("NR-9-c test_w3 旧常量收敛为别名（单一真值）",
-          "_REFUSED_WEBHOOK_URL = REFUSED_HTTP_URL" in w3 and "127.0.0.1:1/bothot-hook" not in w3.split("REFUSED_HTTP_URL")[-1],
-          "见 tests/test_w3_push_scheduler.py:44 区")
+    alias_line = next((i for i, line in enumerate(w3.splitlines(), 1) if line == "_REFUSED_WEBHOOK_URL = REFUSED_HTTP_URL"), None)
+    check("NR-9-c test_w3 旧常量收敛为别名（单一真值：本文件不再自带 URL 字面量）",
+          "_REFUSED_WEBHOOK_URL = REFUSED_HTTP_URL" in w3
+          and '"http://127.0.0.1:1/bothot-hook-no-listener"' not in w3,
+          f"别名在 tests/test_w3_push_scheduler.py:{alias_line}")
 
     # ── NR-10：chat_sse 冒烟的未配置守卫（AST 位置断言）──────────────────────────
     sse = ast.parse((TESTS / "test_chat_sse.py").read_text(encoding="utf-8"))
@@ -291,6 +342,39 @@ MUTANTS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     ("删掉 delenv 循环体", "        monkeypatch.delenv(_name, raising=False)", "        pass", ("NR-4-a",)),
     ("delenv 改 raising=True", "monkeypatch.delenv(_name, raising=False)", "monkeypatch.delenv(_name, raising=True)", ("NR-5",)),
     ("NO_PROXY 值去掉回环", 'NO_PROXY_ISOLATION_VALUE = "127.0.0.1,localhost,::1"', 'NO_PROXY_ISOLATION_VALUE = "localhost"', ("NR-4-b", "NR-13-b")),
+    ("夹具直写 os.environ 而非经 monkeypatch", 'monkeypatch.setenv("NO_PROXY", NO_PROXY_ISOLATION_VALUE)',
+     'os.environ["NO_PROXY"] = NO_PROXY_ISOLATION_VALUE', ("NR-6",)),
+)
+
+
+# 第二条反证通道：文件结构类判据（NR-8/NR-9/NR-11/NR-12/NR-10）读的是仓库里的真实文件，
+# 不能用「改 conftest」来变红，故改为对**内存中的样本源码**跑同一个判定函数——
+# 基准必须成立、变异体必须不成立，否则那条判据是空洞的（G-23）。
+TEXT_PROBES: tuple[tuple[str, str, str, object], ...] = (
+    (
+        "NR-9-b 实参退回 URL 字面量",
+        'from fixtures.net import REFUSED_HTTP_URL\n\nf = P(webhook_url=REFUSED_HTTP_URL)\n',
+        'from fixtures.net import REFUSED_HTTP_URL\n\nf = P(webhook_url="http://127.0.0.1:1/x")\n',
+        lambda t: webhook_url_wired_to_constant(t)[0],
+    ),
+    (
+        "NR-9-b 只 import 从不接到形参",
+        'from fixtures.net import REFUSED_HTTP_URL\n\nf = P(webhook_url=REFUSED_HTTP_URL)\n',
+        'from fixtures.net import REFUSED_HTTP_URL\n\nEXPECTED = REFUSED_HTTP_URL\n',
+        lambda t: webhook_url_wired_to_constant(t)[0],
+    ),
+    (
+        "NR-9-b 丢掉 import 行",
+        'from fixtures.net import REFUSED_HTTP_URL\n\nf = P(webhook_url=REFUSED_HTTP_URL)\n',
+        'f = P(webhook_url=REFUSED_HTTP_URL)\n',
+        lambda t: webhook_url_wired_to_constant(t)[0],
+    ),
+    (
+        "NR-9-b 经模块级别名接线（test_w3 形态）",
+        'from fixtures.net import REFUSED_HTTP_URL\n\n_A = REFUSED_HTTP_URL\n\nf = P(webhook_url=_A)\n',
+        'from fixtures.net import REFUSED_HTTP_URL\n\n_A = "http://x"\n\nf = P(webhook_url=_A)\n',
+        lambda t: webhook_url_wired_to_constant(t)[0],
+    ),
 )
 
 
@@ -309,7 +393,15 @@ def self_test() -> int:
         print(f"{'OK ' if ok else 'BAD'} {label} → 应变红 {list(expected_red)}｜实际红项={sorted(red) or ['（无，断言空洞！）']}")
         if not ok:
             rc = 1
-    print("SELF-TEST " + ("PASS：4 个变异体各自让对应断言变红" if rc == 0 else "FAIL"))
+    for label, base, mutant, judge in TEXT_PROBES:
+        base_ok, mutant_ok = bool(judge(base)), bool(judge(mutant))
+        ok = base_ok and not mutant_ok
+        print(f"{'OK ' if ok else 'BAD'} {label}：基准={base_ok}（应 True）｜变异体={mutant_ok}（应 False）")
+        if not ok:
+            rc = 1
+    print("SELF-TEST " + (
+        f"PASS：{len(MUTANTS)} 个 conftest 变异体各自让对应断言变红 + {len(TEXT_PROBES)} 个源码探针敏感"
+        if rc == 0 else "FAIL"))
     return rc
 
 
@@ -331,8 +423,8 @@ def evaluate(conftest_src: str) -> list[str]:
         red.append("NR-1")
     with sandbox():
         for name in PROXY_VARS:
-            os.environ[name] = "http://127.0.0.1:10808"
-        os.environ["NO_PROXY"] = "internal.example"
+            os.environ[name] = POST_UNDO_HTTP_PROXY
+        os.environ["NO_PROXY"] = _HOST_NO_PROXY
         try:
             fixture = exec_fixture(conftest_src, seed)
             mp = FakeMonkeyPatch()
@@ -341,6 +433,15 @@ def evaluate(conftest_src: str) -> list[str]:
                 red.append("NR-4-a")
             if os.environ.get("NO_PROXY") != EXPECTED_NO_PROXY or os.environ.get("no_proxy") != EXPECTED_NO_PROXY:
                 red.append("NR-4-b")
+            mp.undo()
+            if (os.environ.get("NO_PROXY"), os.environ.get("no_proxy"), os.environ.get("HTTP_PROXY")) != (
+                _HOST_NO_PROXY,
+                POST_UNDO_NO_PROXY,
+                POST_UNDO_HTTP_PROXY,
+            ):
+                red.append("NR-6")
+        except Exception as exc:  # noqa: BLE001
+            red.append(f"NR-4-a(异常 {type(exc).__name__})")
         except Exception as exc:  # noqa: BLE001
             red.append(f"NR-4-a(异常 {type(exc).__name__})")
     with sandbox():
