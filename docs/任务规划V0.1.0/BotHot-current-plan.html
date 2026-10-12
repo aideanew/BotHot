@@ -1,0 +1,4632 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>BotHot 剩余任务分配与执行规划（基线 main@60e5723）</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <style>body{max-width:1100px;margin:auto;padding:24px;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.6;color:#222}table{border-collapse:collapse;margin:12px 0;font-size:13px;display:block;overflow-x:auto}th,td{border:1px solid #ddd;padding:4px 8px;vertical-align:top}th{background:#f4f4f4}pre{background:#f6f8fa;padding:10px;overflow-x:auto;font-size:12px}code{font-size:12px}h2{border-bottom:2px solid #333;padding-bottom:4px;margin-top:40px}h3{margin-top:28px;color:#0b5394}</style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">BotHot 剩余任务分配与执行规划（基线
+main@60e5723）</h1>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#bothot-剩余任务分配与执行规划"
+id="toc-bothot-剩余任务分配与执行规划">BotHot 剩余任务分配与执行规划</a>
+<ul>
+<li><a href="#规划快照" id="toc-规划快照">1. 规划快照</a></li>
+<li><a href="#事实基线" id="toc-事实基线">2. 事实基线</a></li>
+<li><a href="#需求基线复核" id="toc-需求基线复核">3.
+需求基线复核</a></li>
+<li><a href="#契约冻结包" id="toc-契约冻结包">4. 契约冻结包</a></li>
+<li><a href="#数据模型基线" id="toc-数据模型基线">5.
+数据模型基线</a></li>
+<li><a href="#垂直切片清单" id="toc-垂直切片清单">6.
+垂直切片清单</a></li>
+<li><a href="#原子任务卡全集" id="toc-原子任务卡全集">7.
+原子任务卡全集</a></li>
+<li><a href="#依赖-dag" id="toc-依赖-dag">8. 依赖 DAG</a></li>
+<li><a href="#所有权矩阵" id="toc-所有权矩阵">9. 所有权矩阵</a></li>
+<li><a href="#档位分配与成本预算" id="toc-档位分配与成本预算">10.
+档位分配与成本预算</a></li>
+<li><a href="#基线指标" id="toc-基线指标">11. 基线指标</a></li>
+<li><a href="#风险清单-未决问题-待裁决清单"
+id="toc-风险清单-未决问题-待裁决清单">12. 风险清单 / 未决问题 /
+待裁决清单</a></li>
+<li><a href="#落盘清单" id="toc-落盘清单">13. 落盘清单</a></li>
+<li><a href="#自检结果" id="toc-自检结果">14. 自检结果</a></li>
+<li><a href="#本次规划的前提与局限" id="toc-本次规划的前提与局限">15.
+本次规划的前提与局限</a></li>
+<li><a href="#建议的第一刀与启动顺序"
+id="toc-建议的第一刀与启动顺序">16. 建议的第一刀与启动顺序</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="bothot-剩余任务分配与执行规划">BotHot
+剩余任务分配与执行规划</h1>
+<blockquote>
+<p>本文件是规划产物，不是实现。所有「✅
+已有」都附证据；没有证据的地方标「未验证」。 状态
+<code>proposed</code>：在 §12 待裁决项被人裁决前，S2 / S7 / S8
+不得开工。</p>
+</blockquote>
+<hr />
+<h2 id="规划快照">1. 规划快照</h2>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">snapshot</span><span class="kw">:</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">规划日期</span><span class="kw">:</span><span class="at"> 2026-10-12（Asia/Shanghai）</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">仓库</span><span class="kw">:</span><span class="at"> https://github.com/aideanew/BotHot（public）</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">git_branch</span><span class="kw">:</span><span class="at"> main</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">git_commit</span><span class="kw">:</span><span class="at"> 60e57231b1a2fed5ab566290e25f02c16b0e60d3</span><span class="co">   # 2026-10-09 16:45 +0800</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">最新 tag</span><span class="kw">:</span><span class="at"> v1.0.0 → c19fe87（HEAD 领先 tag 15 个提交）</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">工作区是否干净</span><span class="kw">:</span><span class="at"> true（全新 clone，git status 为空）</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">提交总数</span><span class="kw">:</span><span class="at"> </span><span class="dv">93</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">需求文档清单</span><span class="kw">:</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> docs/02_requirements/product-requirements.md   最后修改 2026-09-29</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> docs/01_product/product-scope.md               最后修改 2026-09-29</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> docs/01_product/product-goals.md               最后修改 2026-09-29</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> docs/02_requirements/inbox/                     仅 README，无原始需求</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> docs/04_engineering/backlog.md                 最后修改 2026-10-09</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> docs/04_engineering/roadmap.md                 最后修改 2026-10-08</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> docs/05_execution/tasks/TASK-PLAN-v0.9.md      最后修改 2026-10-08</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">代码文件数</span><span class="kw">:</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">git_ls_files_总数</span><span class="kw">:</span><span class="at"> </span><span class="dv">4958</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">其中_.project_第三方源码</span><span class="kw">:</span><span class="at"> 4385（125M，7 个外部项目）</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">其中_apps</span><span class="kw">:</span><span class="at"> </span><span class="dv">389</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">非_.project_文件</span><span class="kw">:</span><span class="at"> 573（含 apps 389）</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">后端测试文件</span><span class="kw">:</span><span class="at"> apps/api/tests 76 个文件，def test_ 共 895 个</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">前端测试</span><span class="kw">:</span><span class="at"> apps/web/tests 45 个文件；e2e 5 个 spec</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">alembic</span><span class="kw">:</span><span class="at"> 18 个版本，单头 ab1005w5b</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">测试命令（来自 .github/workflows/ci.yml 与 Makefile）</span><span class="kw">:</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">后端</span><span class="kw">:</span><span class="at"> cd apps/api &amp;&amp; ruff check app tests &amp;&amp; mypy app &amp;&amp; python -m alembic upgrade head &amp;&amp; pytest tests/ -q</span><span class="co">   # 需 PG</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">契约</span><span class="kw">:</span><span class="at"> python scripts/gen_contracts.py --check</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">前端</span><span class="kw">:</span><span class="at"> cd apps/web &amp;&amp; pnpm install --frozen-lockfile &amp;&amp; pnpm run typecheck &amp;&amp; pnpm exec tsc --noEmit &amp;&amp; pnpm run test:unit &amp;&amp; pnpm run build</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">e2e</span><span class="kw">:</span><span class="at"> cd apps/web &amp;&amp; pnpm run test:e2e</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">编排</span><span class="kw">:</span><span class="at"> docker compose -f docker/compose.yml -f docker/compose.ci.yml config --quiet &amp;&amp; bash scripts/smoke.sh</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">文档</span><span class="kw">:</span><span class="at"> python scripts/check_docs_consistency.py</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">CI 状态</span><span class="kw">:</span><span class="at"> HEAD 60e5723 的 CI 与 Security 两个工作流结论均为 success（GitHub Actions run 37906907637 等）</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">本次规划未在本地执行</span><span class="kw">:</span><span class="at"> 后端 pytest、前端 vitest/e2e、compose 起栈（无 PG 与共享底座）；仅本地执行了 check_docs_consistency.py（20/20 通过）</span></span></code></pre></div>
+<hr />
+<h2 id="事实基线">2. 事实基线</h2>
+<h3 id="已确认的事实有证据">2.1 已确认的事实（有证据）</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>事实</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>F-01</td>
+<td>v1.0.0 已打 tag 并推送</td>
+<td><code>git ls-remote --tags origin</code> →
+<code>v1.0.0^{} = c19fe87</code></td>
+</tr>
+<tr class="even">
+<td>F-02</td>
+<td>后端 FastAPI，14 个路由模块共 74 个 <code>@router</code>
+装饰端点（另 engines/subscriptions 用具名 router）</td>
+<td><code>apps/api/app/api/v1/*.py</code></td>
+</tr>
+<tr class="odd">
+<td>F-03</td>
+<td>数据模型 22 张表：BotHot 新增 9
+张（<code>bothot_entities.py</code>），继承 13
+张（<code>entities.py</code>）</td>
+<td><code>grep __tablename__</code></td>
+</tr>
+<tr class="even">
+<td>F-04</td>
+<td>角色阶梯 user &lt; operator &lt; admin，授权单一入口
+<code>require_role</code></td>
+<td><code>apps/api/app/services/roles.py</code></td>
+</tr>
+<tr class="odd">
+<td>F-05</td>
+<td>错误码登记表 <code>ERROR_CODES</code> 含 10007/10008，<strong>不含
+50003</strong>；<code>ConfigurationError.code=50003</code></td>
+<td><code>apps/api/app/core/errors.py:9-37,222-225</code></td>
+</tr>
+<tr class="even">
+<td>F-06</td>
+<td>契约包 <code>errors.ts</code> 是<strong>手写</strong>的，缺
+10007/10008；<code>gen_contracts.py --check</code> 不覆盖它</td>
+<td><code>packages/contracts/src/common/errors.ts</code>；<code>scripts/gen_contracts.py:1-60</code></td>
+</tr>
+<tr class="odd">
+<td>F-07</td>
+<td>前端错误文案表缺
+10007/10008/20004/20005/30005/30006/50001/50003，另含后端不存在的
+10101/10102/30101/30102/50101</td>
+<td><code>apps/web/lib/api/http.ts:26-51</code></td>
+</tr>
+<tr class="even">
+<td>F-08</td>
+<td>契约域 DTO 是<strong>持久层实体镜像</strong>，不是 API
+响应形状；identity/chat/engine 仍为骨架</td>
+<td><code>packages/contracts/src/index.ts</code> 头注</td>
+</tr>
+<tr class="odd">
+<td>F-09</td>
+<td>分页双口径并存：bot/hot = page/page_size；知识库/订阅/任务 =
+limit/offset</td>
+<td><code>packages/contracts/src/common/pagination.ts</code></td>
+</tr>
+<tr class="even">
+<td>F-10</td>
+<td><code>docker/compose.yml:157</code> 含明文连接串
+<code>bothot_rw:<已轮换·见运维工单>@host.docker.internal:5435</code>，由
+<code>01f6892</code>（提交说明是 middleware）引入；仓库为 public；当次
+gitleaks 未拦截</td>
+<td><code>git log -S <已轮换·见运维工单></code>；Security run success</td>
+</tr>
+<tr class="odd">
+<td>F-11</td>
+<td>compose 已不含 postgres/redis 服务，改连「共享底座」PG 5435 / Redis
+6379 DB1</td>
+<td><code>docker/compose.yml:46-47,157-158</code></td>
+</tr>
+<tr class="even">
+<td>F-12</td>
+<td>前端 middleware 只放行 <code>/</code> 与
+<code>/auth*</code>；<code>/hot</code> <code>/hot/daily</code>
+<code>/public</code> 均包 AuthGate</td>
+<td><code>apps/web/middleware.ts:14-15</code>；<code>grep -l AuthGate app</code></td>
+</tr>
+<tr class="odd">
+<td>F-13</td>
+<td>middleware 在 mock 构建下短路，e2e 只跑 mock 产物 → 真实态 302
+行为没有自动化覆盖</td>
+<td><code>middleware.ts:26</code>；<code>ci.yml:290-299</code></td>
+</tr>
+<tr class="even">
+<td>F-14</td>
+<td><code>check_docs_consistency.py</code> 未接入 CI 与 preflight</td>
+<td>全仓 grep 仅脚本自身</td>
+</tr>
+<tr class="odd">
+<td>F-15</td>
+<td><code>app.providers.embedding</code> 生产零调用方（仅
+<code>tests/test_embedding.py</code>）</td>
+<td>grep</td>
+</tr>
+<tr class="even">
+<td>F-16</td>
+<td><code>BotBinding</code> 除模型定义外仅在注释中出现</td>
+<td><code>grep BotBinding app</code></td>
+</tr>
+<tr class="odd">
+<td>F-17</td>
+<td>RagflowAdapter / SaaS 适配器方法抛
+<code>NotImplementedError</code>，注册表排除骨架位；空间删除已降级不回滚</td>
+<td><code>providers/engine_port.py:112-170</code>；<code>engines.py:142-160</code></td>
+</tr>
+<tr class="even">
+<td>F-18</td>
+<td>SSE 通知帧无 id；落库在投递之后</td>
+<td><code>api/v1/system.py:227,259</code>；<code>services/push_scheduler.py:222</code></td>
+</tr>
+<tr class="odd">
+<td>F-19</td>
+<td><code>.project/</code> 不在根
+<code>.dockerignore</code>，前端镜像构建上下文会带上 125M</td>
+<td><code>.dockerignore</code></td>
+</tr>
+<tr class="even">
+<td>F-20</td>
+<td>real-backend e2e 为非阻塞 step（continue-on-error）</td>
+<td><code>ci.yml:302-305</code></td>
+</tr>
+<tr class="odd">
+<td>F-21</td>
+<td>性能：仅有 2026-10-08 两条 EXPLAIN 留证（0.034ms /
+0.38ms），<strong>无端到端延迟基线</strong></td>
+<td><code>docs/06_validation/test-results/2026-10-08-notifications-history-explain.md</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="仅来自文档未在代码中验证">2.2 仅来自文档、未在代码中验证</h3>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>说法</th>
+<th>来源</th>
+<th>未验证原因</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>U-01</td>
+<td>全量 1002 passed / 4 skipped</td>
+<td>AGENTS.md</td>
+<td>本次未本地跑 pytest；仅有 CI 绿作间接证据</td>
+</tr>
+<tr class="even">
+<td>U-02</td>
+<td>6 渠道真实投递可达</td>
+<td>backlog PUSH-001~006</td>
+<td>需外部 webhook，未实测</td>
+</tr>
+<tr class="odd">
+<td>U-03</td>
+<td>4 平台文章来源活体可用</td>
+<td>channeltest-20260929 证据</td>
+<td>外部付费 API，未复测</td>
+</tr>
+<tr class="even">
+<td>U-04</td>
+<td>compose-smoke 在 CI 中通过</td>
+<td>run 37906907637 整体 success</td>
+<td>未取 job 级明细</td>
+</tr>
+</tbody>
+</table>
+<h3 id="文档与代码不一致清单">2.3 文档与代码不一致清单</h3>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>文档说法</th>
+<th>代码事实</th>
+<th>处置任务</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>X-01</td>
+<td>AGENTS/README：PG 5433、Redis 6380，compose 起栈内
+postgres/redis</td>
+<td>共享底座 5435/6379，compose 无 PG/Redis</td>
+<td>TASK-003（待 D-02）</td>
+</tr>
+<tr class="even">
+<td>X-02</td>
+<td>README/AGENTS/REQ-C-001：Next.js 14</td>
+<td><code>next ^15.5.24</code>，React 19</td>
+<td>TASK-019</td>
+</tr>
+<tr class="odd">
+<td>X-03</td>
+<td>conventions §5.2：Node 22；§8 前端镜像 node:22</td>
+<td><code>.nvmrc=24.21.0</code>，<code>engines.node &gt;=24</code></td>
+<td>TASK-019</td>
+</tr>
+<tr class="even">
+<td>X-04</td>
+<td>conventions §6.1：渠道密钥是 base64 过渡态</td>
+<td>AES-256-GCM 已落地（<code>core/secret_crypto.py</code>）</td>
+<td>TASK-019</td>
+</tr>
+<tr class="odd">
+<td>X-05</td>
+<td>conventions §6.2：环境变量前缀 <code>BOTHOT_</code></td>
+<td>实际 <code>DATABASE_URL</code>、<code>PUSH_SECRET_MASTER_KEY</code>
+等无前缀</td>
+<td>TASK-019</td>
+</tr>
+<tr class="even">
+<td>X-06</td>
+<td>conventions §8：compose 在
+<code>infra/docker/compose.yml</code></td>
+<td><code>docker/compose.yml</code>（v0.7 裁定不迁）</td>
+<td>TASK-019</td>
+</tr>
+<tr class="odd">
+<td>X-07</td>
+<td>conventions §9：CORS 白名单制</td>
+<td>TASK-PLAN-v0.9 §0.2 裁定不加 CORS（同源代理）</td>
+<td>TASK-019</td>
+</tr>
+<tr class="even">
+<td>X-08</td>
+<td>conventions
+§4.1：<code>tests/unit/modules/&lt;domain&gt;/</code></td>
+<td>扁平 <code>apps/api/tests/test_*.py</code></td>
+<td>TASK-019</td>
+</tr>
+<tr class="odd">
+<td>X-09</td>
+<td>README 本地开发 <code>cd backend</code> /
+<code>cd frontend</code></td>
+<td><code>apps/api</code> / <code>apps/web</code></td>
+<td>TASK-019</td>
+</tr>
+<tr class="even">
+<td>X-10</td>
+<td>REQ-F-001：事件触发待实现</td>
+<td>outbox <code>push_events</code> 已实现（backlog PUSH-008）</td>
+<td>TASK-019</td>
+</tr>
+<tr class="odd">
+<td>X-11</td>
+<td>roadmap v1.0 四项均未勾</td>
+<td>tag v1.0.0 已存在，CHANGELOG 有 v1.0.0 段</td>
+<td>TASK-019</td>
+</tr>
+<tr class="even">
+<td>X-12</td>
+<td>AGENTS「当前项目状态：v0.6.5」</td>
+<td>v1.0.0 已发布</td>
+<td>TASK-019</td>
+</tr>
+<tr class="odd">
+<td>X-13</td>
+<td>CHANGELOG Unreleased：「middleware
+裁定不实施」「公共库/热点保持可见」</td>
+<td>middleware 已实现；/public、/hot 受保护</td>
+<td>TASK-011（待 D-01）</td>
+</tr>
+<tr class="even">
+<td>X-14</td>
+<td>e2e/auth-gate.spec.ts 注释：/hot 游客可浏览</td>
+<td>hot 页已包 AuthGate</td>
+<td>TASK-010（待 D-01）</td>
+</tr>
+<tr class="odd">
+<td>X-15</td>
+<td>project-map：05–07 目录「预留」</td>
+<td>05/06/07 已有内容</td>
+<td>TASK-019</td>
+</tr>
+<tr class="even">
+<td>X-16</td>
+<td>doc-migration-map：6 项「待迁移」</td>
+<td>未迁移</td>
+<td>TASK-020（待 D-05）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="读取失败或无法访问">2.4 读取失败或无法访问</h3>
+<ul>
+<li><code>.docs/09_archive/inception/立项分析/*.docx</code>：二进制，未读（已归档，不影响规划）。</li>
+<li><code>.docs/05_execution/任务进度.md</code>（572KB）与
+<code>.docs/04_planning/剩余任务原子化执行大纲-20260922.md</code>（373KB）：仅抽样，未全文通读。二者已被
+<code>docs/</code> 新体系与 TASK-PLAN-v0.9 取代（见
+doc-migration-map）。<strong>风险</strong>：其中若有未迁移的需求条目，本规划会漏掉。</li>
+<li><code>.project/**</code>：第三方源码，未读（不属本项目需求）。</li>
+<li>外部系统（主平台 OIDC、共享底座、LangBot、6
+个推送渠道）：无访问权限，未实测。</li>
+</ul>
+<hr />
+<h2 id="需求基线复核">3. 需求基线复核</h2>
+<h3 id="复述与拆解">3.1 复述与拆解</h3>
+<p>BotHot 是主平台下的子平台：把公众号文章链接采集入库成知识，供 RAG
+问答；在此之上把新文章、热点聚簇和每日日报通过 6
+种渠道主动推送出去。用户通过主平台 SSO 登录。</p>
+<ul>
+<li><strong>用户</strong>：主平台账号持有者（role=user），在自己的知识空间里入库、订阅、问答。</li>
+<li><strong>管理端</strong>：role=operator / admin。operator
+管推送渠道、推送任务、热点聚簇与日报生成；admin
+另管全站空间、信息源、引擎 Key（<code>bots.py:179</code>
+等、<code>subscriptions.py:103</code>、<code>admin.py</code>）。</li>
+<li><strong>系统边界</strong>：内含
+Web（Next.js）、API（FastAPI）、scheduler、worker
+四个进程；外部依赖主平台 OIDC、共享底座
+PG/Redis、LangBot、SiliconFlow、RedFox 与 4 个文章平台、6
+个推送渠道。</li>
+<li><strong>关键词</strong>：入库、订阅水位、空间隔离、RAG、渠道、Cron、outbox、聚簇、评分、日报、SSO、角色门禁。</li>
+</ul>
+<p><strong>判断</strong>：功能需求 REQ-F-001~008
+在代码中都有实现（F-02~F-04 与 backlog
+逐条证据）。所以「剩余任务」不是新功能，而是：①安全事故止血；②契约与代码的单一来源闭环；③一处需求冲突（访客访问）；④文档漂移；⑤没有基线的非功能需求；⑥一组待人裁决的遗留项。</p>
+<h3 id="分级">3.2 分级</h3>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>ID</th>
+<th>级别</th>
+<th>需求</th>
+<th>可验证改写</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>R-M1</td>
+<td>MUST</td>
+<td>仓库与配置中不得有真实凭据</td>
+<td><code>gitleaks detect</code>（含 URL 内嵌口令规则）对 HEAD
+零告警</td>
+<td>❌ 违反（F-10）</td>
+</tr>
+<tr class="even">
+<td>R-M2</td>
+<td>MUST</td>
+<td>前后端错误码同源</td>
+<td><code>gen_contracts --check</code> 覆盖 errors.ts
+且通过；前端码表类型为
+<code>Record&lt;ApiErrorCode,string&gt;</code></td>
+<td>❌（F-05~F-07）</td>
+</tr>
+<tr class="odd">
+<td>R-M3</td>
+<td>MUST</td>
+<td>角色门禁与登录守卫行为确定且有测试</td>
+<td>ADR-0009 路由表中每条路由都有自动化断言（含真实态）</td>
+<td>⚠️ 冲突（F-12/F-13，X-13/X-14）</td>
+</tr>
+<tr class="even">
+<td>R-M4</td>
+<td>MUST</td>
+<td>文档与代码一致（AGENTS 硬规则）</td>
+<td>check_docs_consistency 在 CI 中执行且通过；§2.3 清单清零</td>
+<td>❌（F-14，X-01~X-16）</td>
+</tr>
+<tr class="odd">
+<td>R-M5</td>
+<td>MUST</td>
+<td>端口纪律（REQ-C-002）</td>
+<td>端口表与编排一致</td>
+<td>❌（X-01）</td>
+</tr>
+<tr class="even">
+<td>R-S1</td>
+<td>SHOULD</td>
+<td>API 响应形状有机器可读契约</td>
+<td>OpenAPI components 含 bot/hot 的 *Out 模型，契约包导出</td>
+<td>❌（F-08）</td>
+</tr>
+<tr class="odd">
+<td>R-S2</td>
+<td>SHOULD</td>
+<td>站内通知实时与历史不重复显示</td>
+<td>帧 id == 表 id，前端按 id 去重的单测通过</td>
+<td>❌（F-18）</td>
+</tr>
+<tr class="even">
+<td>R-S3</td>
+<td>SHOULD</td>
+<td>非功能指标有基线（REQ-NF-001）</td>
+<td>4 项指标有首测数值</td>
+<td>❌（F-21）</td>
+</tr>
+<tr class="odd">
+<td>R-S4</td>
+<td>SHOULD</td>
+<td>真实后端 e2e 为阻塞门禁</td>
+<td>real-backend 4 用例连续 3 次绿且 CI 阻塞</td>
+<td>❌（F-20，外部阻塞）</td>
+</tr>
+<tr class="even">
+<td>R-C1</td>
+<td>COULD</td>
+<td>清理死代码/死表（BotBinding、embedding.py）</td>
+<td>见 TASK-022/023</td>
+<td>待裁决</td>
+</tr>
+<tr class="odd">
+<td>R-C2</td>
+<td>COULD</td>
+<td>仓库瘦身（.project/）</td>
+<td>见 TASK-005/024</td>
+<td>部分待裁决</td>
+</tr>
+<tr class="even">
+<td>R-C3</td>
+<td>COULD</td>
+<td>.docs/ 遗留 6 项迁移</td>
+<td>doc-migration-map 无「待迁移」</td>
+<td>待裁决</td>
+</tr>
+<tr class="odd">
+<td>R-N1</td>
+<td>MUST NOT</td>
+<td>不加 CORS</td>
+<td>TASK-PLAN-v0.9 §0.2</td>
+<td>维持</td>
+</tr>
+<tr class="even">
+<td>R-N2</td>
+<td>MUST NOT</td>
+<td>不修改 AideanBot 原项目</td>
+<td>AGENTS 约束 1</td>
+<td>维持</td>
+</tr>
+<tr class="odd">
+<td>R-N3</td>
+<td>MUST NOT</td>
+<td>不引入 Redis 队列（Job 队列在 PG）</td>
+<td>AGENTS 约束 4 / ADR-0007</td>
+<td>维持</td>
+</tr>
+<tr class="even">
+<td>R-N4</td>
+<td>MUST NOT</td>
+<td>本轮不做六边形 modules/ 重构</td>
+<td>roadmap v0.7 裁定「推迟立项」</td>
+<td>维持（D-10）</td>
+</tr>
+<tr class="odd">
+<td>R-N5</td>
+<td>MUST NOT</td>
+<td>本轮不做多租户、插件化、聚簇向量化（HOT-005）</td>
+<td>product-scope Out of Scope；backlog HOT-005「显式排除」</td>
+<td>维持</td>
+</tr>
+<tr class="even">
+<td>R-N6</td>
+<td>MUST NOT</td>
+<td>无基线不排优化任务</td>
+<td>本规划纪律</td>
+<td>维持</td>
+</tr>
+</tbody>
+</table>
+<p>REQ-NF-001 四个数字（API&lt;500ms
+等）能写成可验证句，但<strong>没有测量</strong>，所以只能先做测量（TASK-021），不能宣称达标或排优化。</p>
+<h3 id="冲突清单">3.3 冲突清单</h3>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>冲突</th>
+<th>双方证据</th>
+<th>处理</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>C-01</td>
+<td>游客能否看 /hot、/public</td>
+<td>CHANGELOG「公共引流位保持可见」、e2e 注释「/hot 游客可浏览」 vs
+<code>2766d17</code> 给 hot 加 AuthGate、middleware 拦截</td>
+<td>BLOCKING → D-01</td>
+</tr>
+<tr class="even">
+<td>C-02</td>
+<td>未登录是原地渲染还是 302</td>
+<td>e2e 断言 URL 不变（只在 mock 下成立） vs 真实态 middleware 302 到
+<code>/</code></td>
+<td>并入 D-01</td>
+</tr>
+<tr class="odd">
+<td>C-03</td>
+<td>端口：5433/6380 vs 5435/6379</td>
+<td>AGENTS 强制表 vs compose 共享底座</td>
+<td>BLOCKING → D-02</td>
+</tr>
+<tr class="even">
+<td>C-04</td>
+<td>「真实密钥禁止入库」 vs compose 明文口令</td>
+<td>README 安全铁律 vs F-10</td>
+<td>无需裁决，直接修（TASK-001/002/004）</td>
+</tr>
+<tr class="odd">
+<td>C-05</td>
+<td>conventions 要求 CORS 白名单 vs 裁定不加 CORS</td>
+<td>conventions §9 vs v0.9 §0.2</td>
+<td>以后者为准（已裁定），改文档（TASK-019）</td>
+</tr>
+<tr class="even">
+<td>C-06</td>
+<td>契约唯一源：SQLAlchemy 内省 vs 需要 API 响应形状</td>
+<td>index.ts 头注</td>
+<td>提议 ADR-0008 → D-09</td>
+</tr>
+<tr class="odd">
+<td>C-07</td>
+<td>非功能目标 vs 无压测环境</td>
+<td>REQ-NF-001 vs TASK-PLAN-v0.9 §3「以留证替代达标」</td>
+<td>先测基线（TASK-021），不承诺达标</td>
+</tr>
+</tbody>
+</table>
+<h3 id="未知登记册">3.4 未知登记册</h3>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>未知</th>
+<th>级别</th>
+<th>处理</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>D-01</td>
+<td>游客访问策略（/hot、/hot/daily、/public 可见与否；真实态 302
+还是原地渲染）</td>
+<td>BLOCKING</td>
+<td>条件方案见 ADR-0009 草案；共同部分：真实态单测必须补</td>
+</tr>
+<tr class="even">
+<td>D-02</td>
+<td>端口与底座口径：以共享底座为准，还是恢复栈内 PG/Redis</td>
+<td>BLOCKING</td>
+<td>方案 A：共享底座为准，改 AGENTS 端口表；方案 B：compose 恢复栈内
+postgres/redis（5433/6380），共享底座作为 override
+文件。共同部分：TASK-002 口令外置两方案都要做</td>
+</tr>
+<tr class="odd">
+<td>D-03</td>
+<td>BotBinding 表删除还是保留</td>
+<td>BLOCKING（仅对 TASK-022）</td>
+<td>A 删（占迁移号 ab1006w6a）/ B 留并注明</td>
+</tr>
+<tr class="even">
+<td>D-04</td>
+<td>前端遗留码 10101/10102/30101/30102/50101 删除还是保留</td>
+<td>NON_BLOCKING</td>
+<td>假设：保留在
+LEGACY_MESSAGES，不进主表类型约束；依据：保留无害，删除可能影响主平台透传错误（未验证）</td>
+</tr>
+<tr class="odd">
+<td>D-05</td>
+<td>.docs/ 6 项迁移还是归档</td>
+<td>BLOCKING（仅对 TASK-020）</td>
+<td>A 迁移（API 文档以 OpenAPI 生成为准）/ B 全部归档</td>
+</tr>
+<tr class="even">
+<td>D-06</td>
+<td>embedding.py 删除还是保留给 HOT-005</td>
+<td>BLOCKING（仅对 TASK-023）</td>
+<td>A 删 / B 留</td>
+</tr>
+<tr class="odd">
+<td>D-07</td>
+<td>.project/ 是否移出版本库</td>
+<td>BLOCKING（仅对 TASK-024）</td>
+<td>A 移出 / B 保留并说明；TASK-005（排除出镜像上下文）两方案都做</td>
+</tr>
+<tr class="even">
+<td>D-08</td>
+<td>主平台 OIDC 白名单、测试账号、真实文章 URL</td>
+<td>BLOCKING（外部，仅对 TASK-025）</td>
+<td>等外部</td>
+</tr>
+<tr class="odd">
+<td>D-09</td>
+<td>批准 ADR-0008（契约唯一源 = 后端 Python 代码：errors.py 登记表 +
+FastAPI OpenAPI；TS 一律生成）</td>
+<td>BLOCKING（对 S1、S3）</td>
+<td>若否决：S1 退化为手工同步 errors.ts + 单测比对；S3 取消</td>
+</tr>
+<tr class="even">
+<td>D-10</td>
+<td>六边形重构是否立项</td>
+<td>非本轮</td>
+<td>维持推迟</td>
+</tr>
+<tr class="odd">
+<td>D-11</td>
+<td>Ragflow / SaaS 引擎实接排期</td>
+<td>外部</td>
+<td>不排任务</td>
+</tr>
+<tr class="even">
+<td>A-01</td>
+<td>50003 的登记名用 CONFIGURATION_ERROR</td>
+<td>NON_BLOCKING</td>
+<td>依据：类名 <code>ConfigurationError</code></td>
+</tr>
+<tr class="odd">
+<td>A-02</td>
+<td>PushMessage 加可选字段不影响其他 5 个 provider</td>
+<td>NON_BLOCKING</td>
+<td>依据：dataclass 默认值；由 TASK-016 回归测试验证</td>
+</tr>
+<tr class="even">
+<td>A-03</td>
+<td>新增 Pydantic 响应模型可做到线上 JSON 零漂移</td>
+<td>NON_BLOCKING</td>
+<td>由快照测试验证，失败即停</td>
+</tr>
+</tbody>
+</table>
+<h3 id="隐含要求与前置条件">3.5 隐含要求与前置条件</h3>
+<ul>
+<li><strong>凭据轮换先于删除</strong>：只改 compose 不轮换，旧口令仍在
+git 历史里可用（public 仓库）。TASK-001 是人工前置。</li>
+<li><strong>git 历史</strong>：彻底清除需要改写历史（filter-repo + force
+push），与协作纪律「拒绝 rebase
+重写」冲突，本规划<strong>不排</strong>，只轮换。列入风险 K-01。</li>
+<li><strong>契约变更须先登记</strong>（AGENTS、errors.py 头注）：S1/S3
+所有改契约的任务都依赖 D-09。</li>
+<li><strong>迁移串行</strong>：本轮只有 TASK-022（条件）占用迁移号
+<code>ab1006w6a</code>，down_revision=<code>ab1005w5b</code>。</li>
+<li><strong>单一提交身份</strong>：执行者按协作纪律用
+<code>CodingHeader</code>。</li>
+<li><strong>推送前门禁</strong>：每个任务合并前跑
+<code>bash scripts/preflight.sh</code>；改 <code>apps/api/app/**</code>
+的任务另跑后端全量 pytest（协作纪律 §9）。</li>
+<li><strong>隔离 PG</strong>：本地测试用独立端口（如 5547），不碰
+5433。</li>
+<li><strong>边界条件</strong>：middleware 只判 cookie 存在，过期 cookie
+会穿透到 AuthGate（backlog AUTHGATE-002 已述）；TASK-010
+的单测需包含「有过期 cookie」用例。</li>
+</ul>
+<hr />
+<h2 id="契约冻结包">4. 契约冻结包</h2>
+<blockquote>
+<p><strong>唯一源（提议，待 D-09 批准 ADR-0008）</strong>：后端 Python
+代码是契约唯一源—— 错误码 =
+<code>apps/api/app/core/errors.py</code>（<code>ERROR_CODES</code> + 各
+<code>AppError</code> 子类）； 请求/响应形状 = FastAPI
+<code>create_app().openapi()</code> 的
+<code>components.schemas</code>（Pydantic）； 实体镜像 = SQLAlchemy
+模型内省（现状保留）。 TypeScript 侧 <code>packages/contracts/**</code>
+<strong>一律由 <code>scripts/gen_contracts.py</code>
+生成</strong>，<code>--check</code> 为 CI 门禁。
+禁止手写第二份。下文中的 TS / JSON
+代码块是「生成器目标产物」的冻结样式，由任务验收命令机器校验，不是第二个源。</p>
+<p><strong>冻结范围</strong>：现有 88
+个端点的线上形状<strong>按当前代码冻结</strong>（本轮不改任何已有字段）；本轮只允许三类变更：
+① 错误码登记补 50003（TASK-006）；② 新增响应模型声明，线上 JSON
+零漂移（TASK-012/013）；③ SSE 通知帧<strong>新增</strong>可选
+<code>id</code> 字段（TASK-016）。</p>
+</blockquote>
+<h3 id="api-契约">4.① API 契约</h3>
+<p><strong>传输与信封</strong>（<code>core/response.py:12-24</code>）</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 生成目标：packages/contracts/src/common/response.ts（现有，已与后端一致）</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">interface</span> ApiResponse<span class="op">&lt;</span>T<span class="op">&gt;</span> { code<span class="op">:</span> <span class="dt">number</span><span class="op">;</span> message<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> data<span class="op">:</span> T <span class="op">|</span> <span class="dt">null</span><span class="op">;</span> requestId<span class="op">:</span> <span class="dt">string</span> }</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co">// 成功判据唯一为 code === 0（不是 HTTP 2xx）</span></span></code></pre></div>
+<p><strong>分页</strong>（冻结双口径，不在本轮统一）</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>口径</th>
+<th>适用域</th>
+<th>形状</th>
+<th>约束</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>page</td>
+<td>bot、hot</td>
+<td><code>{items,total,page,page_size}</code></td>
+<td>page≥1；1≤page_size≤100，默认 20；越界 10005/422</td>
+</tr>
+<tr class="even">
+<td>offset</td>
+<td>spaces、sources/subscriptions、jobs、admin、notifications/history</td>
+<td><code>{items,total,limit,offset}</code>（history 另含
+<code>unread_total</code>）</td>
+<td>见 <code>deps.limit_offset_query</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>鉴权</strong>：Cookie
+<code>bothot_session</code>（HttpOnly、SameSite=Lax、Secure 由
+<code>SESSION_COOKIE_SECURE</code>
+控制、Path=/、Max-Age=<code>session_ttl_seconds</code>，<code>auth.py:92-101</code>）。浏览器经
+Next rewrites 同源访问，<strong>不启用 CORS</strong>。</p>
+<p><strong>幂等语义（已在代码中）</strong></p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>端点</th>
+<th>语义</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>POST /api/v1/hot/topics/cluster</td>
+<td>同日同 days 有在途 Job 时返回 <code>queued:false</code> 与既有
+job_id，不重复入队</td>
+<td><code>hot.py:175-200</code></td>
+</tr>
+<tr class="even">
+<td>POST /api/v1/hot/daily/generate</td>
+<td>同日日报唯一约束 <code>uq_daily_report_date</code></td>
+<td>backlog HOT-004</td>
+</tr>
+<tr class="odd">
+<td>PUT /api/v1/system/notifications/read</td>
+<td>重复标记无副作用；越权 id 影响行数为 0</td>
+<td>backlog NOTIF-001</td>
+</tr>
+<tr class="even">
+<td>POST /api/v1/auth/logout</td>
+<td>无会话也返回成功</td>
+<td><code>auth.py:146</code></td>
+</tr>
+<tr class="odd">
+<td>其余 POST</td>
+<td><strong>未验证</strong>幂等，执行者不得假设</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p><strong>端点全集（88 个，静态解析自
+<code>apps/api/app/api/v1/*.py</code>，鉴权列按依赖注入判定）</strong></p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>方法</th>
+<th>路径</th>
+<th>鉴权</th>
+<th>模块</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td>PATCH</td>
+<td><code>/api/v1/admin/spaces/{space_id}</code></td>
+<td>role≥admin</td>
+<td>admin.py</td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td>DELETE</td>
+<td><code>/api/v1/admin/spaces/{space_id}/docs/{doc_id}</code></td>
+<td>role≥admin</td>
+<td>admin.py</td>
+</tr>
+<tr class="odd">
+<td>3</td>
+<td>DELETE</td>
+<td><code>/api/v1/admin/spaces/{space_id}</code></td>
+<td>role≥admin</td>
+<td>admin.py</td>
+</tr>
+<tr class="even">
+<td>4</td>
+<td>GET</td>
+<td><code>/api/v1/admin/spaces</code></td>
+<td>role≥admin</td>
+<td>admin.py</td>
+</tr>
+<tr class="odd">
+<td>5</td>
+<td>GET</td>
+<td><code>/api/v1/admin/spaces/{space_id}/docs</code></td>
+<td>role≥admin</td>
+<td>admin.py</td>
+</tr>
+<tr class="even">
+<td>6</td>
+<td>GET</td>
+<td><code>/api/v1/admin/jobs</code></td>
+<td>role≥admin</td>
+<td>admin.py</td>
+</tr>
+<tr class="odd">
+<td>7</td>
+<td>GET</td>
+<td><code>/api/v1/admin/jobs/{job_id}</code></td>
+<td>role≥admin</td>
+<td>admin.py</td>
+</tr>
+<tr class="even">
+<td>8</td>
+<td>GET</td>
+<td><code>/api/v1/admin/subscriptions</code></td>
+<td>role≥admin</td>
+<td>admin.py</td>
+</tr>
+<tr class="odd">
+<td>9</td>
+<td>GET</td>
+<td><code>/api/v1/admin/engines/keys</code></td>
+<td>role≥operator</td>
+<td>admin.py</td>
+</tr>
+<tr class="even">
+<td>10</td>
+<td>POST</td>
+<td><code>/api/v1/admin/engines/keys/{engine}</code></td>
+<td>role≥operator</td>
+<td>admin.py</td>
+</tr>
+<tr class="odd">
+<td>11</td>
+<td>DELETE</td>
+<td><code>/api/v1/admin/engines/keys/{engine}</code></td>
+<td>role≥operator</td>
+<td>admin.py</td>
+</tr>
+<tr class="even">
+<td>12</td>
+<td>POST</td>
+<td><code>/api/v1/admin/spaces/{space_id}/docs:delete</code></td>
+<td>role≥admin</td>
+<td>admin.py</td>
+</tr>
+<tr class="odd">
+<td>13</td>
+<td>POST</td>
+<td><code>/api/v1/admin/spaces/{space_id}/docs:recategorize</code></td>
+<td>role≥admin</td>
+<td>admin.py</td>
+</tr>
+<tr class="even">
+<td>14</td>
+<td>GET</td>
+<td><code>/api/v1/admin/push/channels</code></td>
+<td>role≥operator</td>
+<td>admin.py</td>
+</tr>
+<tr class="odd">
+<td>15</td>
+<td>GET</td>
+<td><code>/api/v1/admin/discovery/channels</code></td>
+<td>role≥operator</td>
+<td>admin.py</td>
+</tr>
+<tr class="even">
+<td>16</td>
+<td>GET</td>
+<td><code>/api/v1/admin/ops/liveness</code></td>
+<td>role≥operator</td>
+<td>admin.py</td>
+</tr>
+<tr class="odd">
+<td>17</td>
+<td>POST</td>
+<td><code>/api/v1/admin/push</code></td>
+<td>role≥operator</td>
+<td>admin.py</td>
+</tr>
+<tr class="even">
+<td>18</td>
+<td>POST</td>
+<td><code>/api/v1/admin/jobs/{job_id}:cancel</code></td>
+<td>role≥admin</td>
+<td>admin.py</td>
+</tr>
+<tr class="odd">
+<td>19</td>
+<td>POST</td>
+<td><code>/api/v1/admin/jobs/{job_id}:retry</code></td>
+<td>role≥admin</td>
+<td>admin.py</td>
+</tr>
+<tr class="even">
+<td>20</td>
+<td>DELETE</td>
+<td><code>/api/v1/admin/subscriptions/{subscription_id}</code></td>
+<td>role≥admin</td>
+<td>admin.py</td>
+</tr>
+<tr class="odd">
+<td>21</td>
+<td>GET</td>
+<td><code>/api/v1/admin/sources</code></td>
+<td>role≥admin</td>
+<td>admin.py</td>
+</tr>
+<tr class="even">
+<td>22</td>
+<td>DELETE</td>
+<td><code>/api/v1/admin/sources/{source_id}</code></td>
+<td>role≥admin</td>
+<td>admin.py</td>
+</tr>
+<tr class="odd">
+<td>23</td>
+<td>GET</td>
+<td><code>/api/v1/auth/login</code></td>
+<td>匿名</td>
+<td>auth.py</td>
+</tr>
+<tr class="even">
+<td>24</td>
+<td>GET</td>
+<td><code>/api/v1/auth/callback</code></td>
+<td>匿名</td>
+<td>auth.py</td>
+</tr>
+<tr class="odd">
+<td>25</td>
+<td>POST</td>
+<td><code>/api/v1/auth/logout</code></td>
+<td>匿名</td>
+<td>auth.py</td>
+</tr>
+<tr class="even">
+<td>26</td>
+<td>POST</td>
+<td><code>/api/v1/auth/backchannel-logout</code></td>
+<td>匿名</td>
+<td>auth.py</td>
+</tr>
+<tr class="odd">
+<td>27</td>
+<td>GET</td>
+<td><code>/api/v1/auth/me</code></td>
+<td>匿名</td>
+<td>auth.py</td>
+</tr>
+<tr class="even">
+<td>28</td>
+<td>GET</td>
+<td><code>/api/v1/bots/channels</code></td>
+<td>登录</td>
+<td>bots.py</td>
+</tr>
+<tr class="odd">
+<td>29</td>
+<td>POST</td>
+<td><code>/api/v1/bots</code></td>
+<td>role≥operator</td>
+<td>bots.py</td>
+</tr>
+<tr class="even">
+<td>30</td>
+<td>GET</td>
+<td><code>/api/v1/bots</code></td>
+<td>登录</td>
+<td>bots.py</td>
+</tr>
+<tr class="odd">
+<td>31</td>
+<td>GET</td>
+<td><code>/api/v1/bots/{channel_id}</code></td>
+<td>登录</td>
+<td>bots.py</td>
+</tr>
+<tr class="even">
+<td>32</td>
+<td>PUT</td>
+<td><code>/api/v1/bots/{channel_id}</code></td>
+<td>role≥operator</td>
+<td>bots.py</td>
+</tr>
+<tr class="odd">
+<td>33</td>
+<td>DELETE</td>
+<td><code>/api/v1/bots/{channel_id}</code></td>
+<td>role≥operator</td>
+<td>bots.py</td>
+</tr>
+<tr class="even">
+<td>34</td>
+<td>POST</td>
+<td><code>/api/v1/bots/{channel_id}/test</code></td>
+<td>role≥operator</td>
+<td>bots.py</td>
+</tr>
+<tr class="odd">
+<td>35</td>
+<td>GET</td>
+<td><code>/api/v1/bots/{channel_id}/logs</code></td>
+<td>登录</td>
+<td>bots.py</td>
+</tr>
+<tr class="even">
+<td>36</td>
+<td>POST</td>
+<td><code>/api/v1/bots/tasks</code></td>
+<td>role≥operator</td>
+<td>bots.py</td>
+</tr>
+<tr class="odd">
+<td>37</td>
+<td>GET</td>
+<td><code>/api/v1/bots/tasks</code></td>
+<td>登录</td>
+<td>bots.py</td>
+</tr>
+<tr class="even">
+<td>38</td>
+<td>PUT</td>
+<td><code>/api/v1/bots/tasks/{task_id}</code></td>
+<td>role≥operator</td>
+<td>bots.py</td>
+</tr>
+<tr class="odd">
+<td>39</td>
+<td>DELETE</td>
+<td><code>/api/v1/bots/tasks/{task_id}</code></td>
+<td>role≥operator</td>
+<td>bots.py</td>
+</tr>
+<tr class="even">
+<td>40</td>
+<td>POST</td>
+<td><code>/api/v1/bots/tasks/{task_id}/run</code></td>
+<td>role≥operator</td>
+<td>bots.py</td>
+</tr>
+<tr class="odd">
+<td>41</td>
+<td>POST</td>
+<td><code>/api/v1/chat/ask</code></td>
+<td>登录</td>
+<td>chat.py</td>
+</tr>
+<tr class="even">
+<td>42</td>
+<td>GET</td>
+<td><code>/api/v1/engines</code></td>
+<td>登录</td>
+<td>engines.py</td>
+</tr>
+<tr class="odd">
+<td>43</td>
+<td>PATCH</td>
+<td><code>/api/v1/spaces/{space_id}/engine</code></td>
+<td>登录</td>
+<td>engines.py</td>
+</tr>
+<tr class="even">
+<td>44</td>
+<td>POST</td>
+<td><code>/api/v1/extract</code></td>
+<td>登录</td>
+<td>extract.py</td>
+</tr>
+<tr class="odd">
+<td>45</td>
+<td>GET</td>
+<td><code>/api/v1/hot/topics</code></td>
+<td>登录</td>
+<td>hot.py</td>
+</tr>
+<tr class="even">
+<td>46</td>
+<td>GET</td>
+<td><code>/api/v1/hot/topics/{topic_id}</code></td>
+<td>登录</td>
+<td>hot.py</td>
+</tr>
+<tr class="odd">
+<td>47</td>
+<td>POST</td>
+<td><code>/api/v1/hot/topics/cluster</code></td>
+<td>role≥operator</td>
+<td>hot.py</td>
+</tr>
+<tr class="even">
+<td>48</td>
+<td>GET</td>
+<td><code>/api/v1/hot/daily/reports</code></td>
+<td>登录</td>
+<td>hot.py</td>
+</tr>
+<tr class="odd">
+<td>49</td>
+<td>GET</td>
+<td><code>/api/v1/hot/daily/reports/{report_date}</code></td>
+<td>登录</td>
+<td>hot.py</td>
+</tr>
+<tr class="even">
+<td>50</td>
+<td>POST</td>
+<td><code>/api/v1/hot/daily/generate</code></td>
+<td>role≥operator</td>
+<td>hot.py</td>
+</tr>
+<tr class="odd">
+<td>51</td>
+<td>GET</td>
+<td><code>/api/v1/hot/feed</code></td>
+<td>登录</td>
+<td>hot.py</td>
+</tr>
+<tr class="even">
+<td>52</td>
+<td>GET</td>
+<td><code>/api/v1/onboarding/steps</code></td>
+<td>匿名</td>
+<td>onboarding.py</td>
+</tr>
+<tr class="odd">
+<td>53</td>
+<td>POST</td>
+<td><code>/api/v1/resolve</code></td>
+<td>登录</td>
+<td>resolve.py</td>
+</tr>
+<tr class="even">
+<td>54</td>
+<td>GET</td>
+<td><code>/api/v1/spaces/public</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="odd">
+<td>55</td>
+<td>POST</td>
+<td><code>/api/v1/spaces/{space_id}/links</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="even">
+<td>56</td>
+<td>PATCH</td>
+<td><code>/api/v1/spaces/{space_id}/public</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="odd">
+<td>57</td>
+<td>GET</td>
+<td><code>/api/v1/spaces</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="even">
+<td>58</td>
+<td>POST</td>
+<td><code>/api/v1/spaces</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="odd">
+<td>59</td>
+<td>GET</td>
+<td><code>/api/v1/spaces/{space_id}</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="even">
+<td>60</td>
+<td>PATCH</td>
+<td><code>/api/v1/spaces/{space_id}</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="odd">
+<td>61</td>
+<td>DELETE</td>
+<td><code>/api/v1/spaces/{space_id}</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="even">
+<td>62</td>
+<td>GET</td>
+<td><code>/api/v1/spaces/{space_id}/docs</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="odd">
+<td>63</td>
+<td>GET</td>
+<td><code>/api/v1/spaces/{space_id}/docs:categories</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="even">
+<td>64</td>
+<td>DELETE</td>
+<td><code>/api/v1/spaces/{space_id}/docs/{doc_id}</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="odd">
+<td>65</td>
+<td>PATCH</td>
+<td><code>/api/v1/spaces/{space_id}/docs/{doc_id}</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="even">
+<td>66</td>
+<td>POST</td>
+<td><code>/api/v1/spaces/{space_id}/docs:delete</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="odd">
+<td>67</td>
+<td>POST</td>
+<td><code>/api/v1/spaces/{space_id}/docs:recategorize</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="even">
+<td>68</td>
+<td>POST</td>
+<td><code>/api/v1/spaces/{space_id}/docs</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="odd">
+<td>69</td>
+<td>POST</td>
+<td><code>/api/v1/spaces/{space_id}/docs:batch</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="even">
+<td>70</td>
+<td>GET</td>
+<td><code>/api/v1/spaces/{space_id}/docs/{doc_id}/status</code></td>
+<td>登录</td>
+<td>spaces.py</td>
+</tr>
+<tr class="odd">
+<td>71</td>
+<td>POST</td>
+<td><code>/api/v1/sources</code></td>
+<td>登录</td>
+<td>subscriptions.py</td>
+</tr>
+<tr class="even">
+<td>72</td>
+<td>GET</td>
+<td><code>/api/v1/sources</code></td>
+<td>登录</td>
+<td>subscriptions.py</td>
+</tr>
+<tr class="odd">
+<td>73</td>
+<td>PATCH</td>
+<td><code>/api/v1/sources/{source_id}</code></td>
+<td>role≥admin</td>
+<td>subscriptions.py</td>
+</tr>
+<tr class="even">
+<td>74</td>
+<td>DELETE</td>
+<td><code>/api/v1/sources/{source_id}</code></td>
+<td>role≥admin</td>
+<td>subscriptions.py</td>
+</tr>
+<tr class="odd">
+<td>75</td>
+<td>POST</td>
+<td><code>/api/v1/spaces/{space_id}/subscriptions</code></td>
+<td>登录</td>
+<td>subscriptions.py</td>
+</tr>
+<tr class="even">
+<td>76</td>
+<td>GET</td>
+<td><code>/api/v1/spaces/{space_id}/subscriptions</code></td>
+<td>登录</td>
+<td>subscriptions.py</td>
+</tr>
+<tr class="odd">
+<td>77</td>
+<td>PATCH</td>
+<td><code>/api/v1/spaces/{space_id}/subscriptions/{subscription_id}</code></td>
+<td>登录</td>
+<td>subscriptions.py</td>
+</tr>
+<tr class="even">
+<td>78</td>
+<td>DELETE</td>
+<td><code>/api/v1/spaces/{space_id}/subscriptions/{subscription_id}</code></td>
+<td>登录</td>
+<td>subscriptions.py</td>
+</tr>
+<tr class="odd">
+<td>79</td>
+<td>GET</td>
+<td><code>/api/v1/jobs</code></td>
+<td>登录</td>
+<td>subscriptions.py</td>
+</tr>
+<tr class="even">
+<td>80</td>
+<td>GET</td>
+<td><code>/api/v1/jobs/{job_id}</code></td>
+<td>登录</td>
+<td>subscriptions.py</td>
+</tr>
+<tr class="odd">
+<td>81</td>
+<td>POST</td>
+<td><code>/api/v1/jobs/{job_id}/retry</code></td>
+<td>登录</td>
+<td>subscriptions.py</td>
+</tr>
+<tr class="even">
+<td>82</td>
+<td>POST</td>
+<td><code>/api/v1/jobs/{job_id}/cancel</code></td>
+<td>登录</td>
+<td>subscriptions.py</td>
+</tr>
+<tr class="odd">
+<td>83</td>
+<td>GET</td>
+<td><code>/api/v1/system/health</code></td>
+<td>匿名</td>
+<td>system.py</td>
+</tr>
+<tr class="even">
+<td>84</td>
+<td>GET</td>
+<td><code>/api/v1/system/live</code></td>
+<td>匿名</td>
+<td>system.py</td>
+</tr>
+<tr class="odd">
+<td>85</td>
+<td>GET</td>
+<td><code>/api/v1/system/ready</code></td>
+<td>匿名</td>
+<td>system.py</td>
+</tr>
+<tr class="even">
+<td>86</td>
+<td>GET</td>
+<td><code>/api/v1/system/notifications</code></td>
+<td>登录</td>
+<td>system.py</td>
+</tr>
+<tr class="odd">
+<td>87</td>
+<td>GET</td>
+<td><code>/api/v1/system/notifications/history</code></td>
+<td>登录</td>
+<td>system.py</td>
+</tr>
+<tr class="even">
+<td>88</td>
+<td>PUT</td>
+<td><code>/api/v1/system/notifications/read</code></td>
+<td>登录</td>
+<td>system.py</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>注：<code>/auth/me</code> 标「匿名」是因为鉴权在函数体内（未登录抛
+10001），不是对外开放数据。 <strong>对 D-01
+的影响</strong>：<code>/api/v1/hot/*</code> 与
+<code>/api/v1/spaces/public</code>
+当前<strong>后端要求登录</strong>。若裁决游客可看 /hot 或
+/public，后端也必须开放匿名读，这是 Identity 契约变更。</p>
+</blockquote>
+<p><strong>本轮新增的响应模型（TASK-012/013
+目标，字段逐字取自现序列化代码）</strong></p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 生成目标：packages/contracts/src/bot/dto.ts 追加</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">interface</span> BotChannelOut {            <span class="co">// bots.py:113-129 _serialize_channel</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  id<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> name<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> channel_type<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> webhook_url<span class="op">:</span> <span class="dt">string</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  has_secret<span class="op">:</span> <span class="dt">boolean</span><span class="op">;</span>                       <span class="co">// secret_enc 永不出现在响应中</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  extra_config<span class="op">:</span> <span class="dt">string</span><span class="op">;</span>                      <span class="co">// 回显为解密后的 JSON 字符串（S2.1 语义）</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  status<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> user_id<span class="op">:</span> <span class="dt">string</span><span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>  total_push_count<span class="op">:</span> <span class="dt">number</span><span class="op">;</span> success_push_count<span class="op">:</span> <span class="dt">number</span><span class="op">;</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>  created_at<span class="op">:</span> <span class="dt">string</span> <span class="op">|</span> <span class="dt">null</span><span class="op">;</span> updated_at<span class="op">:</span> <span class="dt">string</span> <span class="op">|</span> <span class="dt">null</span><span class="op">;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">interface</span> PushTaskOut {              <span class="co">// bots.py:145-160 _serialize_task</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>  id<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> name<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> bot_channel_id<span class="op">:</span> <span class="dt">string</span><span class="op">;</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>  trigger_type<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> cron_expr<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> trigger_event<span class="op">:</span> <span class="dt">string</span><span class="op">;</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>  content_template<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> space_id<span class="op">:</span> <span class="dt">string</span><span class="op">;</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>  next_run_at<span class="op">:</span> <span class="dt">string</span> <span class="op">|</span> <span class="dt">null</span><span class="op">;</span> last_run_at<span class="op">:</span> <span class="dt">string</span> <span class="op">|</span> <span class="dt">null</span><span class="op">;</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>  status<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> created_by<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> created_at<span class="op">:</span> <span class="dt">string</span> <span class="op">|</span> <span class="dt">null</span><span class="op">;</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">interface</span> PushLogOut {               <span class="co">// bots.py:132-142 _serialize_log（8 字段）</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>  id<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> bot_channel_id<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> push_task_id<span class="op">:</span> <span class="dt">string</span> <span class="op">|</span> <span class="dt">null</span><span class="op">;</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>  status<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> content_preview<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> error_message<span class="op">:</span> <span class="dt">string</span><span class="op">;</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>  response_summary<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> created_at<span class="op">:</span> <span class="dt">string</span> <span class="op">|</span> <span class="dt">null</span><span class="op">;</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a><span class="co">// 生成目标：packages/contracts/src/hot/dto.ts 追加</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">interface</span> HotTopicOut {              <span class="co">// hot.py:84-97</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>  id<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> title<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> summary<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> hot_score<span class="op">:</span> <span class="dt">number</span><span class="op">;</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>  source_count<span class="op">:</span> <span class="dt">number</span><span class="op">;</span> article_count<span class="op">:</span> <span class="dt">number</span><span class="op">;</span> status<span class="op">:</span> <span class="dt">string</span><span class="op">;</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>  topic_date<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> category<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> created_at<span class="op">:</span> <span class="dt">string</span> <span class="op">|</span> <span class="dt">null</span><span class="op">;</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">interface</span> HotTopicDetailOut <span class="kw">extends</span> HotTopicOut {   <span class="co">// hot.py:128-146</span></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>  articles<span class="op">:</span> { asset_id<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> relevance_score<span class="op">:</span> <span class="dt">number</span> }[]<span class="op">;</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">interface</span> DailyReportOut {           <span class="co">// hot.py:230-238（列表项）</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>  id<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> report_date<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> title<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> topic_count<span class="op">:</span> <span class="dt">number</span><span class="op">;</span></span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>  status<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> generated_by<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> created_at<span class="op">:</span> <span class="dt">string</span> <span class="op">|</span> <span class="dt">null</span><span class="op">;</span></span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">interface</span> FeedItemOut {              <span class="co">// hot.py:345-357</span></span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>  id<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> item_type<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> ref_id<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> title<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> summary<span class="op">:</span> <span class="dt">string</span><span class="op">;</span></span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>  source_name<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> score<span class="op">:</span> <span class="dt">number</span><span class="op">;</span> category<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> url<span class="op">:</span> <span class="dt">string</span><span class="op">;</span></span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>  is_pinned<span class="op">:</span> <span class="dt">boolean</span><span class="op">;</span> created_at<span class="op">:</span> <span class="dt">string</span> <span class="op">|</span> <span class="dt">null</span><span class="op">;</span></span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<blockquote>
+<p>可空性以 SQLAlchemy 列定义为准；上面
+<code>push_task_id</code>、<code>user_id</code>
+等可空性在实现时由模型内省核对，若与此不同，以代码为准并在 TASK-012/013
+的 PR 中注明（不得改线上值）。</p>
+</blockquote>
+<h3 id="errors-契约">4.② Errors 契约</h3>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>code</th>
+<th>登记名</th>
+<th>HTTP</th>
+<th>前端文案（TASK-008 目标）</th>
+<th>前端行为</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>10001</td>
+<td>UNAUTHENTICATED</td>
+<td>401</td>
+<td>尚未登录或会话已过期</td>
+<td>切 AuthGate 访客卡</td>
+</tr>
+<tr class="even">
+<td>10002</td>
+<td>SSO_STATE_INVALID</td>
+<td>400</td>
+<td>登录状态校验失败，请重新登录</td>
+<td>回首页 + 登录按钮</td>
+</tr>
+<tr class="odd">
+<td>10003</td>
+<td>SSO_TOKEN_EXCHANGE_FAILED</td>
+<td>401</td>
+<td>授权码兑换失败，请重新登录</td>
+<td>同上</td>
+</tr>
+<tr class="even">
+<td>10004</td>
+<td>FORBIDDEN</td>
+<td>403</td>
+<td>权限不足</td>
+<td>无权限态</td>
+</tr>
+<tr class="odd">
+<td>10005</td>
+<td>REQUEST_INVALID</td>
+<td>422</td>
+<td>请求参数不合法</td>
+<td>表单内联错误</td>
+</tr>
+<tr class="even">
+<td>10006</td>
+<td>MALFORMED_URL</td>
+<td>400</td>
+<td>链接格式不正确</td>
+<td>表单内联错误</td>
+</tr>
+<tr class="odd">
+<td>10007</td>
+<td>RATE_LIMITED</td>
+<td>429</td>
+<td>请求过于频繁，请稍后再试</td>
+<td>toast；<strong>不自动重试</strong></td>
+</tr>
+<tr class="even">
+<td>10008</td>
+<td>PAYLOAD_TOO_LARGE</td>
+<td>413</td>
+<td>提交内容过大</td>
+<td>toast</td>
+</tr>
+<tr class="odd">
+<td>20001</td>
+<td>SOURCE_URL_UNRECOGNIZED</td>
+<td>400</td>
+<td>非公众号文章，请检查链接</td>
+<td>内联</td>
+</tr>
+<tr class="even">
+<td>20002</td>
+<td>EXTRACT_FAILED</td>
+<td>502</td>
+<td>网络异常，文章抓取失败</td>
+<td>可手动重试</td>
+</tr>
+<tr class="odd">
+<td>20003</td>
+<td>EXTRACT_QUALITY_LOW</td>
+<td>422</td>
+<td>内容质量不足，无法入库</td>
+<td>内联</td>
+</tr>
+<tr class="even">
+<td>20004</td>
+<td>DISCOVERY_FAILED</td>
+<td>502</td>
+<td>信息源发现失败，请稍后重试</td>
+<td>可手动重试</td>
+</tr>
+<tr class="odd">
+<td>20005</td>
+<td>RATE_LIMITED_UPSTREAM</td>
+<td>429</td>
+<td>上游接口限频，请稍后重试</td>
+<td>toast</td>
+</tr>
+<tr class="even">
+<td>30001</td>
+<td>SPACE_NOT_FOUND</td>
+<td>404</td>
+<td>知识空间不存在或已删除</td>
+<td>空态 + 返回</td>
+</tr>
+<tr class="odd">
+<td>30002</td>
+<td>LANGBOT_API_ERROR</td>
+<td>502</td>
+<td>机器人服务异常，请稍后重试</td>
+<td>错误态</td>
+</tr>
+<tr class="even">
+<td>30003</td>
+<td>INGEST_FAILED</td>
+<td>502</td>
+<td>入库失败，请稍后重试</td>
+<td>可手动重试</td>
+</tr>
+<tr class="odd">
+<td>30004</td>
+<td>RESOURCE_NOT_FOUND</td>
+<td>404</td>
+<td>资源不存在或已删除</td>
+<td>空态</td>
+</tr>
+<tr class="even">
+<td>30005</td>
+<td>JOB_STATE_INVALID</td>
+<td>409</td>
+<td>任务当前状态不允许该操作</td>
+<td>toast + 刷新</td>
+</tr>
+<tr class="odd">
+<td>30006</td>
+<td>SPACE_NAME_CONFLICT</td>
+<td>409</td>
+<td>空间名称已存在</td>
+<td>内联</td>
+</tr>
+<tr class="even">
+<td>50001</td>
+<td>INTERNAL_ERROR</td>
+<td>500</td>
+<td>服务内部错误，请稍后重试</td>
+<td>错误态（展示 requestId）</td>
+</tr>
+<tr class="odd">
+<td>50002</td>
+<td>DEPENDENCY_UNAVAILABLE</td>
+<td>503</td>
+<td>依赖服务暂不可用，请稍后重试</td>
+<td>错误态</td>
+</tr>
+<tr class="even">
+<td>50003</td>
+<td>CONFIGURATION_ERROR（<strong>新登记</strong>）</td>
+<td>500</td>
+<td>服务配置异常，请联系管理员</td>
+<td>错误态（展示 requestId）</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>错误体 = 信封
+<code>{code≠0, message, data:null, requestId}</code>；429/413
+由中间件短路，同样是信封并带
+<code>X-Request-ID</code>（<code>core/security.py:6-29</code>）。</li>
+<li>30004 现文案「知识空间不存在或已删除」是继承文案，与
+RESOURCE_NOT_FOUND 语义不符，TASK-008 改为上表。</li>
+<li>遗留码 10101/10102/30101/30102/50101：后端不产出；按 D-04
+默认假设保留在 <code>LEGACY_MESSAGES</code>，不进主表类型约束。</li>
+<li><strong>机器校验</strong>：<code>gen_contracts --check</code>（errors.ts）+
+前端 <code>satisfies Record&lt;ApiErrorCode,string&gt;</code> +
+<code>test_error_registry.py</code>。</li>
+</ul>
+<h3 id="identity-契约">4.③ Identity 契约</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>项</th>
+<th>冻结值</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>用户 ID</td>
+<td><code>users.sub</code>（主平台 OIDC sub，字符串）为身份锚点；本地
+<code>users.id</code> 为 UUID 字符串</td>
+<td>AGENTS 约束 2</td>
+</tr>
+<tr class="even">
+<td>角色枚举</td>
+<td><code>user</code> / <code>operator</code> / <code>admin</code>，秩
+0/1/2，取最高达标即放行</td>
+<td><code>services/roles.py</code> ROLE_RANK</td>
+</tr>
+<tr class="odd">
+<td>默认角色</td>
+<td><code>user</code>；脏值按 user 处理（fail closed）</td>
+<td><code>roles.py</code> has_min_rank</td>
+</tr>
+<tr class="even">
+<td>升权</td>
+<td>只能显式写
+<code>users.role</code>；<code>PUBLIC_ADMIN_ALLOWLIST</code>
+只管「公共库发布」，<strong>不授予任何角色</strong></td>
+<td><code>roles.py</code> 头注</td>
+</tr>
+<tr class="odd">
+<td>会话</td>
+<td>服务端会话（Redis/memory），cookie 只存 session_id</td>
+<td><code>auth.py:92-101</code></td>
+</tr>
+<tr class="even">
+<td>余额/等级</td>
+<td>不落库，实时查主平台</td>
+<td>AGENTS 约束 2</td>
+</tr>
+<tr class="odd">
+<td>登出</td>
+<td>前端 POST /auth/logout；主平台 POST
+/auth/backchannel-logout（logout_token iat 偏差 ≤300s）</td>
+<td><code>config.py:47</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>权限边界（禁止项）</strong></p>
+<ol type="1">
+<li>用户端（role=user）<strong>不得</strong>调用：<code>/api/v1/admin/**</code>、<code>/api/v1/bots/**</code>
+的写操作与日志、<code>POST /hot/topics/cluster</code>、<code>POST /hot/daily/generate</code>、<code>PATCH/DELETE /api/v1/sources/{id}</code>。</li>
+<li>operator <strong>不得</strong>调用：admin
+级端点（空间/文档/Job/订阅/信息源的全站管理）。</li>
+<li>前端 TopBar 显示或隐藏 ≠ 授权；授权只看后端
+<code>require_role</code>。</li>
+<li><code>/auth/me</code> 的 <code>is_admin</code>
+只读回显，不得用于后端授权（<code>roles.py</code>
+sub_has_min_rank）。</li>
+<li>用户只能操作自己的空间（<code>space.user_id != user_id → 30004</code>，如
+<code>engines.py:155-158</code>）。</li>
+<li>通知历史只返回
+<code>sub == 我 OR is_broadcast</code>；标记已读越权影响 0 行。</li>
+</ol>
+<h3 id="resources-契约">4.④ Resources 契约</h3>
+<ul>
+<li>本系统<strong>没有文件/图片上传端点</strong>（<code>grep UploadFile|File( app</code>
+零命中）。</li>
+<li>外部资源只以 URL 形式出现：<code>ContentAsset</code> 的来源
+URL、<code>FeedItem.url</code>、通知
+<code>url</code>；前端只做链接跳转，不代理下载。</li>
+<li>渠道 webhook URL ≤512
+字符（<code>bots.py MAX_WEBHOOK_CHARS</code>）；密钥与
+<code>extra_config</code> 以 AES-256-GCM 落库，响应只回
+<code>has_secret</code>。</li>
+<li>配置类资源（本轮新增约束，TASK-002）：数据库与 Redis
+连接串只能来自环境变量（<code>docker/.env</code>，已
+gitignore），compose 文件内不得出现口令。</li>
+<li>生命周期：知识文档软删除与引擎侧残留规则维持现状（<code>engines.py:142-160</code>
+注释）。</li>
+</ul>
+<h3 id="events-契约">4.⑤ Events 契约</h3>
+<p><strong>A. 推送事件 outbox（<code>push_events</code>
+表，现状冻结）</strong></p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>event_type</th>
+<th>生产者（worker 进程）</th>
+<th>载荷（emit 时补齐）</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>new_article</td>
+<td>文章入库 INDEXED</td>
+<td><code>asset_id, space_id, doc_title, space_name</code></td>
+</tr>
+<tr class="even">
+<td>hot_topic_update</td>
+<td>聚簇完成</td>
+<td><code>topic_id, hot_topic, topic_count</code></td>
+</tr>
+<tr class="odd">
+<td>daily_report</td>
+<td>日报生成</td>
+<td><code>report_date, report_title</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>消费：backend 进程 push_scheduler 每
+<code>PUSH_SCHEDULER_INTERVAL</code>（默认 60s，下限 5s）领取，先标
+<code>consumed_at</code> 再投递 →
+<strong>at-most-once</strong>；延迟下限 = 扫描间隔。</li>
+<li>幂等键：事件行 <code>id</code>（UUID）；投递失败走 PushTask
+重试簿记，不重放事件。</li>
+</ul>
+<p><strong>B. 站内通知（Redis pub/sub → SSE）</strong></p>
+<ul>
+<li>频道：<code>bothot:notifications:{sub}</code>（定向）与
+<code>bothot:notifications:broadcast</code>。</li>
+<li>SSE：<code>GET /api/v1/system/notifications</code>，<code>data:</code>
+行为 JSON；<code>: ping</code> 心跳；Redis 不可用时发
+<code>{"type":"service_unavailable","message":...}</code> 后关流。</li>
+<li>帧 JSON Schema（TASK-016 目标，<code>id</code>
+为<strong>新增可选</strong>，向后兼容）：</li>
+</ul>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;$id&quot;</span><span class="fu">:</span> <span class="st">&quot;bothot.notification.frame.v2&quot;</span><span class="fu">,</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;type&quot;</span><span class="fu">:</span> <span class="st">&quot;object&quot;</span><span class="fu">,</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;required&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;title&quot;</span><span class="ot">,</span> <span class="st">&quot;message&quot;</span><span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;properties&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;id&quot;</span><span class="fu">:</span>       <span class="fu">{</span><span class="dt">&quot;type&quot;</span><span class="fu">:</span> <span class="st">&quot;string&quot;</span><span class="fu">,</span> <span class="dt">&quot;description&quot;</span><span class="fu">:</span> <span class="st">&quot;与 notifications.id 相同；旧帧可缺省&quot;</span><span class="fu">},</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;title&quot;</span><span class="fu">:</span>    <span class="fu">{</span><span class="dt">&quot;type&quot;</span><span class="fu">:</span> <span class="st">&quot;string&quot;</span><span class="fu">},</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;message&quot;</span><span class="fu">:</span>  <span class="fu">{</span><span class="dt">&quot;type&quot;</span><span class="fu">:</span> <span class="st">&quot;string&quot;</span><span class="fu">},</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;url&quot;</span><span class="fu">:</span>      <span class="fu">{</span><span class="dt">&quot;type&quot;</span><span class="fu">:</span> <span class="st">&quot;string&quot;</span><span class="fu">},</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;space_id&quot;</span><span class="fu">:</span> <span class="fu">{</span><span class="dt">&quot;type&quot;</span><span class="fu">:</span> <span class="st">&quot;string&quot;</span><span class="fu">},</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;doc_id&quot;</span><span class="fu">:</span>   <span class="fu">{</span><span class="dt">&quot;type&quot;</span><span class="fu">:</span> <span class="st">&quot;string&quot;</span><span class="fu">}</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">},</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;additionalProperties&quot;</span><span class="fu">:</span> <span class="kw">true</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<ul>
+<li>前端去重键：<code>id</code>（有则用）→
+否则沿用现行内容窗口去重。</li>
+</ul>
+<h3 id="ux-states-契约">4.⑥ UX States 契约</h3>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>页面</th>
+<th>加载态</th>
+<th>访客态</th>
+<th>空态</th>
+<th>错误态</th>
+<th>无权限态</th>
+<th>成功态</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>/spaces、/spaces/[id]</td>
+<td>Skeleton</td>
+<td>AuthGate 卡</td>
+<td>「还没有知识空间」+ 新建入口</td>
+<td>LoadingErrorShell + 重试</td>
+<td>—</td>
+<td>列表/详情</td>
+</tr>
+<tr class="even">
+<td>/subscriptions、/jobs</td>
+<td>Skeleton</td>
+<td>AuthGate 卡</td>
+<td>空列表提示</td>
+<td>LoadingErrorShell</td>
+<td>—</td>
+<td>列表</td>
+</tr>
+<tr class="odd">
+<td>/chat</td>
+<td>Skeleton</td>
+<td>AuthGate 卡</td>
+<td>未选空间提示</td>
+<td>流中断提示可重发</td>
+<td>—</td>
+<td>流式回答</td>
+</tr>
+<tr class="even">
+<td>/bots（渠道/任务）</td>
+<td>Skeleton</td>
+<td>AuthGate 卡</td>
+<td>「暂无渠道」</td>
+<td>LoadingErrorShell</td>
+<td>10004 → 「权限不足」卡</td>
+<td>列表 + 测试推送结果</td>
+</tr>
+<tr class="odd">
+<td>/hot、/hot/daily</td>
+<td>Skeleton</td>
+<td><strong>待 D-01</strong></td>
+<td>「暂无热点 / 暂无日报」</td>
+<td>LoadingErrorShell</td>
+<td>—</td>
+<td>Feed / Markdown</td>
+</tr>
+<tr class="even">
+<td>/public</td>
+<td>Skeleton</td>
+<td><strong>待 D-01</strong></td>
+<td>空列表</td>
+<td>LoadingErrorShell</td>
+<td>—</td>
+<td>列表</td>
+</tr>
+<tr class="odd">
+<td>/admin</td>
+<td>Skeleton</td>
+<td>AuthGate 卡</td>
+<td>—</td>
+<td>LoadingErrorShell</td>
+<td>is_admin=false → 「权限不足」卡</td>
+<td>管理面板</td>
+</tr>
+<tr class="even">
+<td>NotificationBell</td>
+<td>不渲染徽标</td>
+<td>不连接 SSE</td>
+<td>「暂无通知」</td>
+<td>service_unavailable 静默降级</td>
+<td>—</td>
+<td>列表 + 未读数</td>
+</tr>
+<tr class="odd">
+<td>任意页收到 10007</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>toast「请求过于频繁」，不自动重试</td>
+<td>—</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="契约自检">4.4 契约自检</h3>
+<ul>
+<li><label><input type="checkbox" checked="" />前端只凭契约写 API
+层：端点全集 + 信封 + 分页 + 错误表 + bot/hot
+响应形状齐备；其他域响应形状<strong>未生成</strong>，本轮维持各模块现有本地类型（风险
+K-05）。</label></li>
+<li><label><input type="checkbox"
+checked="" />后端只凭契约实现：本轮后端改动（TASK-006/012/013/016）字段已逐字给出。</label></li>
+<li><label><input type="checkbox"
+checked="" />数据端只凭契约设计表结构：本轮仅
+TASK-022（条件）涉及表。</label></li>
+<li><label><input type="checkbox"
+checked="" />错误码覆盖已知失败路径：后端 23 个码全部列出，含 429/413
+中间件路径。</label></li>
+<li><label><input type="checkbox"
+checked="" />管理端越权路径已列为禁止项（4.③ 1–6）。</label></li>
+<li>结论：<strong>对本轮任务完备</strong>。对「未来任意前端新功能」不完备（其他域无响应形状契约），已列入风险。</li>
+</ul>
+<hr />
+<h2 id="数据模型基线">5. 数据模型基线</h2>
+<p><strong>现状（冻结，不在本轮改动）</strong>：22 张表，alembic 18
+个版本，单头 <code>ab1005w5b</code>。</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>组</th>
+<th>表（模型）</th>
+<th>文件</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>identity</td>
+<td>users（User，含 role）</td>
+<td><code>models/entities.py</code></td>
+</tr>
+<tr class="even">
+<td>knowledge</td>
+<td>knowledge_spaces、content_assets、short_link_map、knowledge_documents、engine_key_registrations</td>
+<td><code>models/entities.py</code></td>
+</tr>
+<tr class="odd">
+<td>subscription</td>
+<td>sources、source_subscriptions、article_manifests</td>
+<td><code>models/entities.py</code></td>
+</tr>
+<tr class="even">
+<td>ingest</td>
+<td>jobs、job_items</td>
+<td><code>models/entities.py</code></td>
+</tr>
+<tr class="odd">
+<td>system</td>
+<td>process_heartbeats</td>
+<td><code>models/entities.py</code></td>
+</tr>
+<tr class="even">
+<td>bot</td>
+<td>bot_channels、push_tasks、push_logs、push_events、notifications</td>
+<td><code>models/bothot_entities.py</code></td>
+</tr>
+<tr class="odd">
+<td>hot</td>
+<td>hot_topics、hot_topic_articles、daily_reports、feed_items</td>
+<td><code>models/bothot_entities.py</code></td>
+</tr>
+<tr class="even">
+<td>疑似死表</td>
+<td>bot_bindings（BotBinding）</td>
+<td><code>models/entities.py</code>（F-16）</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>字段级定义以 SQLAlchemy 模型为准，契约镜像见
+<code>packages/contracts/src/*/dto.ts</code>（生成物，<code>--check</code>
+守护）。本规划<strong>不另写一份字段表</strong>，避免第二来源。</li>
+<li>已有关键索引：<code>hot_topics.hot_score</code>、<code>notifications(sub, created_at)</code>、<code>push_events.event_type/consumed_at</code>、<code>feed_items(item_type, ref_id)</code>
+唯一、<code>daily_reports.report_date</code> 唯一、FK
+索引（<code>ab1004w4a</code>）。</li>
+<li>软删除：知识文档与推送任务为软删除（<code>bots.py</code>
+任务软删除，roadmap v0.4）。</li>
+<li>渠道字段为 <code>String(32)</code> 而非 enum（AGENTS 约束 3）。</li>
+</ul>
+<p><strong>迁移版本号编排（本轮）</strong></p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>序</th>
+<th>版本号</th>
+<th>down_revision</th>
+<th>任务</th>
+<th>条件</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td>ab1006w6a</td>
+<td>ab1005w5b</td>
+<td>TASK-022 删除 bot_bindings</td>
+<td>仅 D-03=A 时</td>
+</tr>
+</tbody>
+</table>
+<p>本轮其他任务<strong>禁止</strong>新增迁移。若后续任务需要迁移，必须先在本表登记版本号，串行合并。</p>
+<p><strong>不写
+<code>database/migrations/001_init.sql</code></strong>：项目以 alembic
+为唯一迁移源，v0.7 裁定 <code>database/migrations/</code>
+不启用（roadmap v0.7「裁定不迁移」）。另写 SQL 会形成第二来源，违反
+§4.2。</p>
+<hr />
+<h2 id="垂直切片清单">6. 垂直切片清单</h2>
+<p><strong>步行骨架已存在</strong>：健康检查（<code>/system/health</code>、<code>/live</code>、<code>/ready</code>）、鉴权写接口（如
+<code>POST /bots</code>）、表与迁移、前端打真实
+API、统一错误信封，均在代码中，CI 编排冒烟通过。所以本轮不重建骨架，S0
+的职责是让骨架在<strong>不泄露凭据</strong>的前提下可复现。</p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>切片</th>
+<th>可演示行为（比上一刀多出的）</th>
+<th>任务</th>
+<th>规模</th>
+<th>可否与他刀并行</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>S0 安全止血</strong></td>
+<td>用只在 <code>.env</code> 里的连接串起栈，smoke
+通过；旧口令失效；gitleaks 能拦住同类提交</td>
+<td>001 002 003 004 005</td>
+<td>0.5–1 天</td>
+<td>与 S1、S4、S5 并行</td>
+</tr>
+<tr class="even">
+<td><strong>S1 错误码同源</strong></td>
+<td>触发限流时界面显示「请求过于频繁」；后端新增错误码不改前端即编译失败</td>
+<td>006 007 008</td>
+<td>1 天</td>
+<td>与 S0、S4、S5 并行（需 D-09）</td>
+</tr>
+<tr class="odd">
+<td><strong>S2 访客策略</strong></td>
+<td>未登录访问各页面的行为与 ADR 一致，且真实构建有单测锁定</td>
+<td>009 010 011</td>
+<td>0.5–1 天</td>
+<td>需 D-01；与 S3 并行</td>
+</tr>
+<tr class="even">
+<td><strong>S3 响应形状契约</strong></td>
+<td>改后端字段名，CI 的契约门禁会红；前端 bots/hot 用生成类型</td>
+<td>012 013 014 015</td>
+<td>1.5–2 天</td>
+<td>需 D-09；在 S1 之后（同用 gen_contracts.py）</td>
+</tr>
+<tr class="odd">
+<td><strong>S4 通知去重</strong></td>
+<td>在线收到一条站内通知后刷新页面，铃铛里只有一条</td>
+<td>016 017</td>
+<td>0.5 天</td>
+<td>与 S0、S1、S5 并行</td>
+</tr>
+<tr class="even">
+<td><strong>S5 治理门禁</strong></td>
+<td>在 backlog 写错一个文件路径，CI 变红；文档与代码一致</td>
+<td>018 019 020</td>
+<td>1 天</td>
+<td>与 S0、S1、S4 并行</td>
+</tr>
+<tr class="odd">
+<td><strong>S6 性能基线</strong></td>
+<td>一份带数字的基线报告，脚本可复跑</td>
+<td>021</td>
+<td>0.5–1 天</td>
+<td>在 S0 之后（需能起栈）</td>
+</tr>
+<tr class="even">
+<td><strong>S7 遗留处置</strong></td>
+<td>按裁决删除或注明死表、死代码、第三方源码</td>
+<td>022 023 024</td>
+<td>0.5 天</td>
+<td>需 D-03/D-06/D-07</td>
+</tr>
+<tr class="odd">
+<td><strong>S8 真实链路</strong></td>
+<td>真实 OIDC 登录下 4 条 e2e 连续 3 次绿，CI 阻塞</td>
+<td>025</td>
+<td>1 天</td>
+<td>需 D-08（外部）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>排序理由</strong>：S0 是正在发生的安全事件（public
+仓库里有可用口令），优先级最高；S1 解锁 S3（共用生成器）且不确定性低；S2
+不确定性最高（需求冲突），但依赖人裁决，所以尽早把选项交出去；S6
+必须先于任何优化；S7/S8 被外部条件卡住，放后。</p>
+<p>小于 2
+小时的任务（001、003、005、011、017、018、023、024）已并入所属切片一起演示，不单独成刀。</p>
+<hr />
+<h2 id="原子任务卡全集">7. 原子任务卡全集</h2>
+<p>工作包（Work Package）→ 原子任务（Atomic Task）→ 执行步骤（Execution
+Step）：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>工作包</th>
+<th>交付什么</th>
+<th>原子任务</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>WP-0 安全止血</td>
+<td>凭据不在仓库、栈可复现、同类泄露可被拦截</td>
+<td>TASK-001…005</td>
+</tr>
+<tr class="even">
+<td>WP-1 错误契约单一源</td>
+<td>错误码一处登记，前后端同源</td>
+<td>TASK-006…008</td>
+</tr>
+<tr class="odd">
+<td>WP-2 访客访问策略</td>
+<td>登录守卫行为确定且有测试</td>
+<td>TASK-009…011</td>
+</tr>
+<tr class="even">
+<td>WP-3 响应形状契约</td>
+<td>bot/hot 响应形状机器可读并被前端消费</td>
+<td>TASK-012…015</td>
+</tr>
+<tr class="odd">
+<td>WP-4 通知去重</td>
+<td>实时与历史通知按 id 合并</td>
+<td>TASK-016…017</td>
+</tr>
+<tr class="even">
+<td>WP-5 治理门禁</td>
+<td>文档一致性进 CI，漂移清零</td>
+<td>TASK-018…020</td>
+</tr>
+<tr class="odd">
+<td>WP-6 基线指标</td>
+<td>四项非功能指标有首测</td>
+<td>TASK-021</td>
+</tr>
+<tr class="even">
+<td>WP-7 待裁决处置</td>
+<td>死表/死代码/第三方源码按裁决处理</td>
+<td>TASK-022…024</td>
+</tr>
+<tr class="odd">
+<td>WP-8 真实链路验收</td>
+<td>真实后端 e2e 成为门禁</td>
+<td>TASK-025</td>
+</tr>
+</tbody>
+</table>
+<p>每张卡的完整内容见下文（同时落盘为
+<code>docs/05_execution/tasks/TASK-xxx.md</code>）。</p>
+<h3
+id="task-001轮换已入库的共享底座-pg-账号口令人工">TASK-001：轮换已入库的共享底座
+PG 账号口令（人工）</h3>
+<p><strong>归属</strong> - 所属切片：S0（WP-0 安全止血） - 执行
+Agent：人工（运维） - 来源需求：REQ-NF-002（真实密钥禁止入库，README
+安全铁律） - 来源方案：ADR-0010（提议）</p>
+<p><strong>目标</strong> 共享底座 PG 账号 bothot_rw 的口令已更换，旧口令
+<已轮换·见运维工单> 无法再连接。</p>
+<p><strong>输入</strong> - 证据：docker/compose.yml:157（commit 01f6892
+引入，仓库为 public） - 前置任务：无 - 前置状态：无</p>
+<p><strong>输出</strong>（新增/修改的文件） - 无仓库文件变更（运维操作）
+-
+docs/06_validation/evidence/EVD-001/rotation.md（记录时间、执行人，不记新口令）</p>
+<p><strong>Execution Steps</strong> 1. [ ] 在共享底座 PG（宿主
+5435）执行 ALTER ROLE bothot_rw WITH PASSWORD ‘<新值>’ 2. [ ]
+把新连接串只写入本机 docker/.env（已 gitignore） 3. [ ]
+用旧口令尝试连接，确认被拒绝 4. [ ] 在 EVD-001
+写入时间与结论（不含口令）</p>
+<p><strong>验收标准</strong> - [ ] 旧口令连接返回 password
+authentication failed - [ ] 仓库内无新口令（gitleaks 与 grep 均 0
+命中）</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="va">PGPASSWORD</span><span class="op">=</span><已轮换·见运维工单> <span class="ex">psql</span> <span class="at">-h</span> 127.0.0.1 <span class="at">-p</span> 5435 <span class="at">-U</span> bothot_rw <span class="at">-d</span> bothot <span class="at">-c</span> <span class="st">&#39;select 1&#39;</span>   <span class="co"># 期望：认证失败</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> grep <span class="at">-n</span> <span class="st">&quot;&lt;新口令片段&gt;&quot;</span> <span class="kw">||</span> <span class="bu">echo</span> OK</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-001/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> -
+<code>docs/06_validation/evidence/EVD-001/**</code></p>
+<p><strong>禁止修改</strong> - 仓库内任何代码与配置</p>
+<p><strong>依赖与阻塞</strong> - Depends on：无 - Blocks：TASK-002
+的上线（不阻塞其开发） - 阻塞条件：无共享底座 DBA 权限 → 标 blocked
+交人</p>
+<p><strong>建议执行档位</strong> 人工　理由：涉及生产凭据，CLI
+不得接触口令</p>
+<p><strong>升级条件</strong> 不适用；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 小（&lt;2h，按规则并入 S0 演示）</p>
+<hr />
+<h3 id="task-002compose-连接串外置为必填环境变量">TASK-002：compose
+连接串外置为必填环境变量</h3>
+<p><strong>归属</strong> - 所属切片：S0（WP-0 安全止血） - 执行
+Agent：Agent-Guard - 来源需求：REQ-NF-002；README『真实密钥禁止入库』 -
+来源方案：ADR-0010（提议）</p>
+<p><strong>目标</strong> docker/compose.yml
+不再含任何明文口令；DATABASE_URL/REDIS_URL 缺失时 compose config
+直接报错。</p>
+<p><strong>输入</strong> - docker/compose.yml:150-160（backend_env 锚）
+- docker/.env.example - docker/compose.ci.yml（CI 叠加覆盖，不得被破坏）
+- 契约：DESIGN-001 §Resources/配置</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+<code>docker/compose.yml</code> - <code>docker/.env.example</code></p>
+<p><strong>Execution Steps</strong> 1. [ ] 把 compose.yml:157-158 改为
+${DATABASE_URL:?DATABASE_URL 未设置} 与 ${REDIS_URL:?REDIS_URL 未设置}
+2. [ ] grep 全仓 host.docker.internal:5435 与 bothot_rw
+的消费方，逐个改为引用变量（含注释文案） 3. [ ] .env.example
+增两条带占位符的条目与注释（共享底座/栈内两种写法） 4. [ ] 确认
+compose.ci.yml 覆盖值仍生效</p>
+<p><strong>验收标准</strong> - [ ] git grep -nE ‘bothot_rw:[^&lt;&gt;@[:space:]]+@’ -- docker apps scripts packages .github 返回空 -
+[ ] 未设置 DATABASE_URL 时 docker compose config 非 0 退出 - [ ]
+compose.ci.yml 叠加 config –quiet 通过 - [ ] CI compose / compose-smoke
+两 job 绿</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> grep <span class="at">-n</span> <span class="st">&#39;<已轮换·见运维工单>&#39;</span> <span class="kw">&amp;&amp;</span> <span class="bu">exit</span> 1 <span class="kw">||</span> <span class="fu">true</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="fu">env</span> <span class="at">-u</span> DATABASE_URL docker compose <span class="at">-f</span> docker/compose.yml config <span class="at">--quiet</span><span class="kw">;</span> <span class="bu">test</span> <span class="va">$?</span> <span class="at">-ne</span> 0</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="va">DATABASE_URL</span><span class="op">=</span>x <span class="va">REDIS_URL</span><span class="op">=</span>y <span class="ex">docker</span> compose <span class="at">-f</span> docker/compose.yml <span class="at">-f</span> docker/compose.ci.yml config <span class="at">--quiet</span></span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-002/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>docker/compose.yml</code> -
+<code>docker/.env.example</code></p>
+<p><strong>禁止修改</strong> - packages/contracts/<strong>（除
+Agent-Contract 任务） -
+apps/api/alembic/versions/</strong>（除明确标注迁移版本号的任务） -
+apps/api/app/core/errors.py（除 Agent-Contract 任务） - AideanBot
+原项目任何文件（AGENTS.md 关键约束 1） - docker/compose.ci.yml</p>
+<p><strong>依赖与阻塞</strong> - Depends on：无 - Blocks：TASK-003 -
+阻塞条件：compose.ci.yml 必须同步修改才能绿 → 停，提交给 Agent-Guard
+协调</p>
+<p><strong>建议执行档位</strong>
+sonnect　理由：单文件配置改动，规则明确</p>
+<p><strong>升级条件</strong> CI compose-smoke 连续 2 次红 →
+opus；任何任务连续 2 次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 小（约 2h）</p>
+<hr />
+<h3
+id="task-003端口与底座口径落档依裁决-d-02">TASK-003：端口与底座口径落档（依裁决
+D-02）</h3>
+<p><strong>归属</strong> - 所属切片：S0（WP-0 安全止血） - 执行
+Agent：Agent-Doc - 来源需求：REQ-C-002（端口分配） -
+来源方案：ADR-0010（提议）</p>
+<p><strong>目标</strong> AGENTS.md / README / conventions.md 的
+PG、Redis 端口与实际编排一致，且只有一种口径。</p>
+<p><strong>输入</strong> - 裁决 D-02 结果 - AGENTS.md
+端口表（5433/6380） - docker/compose.yml:46-47（共享底座 5435/6379）</p>
+<p><strong>输出</strong>（新增/修改的文件） - <code>AGENTS.md</code> -
+<code>README.md</code> -
+<code>docs/04_engineering/conventions.md</code></p>
+<p><strong>Execution Steps</strong> 1. [ ] 按 D-02 结论更新三处端口表 2.
+[ ] README『服务与启动顺序』改写为共享底座或栈内二选一的实际形态 3. [ ]
+make guard-ports 若需新增检查，提交需求给 Agent-Guard（本任务不改
+Makefile）</p>
+<p><strong>验收标准</strong> - [ ] 三份文档端口表逐字一致 - [ ] 与
+docker/compose.yml 实际值一致（人工比对表格）</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">grep</span> <span class="at">-nE</span> <span class="st">&#39;5433|5435|6380|6379&#39;</span> AGENTS.md README.md docs/04_engineering/conventions.md docker/compose.yml</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-003/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>AGENTS.md</code> -
+<code>README.md</code> -
+<code>docs/04_engineering/conventions.md</code></p>
+<p><strong>禁止修改</strong> - packages/contracts/<strong>（除
+Agent-Contract 任务） -
+apps/api/alembic/versions/</strong>（除明确标注迁移版本号的任务） -
+apps/api/app/core/errors.py（除 Agent-Contract 任务） - AideanBot
+原项目任何文件（AGENTS.md 关键约束 1） - docker/** - Makefile</p>
+<p><strong>依赖与阻塞</strong> - Depends on：TASK-002、D-02 - Blocks：无
+- 阻塞条件：D-02 未裁决 → blocked</p>
+<p><strong>建议执行档位</strong> haiku　理由：纯文档替换</p>
+<p><strong>升级条件</strong> 出现第三种口径 → opus；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 小（并入 S0）</p>
+<hr />
+<h3 id="task-004gitleaks-规则补url-内嵌口令检测">TASK-004：gitleaks
+规则补『URL 内嵌口令』检测</h3>
+<p><strong>归属</strong> - 所属切片：S0（WP-0 安全止血） - 执行
+Agent：Agent-Guard - 来源需求：REQ-NF-002 - 来源方案：DESIGN-001 §9
+自动化守卫</p>
+<p><strong>目标</strong> 向 security.yml 的 gitleaks 增加规则，使形如
+scheme://<user>:<pass>@host 的连接串被识别；对 commit 01f6892
+复跑能报出。</p>
+<p><strong>输入</strong> -
+.github/workflows/security.yml:421-515（gitleaks step） - 证据：01f6892
+的口令未被现有 gitleaks 拦截（该 run 结论 success）</p>
+<p><strong>输出</strong>（新增/修改的文件） - .gitleaks.toml（仓库根） -
+<code>.github/workflows/security.yml</code></p>
+<p><strong>Execution Steps</strong> 1. [ ] 新建 .gitleaks.toml：extend
+默认规则 + 自定义 regex <code>[a-z+]+://[^:/\s]+:[^@/\s]+@</code> 2. [ ]
+allowlist 仅放行 docker/compose.ci.yml 的一次性 bothot:bothot（CI
+临时库） 3. [ ] security.yml 的 gitleaks 调用加 –config .gitleaks.toml
+4. [ ] 本地对 01f6892 复跑验证能报出</p>
+<p><strong>验收标准</strong> - [ ] gitleaks detect –log-opts
+01f6892^..01f6892 报出 compose.yml:157 - [ ] HEAD 全量扫描在 TASK-002
+合并后 0 告警 - [ ] Security 工作流绿</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="ex">gitleaks</span> detect <span class="at">--config</span> .gitleaks.toml <span class="at">--log-opts</span> <span class="st">&#39;01f6892^..01f6892&#39;</span> <span class="at">-v</span><span class="kw">;</span> <span class="bu">test</span> <span class="va">$?</span> <span class="at">-eq</span> 1</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="ex">gitleaks</span> detect <span class="at">--config</span> .gitleaks.toml <span class="at">--no-git</span> <span class="at">-s</span> docker/</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-004/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>.gitleaks.toml</code> -
+<code>.github/workflows/security.yml</code></p>
+<p><strong>禁止修改</strong> - packages/contracts/<strong>（除
+Agent-Contract 任务） -
+apps/api/alembic/versions/</strong>（除明确标注迁移版本号的任务） -
+apps/api/app/core/errors.py（除 Agent-Contract 任务） - AideanBot
+原项目任何文件（AGENTS.md 关键约束 1） - docker/**</p>
+<p><strong>依赖与阻塞</strong> - Depends on：无 - Blocks：无 -
+阻塞条件：规则误报 compose.ci.yml 以外的测试夹具 ≥3 处 →
+停，回报清单</p>
+<p><strong>建议执行档位</strong> sonnect　理由：规则编写 +
+工作流参数</p>
+<p><strong>升级条件</strong> Security 工作流连续 2 次红 →
+opus；任何任务连续 2 次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 小</p>
+<hr />
+<h3 id="task-005.project-排除出前端镜像构建上下文">TASK-005：.project/
+排除出前端镜像构建上下文</h3>
+<p><strong>归属</strong> - 所属切片：S0（WP-0 安全止血） - 执行
+Agent：Agent-Guard - 来源需求：REQ-C-001（Docker Compose 部署） -
+来源方案：—（卫生项，无需 ADR）</p>
+<p><strong>目标</strong> 根 .dockerignore 排除 .project/（125M
+第三方源码），frontend 镜像构建上下文不再携带它。</p>
+<p><strong>输入</strong> - .dockerignore（当前无 .project 条目） - du
+-sh .project = 125M</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+<code>.dockerignore</code></p>
+<p><strong>Execution Steps</strong> 1. [ ] 在
+.dockerignore『其余目录一律不入上下文』段加 .project/ 一行（附注释） 2.
+[ ] 本地 docker build 前端镜像，对比构建上下文体积</p>
+<p><strong>验收标准</strong> - [ ] grep -n ‘^.project/’ .dockerignore
+命中 - [ ] frontend 镜像 build 成功，上下文体积下降（记录前后数值）</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">grep</span> <span class="at">-n</span> <span class="st">&#39;^\.project/&#39;</span> .dockerignore</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> compose <span class="at">-f</span> docker/compose.yml build frontend <span class="dv">2</span><span class="op">&gt;&amp;</span><span class="dv">1</span> <span class="kw">|</span> <span class="fu">grep</span> <span class="at">-i</span> <span class="st">&#39;transferring context&#39;</span></span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-005/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>.dockerignore</code></p>
+<p><strong>禁止修改</strong> - packages/contracts/<strong>（除
+Agent-Contract 任务） -
+apps/api/alembic/versions/</strong>（除明确标注迁移版本号的任务） -
+apps/api/app/core/errors.py（除 Agent-Contract 任务） - AideanBot
+原项目任何文件（AGENTS.md 关键约束 1） - .project/**（不删除，删除属
+D-07）</p>
+<p><strong>依赖与阻塞</strong> - Depends on：无 - Blocks：无 -
+阻塞条件：build 失败且与本改动相关 → 回退并回报</p>
+<p><strong>建议执行档位</strong> haiku　理由：一行配置</p>
+<p><strong>升级条件</strong> build 失败 → sonnect；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 小（并入 S0 演示）</p>
+<hr />
+<h3
+id="task-006错误码登记表补全-50003-并加注册一致性断言">TASK-006：错误码登记表补全
+50003 并加注册一致性断言</h3>
+<p><strong>归属</strong> - 所属切片：S1（WP-1 错误契约单一源） - 执行
+Agent：Agent-Contract - 来源需求：REQ-F-008 /
+REQ-NF-002（失败可读）；errors.py 头注『先登记后实现』 -
+来源方案：ADR-0008（提议）</p>
+<p><strong>目标</strong> errors.py 中每个 AppError 子类的 code 都在
+ERROR_CODES 中有登记名；50003 登记为 CONFIGURATION_ERROR。</p>
+<p><strong>输入</strong> -
+apps/api/app/core/errors.py:9-37（ERROR_CODES，缺 50003） -
+errors.py:222-225（ConfigurationError code=50003） - 契约：DESIGN-001 §②
+Errors 目标表</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+<code>apps/api/app/core/errors.py</code> -
+apps/api/tests/test_error_registry.py（新增）</p>
+<p><strong>Execution Steps</strong> 1. [ ] ERROR_CODES 增 50003:
+“CONFIGURATION_ERROR” 2. [ ] 新增测试：遍历
+AppError.__subclasses__()（递归），断言 code ∈ ERROR_CODES 且
+http_status 为 int 3. [ ] 跑 ruff/mypy/新测试</p>
+<p><strong>验收标准</strong> - [ ] 新测试通过 - [ ] ruff check、mypy app
+通过 - [ ] AppError(50003) 实例 name == CONFIGURATION_ERROR</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> apps/api <span class="kw">&amp;&amp;</span> <span class="ex">ruff</span> check app tests <span class="kw">&amp;&amp;</span> <span class="ex">mypy</span> app <span class="kw">&amp;&amp;</span> <span class="ex">pytest</span> tests/test_error_registry.py <span class="at">-q</span></span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-006/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>apps/api/app/core/errors.py</code>
+- <code>apps/api/tests/test_error_registry.py</code></p>
+<p><strong>禁止修改</strong> - packages/contracts/<strong> -
+apps/web/</strong> - apps/api/alembic/**</p>
+<p><strong>依赖与阻塞</strong> - Depends on：D-09 - Blocks：TASK-007 -
+阻塞条件：发现其他未登记 code → 一并登记前先回报（属契约变更）</p>
+<p><strong>建议执行档位</strong>
+opus　理由：改的是全栈契约源，需判断语义命名</p>
+<p><strong>升级条件</strong> —（已是 opus）；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 小</p>
+<hr />
+<h3
+id="task-007gen_contracts-生成-errors.ts-并纳入-check">TASK-007：gen_contracts
+生成 errors.ts 并纳入 –check</h3>
+<p><strong>归属</strong> - 所属切片：S1（WP-1 错误契约单一源） - 执行
+Agent：Agent-Contract -
+来源需求：REQ-F-008；契约唯一源纪律（packages/contracts/src/index.ts
+头注） - 来源方案：ADR-0008（提议）</p>
+<p><strong>目标</strong> packages/contracts/src/common/errors.ts 由
+scripts/gen_contracts.py 从 errors.py 生成；手改即被 –check 拦截。</p>
+<p><strong>输入</strong> -
+scripts/gen_contracts.py:112-172（generate/check） -
+apps/api/app/core/errors.py（TASK-006 后） - 现手写
+packages/contracts/src/common/errors.ts（缺 10007/10008）</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+<code>scripts/gen_contracts.py</code> -
+packages/contracts/src/common/errors.ts（生成物）</p>
+<p><strong>Execution Steps</strong> 1. [ ] generate() 增加 errors
+产物：读取 ERROR_CODES 与各子类 http_status，渲染
+ApiErrorCode/ApiErrorName/ApiErrorHttpStatus/AuthErrorCode 2. [ ]
+AuthErrorCode 取 http_status==401 的 code
+集合（10001/10003），保持与现导出名一致 3. [ ]
+生成物加『请勿手动修改』头 4. [ ] 运行生成 → –check 幂等 5. [ ] 契约包
+tsc –noEmit 通过</p>
+<p><strong>验收标准</strong> - [ ] errors.ts 含
+10007、10008、50003=CONFIGURATION_ERROR - [ ] python
+scripts/gen_contracts.py –check 退出 0 - [ ] 手改 errors.ts 任意一行后
+–check 退出 1 - [ ] packages/contracts tsc 零错；apps/web tsc 零错</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> apps/api <span class="kw">&amp;&amp;</span> <span class="ex">python</span> ../../scripts/gen_contracts.py <span class="kw">&amp;&amp;</span> <span class="ex">python</span> ../../scripts/gen_contracts.py <span class="at">--check</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> ../web <span class="kw">&amp;&amp;</span> <span class="ex">pnpm</span> exec tsc <span class="at">--noEmit</span> <span class="at">-p</span> ../../packages/contracts/tsconfig.json <span class="kw">&amp;&amp;</span> <span class="ex">pnpm</span> exec tsc <span class="at">--noEmit</span></span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-007/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>scripts/gen_contracts.py</code> -
+<code>packages/contracts/src/common/errors.ts</code></p>
+<p><strong>禁止修改</strong> - apps/<strong> -
+apps/api/alembic/</strong></p>
+<p><strong>依赖与阻塞</strong> - Depends on：TASK-006 - Blocks：TASK-008
+- 阻塞条件：index.ts 导出名需改 → 停，属契约变更需 opus 审</p>
+<p><strong>建议执行档位</strong> sonnect　理由：生成器扩展，规则已在
+DESIGN-001 写死</p>
+<p><strong>升级条件</strong> –check 不幂等连续 2 次 → opus；任何任务连续
+2 次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 中</p>
+<hr />
+<h3
+id="task-008前端错误表对齐契约-429413-展示态">TASK-008：前端错误表对齐契约
++ 429/413 展示态</h3>
+<p><strong>归属</strong> - 所属切片：S1（WP-1 错误契约单一源） - 执行
+Agent：Agent-App - 来源需求：REQ-F-008；UX States 契约 -
+来源方案：ADR-0008（提议）、DESIGN-001 §⑥</p>
+<p><strong>目标</strong> 前端 ERROR_MESSAGES 以
+Record&lt;ApiErrorCode,string&gt; 类型约束覆盖全部后端码；10007/10008
+有专属文案，10007 不触发自动重试。</p>
+<p><strong>输入</strong> -
+apps/web/lib/api/http.ts:26-51（ERROR_MESSAGES、isAuthError） -
+packages/contracts/src/common/errors.ts（TASK-007 生成物） - DESIGN-001
+§② 前端文案表</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+<code>apps/web/lib/api/http.ts</code> -
+apps/web/tests/error-messages.spec.ts（新增）</p>
+<p><strong>Execution Steps</strong> 1. [ ] ERROR_MESSAGES
+拆为：satisfies Record&lt;ApiErrorCode,string&gt; 的主表 +
+LEGACY_MESSAGES（10101/10102/30101/30102/50101，按 D-04 结论保留或删除）
+2. [ ] 补
+10007『请求过于频繁，请稍后再试』、10008『提交内容过大』、20004/20005/30005/30006/50001/50003
+文案（取 DESIGN-001） 3. [ ] isAuthError 改为基于契约 AuthErrorCode（+
+D-04 决定是否保留 10101） 4. [ ] 新增
+vitest：遍历契约码表断言每码有文案；10007 不在重试判定内</p>
+<p><strong>验收标准</strong> - [ ] pnpm exec tsc –noEmit
+零错（缺码即编译失败） - [ ] 新 vitest 用例全绿，既有 vitest 零回归 - [
+] mock e2e 绿</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> apps/web <span class="kw">&amp;&amp;</span> <span class="ex">pnpm</span> exec tsc <span class="at">--noEmit</span> <span class="kw">&amp;&amp;</span> <span class="ex">pnpm</span> run test:unit <span class="at">--</span> <span class="at">--run</span> <span class="kw">&amp;&amp;</span> <span class="ex">pnpm</span> run test:e2e</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-008/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>apps/web/lib/api/http.ts</code> -
+<code>apps/web/tests/error-messages.spec.ts</code></p>
+<p><strong>禁止修改</strong> - packages/contracts/<strong> -
+apps/api/</strong></p>
+<p><strong>依赖与阻塞</strong> - Depends on：TASK-007、D-04 - Blocks：无
+- 阻塞条件：需要新增错误码 → 停，回报给 Agent-Contract</p>
+<p><strong>建议执行档位</strong> sonnect　理由：前端实现 + 单测</p>
+<p><strong>升级条件</strong> 连续 2 次验收失败 → opus；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 中</p>
+<hr />
+<h3 id="task-009adr-0009-访客访问策略定稿依裁决-d-01">TASK-009：ADR-0009
+访客访问策略定稿（依裁决 D-01）</h3>
+<p><strong>归属</strong> - 所属切片：S2（WP-2 访客访问策略） - 执行
+Agent：Agent-Doc（opus 起草） - 来源需求：REQ-F-007（角色门禁）；backlog
+AUTHGATE-001/002 - 来源方案：ADR-0009（提议，本规划已起草）</p>
+<p><strong>目标</strong> ADR-0009 状态从 proposed 变 accepted，明确
+/hot、/hot/daily、/public 对游客是否可见，以及真实态是 302
+还是原地渲染。</p>
+<p><strong>输入</strong> -
+docs/03_solution/decisions/adr-0009-guest-access-policy.md（草案） -
+apps/web/middleware.ts:14-15（白名单仅 / 与 /auth） -
+apps/web/e2e/auth-gate.spec.ts:10（注释称 /hot 豁免） - commit
+2766d17（hot 页接 AuthGate） - CHANGELOG
+Unreleased『公共引流位保持可见』</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+<code>docs/03_solution/decisions/adr-0009-guest-access-policy.md</code>
+- <code>docs/03_solution/decisions/adr-index.md</code></p>
+<p><strong>Execution Steps</strong> 1. [ ] 把 D-01 裁决结果写入
+ADR『决定』节 2. [ ] 列出受影响路由表与 e2e 断言变化 3. [ ] adr-index
+登记</p>
+<p><strong>验收标准</strong> - [ ] ADR 状态 accepted，含路由 ×
+游客行为表 - [ ] 表内每条路由都有对应 e2e 断言计划</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="fu">grep</span> <span class="at">-n</span> <span class="st">&#39;^status:&#39;</span> docs/03_solution/decisions/adr-0009-guest-access-policy.md</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-009/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> -
+<code>docs/03_solution/decisions/**</code></p>
+<p><strong>禁止修改</strong> - apps/<strong> - packages/</strong></p>
+<p><strong>依赖与阻塞</strong> - Depends on：D-01 -
+Blocks：TASK-010、TASK-011 - 阻塞条件：D-01 未裁决 → blocked</p>
+<p><strong>建议执行档位</strong> opus　理由：安全边界决策</p>
+<p><strong>升级条件</strong> 裁决推翻已冻结的 Identity 契约 →
+fable；任何任务连续 2 次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 小</p>
+<hr />
+<h3
+id="task-010middleware-白名单与-authgate-按-adr-0009-对齐-真实态单测">TASK-010：middleware
+白名单与 AuthGate 按 ADR-0009 对齐 + 真实态单测</h3>
+<p><strong>归属</strong> - 所属切片：S2（WP-2 访客访问策略） - 执行
+Agent：Agent-App - 来源需求：REQ-F-007 - 来源方案：ADR-0009</p>
+<p><strong>目标</strong> 真实构建下 middleware 的放行集合 = ADR-0009
+的游客可见路由；有不依赖 mock 的单测锁定该行为。</p>
+<p><strong>输入</strong> - apps/web/middleware.ts -
+apps/web/app/{hot,hot/daily,public}/page.tsx（AuthGate 包裹） -
+apps/web/e2e/auth-gate.spec.ts - ADR-0009 路由表</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+<code>apps/web/middleware.ts</code> -
+<code>apps/web/app/hot/page.tsx</code> -
+<code>apps/web/app/hot/daily/page.tsx</code> -
+<code>apps/web/app/public/page.tsx</code> -
+<code>apps/web/e2e/auth-gate.spec.ts</code> -
+apps/web/tests/middleware.spec.ts（新增）</p>
+<p><strong>Execution Steps</strong> 1. [ ] PUBLIC_PATHS/PUBLIC_PREFIXES
+按 ADR 表修改 2. [ ] 游客可见页移除 AuthGate 包裹或改为可选登录态（按
+ADR） 3. [ ] 新增 vitest：以 NextRequest 构造无 cookie 请求，逐路由断言
+next() 或 redirect 4. [ ] e2e 矩阵 PROTECTED_PAGES 与注释同步 ADR</p>
+<p><strong>验收标准</strong> - [ ] middleware 单测覆盖 ADR 表中每条路由
+- [ ] vitest 全绿零回归；mock e2e 绿 - [ ] e2e 注释与 PROTECTED_PAGES
+不再矛盾</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> apps/web <span class="kw">&amp;&amp;</span> <span class="ex">pnpm</span> run test:unit <span class="at">--</span> <span class="at">--run</span> tests/middleware.spec.ts <span class="kw">&amp;&amp;</span> <span class="ex">pnpm</span> run test:unit <span class="at">--</span> <span class="at">--run</span> <span class="kw">&amp;&amp;</span> <span class="ex">pnpm</span> run test:e2e</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-010/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>apps/web/middleware.ts</code> -
+<code>apps/web/app/hot/**</code> - <code>apps/web/app/public/**</code> -
+<code>apps/web/e2e/auth-gate.spec.ts</code> -
+<code>apps/web/tests/middleware.spec.ts</code></p>
+<p><strong>禁止修改</strong> - apps/api/<strong> - packages/</strong> -
+apps/web/components/AuthGate.tsx（行为契约不变）</p>
+<p><strong>依赖与阻塞</strong> - Depends on：TASK-009 - Blocks：TASK-011
+- 阻塞条件：需要后端放开匿名接口（如 /hot/feed 无登录） → 停，属
+Identity 契约变更</p>
+<p><strong>建议执行档位</strong> sonnect　理由：规则已由 ADR 写死</p>
+<p><strong>升级条件</strong> 连续 2 次 e2e 红 → opus；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 中</p>
+<hr />
+<h3 id="task-011访客策略文档对账">TASK-011：访客策略文档对账</h3>
+<p><strong>归属</strong> - 所属切片：S2（WP-2 访客访问策略） - 执行
+Agent：Agent-Doc - 来源需求：协作纪律 §5（文档与代码一致） -
+来源方案：ADR-0009</p>
+<p><strong>目标</strong> CHANGELOG Unreleased、backlog AUTHGATE-002 与
+ADR-0009 一致，无互相矛盾表述。</p>
+<p><strong>输入</strong> - CHANGELOG.md:11-44 -
+docs/04_engineering/backlog.md AUTHGATE 节</p>
+<p><strong>输出</strong>（新增/修改的文件） - <code>CHANGELOG.md</code>
+- <code>docs/04_engineering/backlog.md</code></p>
+<p><strong>Execution Steps</strong> 1. [ ] 删除/改写『middleware
+裁定不实施』与『公共引流位保持可见』等与现状冲突的表述 2. [ ] backlog
+AUTHGATE-002 指向 ADR-0009 并附 TASK-010 提交哈希</p>
+<p><strong>验收标准</strong> - [ ] python
+scripts/check_docs_consistency.py 退出 0 - [ ] 人工：CHANGELOG 与 ADR
+无矛盾句</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> scripts/check_docs_consistency.py</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-011/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>CHANGELOG.md</code> -
+<code>docs/04_engineering/backlog.md</code></p>
+<p><strong>禁止修改</strong> - apps/<strong> - packages/</strong></p>
+<p><strong>依赖与阻塞</strong> - Depends on：TASK-010 - Blocks：无 -
+阻塞条件：—</p>
+<p><strong>建议执行档位</strong> haiku　理由：文档同步</p>
+<p><strong>升级条件</strong> 出现新冲突需判断 → sonnect；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 小</p>
+<hr />
+<h3 id="task-012bot-域响应模型pydantic声明并接入序列化">TASK-012：bot
+域响应模型（Pydantic）声明并接入序列化</h3>
+<p><strong>归属</strong> - 所属切片：S3（WP-3 响应形状契约） - 执行
+Agent：Agent-API - 来源需求：REQ-F-001；packages/contracts
+index.ts『响应形状生成器扩展已登记 backlog』 -
+来源方案：ADR-0008（提议）</p>
+<p><strong>目标</strong> bots.py 的渠道、任务、日志三类响应由 Pydantic
+模型定义，出现在 /openapi.json components 中，线上 JSON 形状不变。</p>
+<p><strong>输入</strong> -
+apps/api/app/api/v1/bots.py:134（_serialize_log 8
+字段）、_serialize_channel（secret_enc→has_secret） - DESIGN-001 §① bot
+响应 Schema</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+apps/api/app/api/v1/schemas/bot.py（新增） -
+<code>apps/api/app/api/v1/bots.py</code> -
+apps/api/tests/test_bot_response_shape.py（新增）</p>
+<p><strong>Execution Steps</strong> 1. [ ] 新建
+BotChannelOut/PushTaskOut/PushLogOut 与 PageOf[T] 泛型（page/page_size
+口径） 2. [ ] 序列化函数改为构造模型后
+model_dump(mode=‘json’)，字段与现输出逐字一致 3. [ ] 路由声明
+responses/response_model 使其进入 OpenAPI（信封保持 Envelope） 4. [ ]
+新增快照测试：同一夹具改造前后 JSON 相等</p>
+<p><strong>验收标准</strong> - [ ] 快照测试通过（形状零漂移） - [ ]
+app.openapi()[‘components’][‘schemas’] 含三模型 - [ ] 后端全量 pytest
+零回归；ruff/mypy 绿</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> apps/api <span class="kw">&amp;&amp;</span> <span class="ex">pytest</span> tests/test_bot_response_shape.py <span class="at">-q</span> <span class="kw">&amp;&amp;</span> <span class="ex">python</span> <span class="at">-c</span> <span class="st">&quot;from app.main import create_app;s=create_app().openapi()[&#39;components&#39;][&#39;schemas&#39;];assert {&#39;BotChannelOut&#39;,&#39;PushTaskOut&#39;,&#39;PushLogOut&#39;}&lt;=set(s)&quot;</span> <span class="kw">&amp;&amp;</span> <span class="ex">ruff</span> check app tests <span class="kw">&amp;&amp;</span> <span class="ex">mypy</span> app</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-012/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> -
+<code>apps/api/app/api/v1/schemas/bot.py</code> -
+<code>apps/api/app/api/v1/schemas/__init__.py</code> -
+<code>apps/api/app/api/v1/bots.py</code> -
+<code>apps/api/tests/test_bot_response_shape.py</code></p>
+<p><strong>禁止修改</strong> - packages/contracts/<strong>（除
+Agent-Contract 任务） -
+apps/api/alembic/versions/</strong>（除明确标注迁移版本号的任务） -
+apps/api/app/core/errors.py（除 Agent-Contract 任务） - AideanBot
+原项目任何文件（AGENTS.md 关键约束 1） - apps/api/app/api/v1/hot.py -
+apps/web/**</p>
+<p><strong>依赖与阻塞</strong> - Depends on：D-09（ADR-0008 批准） -
+Blocks：TASK-014 - 阻塞条件：形状必须变化才能建模 → 停，属 API
+契约变更</p>
+<p><strong>建议执行档位</strong> sonnect　理由：模式化改造 +
+快照测试</p>
+<p><strong>升级条件</strong> 快照不一致无法消除 → opus；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 中</p>
+<hr />
+<h3 id="task-013hot-域响应模型pydantic声明并接入序列化">TASK-013：hot
+域响应模型（Pydantic）声明并接入序列化</h3>
+<p><strong>归属</strong> - 所属切片：S3（WP-3 响应形状契约） - 执行
+Agent：Agent-API - 来源需求：REQ-F-002 - 来源方案：ADR-0008（提议）</p>
+<p><strong>目标</strong> hot.py 的 topics/daily/feed 响应由 Pydantic
+模型定义并进入 OpenAPI，线上 JSON 形状不变。</p>
+<p><strong>输入</strong> -
+apps/api/app/api/v1/hot.py:89/193/344（分页返回点） - DESIGN-001 §① hot
+响应 Schema</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+apps/api/app/api/v1/schemas/hot.py（新增） -
+<code>apps/api/app/api/v1/hot.py</code> -
+apps/api/tests/test_hot_response_shape.py（新增）</p>
+<p><strong>Execution Steps</strong> 1. [ ] 新建
+HotTopicOut/HotTopicDetailOut/DailyReportOut/FeedItemOut 2. [ ]
+序列化改造 + 路由声明 3. [ ] 快照测试</p>
+<p><strong>验收标准</strong> - [ ] 快照测试通过 - [ ] OpenAPI components
+含四模型 - [ ] 全量 pytest 零回归；ruff/mypy 绿</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> apps/api <span class="kw">&amp;&amp;</span> <span class="ex">pytest</span> tests/test_hot_response_shape.py <span class="at">-q</span> <span class="kw">&amp;&amp;</span> <span class="ex">ruff</span> check app tests <span class="kw">&amp;&amp;</span> <span class="ex">mypy</span> app</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-013/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> -
+<code>apps/api/app/api/v1/schemas/hot.py</code> -
+<code>apps/api/app/api/v1/hot.py</code> -
+<code>apps/api/tests/test_hot_response_shape.py</code></p>
+<p><strong>禁止修改</strong> - packages/contracts/<strong>（除
+Agent-Contract 任务） -
+apps/api/alembic/versions/</strong>（除明确标注迁移版本号的任务） -
+apps/api/app/core/errors.py（除 Agent-Contract 任务） - AideanBot
+原项目任何文件（AGENTS.md 关键约束 1） - apps/api/app/api/v1/bots.py -
+apps/api/app/api/v1/schemas/<strong>init</strong>.py（归
+TASK-012；本任务直接 import app.api.v1.schemas.hot，Python 3
+命名空间包在 <strong>init</strong> 尚未合并时同样可导入） -
+apps/web/**</p>
+<p><strong>依赖与阻塞</strong> - Depends on：D-09 - Blocks：TASK-014 -
+阻塞条件：同 TASK-012</p>
+<p><strong>建议执行档位</strong> sonnect　理由：同上</p>
+<p><strong>升级条件</strong> 同上；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 中</p>
+<hr />
+<h3
+id="task-014gen_contracts-生成响应形状-dtoout">TASK-014：gen_contracts
+生成响应形状 DTO（*Out）</h3>
+<p><strong>归属</strong> - 所属切片：S3（WP-3 响应形状契约） - 执行
+Agent：Agent-Contract - 来源需求：契约唯一源 - 来源方案：ADR-0008</p>
+<p><strong>目标</strong> packages/contracts 新增 bot/hot 的 *Out
+响应类型，由 OpenAPI components 生成，并由 index.ts 导出；–check
+覆盖。</p>
+<p><strong>输入</strong> -
+scripts/gen_contracts.py:38-60（DOMAIN_REQUEST_SCHEMAS） - TASK-012/013
+的 OpenAPI 组件</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+<code>scripts/gen_contracts.py</code> -
+<code>packages/contracts/src/bot/dto.ts</code> -
+<code>packages/contracts/src/hot/dto.ts</code> -
+<code>packages/contracts/src/index.ts</code></p>
+<p><strong>Execution Steps</strong> 1. [ ] 新增 DOMAIN_RESPONSE_SCHEMAS
+映射 2. [ ] _schema_to_ts 复用，产出 *Out 接口 3. [ ] index.ts
+导出新类型（保留原实体导出，不破坏消费方） 4. [ ] –check 幂等 + 契约包
+tsc</p>
+<p><strong>验收标准</strong> - [ ] –check 退出 0 - [ ] 契约包与 apps/web
+tsc 零错 - [ ] index.ts 导出 7 个 *Out 类型</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> apps/api <span class="kw">&amp;&amp;</span> <span class="ex">python</span> ../../scripts/gen_contracts.py <span class="at">--check</span> <span class="kw">&amp;&amp;</span> <span class="bu">cd</span> ../web <span class="kw">&amp;&amp;</span> <span class="ex">pnpm</span> exec tsc <span class="at">--noEmit</span> <span class="at">-p</span> ../../packages/contracts/tsconfig.json</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-014/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>scripts/gen_contracts.py</code> -
+<code>packages/contracts/**</code></p>
+<p><strong>禁止修改</strong> - apps/**</p>
+<p><strong>依赖与阻塞</strong> - Depends on：TASK-012、TASK-013 -
+Blocks：TASK-015 - 阻塞条件：生成器需要改实体导出名 → 停</p>
+<p><strong>建议执行档位</strong> sonnect　理由：生成器扩展</p>
+<p><strong>升级条件</strong> 不幂等 2 次 → opus；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 中</p>
+<hr />
+<h3 id="task-015前端-botshot-api-层改用-out-契约类型">TASK-015：前端
+bots/hot API 层改用 *Out 契约类型</h3>
+<p><strong>归属</strong> - 所属切片：S3（WP-3 响应形状契约） - 执行
+Agent：Agent-App - 来源需求：REQ-F-001/002 - 来源方案：ADR-0008</p>
+<p><strong>目标</strong> apps/web/lib/api/bots.ts 与 hot.ts
+的返回类型来自 <span class="citation"
+data-cites="bothot/contracts">@bothot/contracts</span> 的
+*Out，删除本地重复定义。</p>
+<p><strong>输入</strong> - apps/web/lib/api/{bots,hot,types}.ts -
+packages/contracts/src/index.ts（TASK-014 后）</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+<code>apps/web/lib/api/bots.ts</code> -
+<code>apps/web/lib/api/hot.ts</code> -
+<code>apps/web/lib/api/types.ts</code> -
+<code>apps/web/lib/api/mock-data.ts</code></p>
+<p><strong>Execution Steps</strong> 1. [ ] import type 替换本地类型 2. [
+] mock-data 以 satisfies 对齐新类型 3. [ ] 删除本地重复 interface（grep
+确认零消费）</p>
+<p><strong>验收标准</strong> - [ ] tsc 零错；vitest 零回归；mock e2e 绿
+- [ ] grep 本地重复类型名零命中</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> apps/web <span class="kw">&amp;&amp;</span> <span class="ex">pnpm</span> exec tsc <span class="at">--noEmit</span> <span class="kw">&amp;&amp;</span> <span class="ex">pnpm</span> run test:unit <span class="at">--</span> <span class="at">--run</span> <span class="kw">&amp;&amp;</span> <span class="ex">pnpm</span> run test:e2e</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-015/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>apps/web/lib/api/**</code></p>
+<p><strong>禁止修改</strong> - packages/<strong> - apps/api/</strong> -
+apps/web/components/**（若组件需改，回报）</p>
+<p><strong>依赖与阻塞</strong> - Depends on：TASK-014 - Blocks：无 -
+阻塞条件：组件层类型报错 &gt; 10 处 → 停，回报拆分</p>
+<p><strong>建议执行档位</strong> sonnect　理由：类型替换</p>
+<p><strong>升级条件</strong> 2 次失败 → opus；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 中</p>
+<hr />
+<h3 id="task-016sse-通知帧携带落库-id后端">TASK-016：SSE 通知帧携带落库
+id（后端）</h3>
+<p><strong>归属</strong> - 所属切片：S4（WP-4 通知去重） - 执行
+Agent：Agent-API - 来源需求：REQ-F-001（站内通知）；backlog NOTIF-001
+遗留待办 - 来源方案：DESIGN-001 §⑤ Events</p>
+<p><strong>目标</strong> web 渠道每条实时帧带 id，且与 notifications
+表行 id 相同。</p>
+<p><strong>输入</strong> -
+apps/api/app/services/push_scheduler.py:222、267（persist_web_notification
+在投递后） - apps/api/app/providers/push/web.py（publish payload） -
+apps/api/app/models/bothot_entities.py:265（Notification）</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+<code>apps/api/app/services/push_scheduler.py</code> -
+<code>apps/api/app/providers/push/web.py</code> -
+apps/api/app/providers/push/base.py（若 PushMessage 定义于此） -
+apps/api/tests/test_notification_frame_id.py（新增）</p>
+<p><strong>Execution Steps</strong> 1. [ ] PushMessage 增可选
+notification_id 字段（默认 None，其他渠道忽略） 2. [ ] _execute_task 在
+web 渠道投递前 gen_uuid() 赋值 3. [ ] web.py 发布 JSON 增 id 字段 4. [ ]
+persist_web_notification 使用同一 id 落库 5. [ ] 连库测试：投递后 Redis
+帧 id == 表行 id</p>
+<p><strong>验收标准</strong> - [ ] 新连库测试通过 - [ ]
+test_notification_history.py 等既有用例零回归 - [ ] 其他 5 渠道 provider
+测试零回归</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> apps/api <span class="kw">&amp;&amp;</span> <span class="ex">pytest</span> tests/test_notification_frame_id.py tests/test_notification_history.py tests/test_push_providers.py <span class="at">-q</span></span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-016/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> -
+<code>apps/api/app/services/push_scheduler.py</code> -
+<code>apps/api/app/providers/push/**</code> -
+<code>apps/api/tests/test_notification_frame_id.py</code></p>
+<p><strong>禁止修改</strong> - packages/contracts/<strong>（除
+Agent-Contract 任务） -
+apps/api/alembic/versions/</strong>（除明确标注迁移版本号的任务） -
+apps/api/app/core/errors.py（除 Agent-Contract 任务） - AideanBot
+原项目任何文件（AGENTS.md 关键约束 1） - apps/web/**</p>
+<p><strong>依赖与阻塞</strong> - Depends on：无 - Blocks：无 -
+阻塞条件：需要改 Notification 表结构 → 停（会占迁移版本号）</p>
+<p><strong>建议执行档位</strong>
+sonnect　理由：小范围后端改动，契约已冻结</p>
+<p><strong>升级条件</strong> 跨进程顺序问题导致测试不稳 →
+opus；任何任务连续 2 次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 中</p>
+<hr />
+<h3
+id="task-017notificationbell-用帧-id-去重前端">TASK-017：NotificationBell
+用帧 id 去重（前端）</h3>
+<p><strong>归属</strong> - 所属切片：S4（WP-4 通知去重） - 执行
+Agent：Agent-App - 来源需求：同 TASK-016 - 来源方案：DESIGN-001 §⑤
+Events</p>
+<p><strong>目标</strong> 实时帧的 id 写入 serverId；同一通知经 SSE
+与历史各到一次时只显示一条。帧无 id 时保持现行内容窗口去重。</p>
+<p><strong>输入</strong> -
+apps/web/components/NotificationBell.tsx:36、105-128 - DESIGN-001 §⑤ 帧
+Schema（id 可选）</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+<code>apps/web/components/NotificationBell.tsx</code> -
+apps/web/tests/notification-bell-dedupe.spec.tsx（新增）</p>
+<p><strong>Execution Steps</strong> 1. [ ] SSE onmessage 解析 id →
+serverId 2. [ ] 合并逻辑统一按 serverId 去重，缺失时回落现规则 3. [ ]
+vitest：先 SSE 后 history、先 history 后 SSE、帧无 id 三用例</p>
+<p><strong>验收标准</strong> - [ ] 三用例全绿；既有 vitest 零回归</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> apps/web <span class="kw">&amp;&amp;</span> <span class="ex">pnpm</span> run test:unit <span class="at">--</span> <span class="at">--run</span></span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-017/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> -
+<code>apps/web/components/NotificationBell.tsx</code> -
+<code>apps/web/tests/notification-bell-dedupe.spec.tsx</code></p>
+<p><strong>禁止修改</strong> - apps/api/<strong> -
+packages/</strong></p>
+<p><strong>依赖与阻塞</strong> - Depends on：无 - Blocks：无 -
+阻塞条件：—</p>
+<p><strong>建议执行档位</strong> sonnect　理由：组件 + 单测</p>
+<p><strong>升级条件</strong> 2 次失败 → opus；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 小（与 TASK-016 同刀演示）</p>
+<hr />
+<h3
+id="task-018check_docs_consistency-入-ci-与-preflight">TASK-018：check_docs_consistency
+入 CI 与 preflight</h3>
+<p><strong>归属</strong> - 所属切片：S5（WP-5 治理门禁） - 执行
+Agent：Agent-Guard - 来源需求：roadmap v0.6.5 未勾项『治理脚本入 CI
+强制步』 - 来源方案：—</p>
+<p><strong>目标</strong> CI backend job 与 scripts/preflight.sh 都执行
+check_docs_consistency.py，失败即红。</p>
+<p><strong>输入</strong> -
+.github/workflows/ci.yml:97（契约漂移门禁附近） - scripts/preflight.sh -
+现状：全仓 grep check_docs_consistency 仅脚本自身</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+<code>.github/workflows/ci.yml</code> -
+<code>scripts/preflight.sh</code></p>
+<p><strong>Execution Steps</strong> 1. [ ] ci.yml backend job
+在契约门禁后加一步 python
+“$GITHUB_WORKSPACE/scripts/check_docs_consistency.py” 2. [ ]
+preflight.sh 加同名检查 3. [ ] actionlint 通过</p>
+<p><strong>验收标准</strong> - [ ] actionlint 零告警 - [ ] CI 中该 step
+存在且绿 - [ ] 故意在 backlog 写一个不存在路径时 step 红（本地验证）</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="ex">actionlint</span> <span class="kw">&amp;&amp;</span> <span class="fu">bash</span> scripts/preflight.sh <span class="kw">&amp;&amp;</span> <span class="ex">python</span> scripts/check_docs_consistency.py</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-018/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>.github/workflows/ci.yml</code> -
+<code>scripts/preflight.sh</code></p>
+<p><strong>禁止修改</strong> - packages/contracts/<strong>（除
+Agent-Contract 任务） -
+apps/api/alembic/versions/</strong>（除明确标注迁移版本号的任务） -
+apps/api/app/core/errors.py（除 Agent-Contract 任务） - AideanBot
+原项目任何文件（AGENTS.md 关键约束 1） -
+scripts/check_docs_consistency.py</p>
+<p><strong>依赖与阻塞</strong> - Depends on：无 - Blocks：无 -
+阻塞条件：—</p>
+<p><strong>建议执行档位</strong> haiku　理由：追加一步</p>
+<p><strong>升级条件</strong> actionlint 红 → sonnect；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 小</p>
+<hr />
+<h3
+id="task-019文档漂移修正批不含端口">TASK-019：文档漂移修正批（不含端口）</h3>
+<p><strong>归属</strong> - 所属切片：S5（WP-5 治理门禁） - 执行
+Agent：Agent-Doc - 来源需求：协作纪律 §5、§8 - 来源方案：—</p>
+<p><strong>目标</strong>
+以下已证实的漂移全部改为与代码一致：conventions.md（Node
+版本、密钥现状、环境变量前缀、compose 路径、CORS
+裁定、测试目录）、README（Next
+版本、本地开发路径）、AGENTS『当前项目状态』（版本/Next）、product-requirements
+REQ-F-001（事件触发已实现）、roadmap v1.0 勾选、project-map 05–07
+状态、backlog TEST-003。</p>
+<p><strong>输入</strong> - 本规划 §2.3 不一致清单 X-01…X-12 -
+代码证据：apps/web/package.json（next ^15.5.24、node
+&gt;=24）、apps/web/.nvmrc=24.21.0、core/secret_crypto.py、tag
+v1.0.0、CI run 37906907637 success</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+<code>docs/04_engineering/conventions.md</code> - <code>README.md</code>
+- <code>AGENTS.md</code> -
+<code>docs/02_requirements/product-requirements.md</code> -
+<code>docs/04_engineering/roadmap.md</code> -
+<code>docs/00_governance/project-map.md</code> -
+<code>docs/04_engineering/backlog.md</code></p>
+<p><strong>Execution Steps</strong> 1. [ ] 逐条按 §2.3 清单修改，每处附
+文件:行 证据 2. [ ] 端口相关条目跳过（属 TASK-003） 3. [ ] 跑
+check_docs_consistency</p>
+<p><strong>验收标准</strong> - [ ] §2.3 中
+X-01…X-12（端口项除外）逐条有对应 diff - [ ] check_docs_consistency 退出
+0</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb23"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> scripts/check_docs_consistency.py <span class="kw">&amp;&amp;</span> <span class="fu">grep</span> <span class="at">-n</span> <span class="st">&#39;Next.js 14\|cd backend\|Node 版本：22&#39;</span> README.md AGENTS.md docs/04_engineering/conventions.md<span class="kw">;</span> <span class="bu">test</span> <span class="va">$?</span> <span class="at">-eq</span> 1</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-019/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>docs/**</code> -
+<code>README.md</code> - <code>AGENTS.md</code></p>
+<p><strong>禁止修改</strong> - apps/<strong> - packages/</strong> -
+docker/** - AGENTS.md 端口表段落</p>
+<p><strong>依赖与阻塞</strong> - Depends on：无 - Blocks：无 -
+阻塞条件：发现条目需代码改动才能一致 → 回报，不改代码</p>
+<p><strong>建议执行档位</strong> sonnect　理由：需逐条核证据，haiku
+易误改</p>
+<p><strong>升级条件</strong> —；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 中</p>
+<hr />
+<h3 id="task-020.docs-遗留待迁移6-项迁移或归档">TASK-020：.docs/
+遗留『待迁移』6 项：迁移或归档</h3>
+<p><strong>归属</strong> - 所属切片：S5（WP-5 治理门禁） - 执行
+Agent：Agent-Doc - 来源需求：docs/00_governance/doc-migration-map.md 中
+6 条『待迁移』 - 来源方案：—</p>
+<p><strong>目标</strong> doc-migration-map
+中不再有『待迁移』状态；每项要么已迁移并与代码核对，要么归档并注明原因。</p>
+<p><strong>输入</strong> - docs/00_governance/doc-migration-map.md -
+.docs/03_solution/interfaces/API接口文档.md（162KB，AideanBot 时代） -
+.docs/03_solution/interfaces/数据库文档.md - SSO 3 文件、test-plans 2
+文件</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+<code>docs/00_governance/doc-migration-map.md</code> -
+<code>docs/09_archive/superseded/**</code> -
+docs/03_solution/**（若选迁移）</p>
+<p><strong>Execution Steps</strong> 1. [ ] 按 D-05 结论执行 2. [ ]
+若迁移 API 文档：以 FastAPI /openapi.json 为准，不手抄旧文档</p>
+<p><strong>验收标准</strong> - [ ] grep -c ‘待迁移’ doc-migration-map.md
+== 0</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb24"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="fu">grep</span> <span class="at">-c</span> <span class="st">&#39;待迁移&#39;</span> docs/00_governance/doc-migration-map.md</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-020/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>docs/**</code></p>
+<p><strong>禁止修改</strong> - apps/<strong> -
+.docs/</strong>（只读，不删）</p>
+<p><strong>依赖与阻塞</strong> - Depends on：D-05 - Blocks：无 -
+阻塞条件：D-05 未裁决 → blocked</p>
+<p><strong>建议执行档位</strong> haiku（归档）/
+sonnect（迁移）　理由：视裁决</p>
+<p><strong>升级条件</strong> —；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 中</p>
+<hr />
+<h3
+id="task-021性能基线测量脚本与首测">TASK-021：性能基线测量脚本与首测</h3>
+<p><strong>归属</strong> - 所属切片：S6（WP-6 基线指标） - 执行
+Agent：Agent-Guard - 来源需求：REQ-NF-001（API&lt;500ms、首
+Token&lt;3s、单篇入库&lt;30s、Feed&lt;100ms） - 来源方案：§11
+基线指标</p>
+<p><strong>目标</strong> M-01…M-04
+四项各有可复跑脚本与一次首测数值（含环境说明），落入 test-results。</p>
+<p><strong>输入</strong> - 本规划 §11 指标定义 - 运行中的 compose
+栈（共享底座） - Job 表 created_at/updated_at（入库耗时来源）</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+scripts/bench/api_latency.py（新增） -
+scripts/bench/chat_ttft.py（新增） -
+scripts/bench/ingest_duration.sql（新增） -
+<code>docs/06_validation/test-results/2026-10-perf-baseline.md</code></p>
+<p><strong>Execution Steps</strong> 1. [ ] api_latency：对 GET
+/api/v1/hot/feed?page=1&amp;page_size=20 与 GET /api/v1/bots/tasks 各 50
+次，输出 p50/p95 2. [ ] chat_ttft：POST /api/v1/chat/ask 测首个 SSE data
+帧时间，10 次 3. [ ] ingest_duration：对近 7 天成功 Job 计算
+p50/p95（只读 SQL） 4. [ ] M-04 Feed DB 时间：EXPLAIN ANALYZE 复用
+2026-10-08 留证口径 5. [ ] 汇总报告写明机器、数据量、时间</p>
+<p><strong>验收标准</strong> - [ ] 四项指标均有数值或明确『无法测量 +
+原因』 - [ ] 脚本可在同环境复跑，结果偏差记录</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb25"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> scripts/bench/api_latency.py <span class="at">--base</span> http://127.0.0.1:3300 <span class="at">--n</span> 50</span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> scripts/bench/chat_ttft.py <span class="at">--n</span> 10</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-021/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>scripts/bench/**</code> -
+<code>docs/06_validation/test-results/**</code></p>
+<p><strong>禁止修改</strong> - packages/contracts/<strong>（除
+Agent-Contract 任务） -
+apps/api/alembic/versions/</strong>（除明确标注迁移版本号的任务） -
+apps/api/app/core/errors.py（除 Agent-Contract 任务） - AideanBot
+原项目任何文件（AGENTS.md 关键约束 1） - apps/**</p>
+<p><strong>依赖与阻塞</strong> - Depends on：TASK-002（栈可起） -
+Blocks：任何性能优化任务（本规划不排） - 阻塞条件：无可用会话 cookie /
+无测试数据 → 回报，不伪造</p>
+<p><strong>建议执行档位</strong> sonnect　理由：脚本编写 + 实测</p>
+<p><strong>升级条件</strong> 结果离散度 &gt; 50% → opus
+复核方法；任何任务连续 2 次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 中</p>
+<hr />
+<h3 id="task-022botbinding-死表处置条件d-03">TASK-022：BotBinding
+死表处置（条件：D-03）</h3>
+<p><strong>归属</strong> - 所属切片：S7（WP-7 待裁决处置） - 执行
+Agent：Agent-Data - 来源需求：TASK-PLAN-v0.9 S2.3 - 来源方案：—</p>
+<p><strong>目标</strong> A：删除 BotBinding 模型与表（迁移
+ab1006w6a）；B：保留并在 entities.py 注明保留理由。二选一完成。</p>
+<p><strong>输入</strong> - apps/api/app/models/entities.py（class
+BotBinding） -
+grep：除模型外仅注释提及（admin.py:16、process_heartbeat.py:27） -
+迁移链当前单头 ab1005w5b</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+A：apps/api/app/models/entities.py、apps/api/alembic/versions/ab1006w6a_drop_bot_binding.py、scripts/gen_contracts（无需）
+- B：apps/api/app/models/entities.py（注释）</p>
+<p><strong>Execution Steps</strong> 1. [ ] A：模型删除 → 新迁移
+down_revision=‘ab1005w5b’，upgrade drop_table、downgrade 重建 → 单头断言
+2. [ ] B：只加注释</p>
+<p><strong>验收标准</strong> - [ ] A：alembic heads 单头 =
+ab1006w6a；upgrade/downgrade 往返在隔离 PG 通过；全量 pytest 零回归 - [
+] B：文档登记</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb26"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> apps/api <span class="kw">&amp;&amp;</span> <span class="ex">python</span> <span class="at">-m</span> alembic heads <span class="kw">&amp;&amp;</span> <span class="ex">python</span> <span class="at">-m</span> alembic upgrade head <span class="kw">&amp;&amp;</span> <span class="ex">python</span> <span class="at">-m</span> alembic downgrade <span class="at">-1</span> <span class="kw">&amp;&amp;</span> <span class="ex">python</span> <span class="at">-m</span> alembic upgrade head</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-022/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> -
+<code>apps/api/app/models/entities.py</code> -
+<code>apps/api/alembic/versions/ab1006w6a_drop_bot_binding.py</code></p>
+<p><strong>禁止修改</strong> - packages/<strong> -
+apps/web/</strong></p>
+<p><strong>依赖与阻塞</strong> - Depends on：D-03 - Blocks：无 -
+阻塞条件：发现生产库该表有数据 → 停</p>
+<p><strong>建议执行档位</strong> sonnect（执行）+
+opus（迁移审）　理由：迁移不可逆风险</p>
+<p><strong>升级条件</strong> —；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 小</p>
+<hr />
+<h3 id="task-023embedding.py-处置条件d-06">TASK-023：embedding.py
+处置（条件：D-06）</h3>
+<p><strong>归属</strong> - 所属切片：S7（WP-7 待裁决处置） - 执行
+Agent：Agent-API - 来源需求：TASK-PLAN-v0.9 S2.6；backlog HOT-005 -
+来源方案：—</p>
+<p><strong>目标</strong> A：删除 app/providers/embedding.py 与
+tests/test_embedding.py；B：保留并登记为 HOT-005 前置。</p>
+<p><strong>输入</strong> - grep：app.providers.embedding 仅
+tests/test_embedding.py 引用</p>
+<p><strong>输出</strong>（新增/修改的文件） - A：两文件删除（rm + git
+add，遵守『禁止 git rm』） - B：backlog 注记</p>
+<p><strong>Execution Steps</strong> 1. [ ] A：rm 两文件 → 全量 pytest →
+ruff/mypy 2. [ ] B：仅文档</p>
+<p><strong>验收标准</strong> - [ ] A：git grep ‘providers.embedding’
+零命中；pytest 零回归</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb27"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> grep <span class="at">-n</span> <span class="st">&#39;providers.embedding&#39;</span><span class="kw">;</span> <span class="bu">cd</span> apps/api <span class="kw">&amp;&amp;</span> <span class="ex">pytest</span> <span class="at">-q</span></span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-023/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> -
+<code>apps/api/app/providers/embedding.py</code> -
+<code>apps/api/tests/test_embedding.py</code> -
+<code>docs/04_engineering/backlog.md</code></p>
+<p><strong>禁止修改</strong> - 其余全部</p>
+<p><strong>依赖与阻塞</strong> - Depends on：D-06 - Blocks：无 -
+阻塞条件：—</p>
+<p><strong>建议执行档位</strong> haiku　理由：删除或注记</p>
+<p><strong>升级条件</strong> pytest 红 → sonnect；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 小</p>
+<hr />
+<h3 id="task-024.project-第三方源码去留条件d-07">TASK-024：.project/
+第三方源码去留（条件：D-07）</h3>
+<p><strong>归属</strong> - 所属切片：S7（WP-7 待裁决处置） - 执行
+Agent：Agent-Guard - 来源需求：仓库卫生 - 来源方案：—</p>
+<p><strong>目标</strong> A：.project/ 移出版本库并
+gitignore；B：保留并在 README/AGENTS 说明用途与许可。</p>
+<p><strong>输入</strong> - .project/（7 个第三方项目，125M，git ls-files
+4385 个文件）</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+A：.gitignore、.project/**（rm + git add） - B：AGENTS.md 一节</p>
+<p><strong>Execution Steps</strong> 1. [ ] A：外部备份 → rm -r .project
+→ git add -u .project → .gitignore 加条目 2. [ ] B：写明用途</p>
+<p><strong>验收标准</strong> - [ ] A：git ls-files .project | wc -l ==
+0；CI 绿</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb28"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> ls-files .project <span class="kw">|</span> <span class="fu">wc</span> <span class="at">-l</span></span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-024/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> - <code>.gitignore</code> -
+<code>.project/**</code> - <code>AGENTS.md</code></p>
+<p><strong>禁止修改</strong> - apps/<strong> - packages/</strong></p>
+<p><strong>依赖与阻塞</strong> - Depends on：D-07 - Blocks：无 -
+阻塞条件：发现 apps/** 引用 .project 内文件 → 停</p>
+<p><strong>建议执行档位</strong> haiku　理由：机械操作</p>
+<p><strong>升级条件</strong> —；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 小</p>
+<hr />
+<h3
+id="task-025real-backend-e2e-解阻并转为阻塞门禁外部依赖">TASK-025：real-backend
+e2e 解阻并转为阻塞门禁（外部依赖）</h3>
+<p><strong>归属</strong> - 所属切片：S8（WP-8 真实链路验收） - 执行
+Agent：Agent-App - 来源需求：backlog TEST-002；roadmap
+v1.0『全量测试通过』 - 来源方案：—</p>
+<p><strong>目标</strong> e2e/real-backend.spec.ts 在 compose 栈上以真实
+OIDC 登录跑通 4 条用例，CI 中去掉 continue-on-error。</p>
+<p><strong>输入</strong> - apps/web/e2e/real-backend.spec.ts -
+.github/workflows/ci.yml:302-305（non-blocking） - 外部：主平台
+oidc_clients.redirect_uris 白名单、测试账号、真实文章 URL</p>
+<p><strong>输出</strong>（新增/修改的文件） -
+<code>apps/web/e2e/real-backend.spec.ts</code> -
+<code>.github/workflows/ci.yml</code></p>
+<p><strong>Execution Steps</strong> 1. [ ] 确认三项外部前置（D-08） 2. [
+] 本地栈跑通 4 用例 3. [ ] CI 侧提供测试凭据（仓库
+secret，由人配置）后去掉 continue-on-error</p>
+<p><strong>验收标准</strong> - [ ] 4 用例绿 3 次连续 - [ ] CI 中该 step
+为阻塞</p>
+<p><strong>验证命令</strong></p>
+<div class="sourceCode" id="cb29"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> apps/web <span class="kw">&amp;&amp;</span> <span class="va">E2E_REAL_BACKEND</span><span class="op">=</span>1 <span class="ex">pnpm</span> run test:e2e <span class="at">--</span> e2e/real-backend.spec.ts</span></code></pre></div>
+<p><strong>证据路径</strong>
+<code>docs/06_validation/evidence/EVD-025/</code>（PR
+描述附命令输出与提交哈希）</p>
+<p><strong>允许修改</strong> -
+<code>apps/web/e2e/real-backend.spec.ts</code> -
+<code>.github/workflows/ci.yml</code></p>
+<p><strong>禁止修改</strong> - packages/contracts/<strong>（除
+Agent-Contract 任务） -
+apps/api/alembic/versions/</strong>（除明确标注迁移版本号的任务） -
+apps/api/app/core/errors.py（除 Agent-Contract 任务） - AideanBot
+原项目任何文件（AGENTS.md 关键约束 1） - apps/api/**</p>
+<p><strong>依赖与阻塞</strong> - Depends on：D-08 - Blocks：无 -
+阻塞条件：外部前置缺任一 → blocked</p>
+<p><strong>建议执行档位</strong> sonnect　理由：脚本修复</p>
+<p><strong>升级条件</strong> 链路问题跨前后端 → opus；任何任务连续 2
+次验收失败即熔断（§10）。</p>
+<p><strong>预估规模</strong> 中</p>
+<hr />
+<h2 id="依赖-dag">8. 依赖 DAG</h2>
+<pre class="text"><code>图例：A → B 表示 B 依赖 A；[D-xx] 为人工裁决；( ) 内为执行 Agent
+
+[无前置]
+  TASK-001 (人工)            TASK-002 (Guard) ──→ TASK-003 (Doc) ←── [D-02]
+  TASK-004 (Guard)           TASK-005 (Guard)
+  TASK-016 (API)             TASK-017 (App)
+  TASK-018 (Guard)           TASK-019 (Doc)
+
+[D-09] ──→ TASK-006 (Contract) ──→ TASK-007 (Contract) ──→ TASK-008 (App)
+[D-09] ──→ TASK-012 (API) ──┐
+[D-09] ──→ TASK-013 (API) ──┴──→ TASK-014 (Contract) ──→ TASK-015 (App)
+        TASK-007 ─────────────────→ TASK-014   （同改 gen_contracts.py，必须串行）
+
+[D-01] ──→ TASK-009 (Doc/opus) ──→ TASK-010 (App) ──→ TASK-011 (Doc)
+TASK-002 ──→ TASK-021 (Guard)
+[D-05] ──→ TASK-020    [D-03] ──→ TASK-022    [D-06] ──→ TASK-023
+[D-07] ──→ TASK-024    [D-08] ──→ TASK-025</code></pre>
+<p><strong>可并行组（按机械规则判定，§7.1 四条：无共享可变状态 ∧
+契约已冻结可校验 ∧ 文件所有权不相交 ∧ 不共用迁移号；另叠加
+§8.1「Contract 与 Guard 不与实现并行改」「同时最多 3 个写入
+Agent」）</strong></p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>阶段</th>
+<th>并行组</th>
+<th>满足依据</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>P1 守卫期</td>
+<td>002 → 004 → 005 → 018（同一 Agent-Guard 会话串行）∥ 019（Doc）∥
+001（人工）</td>
+<td>Guard 期间无实现任务在跑；Guard 与 Doc
+文件集不相交（§9）；无迁移；无共享运行时状态</td>
+</tr>
+<tr class="even">
+<td>P2 实现期 A</td>
+<td>016（API）∥ 017（App）∥ 021（Guard 脚本，需 002 已合并）</td>
+<td>016 改 push_scheduler/providers，017 改 NotificationBell，021 只新增
+scripts/bench 与 test-results → 不相交；016/017 共同依赖的帧 Schema 已在
+§4.⑤ 冻结且 <code>id</code> 可选、向后兼容；无迁移。注：021
+只新增独立脚本、不改任何门禁，不属于「改守卫」，故可与实现并行</td>
+</tr>
+<tr class="odd">
+<td>P3 契约期 1（D-09 后）</td>
+<td>006 → 007（同一 Agent-Contract 会话串行）</td>
+<td>契约期无实现任务在跑</td>
+</tr>
+<tr class="even">
+<td>P4 实现期 B</td>
+<td>008（App）∥ 012（API）∥ 013（API）</td>
+<td>008 改 http.ts；012 改 bots.py + schemas/bot.py +
+schemas/<strong>init</strong>.py；013 改 hot.py + schemas/hot.py →
+不相交；依赖的错误契约（P3 产物）与响应 Schema（§4.①）已冻结；无迁移；共
+3 个写入者</td>
+</tr>
+<tr class="odd">
+<td>P5 契约期 2</td>
+<td>014</td>
+<td>单任务</td>
+</tr>
+<tr class="even">
+<td>P6 实现期 C</td>
+<td>015 ∥ 009（Doc，若 D-01 已裁决）</td>
+<td>015 改 apps/web/lib/api/<strong>，009 改 decisions/</strong> →
+不相交</td>
+</tr>
+<tr class="odd">
+<td>P7</td>
+<td>010 → 011；条件任务 020/022/023/024/025 随裁决插入实现期</td>
+<td>022 占迁移号 ab1006w6a，期间不得有其他迁移</td>
+</tr>
+</tbody>
+</table>
+<p><strong>必须串行的链</strong></p>
+<ol type="1">
+<li>006 → 007 → 008（契约源 → 生成物 → 消费方）</li>
+<li>007 → 014（同一文件
+<code>scripts/gen_contracts.py</code>，所有权相交）</li>
+<li>012/013 → 014 → 015</li>
+<li>009 → 010 → 011</li>
+<li>002 → 003；002 → 021（需能起栈）</li>
+<li>018 → 025（同改 ci.yml）</li>
+</ol>
+<p><strong>关键路径</strong>：<code>P1 守卫期 → [D-09] → 006 → 007 → {008 ∥ 012 ∥ 013} → 014 → 015</code>（不含裁决等待约
+4 个工作日）。若 D-09 延迟，可先完成 <code>P1 → P2</code>（约 1.5
+天），关键路径随裁决到达时间顺延。</p>
+<p><strong>环检测</strong>：对上图做拓扑排序（001,002,004,005,016,017,018,019
+→ 003,006,012,013,021 → 007 → 008,014 → 015；009 → 010 → 011；条件任务
+020/022/023/024/025 无出边），<strong>无环</strong>。</p>
+<hr />
+<h2 id="所有权矩阵">9. 所有权矩阵</h2>
+<table>
+<colgroup>
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>路径</th>
+<th>Contract</th>
+<th>App</th>
+<th>API</th>
+<th>Data</th>
+<th>Guard</th>
+<th>Doc</th>
+<th>人工</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>packages/contracts/**</td>
+<td>✍ 007 014</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>scripts/gen_contracts.py</td>
+<td>✍ 007 014</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>apps/api/app/core/errors.py</td>
+<td>✍ 006</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>apps/api/tests/test_error_registry.py</td>
+<td>✍ 006</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>apps/api/app/api/v1/bots.py、schemas/bot.py、schemas/<strong>init</strong>.py</td>
+<td></td>
+<td></td>
+<td>✍ 012</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>apps/api/app/api/v1/hot.py、schemas/hot.py</td>
+<td></td>
+<td></td>
+<td>✍ 013</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>apps/api/app/services/push_scheduler.py、providers/push/**</td>
+<td></td>
+<td></td>
+<td>✍ 016</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>apps/api/app/providers/embedding.py、tests/test_embedding.py</td>
+<td></td>
+<td></td>
+<td>✍ 023</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>apps/api/app/models/entities.py、alembic/versions/ab1006w6a_*</td>
+<td></td>
+<td></td>
+<td></td>
+<td>✍ 022</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>apps/web/lib/api/http.ts</td>
+<td></td>
+<td>✍ 008</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>apps/web/lib/api/{bots,hot,types,mock-data}.ts</td>
+<td></td>
+<td>✍ 015</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>apps/web/middleware.ts、app/hot/<strong>、app/public/</strong>、e2e/auth-gate.spec.ts</td>
+<td></td>
+<td>✍ 010</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>apps/web/components/NotificationBell.tsx</td>
+<td></td>
+<td>✍ 017</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>apps/web/e2e/real-backend.spec.ts</td>
+<td></td>
+<td>✍ 025</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>docker/compose.yml、docker/.env.example</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>✍ 002</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>.gitleaks.toml、.github/workflows/security.yml</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>✍ 004</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>.github/workflows/ci.yml</td>
+<td></td>
+<td>025（仅 302-305 行）</td>
+<td></td>
+<td></td>
+<td>✍ 018</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>.dockerignore</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>✍ 005</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>scripts/preflight.sh</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>✍ 018</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>scripts/bench/<strong>、docs/06_validation/test-results/</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>✍ 021</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>.gitignore、.project/**</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>✍ 024</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>AGENTS.md、README.md、docs/04_engineering/conventions.md</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>✍ 003（端口段）019（其余）</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>docs/03_solution/decisions/**</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>✍ 009</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>CHANGELOG.md、docs/04_engineering/backlog.md</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>✍ 011 019 023(B)</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>docs/**（其余）</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>✍ 019 020</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>docs/06_validation/evidence/EVD-001/**</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>✍ 001</td>
+</tr>
+</tbody>
+</table>
+<p><strong>重叠检查与消除</strong></p>
+<ul>
+<li><code>ci.yml</code>：018（Guard）与 025（App）同文件 →
+<strong>按行段拆分不够安全</strong>，规定 025 在 018 合并后才开工（025
+本就被 D-08 阻塞），时间上不重叠。</li>
+<li><code>AGENTS.md / README / conventions.md</code>：003 与 019 同文件
+→ 规定由同一 Agent-Doc 会话串行执行，003 在 019 之后（019
+跳过端口段）。</li>
+<li><code>backlog.md</code>：011、019、023(B) → 同一 Agent-Doc
+串行。</li>
+<li>其余路径无重叠。</li>
+</ul>
+<p><strong>新增 Agent 说明</strong>：在 §8.1 五个 Agent 之外增加
+<strong>Agent-Doc</strong>（只写
+docs/、README、AGENTS、CHANGELOG），理由：本轮文档任务 7 个，放进 Guard
+会使 Guard 与实现并行时违反「Guard 不与实现并行改」。</p>
+<hr />
+<h2 id="档位分配与成本预算">10. 档位分配与成本预算</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>档位</th>
+<th>用途（本轮）</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>fable</td>
+<td>不预分配；仅在 D-01 或 D-09 的裁决要推翻已冻结的 Identity /
+契约语义时启用</td>
+</tr>
+<tr class="even">
+<td>opus</td>
+<td>TASK-006（契约源）、TASK-009（安全边界 ADR）、TASK-022
+迁移审查、每切片开工前契约审、熔断升级</td>
+</tr>
+<tr class="odd">
+<td>sonnect</td>
+<td>实现、测试、生成器、配置、需核证据的文档</td>
+</tr>
+<tr class="even">
+<td>haiku</td>
+<td>纯文档替换、一行配置、机械删除</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>规则要求「默认档 =
+opus」：凡任务卡未写明档位或执行中出现卡外情况，一律按 opus 处理。卡上写
+sonnect/haiku 的，都附了理由与升级条件。</p>
+</blockquote>
+<table>
+<thead>
+<tr class="header">
+<th>切片</th>
+<th>任务数</th>
+<th>haiku</th>
+<th>sonnect</th>
+<th>opus</th>
+<th>fable</th>
+<th>人工</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>S0</td>
+<td>5</td>
+<td>2（003、005）</td>
+<td>2（002、004）</td>
+<td>0</td>
+<td>0</td>
+<td>1（001）</td>
+</tr>
+<tr class="even">
+<td>S1</td>
+<td>3</td>
+<td>0</td>
+<td>2（007、008）</td>
+<td>1（006）</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td>S2</td>
+<td>3</td>
+<td>1（011）</td>
+<td>1（010）</td>
+<td>1（009）</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td>S3</td>
+<td>4</td>
+<td>0</td>
+<td>4</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td>S4</td>
+<td>2</td>
+<td>0</td>
+<td>2</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td>S5</td>
+<td>3</td>
+<td>1–2（018、020 归档）</td>
+<td>1–2（019、020 迁移）</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td>S6</td>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td>S7</td>
+<td>3</td>
+<td>2（023、024）</td>
+<td>1（022）</td>
+<td>1（022 迁移审）</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td>S8</td>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td><strong>合计</strong></td>
+<td><strong>25</strong></td>
+<td><strong>6–7</strong></td>
+<td><strong>15–16</strong></td>
+<td><strong>4</strong></td>
+<td><strong>0</strong></td>
+<td><strong>1</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>券制度</strong>：opus 每切片 ≤3 次（契约审 / 卡住升级 /
+高风险 review）；fable 每切片 ≤1 次且须人批准；超出需人批准。</p>
+<p><strong>熔断</strong>：同一任务连续 2 次验收失败 →
+停止改代码，改为重写任务书 / 升级档位 / 标 blocked，禁止换提示词硬撞第 3
+次。</p>
+<hr />
+<h2 id="基线指标">11. 基线指标</h2>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>用户可感操作</th>
+<th>指标</th>
+<th>目标（REQ-NF-001）</th>
+<th>与用户耗时的关系</th>
+<th>首次测量值</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>M-01</td>
+<td>打开热点 Feed 首页</td>
+<td><code>GET /api/v1/hot/feed?page=1&amp;page_size=20</code> 服务端
+p95</td>
+<td>&lt;100ms</td>
+<td>首屏数据等待的主要部分；DB 时间之外还含序列化与网络</td>
+<td><strong>尚无基线</strong>（只有 DB 层 EXPLAIN，见 M-01b）</td>
+</tr>
+<tr class="even">
+<td>M-01b</td>
+<td>同上（DB 层）</td>
+<td>对应 SQL 的 EXPLAIN ANALYZE 执行时间</td>
+<td>—</td>
+<td>仅是 M-01 的组成部分，<strong>不得</strong>单独作为优化目标</td>
+<td>通知历史同类查询 0.034ms（定向）/ 约 0.38ms（5000
+行广播分支），2026-10-08 留证；Feed 查询本身<strong>未测</strong></td>
+</tr>
+<tr class="odd">
+<td>M-02</td>
+<td>打开推送任务列表</td>
+<td><code>GET /api/v1/bots/tasks</code> 服务端 p95</td>
+<td>&lt;500ms</td>
+<td>管理页首屏等待</td>
+<td><strong>尚无基线</strong></td>
+</tr>
+<tr class="even">
+<td>M-03</td>
+<td>提问到看见第一个字</td>
+<td><code>POST /api/v1/chat/ask</code> 首个 SSE data 帧时间</td>
+<td>&lt;3s</td>
+<td>直接等于用户等待</td>
+<td><strong>尚无基线</strong></td>
+</tr>
+<tr class="odd">
+<td>M-04</td>
+<td>提交一篇文章到可检索</td>
+<td>单篇入库 Job（created_at→成功终态）p50/p95</td>
+<td>&lt;30s</td>
+<td>直接等于用户等待</td>
+<td><strong>尚无基线</strong>（可从 jobs 表只读计算）</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>首测由 TASK-021 完成。<strong>在 TASK-021
+交付前，本规划不排任何性能优化任务</strong>；交付后，只有离目标最远且与用户耗时有直接关系的指标才可立项优化。</li>
+<li>已下线的候选指标：前端包体积（无证据表明它是当前用户耗时瓶颈）、聚簇耗时（后台任务，用户不直接等待）。</li>
+</ul>
+<hr />
+<h2 id="风险清单-未决问题-待裁决清单">12. 风险清单 / 未决问题 /
+待裁决清单</h2>
+<h3 id="风险">12.1 风险</h3>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>风险</th>
+<th>可能性</th>
+<th>影响</th>
+<th>应对</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>K-01</td>
+<td>泄露口令在 git 历史中永久存在（public 仓库）</td>
+<td>已发生</td>
+<td>高</td>
+<td>TASK-001 轮换是唯一有效手段；改写历史与协作纪律冲突，不做</td>
+</tr>
+<tr class="even">
+<td>K-02</td>
+<td>共享底座 PG 是否对公网可达<strong>未知</strong></td>
+<td>未知</td>
+<td>若可达则高</td>
+<td>请人确认 5435 的监听地址与防火墙</td>
+</tr>
+<tr class="odd">
+<td>K-03</td>
+<td>响应模型改造引入线上形状漂移</td>
+<td>中</td>
+<td>中</td>
+<td>快照测试为硬门禁，不一致即停</td>
+</tr>
+<tr class="even">
+<td>K-04</td>
+<td>D-01 若选「游客可看 /hot」，需开放后端匿名读，扩大攻击面</td>
+<td>视裁决</td>
+<td>中</td>
+<td>ADR-0009 列出限流与字段裁剪要求</td>
+</tr>
+<tr class="odd">
+<td>K-05</td>
+<td>其他域（spaces/jobs/subscriptions/chat）仍无响应形状契约</td>
+<td>确定</td>
+<td>中</td>
+<td>本轮只做 bot/hot；后续按同模式扩展</td>
+</tr>
+<tr class="even">
+<td>K-06</td>
+<td>多 AI 会话并行导致工作树交错（协作纪律已记录）</td>
+<td>中</td>
+<td>中</td>
+<td>执行者遵守 §1 开工取证、只 add 自己路径</td>
+</tr>
+<tr class="odd">
+<td>K-07</td>
+<td><code>.docs/</code> 两个超大文件未通读，可能漏掉未迁移需求</td>
+<td>低-中</td>
+<td>中</td>
+<td>D-05 处理时顺带检索「未实现」「待办」关键词</td>
+</tr>
+<tr class="even">
+<td>K-08</td>
+<td>本规划未本地跑测试，「1002 passed」依赖文档与 CI 绿</td>
+<td>低</td>
+<td>低</td>
+<td>第一刀开工前执行者先跑一次全量作为基线</td>
+</tr>
+</tbody>
+</table>
+<h3 id="未决问题需信息不需拍板">12.2 未决问题（需信息，不需拍板）</h3>
+<ul>
+<li>Q-01 共享底座 PG（5435）是否只监听本机？（影响 K-02 严重度）</li>
+<li>Q-02 主平台 OIDC 是否已把 BotHot 的 redirect_uri
+加入白名单？（D-08）</li>
+<li>Q-03 生产环境 bot_bindings 表是否有数据？（D-03 的前提）</li>
+<li>Q-04 <code>.project/</code>
+中的第三方项目许可证是否允许随仓库公开分发？（D-07 的前提）</li>
+</ul>
+<h3 id="待裁决清单需人拍板">12.3 待裁决清单（需人拍板）</h3>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>问题</th>
+<th>选项</th>
+<th>规划默认推荐（仅供参考，不代替裁决）</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>D-01</td>
+<td>游客访问 /hot、/hot/daily、/public</td>
+<td>A：全部需登录（现状代码）＋把真实态 302
+写进契约；B：/hot、/hot/daily 游客可看（后端开放匿名只读 +
+限流），/public 需登录；C：三者都游客可看</td>
+<td>无推荐：这是产品决定。A 改动最小</td>
+</tr>
+<tr class="even">
+<td>D-02</td>
+<td>端口与底座口径</td>
+<td>A：以共享底座为准（改 AGENTS 端口表为 5435/6379）；B：compose
+恢复栈内 PG/Redis（5433/6380），共享底座改为 override 文件</td>
+<td>B 与 AGENTS 强制约束一致，且 CI 已有 compose.ci.yml 同类做法</td>
+</tr>
+<tr class="odd">
+<td>D-03</td>
+<td>bot_bindings</td>
+<td>A 删除 / B 保留</td>
+<td>先回答 Q-03</td>
+</tr>
+<tr class="even">
+<td>D-04</td>
+<td>前端遗留错误码</td>
+<td>A 删除 / B 保留在 LEGACY 表（默认假设）</td>
+<td>B</td>
+</tr>
+<tr class="odd">
+<td>D-05</td>
+<td>.docs/ 6 项</td>
+<td>A 迁移 / B 归档</td>
+<td>B（旧文档属 AideanBot 时代，API 文档应以 OpenAPI 为准）</td>
+</tr>
+<tr class="even">
+<td>D-06</td>
+<td>embedding.py</td>
+<td>A 删除 / B 保留给 HOT-005</td>
+<td>视 HOT-005 是否立项</td>
+</tr>
+<tr class="odd">
+<td>D-07</td>
+<td>.project/</td>
+<td>A 移出版本库 / B 保留并说明</td>
+<td>先回答 Q-04</td>
+</tr>
+<tr class="even">
+<td>D-08</td>
+<td>real-backend e2e 外部前置</td>
+<td>外部提供 / 继续非阻塞</td>
+<td>—</td>
+</tr>
+<tr class="odd">
+<td>D-09</td>
+<td>ADR-0008 契约唯一源</td>
+<td>批准 / 否决</td>
+<td>批准（与现有 gen_contracts 方向一致，只是扩大覆盖）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="落盘清单">13. 落盘清单</h2>
+<p>见下表（路径均相对仓库根，写在本地分支
+<code>plan/2026-10-12-remaining-tasks</code>，<strong>未推送</strong>）。</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>路径</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>docs/04_planning/current-plan.md</code></td>
+<td>本规划全文（16 节）</td>
+</tr>
+<tr class="even">
+<td><code>docs/03_solution/design/DESIGN-001-contract-freeze-pack.md</code></td>
+<td>六份契约冻结包（与 §4 同文）</td>
+</tr>
+<tr class="odd">
+<td><code>docs/03_solution/decisions/adr-0008-contract-single-source.md</code></td>
+<td>ADR-0008 契约唯一源（proposed）</td>
+</tr>
+<tr class="even">
+<td><code>docs/03_solution/decisions/adr-0009-guest-access-policy.md</code></td>
+<td>ADR-0009 访客访问策略（proposed，待 D-01）</td>
+</tr>
+<tr class="odd">
+<td><code>docs/03_solution/decisions/adr-0010-externalize-connection-strings.md</code></td>
+<td>ADR-0010 连接串外置（proposed）</td>
+</tr>
+<tr class="even">
+<td><code>docs/05_execution/task-template.md</code></td>
+<td>任务卡模板（16 字段）</td>
+</tr>
+<tr class="odd">
+<td><code>docs/05_execution/task-index.md</code></td>
+<td>任务索引（25 张卡，状态/依赖/档位）</td>
+</tr>
+<tr class="even">
+<td><code>docs/05_execution/tasks/TASK-001.md … TASK-025.md</code></td>
+<td>25 张原子任务卡</td>
+</tr>
+<tr class="odd">
+<td><code>docs/00_governance/glossary.md</code></td>
+<td>末尾追加「规划期新增术语」一节</td>
+</tr>
+<tr class="even">
+<td><code>docs/03_solution/decisions/adr-index.md</code></td>
+<td>登记 ADR-0008/0009/0010（proposed）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>未写入（及原因）</strong></p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>路径</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>docs/03_solution/architecture.md</td>
+<td>已存在且 active；本规划不改架构，只在 ADR 中提议</td>
+</tr>
+<tr class="even">
+<td>docs/04_planning/roadmap.md</td>
+<td>已有
+<code>docs/04_engineering/roadmap.md</code>，再建一份会成为第二来源；切片路线已在本文件
+§6</td>
+</tr>
+<tr class="odd">
+<td>packages/contracts/**</td>
+<td>契约变更须先批准
+ADR-0008（AGENTS「先登记后实现」）；目标产物样式已冻结在 §4，由
+TASK-007/014 生成</td>
+</tr>
+<tr class="even">
+<td>database/migrations/001_init.sql</td>
+<td>alembic 是唯一迁移源，v0.7 裁定不启用该目录（§5）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="自检结果">14. 自检结果</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>项</th>
+<th>结果</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>每条 MUST 可写成可验证句</td>
+<td>✅</td>
+<td>§3.2 R-M1…R-M5</td>
+</tr>
+<tr class="even">
+<td>冲突全部列出，未替用户决定</td>
+<td>✅</td>
+<td>C-01…C-07；D-01/D-02 未擅定</td>
+</tr>
+<tr class="odd">
+<td>BLOCKING 已列并给条件方案</td>
+<td>✅</td>
+<td>§3.4、§12.3</td>
+</tr>
+<tr class="even">
+<td>未伪造需求或方案</td>
+<td>✅</td>
+<td>无新功能；每项附证据</td>
+</tr>
+<tr class="odd">
+<td>六份契约齐全、机器可校验</td>
+<td>⚠️ 部分</td>
+<td>错误码、bot/hot
+响应、通知帧可机器校验；其余域响应形状未覆盖（K-05），本轮不需要</td>
+</tr>
+<tr class="even">
+<td>唯一源已指定</td>
+<td>✅（待 D-09）</td>
+<td>ADR-0008</td>
+</tr>
+<tr class="odd">
+<td>三方能凭契约独立开工</td>
+<td>✅（对本轮任务）</td>
+<td>§4.4</td>
+</tr>
+<tr class="even">
+<td>错误码覆盖已知失败路径</td>
+<td>✅</td>
+<td>23 码</td>
+</tr>
+<tr class="odd">
+<td>管理端越权路径已禁止</td>
+<td>✅</td>
+<td>§4.③</td>
+</tr>
+<tr class="even">
+<td>按垂直切片划分</td>
+<td>✅</td>
+<td>§6</td>
+</tr>
+<tr class="odd">
+<td>每刀可独立演示验收</td>
+<td>✅</td>
+<td>§6 演示列</td>
+</tr>
+<tr class="even">
+<td>第一刀是步行骨架</td>
+<td>⚠️ 已存在</td>
+<td>骨架已在代码中（§6 首段证据）；S0 负责让它安全可复现</td>
+</tr>
+<tr class="odd">
+<td>任务卡 16 项字段齐全</td>
+<td>✅</td>
+<td>25 张卡，生成器统一渲染</td>
+</tr>
+<tr class="even">
+<td>每张卡有验证命令</td>
+<td>✅</td>
+<td>TASK-001 为人工命令</td>
+</tr>
+<tr class="odd">
+<td>每张卡有允许/禁止路径</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>每个任务可追溯到需求</td>
+<td>✅</td>
+<td>「来源需求」字段</td>
+</tr>
+<tr class="odd">
+<td>DAG 无环</td>
+<td>✅</td>
+<td>§8</td>
+</tr>
+<tr class="even">
+<td>并行结论附机械依据</td>
+<td>✅</td>
+<td>§8 可并行组表</td>
+</tr>
+<tr class="odd">
+<td>关键路径已标</td>
+<td>✅</td>
+<td>§8</td>
+</tr>
+<tr class="even">
+<td>所有权矩阵无重叠</td>
+<td>✅（经时序消除）</td>
+<td>§9 三处同文件按串行消除</td>
+</tr>
+<tr class="odd">
+<td>每任务有档位与理由</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>成本预算表</td>
+<td>✅</td>
+<td>§10</td>
+</tr>
+<tr class="odd">
+<td>基线指标有首测或标「尚无基线」</td>
+<td>✅</td>
+<td>§11</td>
+</tr>
+<tr class="even">
+<td>风险/未决/待裁决分开</td>
+<td>✅</td>
+<td>§12</td>
+</tr>
+<tr class="odd">
+<td>未修改业务代码</td>
+<td>✅</td>
+<td>只写 docs/</td>
+</tr>
+<tr class="even">
+<td>无无证据绝对结论</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>未用「最佳实践」替代证据</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>未验证项已标注</td>
+<td>✅</td>
+<td>§2.2</td>
+</tr>
+</tbody>
+</table>
+<p>两项 ⚠️
+已说明理由，不属于「带着未过项输出」：一项是本轮范围外的契约覆盖，一项是骨架已存在无需重建。</p>
+<hr />
+<h2 id="本次规划的前提与局限">15. 本次规划的前提与局限</h2>
+<ul>
+<li>基线钉在 <code>main@60e5723</code>。并行会话若之后推进了
+main，执行者开工前须按协作纪律 §1 重新取证，冲突时以新 HEAD
+为准并更新本文件。</li>
+<li>未本地运行后端 pytest、前端 vitest/e2e、compose
+起栈；测试数与可运行性依赖 AGENTS.md 记载与 GitHub Actions 结论。</li>
+<li>外部系统（主平台、共享底座、LangBot、推送渠道、文章平台）全部未实测。</li>
+<li><code>.docs/</code> 两个超大历史文件只抽样，见 K-07。</li>
+<li>工期估算基于任务规模经验，没有本项目的历史速度数据，只能作排序参考。</li>
+<li>档位名沿用指令中的
+<code>fable / opus / sonnect / haiku</code>。</li>
+</ul>
+<hr />
+<h2 id="建议的第一刀与启动顺序">16. 建议的第一刀与启动顺序</h2>
+<p><strong>第一刀 = S0 安全止血</strong>，原因：public
+仓库中有可用口令（F-10），这是唯一在持续造成风险的问题，而且不依赖任何裁决。</p>
+<p>启动顺序：</p>
+<ol type="1">
+<li><strong>今天，人工</strong>：TASK-001 轮换 <code>bothot_rw</code>
+口令；回答 Q-01（5435 是否对外）。</li>
+<li><strong>P1 守卫期</strong>：Agent-Guard 一个会话串行做 002 → 004 →
+005 → 018；同时 Agent-Doc 做 019（跳过端口段）。</li>
+<li><strong>P2 实现期 A</strong>：016（API）、017（App）、021（Guard
+新增测量脚本）三个并行。</li>
+<li><strong>把 D-01、D-02、D-09 三个裁决交给人</strong>。D-09 批准后进入
+P3（006 → 007）与 P4（008 ∥ 012 ∥ 013）。</li>
+<li>D-02 裁决后，Agent-Doc 在 019 之后做 003。</li>
+<li>D-01 裁决后做 009 → 010 → 011；D-03/D-05/D-06/D-07/D-08
+随到随插。</li>
+</ol>
+</body>
+</html>
