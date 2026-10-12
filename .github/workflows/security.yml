@@ -415,9 +415,12 @@ jobs:
       #      `contents: read`，不为一个可由日志替代的功能扩大权限。
       #   钉二进制直接跑，参数即文档。
       #
-      # 扫描域配置在**运行时**生成（$RUNNER_TEMP），不入库：
-      #   本工作流的文件所有权不含 `.gitleaks.toml`（新增仓库文件会与他路工作流冲突），
-      #   而"不排除第三方源码"会让 4385 个 .project/ 文件里的示例密钥淹没本仓结论。
+      # 扫描域配置 = 仓库根 `.gitleaks.toml`（入库、可人审、可本地复跑）。
+      #   旧做法是在运行时用 heredoc 生成 $RUNNER_TEMP/gitleaks.toml，只带 allowlist、
+      #   完全依赖上游默认规则——而默认规则按已知 token 前缀匹配，不认识
+      #   `postgresql+psycopg://<账号>:<口令>@host` 这类自定义 DSN 内嵌口令，
+      #   导致 01f6892 引入 compose.yml:157 明文口令时本步结论为 success（漏检）。
+      #   配置入库后，新增仓库文件的所有权争议已不存在：本工作流就是它的使用方。
       - name: "④ gitleaks — 明文密钥与凭据"
         id: gitleaks
         continue-on-error: true
@@ -433,34 +436,19 @@ jobs:
           fi
           tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
 
-          cat > "$RUNNER_TEMP/gitleaks.toml" <<'TOML'
-          title = "BotHot gitleaks（CI 扫描域）"
-
-          [extend]
-          useDefault = true
-
-          [allowlist]
-          description = "第三方参考源码与构建产物：非本项目代码，其示例密钥（.env.example / fixture）不在本项目责任范围；不排除则本仓结论被 4385 个 .project/ 文件淹没"
-          paths = [
-            '''\.project/''',
-            '''langbot_plugins''',
-            '''node_modules/''',
-            '''\.next/''',
-            '''dist/''',
-            '''build/''',
-            '''coverage/''',
-            '''apps/web/test-results/''',
-            '''apps/web/playwright-report/''',
-          ]
-          TOML
-
           set +e
+          # 配置文件缺失 = 扫描域未知 = 不能当作"没扫出问题"：显式前置校验，
+          # 让它落到 rc!=0/1 的 SCANNER_ERROR 分支（fail-closed），而不是假绿。
+          if [ ! -f .gitleaks.toml ]; then
+            echo "❌ .gitleaks.toml 不存在：扫描域（规则 + 白名单）失去单一来源"
+            exit 0
+          fi
           # --redact：CI 日志与 JSON 报告中的密钥一律打码。这不只是好看——
           # 报告会作为 artifact 长期留存，未打码等于把密钥又复制了一份。
           # --exit-code 1：检出即 1（其余非 0 码留给"工具自身故障"，两者必须可分）。
           /tmp/gitleaks detect \
             --source . \
-            --config "$RUNNER_TEMP/gitleaks.toml" \
+            --config .gitleaks.toml \
             --report-format json \
             --report-path gitleaks.json \
             --exit-code 1 \

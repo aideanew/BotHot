@@ -1,0 +1,210 @@
+# ============================================================
+# BotHot gitleaks 扫描域配置（唯一来源；CI 直接 `--config .gitleaks.toml`）
+# ============================================================
+# 为什么入库而不再在 CI 里运行时生成（原方案见 security.yml 旧注释）：
+#   规则本身是安全边界的一部分。藏在 heredoc 里既不能被人审、也不能本地复跑，
+#   上次 compose.yml:157 的明文口令漏检正是因为「只依赖上游默认规则」——
+#   上游规则按已知 token 前缀（AKIA…/ghp_…/-----BEGIN…）匹配，不认识
+#   postgresql+psycopg://<账号>:<口令>@host 这类**自定义 scheme 内嵌口令**。
+#
+# 版本要求：gitleaks 8.21.2（与 .github/workflows/security.yml 的 GITLEAKS_VERSION 同源）。
+# 正则方言：RE2 —— **不支持 lookahead**，因此"排除占位口令"只能走 allowlist，
+# 不能写成 (?!...)。改规则前请先跑本文件末尾的一次性证明命令。
+
+title = "BotHot gitleaks 扫描域"
+
+[extend]
+useDefault = true
+
+# ── 规则 1：URL / DSN 内嵌口令 ──────────────────────────────
+# 匹配 shape：  scheme://<userinfo>:<SECRET>@<host>
+# 关键约束（都是为了让误报可控）：
+#   · user 段禁 "/"、":"、空白与引号 → 不会跨过 "://" 往左吃
+#   · pass 段禁 "/" → `http://h:8080/a@b` 这类「端口 + 路径含 @」不命中
+#     （代价：口令里真的含 "/" 时漏检；DSN 里 "/" 须 URL 编码，实践可接受）
+#   · scheme 允许字母开头 + "+.-"（postgresql+psycopg / http / redis / amqp…）
+#   · 无 `:` 或无 `@` 的 URL（redis://host:6379/1、https://x.io/y）天然不命中
+[[rules]]
+id = "connection-string-embedded-password"
+description = "连接串内嵌明文口令（scheme://<账号>:<口令>@<主机>）——上游默认规则不认识自定义 DSN scheme"
+regex = '''(?i)[a-z][a-z0-9+.\-]*://[^:/\s"']+:[^@/\s"']+@'''
+keywords = ["://"]
+
+# 占位/一次性凭据白名单：这些值**不是秘密**，把它们当告警会让门禁长期红灯、
+# 从而训练所有人忽略红灯 —— 那才是真正的安全风险。
+# 两类：
+#   (1) 尖括号 / 变量引用占位符（`<password>`、`${TOKEN}`、`$TOKEN`）——值在运行时才存在；
+#   (2) 本地与 CI 固定占位口令（bothot / aideanbot / change-me / nobody / test …）。
+# 注意：交替项必须**整段**匹配到 "@"，所以"口令段是别的真实串"不会被误放行——
+# 命中 "bothot" 后下一个字符若不是 "@" 就落空，其余交替项也全部落空。
+# （那条例面口令的**字面值不写在本文件里**：写进来就是把它再泄露一次，而且本规则对
+#   "裸露口令词"形态**不匹配、看不见**——它只认"协议 + 账号 + 口令 + @"连成一体的邻接形状。
+#   规划 §TASK-002 验收注已定此口径："口令本身不该出现在任何入库文件里"。）
+[[rules.allowlists]]
+description = "占位符口令（变量引用 / 尖括号模板）与本地-CI 固定占位凭据（非秘密）"
+regexes = [
+  # "@" 前紧邻的一段是**展开式/模板**而非字面口令：`${VAR}`、`${VAR:-default}`、`$VAR`、`<pass>`、`%s`
+  # （只锚 "@" 前一段，避免 "${USER:-x}:${PW}" 这类"用户段含冒号"导致整段匹配落空）
+  '''[:/](?:\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|<[^>\s]+>|%[sdv])@''',
+  # 明文占位口令白名单 —— **刻意不含** root/admin/user/pass/password/secret/test/example
+  # 这类"生产里真有人用的弱口令"：一旦列进来，等于告诉攻击者把这些词换成
+  # 真实口令即可零成本绕过扫描（弱口令本身才是该拦的东西）。
+  # 只收明显的假值：项目专用占位账号名 + 语义上不可能成为秘密的词。
+  '''://(?:[^:/\s"@]+|<user>):(?:bothot|bothot_dev|bothot_ci|aideanbot|nobody|nosuch|not_a_secret)@''',
+]
+
+# 按**角色**豁免的文件：实测后**只留一条**，每条都有反证理由（不是"先加上保险"）。
+# 这里原本还可能有 `scripts/rotate_keys.sh`、`.docs/`（80 个文件）、`docs/07_release/`，
+# 以及下面曾经写着的 `docker/compose\.ci\.yml` 与 `\.github/workflows/ci\.yml` 两条。
+# 逐条反证（复现器见文件末尾；每次只删一条 paths 行后重跑三档）：
+#   · 删 compose.ci.yml 那条 → tracked 35/告警0 · worktree 48/告警0 · history 44/告警0（全不变）
+#   · 删 ci.yml 那条        → 三档同样全不变
+#   · 删 .env.example 那条   → history 44 命中 → **告警 1**
+#       FLAG dca56b0 docker/.env.example 的模板 DATABASE_URL 行
+#   ⇒ 前两条**一行都不必要**（它们没有任何命中需要被放行），却各自买到"该路径下任何
+#     字面口令永远看不见"的远期失明，故删；第三条是**load-bearing**，留。
+# `docker/.env.example` 为什么必须豁免：命中的是模板惯例占位值。不豁免的代价是让
+# Security 门禁**永久红灯**（§3.5 禁止改写 git 历史），红灯一旦常态化就没人看了。
+# 为什么不用"把占位值加进词表"代替：词表是对**任意文件**生效的
+# 「scheme 协议 + 任意账号 + 该占位口令 + 任意主机」，等于公开教人"口令写这个占位词就绕过扫描"；
+# 路径豁免只关掉这一个模板文件的盲点，爆炸半径小两个数量级。
+# ⚠ 诚实说明（推翻本文件上一版的说法）：全局/规则 paths 是对整条路径做 regex **search**，
+#   `(^|/)` + `$` 只保证"以 docker/.env.example 结尾、且前一段是目录边界"，它**并不**限定在仓库根：
+#   `x/docker/.env.example`、`.project/lux/x/docker/.env.example`、`apps/api/tests/fixtures/docker/.env.example`
+#   同样被豁免。上一版注释声称锚定"能挡住第三方目录里的同名文件"，该结论**已被证伪**并删除。
+#   现状可接受的唯一理由：这些形状不存在真实凭据（`.project/` 本就整体豁免）；
+#   补偿控制待建（见计划大纲 G-11：paths 改 `^docker/\.env\.example$` 需先实测
+#   gitleaks 是否按仓库根相对路径给出 path，否则根锚定会失效）。
+[[rules.allowlists]]
+description = "模板占位凭据：此文件里的连接串按约定就是占位值（实测 load-bearing，另两条已删）"
+paths = [
+  '''(^|/)docker/\.env\.example$''',
+]
+
+# 历史登记：01f6892 引入 compose.yml:157 明文口令。该串已随 TASK-002 从工作树移除、
+# 随 TASK-001 完成账号轮换；计划 §3.5 明确**禁止改写 git 历史**，因此不消除历史出现，
+# 只在此登记，避免 Security 门禁永久红灯（红灯一旦常态化就没人看了）。
+[[rules.allowlists]]
+description = "已轮换并已移出工作树的历史提交（改写历史被禁止，故按 commit 登记）"
+commits = [
+  "01f6892de76b3c328ac094ab7522e843a3c11414",
+]
+
+# ── 全局白名单：扫描域收窄 ─────────────────────────────────
+# .project/ 是 131M 第三方参考源码（4385 文件），其中示例密钥极多。
+# 这些不是本项目代码、也不由本项目分发凭据 → 整体排除；
+# 其许可证合规问题另见 TASK-024 / 裁决 D-07（那是法务问题，不是密钥问题）。
+[allowlist]
+description = "第三方参考源码、依赖目录与构建产物：非本项目代码，不在本项目责任范围"
+paths = [
+  '''\.project/''',
+  '''langbot_plugins''',
+  '''node_modules/''',
+  '''\.next/''',
+  '''dist/''',
+  '''build/''',
+  '''coverage/''',
+  '''apps/web/test-results/''',
+  '''apps/web/playwright-report/''',
+]
+# 与上面 rule 级 commits **同值的双写**：`[[rules.allowlists]]`（复数）是 v8.21.0 才
+# 替换 `[[rules.allowlist]]`（单数）的形式，而 8.21.2 自带的 default gitleaks.toml 里
+# 仍是单数 —— 本机无二进制无法证伪。故在此双写做冗余保险。
+# ⚠ 但**不要**把双写当成安全网的心理安慰：gitleaks v8 的配置加载走 koanf，
+#   未识别的键是**被忽略**而不是硬报错（上一版注释断言"版本不认会硬报错"，此断言无据、
+#   且与 koanf 的既有行为相悖 ⇒ 已删除该断言）。真实失效模式是**静默的**：
+#   若复数键被忽略，占位白名单与路径豁免一起消失 → Security 首跑不是"响亮地报错"，
+#   而是**几十条 finding 的红灯墙**，其结果是团队把门禁关掉 —— 那才是这条配置最坏的结局。
+#   因此下面的"配置加载自检 fixture"是**必需项**，不是可选加固。
+# ⚠ 代价要讲清楚：.project/ 一条就豁免 4385/4958 个跟踪路径 ⇒ 本规则的**实际扫描域
+#    只有 573 个第一方文件**。第三方源码里的示例密钥不属本项目凭据，但"vendored 目录
+#    整体免扫"是 TASK-024 / 裁决 D-07 必须重新裁决的范围问题，不是这里可以顺手解决的。
+commits = [
+  "01f6892de76b3c328ac094ab7522e843a3c11414",
+]
+
+# ============================================================
+# 一次 Actions 运行前的已知局限（务必读）
+#   本机无 gitleaks 二进制，且 RE2 与 Python re **不是同一引擎**：
+#     · RE2 无 lookahead —— 本文件因此**没有**使用 lookahead；
+#     · RE2 的 `\s` = `[\t\n\f\r ]`，Python 的 `\s` 另含 `\v`、`\x1c`–`\x1f`、U+0085、U+00A0 等
+#       （已实证：口令段内含一个 `\x0b` 的 DSN，RE2 判命中、Python 判不命中）；
+#     · `\w` 在 RE2 是 ASCII 域、Python 是 Unicode 域。
+#   下面的"离线回放"用 Python 解释本文件正则，是**近似**不是等价；回放里已把 `\s`
+#   改写成 `[\t\n\f\r ]` 以贴近 RE2，但**"0 告警"仍只是下界**，不能替代 CI 实跑。
+#
+# 离线回放结果（复现器：`python docs/任务规划V0.1.0/_workspace/gitleaks_replay.py tree|worktree|history`）
+# ⚠ 命中总数**不是判据**，"告警 0"才是；总数会随工作区里"未跟踪且未被忽略"的文件数漂移
+#   （本轮实测候选路径数从 4998 → 4999 → 5000，只因计划目录里新增了大纲与 .gitignore）。
+# ⚠ **副本残留会污染计数**（2026-10-12 由复审纠正，我原来的复现指令是自相矛盾的）：
+#   - 用 `_workspace/.probe_copy.local.toml` 这个名字复制 ⇒ worktree **仍是 46**，因为
+#     `_workspace/.gitignore` 第 6 行 `*.local.toml` 把它排除了，它根本没进扫描域；
+#   - 用**非忽略名**（如 `_workspace/probe_copy.toml`）复制 ⇒ worktree 46 → **52**，
+#     增量 6 **恰等于**本文件的自命中处数（3 处描述匹配形状的注释 + 3 处下面 fixture 的
+#     printf 命令行，全部被占位符 regexes 放行）；删掉副本回到 46。
+#   ⇒ 两个数字合起来才是一条完整证据：**忽略规则确实在起作用**，且**副本的影响量 = 自命中数**。
+#   （刻意不写这些命中的行号：本文件会继续被编辑，实测上一版写下的行号在一次改动后就整体错位。
+#     要复算请跑 `.gitleaks.toml` 里那条 `compile_rule_regex` 单行命令，别引用行号。）
+#   · 工作树 tracked（4958 个跟踪路径，全局 paths 先排除 4385 → 实扫 573）：
+#     本规则命中 **35** 行 → 白名单覆盖 35 → **告警 0**（rc=0）
+#     —— 注意本文件**不在**这一档：它还未入库，tracked 档看不见它。守卫自己的配置
+#     必须由下一档覆盖，这也是本文件把 worktree 档列为权威档的原因。
+#   · 工作树 tracked+untracked（**含本文件与整个计划目录**；候选路径数随未跟踪文件增减而变，
+#     本轮实测 5000，不把它当判据）：
+#     命中 **46** 行 → **告警 0**（rc=0）
+#     —— 这一档才是"将要提交的内容"。上一版只跑 tracked，于是本文件自己的自命中
+#     （注释里的示例形状）完全不在扫描域内；守卫的扫描域必须包含未跟踪的新文件，
+#     否则"新写的守卫配置绕过守卫自己"这类事永远不会被发现。
+#     本文件自身的命中全部落在"描述匹配形状"的注释与下面 fixture 的 printf 拼装命令行上，
+#     且全部被占位符 regexes 放行 ⇒ 告警 0。
+#     ⚠ 递归陷阱（本轮实证）：**用散文描述这个计数本身会改变计数**——我在下面 fixture 之前
+#     一度写出"46 里有 6 行…"并附上拼装形状，那句话自己就成了新命中，于是 6 变成 7。
+#     故此处只用文字指代形状、不写出可匹配的样例；样例只保留在必须可复制执行的命令行里。
+#   · 全历史（93 个 commit 的增量行）：命中 **44** 行 → 经 commits 登记 + **1 条**路径豁免
+#     **告警 0**（rc=0）
+#   · 检出能力坐实（同一条历史、只删 commits 登记的对照跑）：
+#     `sed '/^commits = \[/,+2d' .gitleaks.toml > docs/任务规划V0.1.0/_workspace/.gitleaks_nocommits.local.toml`
+#     `GITLEAKS_TOML=docs/任务规划V0.1.0/_workspace/.gitleaks_nocommits.local.toml python …/gitleaks_replay.py history`
+#     → 命中 44 → **告警 1** = `01f6892` 在 `docker/compose.yml:157` 引入的那条内嵌口令行（rc=1）。
+#       该行口令的**字面值不在本文件复述**：入库文件里再写一次等于二次泄露，而本规则对
+#       裸露口令词形态**看不见**（它只认"协议 + 账号 + 口令 + @"连成一体的邻接形状）。
+#       ⇒ 已知盲区 G-14：**"0 告警"绝不等于"无凭据"**；字面值的检查只能由仓库外的值域完成
+#         （运维工单里的旧口令 + 人工/CI 用 secret 注入比对），仓库内只能做形状断言。
+#         本仓库为 **public**（见 adr-0010:15），所以"把口令写进入库文件"不是假设风险而是既成事实。
+#     即：CI 里那条历史静默**只**因为 commits 登记，不是因为规则抓不到；且它是按
+#     "finding 所在 commit"粒度放行的，新提交里重复同一形状**仍会被抓**。
+#   · 正例（必须命中且不被放行）：DSN 口令段为**字面量**时一律命中，形状即
+#     scheme://<账号>:<字面口令>@<主机>。本文件不能内嵌这类示例——写了就会被自己的规则
+#     抓到（已实证：注释示例形状一度产生 3 条自告警）。**守卫配置必须先过自己的守卫。**
+#   · 反例（必须不命中）：`redis://host.docker.internal:6379/1`（只有端口、无口令）
+#   · 弱口令词表是**故意留空**的：root/admin/user/pass/password/secret/test/example 一律
+#     不豁免，否则等于告诉攻击者"换这几个词就绕过扫描"。
+#   · 已知残留风险（不在本文件解决）：见上 ⚠ 扫描域 573/4958；以及
+#     `docs/**` 里若出现字面 DSN 会由**计划目录**产生 finding——计划正文已改为占位形状。
+#
+# 在装有 gitleaks 的机器上各跑一次，输出贴进 PR（这是验收硬条件，本机做不到）：
+#   gitleaks version   # 期望 8.21.2，与 ci.yml/security.yml 钉的版本一致
+#   gitleaks detect --config .gitleaks.toml --no-git -s . -v --exit-code 0; echo rc=$?
+#     # 期望 rc=0：HEAD 工作树 0 告警
+#   ⚠⚠ **配置加载自检（必需，不可选）** —— 上面 rc=0 **不能**证明 allowlists 生效：
+#      gitleaks v8 用 koanf 读配置，未知键被**忽略**，于是"复数键不认"这种写错的方式
+#      不报错、只是静默少了一层放行。用两条 fixture 把它变成**定向诊断**：
+#        mkdir -p /tmp/glfix
+#        S=postgresql+psycopg; U=u; P='Rea1ly-L1teral-Pw'
+#        printf 'DB=%s://%s:%s@h:5432/db\n' "$S" "$U" "$P" > /tmp/glfix/bad.txt
+#        printf 'DB=%s://%s:%s@h:5432/db\n' "$S" bothot change-me > /tmp/glfix/ok.txt
+#        gitleaks detect --config .gitleaks.toml --no-git -s /tmp/glfix -v --exit-code 0
+#      （两条命令都用 `%s` 运行时拼装，**本文件里不出现** <scheme>://<账号>:<口令>@ 形状——
+#        已实证：直接在注释里写出这类示例，本文件会被自己的规则抓到；这个坑已踩过三次。）
+#      期望：**只有 bad.txt 那一条 finding**，ok.txt 0 条。
+#        · 若 ok.txt 也报 ⇒ allowlists 未加载（键名形式与本机 gitleaks 版本不匹配）→ 改回单数形式重测；
+#        · 若 bad.txt 不报 ⇒ 规则本身未加载，本文件等于空配置，门禁全绿是假绿；
+#        · 两条都报 ⇒ 仅路径/词表放行失效；两条都不报 ⇒ 整个 config 被忽略。
+#      这把"静默失效"四种结局区分开，是把上面的 commits 双写从心理安慰变成可验证事实的唯一办法。
+#   gitleaks detect --config .gitleaks.toml --log-opts '01f6892^..01f6892' -v --no-banner
+#     # 期望 rc=0 且无 finding（commits 登记生效）
+#   sed '/^commits = \[/,+2d' .gitleaks.toml > /tmp/gl.toml
+#   gitleaks detect --config /tmp/gl.toml --log-opts '01f6892^..01f6892' -v --no-banner
+#     # 期望报出 compose.yml:157 —— "补规则前漏检、补规则后检出"的直接对照
+#     # 注意：对照文件写到 /tmp，**不要**写进本仓库工作区（会被 worktree 档扫到、污染命中总数）
+# ============================================================
