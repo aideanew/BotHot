@@ -5,11 +5,12 @@
 不查库、不抓取、不抛业务异常：无法识别的输入一律以空串字段返回，由调用方决定降级路径。
 
 为什么单独成模块（而不是继续在 `app/services/kb.py` 里打补丁）：
-`kb.py:587-593` 的 `_biz_from_url` 只读 `biz`，而微信长链的真实参数名是 `__biz`
+改前的 `kb._biz_from_url` 只读 `biz`，而微信长链的真实参数名是 `__biz`
 （形状见 `apps/api/tests/fixtures/wechat_urls.py:45`），长链入库时 biz 恒为空串；
 `kb.py:554-557` 的 `_article_key` 取 URL 末段，长链末段是 `s` ⇒ 同账号两篇文章坍缩为同一键
 （探针 P-3，`docs/任务规划V0.2.0/evidence/probe_longlink_collision.py`）。
-身份口径必须只有一处定义，否则「解析」与「幂等键」会在两个文件里各说各话。
+身份口径必须只有一处定义，否则「解析」与「幂等键」会在两个文件里各说各话
+——S2.1.3 已把 `kb._biz_from_url` 改成委托本模块（`kb.py:587-591`），这段是**改前根因**的记录。
 """
 
 from __future__ import annotations

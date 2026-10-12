@@ -585,12 +585,10 @@ def _short_link_key(url: str) -> str:
 
 
 def _biz_from_url(url: str) -> str:
-    """URL 中的 biz 参数（短链/长链 query 携带）；无则空串。"""
-    from urllib.parse import parse_qs, urlparse
+    """URL 中的号主标识；口径单点取自 article_identity。"""
+    from app.services.article_identity import parse_wechat_url
 
-    qs = parse_qs(urlparse(url).query)
-    val = qs.get("biz", [""])
-    return val[0] if val else ""
+    return parse_wechat_url(url).biz
 
 
 def _safe_filename(title: str) -> str:

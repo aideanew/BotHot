@@ -1,10 +1,11 @@
 """STEP-02 / S2.1.1：`parse_wechat_url` 的先红用例（P0-1 前半，不依赖 ADR-0011）。
 
-存在理由：`app/services/kb.py:587-593` 的 `_biz_from_url` 只读 `biz`，而微信长链的真实参数名
+存在理由：改前 `app/services/kb.py` 的 `_biz_from_url` 只读 `biz`，而微信长链的真实参数名
 是 `__biz`（形状见 `tests/fixtures/wechat_urls.py:45`）⇒ 长链入库时 biz 恒为空串，
 `_find_source_by_anchor` 只剩 article_key 锚 + `Source.url.like(f"%{article_key}%")` 兜底
 （`kb.py:359`）——D-01b 与探针 P-4 崩溃都从这条路径进来。本文件先把**解析层**的语义钉住，
-实现见 `app/services/article_identity.py`（S2.1.2）；S2.1.3 再让 `kb._biz_from_url` 委托它。
+实现见 `app/services/article_identity.py`（S2.1.2）；`kb._biz_from_url` 已委托它（S2.1.3，
+`kb.py:587-591`，证明在 `EVD-V2-02/prove_biz_delegation.py`）。
 
 口径来源（逐条对应卡面 S2.1.1 交付项）：
 - 同 biz 不同 mid：`tests/fixtures/wechat_urls.py:45-46`（探针 P-3 的坍缩对）
@@ -160,9 +161,9 @@ def test_non_string_input_yields_empty_parts_without_raising():
 def test_wechat_params_on_foreign_host_are_still_parsed():
     """当前口径：解析与 host 无关——外链带微信参数照样解出 biz/mid/idx/sn。
 
-    这条不是「漏洞尚未修」，而是**被用例钉住的待定项**：`kb._biz_from_url`（`kb.py:587-593`）
-    的既有行为同样只看查询串，S2.1.3 委托后若擅自加 host 闸门，所有非微信源解析出的 biz
-    都会变成空串 ⇒ 影响面超出本卡，须经裁决定案。将来定案后要**同步改这条用例**——
+    这条不是「漏洞尚未修」，而是**被用例钉住的待定项**：委托后的 `kb._biz_from_url`
+    （`kb.py:587-591`）口径即本模块，同样只看查询串，若擅自加 host 闸门，所有非微信源解析出的
+    biz 都会变成空串 ⇒ 影响面超出本卡，须经裁决定案。将来定案后要**同步改这条用例**——
     它变绿不代表回归，代表口径已变更。
     """
     parts = parse_wechat_url("https://evil.example.com/s?__biz=MjM5&mid=1&idx=2&sn=aa")

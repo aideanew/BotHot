@@ -1,5 +1,7 @@
 # STEP-02 S2.1.1/S2.1.2 本机执行原始留档（不启服务、不装依赖）
-# 时间 2026-10-12T21:20:51+08:00｜HEAD=b69123f+工作区未提交改动｜Python 3.11.9｜win32｜全链带 PYTHONIOENCODING=utf-8
+# 时间 2026-10-12T21:20:51+08:00｜采集当时 HEAD=b69123f+工作区未提交改动｜Python 3.11.9｜win32｜全链带 PYTHONIOENCODING=utf-8
+#   ↑ 第二轮复审 F2：这行会被读成「本包直接接在 b69123f 上」。补注：本包实际交付提交为 78e3378，其父为 1470b77；
+#     本行只是采集时刻的 HEAD 快照，不是父提交关系。权威口径见 README §0 基线说明。
 # 通道 A：真实 pytest 9.1.1（本机无 sqlalchemy ⇒ 必须 --noconftest，本用例不消费 conftest 夹具）
 
 ########## A1 改前红重放：-p 只拦 app.services.article_identity 这一个模块名
