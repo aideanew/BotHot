@@ -68,9 +68,11 @@ if _PG_URL_SOURCE == "unset":
     PG_URL = _REFUSED_PG_URL
 
 # 下游 9 个连库用例各自 `os.environ.get(_TEST_PG_ENV_VAR, 生产库)` 独立判定；
-# 若只在本模块解析而不回写，它们仍会直连生产库，隔离形同虚设。setdefault 保证
-# 显式环境变量优先级不变，.env 命中时统一向下游广播同一 DSN。
-os.environ.setdefault(_TEST_PG_ENV_VAR, PG_URL)
+# 若只在本模块解析而不回写，它们仍会直连生产库，隔离形同虚设。必须用赋值而非
+# setdefault：环境变量「已设置但为空串」时 setdefault 是空操作，下游会拿到空串
+# （报 URL 解析错而非预期的连接被拒），且本模块的规范化值丢失。赋值后全仓只有一
+# 处解析口径——PG_URL 即下游所见值。
+os.environ[_TEST_PG_ENV_VAR] = PG_URL
 
 
 @pytest.fixture

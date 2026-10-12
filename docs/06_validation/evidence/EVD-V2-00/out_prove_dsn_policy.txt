@@ -10,9 +10,13 @@ PASS S0.1.2-i 拒连地址不含部署端口 :: postgresql+psycopg://invalid@127
 PASS S0.1.2-j skip 原因含「未设置」 :: AIDEANBOT_TEST_PG_DSN 未设置：连库用例需要独立测试库。准备命令：bash scripts/test-env.sh up && eval "$(bash scripts/test-env.sh env)"
 PASS S0.1.2-k skip 原因不含「不可达」（避免触中 ci.yml:148 的 PG-不可达门禁）
 PASS S0.1.2-l 纯空白 env 视为未配置 :: '',unset
+PASS S0.1.2-p 空串 env 也广播为拒连地址（赋值而非 setdefault） :: _broadcast='postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'
+PASS S0.1.2-q 纯空白 env 广播拒连地址 :: _broadcast='postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'
+PASS S0.1.2-r 三种入口的广播值均非空串（下游永远不会读到 ""） :: 广播值为空串/None
+PASS S0.1.2-s 带空白的配置广播为剥离后的值 :: _broadcast='postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_test'
 PASS S0.1.2-m .env 层解析并广播该值 :: postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_from_env_file,file:.env,broadcast='postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_from_env_file'
 PASS S0.1.2-n .env 空值视为未配置
-PASS S0.1.2-o 下游自带默认回退点=9（其中生产形态 9）；旧注释称 7 :: 存在非生产形态默认值，需复核
+PASS S0.1.2-o 下游自带默认回退点=9（其中生产形态 9）；旧注释称 7 ⇒ 钉死为 9 :: 实测 9 处、生产形态 9 处；期望恰 9（数量变动须同步 §3.2 表）
   INFO 回退点 test_docs_batch.py:45 生产形态=True
   INFO 回退点 test_idempotency_lock.py:48 生产形态=True
   INFO 回退点 test_job_worker.py:37 生产形态=True
@@ -22,4 +26,6 @@ PASS S0.1.2-o 下游自带默认回退点=9（其中生产形态 9）；旧注�
   INFO 回退点 test_scheduler.py:41 生产形态=True
   INFO 回退点 test_w2_worker.py:27 生产形态=True
   INFO 回退点 test_w3_push_scheduler.py:46 生产形态=True
-ALL PASS (15 断言，回退点 9 个已列举)
+PASS S0.1.2-t 直接 import conftest.PG_URL 的模块已被清点（现恰 1 处） :: 实测 [('test_chat_sse.py', 18)]；数量或归属变动须同步 §3.2 表
+  INFO 直接消费者 test_chat_sse.py:18（值=conftest 解析结果，未配置时=拒连地址）
+ALL PASS (20 断言，回退点 9 个已列举)

@@ -5,7 +5,9 @@
   link 缺失时回退取 guid(:203-207)，guid 缺失时回退取 link(:209-211)，两者皆无则丢弃(:213-214)。
   ⚠ 解析器**不读** item/author、item/category、item enclosure ⇒ 本样本刻意不含（含了即猜测）。
   emit 的 dict 键见 rss.py:216-226，其中 "publishTime" 是 pubDate 的**原样透传**(:221)，
-  而 manifest.py:114 `_parse_time` 只用 datetime.fromisoformat ⇒ RFC 822 串恒解析为 None（D-04）。
+  而 `manifest.py:96 _parse_time` 的字符串支路只有两条：纯数字串按 epoch 解(:111-112)，
+  否则 `datetime.fromisoformat`(:114)。RFC 822 既非纯数字也无法被 fromisoformat 解析
+  ⇒ 恒返回 None（D-04）。
 结构与日期串：与 apps/api/tests/test_rss_provider.py:24-45 的 RSS2_SAMPLE 同形
   （:33 "Mon, 02 Oct 2026 10:00:00 +0800"、:40 "Tue, 03 Oct 2026 14:30:00 +0800"）。
 分页：rss.py:104-105 page>1 返回空（D-06）；:36 单 feed 上限 100 条。

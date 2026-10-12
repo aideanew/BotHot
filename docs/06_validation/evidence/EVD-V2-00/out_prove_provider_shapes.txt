@@ -1,23 +1,28 @@
 INFO redfox.json 存在 :: apps\api\tests\fixtures\provider_payloads\redfox.json
-PASS redfox.json JSON 可解析 :: 顶层键=['_shape_source', 'code', 'data', 'msg']
-PASS redfox.json 覆盖 app/providers/redfox/client.py 的读取键 :: 命中 3/3 个键读取点（AST 导出，未写死）
+PASS redfox.json JSON 可解析 :: 顶层键=['code', 'data', 'msg']
+PASS redfox.json 顶层无注记键 :: 注记键=无（声明：样本字面即上游形状）
+PASS redfox.json 覆盖 app/providers/redfox/client.py 的全部主路径读取键 :: 命中 3/3 个读取点；主路径缺失=无（AST 导出，未写死）
 INFO dajiala.json 存在 :: apps\api\tests\fixtures\provider_payloads\dajiala.json
-PASS dajiala.json JSON 可解析 :: 顶层键=['_shape_source', 'code', 'data', 'msg']
-PASS dajiala.json 覆盖 app/providers/article_sources/dajiala.py 的读取键 :: 命中 5/5 个键读取点（AST 导出，未写死）
+PASS dajiala.json JSON 可解析 :: 顶层键=['code', 'data', 'msg']
+PASS dajiala.json 顶层无注记键 :: 注记键=无（声明：样本字面即上游形状）
+PASS dajiala.json 覆盖 app/providers/article_sources/dajiala.py 的全部主路径读取键 :: 命中 5/5 个读取点；主路径缺失=无（AST 导出，未写死）
 INFO justoneapi.json 存在 :: apps\api\tests\fixtures\provider_payloads\justoneapi.json
-PASS justoneapi.json JSON 可解析 :: 顶层键=['_shape_source', 'code', 'data', 'message', 'recordTime', 'requestId']
-PASS justoneapi.json 覆盖 app/providers/article_sources/justoneapi.py 的读取键 :: 命中 10/10 个键读取点（AST 导出，未写死）
+PASS justoneapi.json JSON 可解析 :: 顶层键=['code', 'data', 'message', 'recordTime', 'requestId']
+PASS justoneapi.json 顶层无注记键 :: 注记键=无（声明：样本字面即上游形状）
+PASS justoneapi.json 覆盖 app/providers/article_sources/justoneapi.py 的全部主路径读取键 :: 命中 10/10 个读取点；主路径缺失=无（AST 导出，未写死）
 INFO tikhub.json 存在 :: apps\api\tests\fixtures\provider_payloads\tikhub.json
-PASS tikhub.json JSON 可解析 :: 顶层键=['_shape_source', 'data']
-WARN app/providers/article_sources/tikhub.py 读取路径 $.data.articles 在 tikhub.json 中存在 :: holder=data key=articles（兜底/未覆盖变体）
-WARN app/providers/article_sources/tikhub.py 读取路径 $.data.data[].create_time 在 tikhub.json 中存在 :: holder=item key=create_time（兜底/未覆盖变体）
-WARN app/providers/article_sources/tikhub.py 读取路径 $.data.data[].content_url 在 tikhub.json 中存在 :: holder=item key=content_url（兜底/未覆盖变体）
-WARN app/providers/article_sources/tikhub.py 读取路径 $.data.data[].title 在 tikhub.json 中存在 :: holder=item key=title（兜底/未覆盖变体）
-WARN app/providers/article_sources/tikhub.py 读取路径 $.data.data[].digest 在 tikhub.json 中存在 :: holder=item key=digest（兜底/未覆盖变体）
-PASS tikhub.json 覆盖 app/providers/article_sources/tikhub.py 的读取键 :: 命中 8/13 个键读取点（AST 导出，未写死）
+PASS tikhub.json JSON 可解析 :: 顶层键=['data']
+PASS tikhub.json 顶层无注记键 :: 注记键=无（声明：样本字面即上游形状）
+WARN app/providers/article_sources/tikhub.py 兜底键在 tikhub.json 中缺席 :: $.data.articles（OR 链非首项，允许）
+WARN app/providers/article_sources/tikhub.py 兜底键在 tikhub.json 中缺席 :: $.data.data[].create_time（OR 链非首项，允许）
+WARN app/providers/article_sources/tikhub.py 兜底键在 tikhub.json 中缺席 :: $.data.data[].content_url（OR 链非首项，允许）
+WARN app/providers/article_sources/tikhub.py 兜底键在 tikhub.json 中缺席 :: $.data.data[].title（OR 链非首项，允许）
+WARN app/providers/article_sources/tikhub.py 兜底键在 tikhub.json 中缺席 :: $.data.data[].digest（OR 链非首项，允许）
+PASS tikhub.json 覆盖 app/providers/article_sources/tikhub.py 的全部主路径读取键 :: 命中 8/13 个读取点；主路径缺失=无（AST 导出，未写死）
 INFO wellbyte.json 存在 :: apps\api\tests\fixtures\provider_payloads\wellbyte.json
-PASS wellbyte.json JSON 可解析 :: 顶层键=['_shape_source', 'code', 'data', 'message', 'meta']
-PASS wellbyte.json 覆盖 app/providers/article_sources/wellbyte.py 的读取键 :: 命中 10/10 个键读取点（AST 导出，未写死）
+PASS wellbyte.json JSON 可解析 :: 顶层键=['code', 'data', 'message', 'meta']
+PASS wellbyte.json 顶层无注记键 :: 注记键=无（声明：样本字面即上游形状）
+PASS wellbyte.json 覆盖 app/providers/article_sources/wellbyte.py 的全部主路径读取键 :: 命中 10/10 个读取点；主路径缺失=无（AST 导出，未写死）
 PASS RedFox data.list 为非空数组 :: $.data.list → ['list']
 PASS RedFox data.total 存在 :: $.data.total → ['int']
 PASS Dajiala data **本身即数组**（非 data.list） :: $.data → ['list']
@@ -47,5 +52,6 @@ PASS RedFox 原始行经真实 _map_row 全部可落库 :: 2/2；external_id=['d
 PASS RedFox 行无 url 键时仍取到 workUrl（_URL_KEYS 顺序：workUrl 在前） :: url=['https://mp.weixin.qq.com', 'https://mp.weixin.qq.com']
 PASS RedFox 无时区北京时间串按 Asia/Shanghai 解析（L1-1 不回退） :: publish_time=['2026-09-27 07:42:00+08:00', '2026-09-26 08:00:00+08:00']
 
-合计 PASS=27 WARN=10 INFO=11 FAIL=0
-结论：S0.3.2 全部断言通过（A 静态路径 + B 真实执行 + C 对照）
+合计 PASS=32 WARN=10 INFO=11 FAIL=0
+结论：S0.3.2 无 FAIL。承重断言是「主路径读取键全覆盖（缺失即 FAIL）」+「容器层级硬断言」+「RSS/Atom 真执行行数」；PASS 计数只是断言行数，不作强度指标。
+       未覆盖项 10 条（WARN）全部为 OR 兜底变体或替身声明，不含主路径缺口。

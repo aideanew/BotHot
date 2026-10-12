@@ -155,14 +155,34 @@ def _resolve_path(doc: Any, path: tuple[str | list, ...]) -> tuple[bool, str]:
     return True, "$" + "".join(steps) + f" → {sorted(types)}"
 
 
-def derive_paths(src: Path, func_name: str) -> tuple[dict[str, tuple[str | list, ...]], list[tuple[str, str]]]:
-    """导出 (变量→路径, [(holder 变量, 键)])，符号链自 `payload` 起。"""
+def _optional_access_ids(fn: ast.AST) -> set[int]:
+    """收集 `A or B or {}` 里 **非首项** 的键读取点 id()——这些是兜底变体，样本可以不含。
+
+    没有这个区分，「所有读取点都要在样本里出现」就成了假断言（代码里的 OR 兜底链
+    本就不该被单一样本穷举）；有了它，主路径缺失就能真的判红。
+    """
+    opt: set[int] = set()
+    for node in ast.walk(fn):
+        if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):
+            for tail in node.values[1:]:
+                for sub in ast.walk(tail):
+                    if isinstance(sub, ast.Call | ast.Subscript) and _key_of(sub):
+                        opt.add(id(sub))
+    return opt
+
+
+def derive_paths(
+    src: Path, func_name: str
+) -> tuple[dict[str, tuple[str | list, ...]], list[tuple[str, str]], set[tuple[str, str]]]:
+    """导出 (变量→路径, [(holder 变量, 键)], 兜底可选键集合)，符号链自 `payload` 起。"""
     tree = ast.parse(src.read_text(encoding="utf-8"), filename=str(src))
     fn = _func(tree, func_name)
     if fn is None:
         raise AssertionError(f"{src.name} 未找到 {func_name}()")
+    optional_nodes = _optional_access_ids(fn)
     paths: dict[str, tuple[str | list, ...]] = {"payload": (), "resp": ()}
     accesses: list[tuple[str, str]] = []
+    optional: set[tuple[str, str]] = set()
     for node in ast.walk(fn):
         # 赋值链：data = payload.get("data") / msg_list = data.get("MsgList") or {}
         #          payload = await self._handle_response(...) 之类的非 .get 赋值不追踪
@@ -194,7 +214,9 @@ def derive_paths(src: Path, func_name: str) -> tuple[dict[str, tuple[str | list,
             holder = _base_name(node)
             if key and holder in paths:
                 accesses.append((holder, key))
-    return paths, accesses
+                if id(node) in optional_nodes:
+                    optional.add((holder, key))
+    return paths, accesses, optional
 
 
 # ── 从源码 exec 出纯标准库函数（不经 httpx / sqlalchemy） ─────────────
@@ -253,10 +275,17 @@ def check_json_cases() -> None:
         except json.JSONDecodeError as exc:
             rec("FAIL", f"{sample_name} 为合法 JSON", str(exc))
             continue
-        rec("PASS", f"{sample_name} JSON 可解析", f"顶层键={sorted(k for k in (doc if isinstance(doc, dict) else {}) )}")
-        paths, accesses = derive_paths(src, "query_work_list")
-        # 去重并按 holder 路径分组
+        top = sorted(k for k in (doc if isinstance(doc, dict) else {}))
+        rec("PASS", f"{sample_name} JSON 可解析", f"顶层键={top}")
+        # 形状忠实：顶层不得出现注记键（历史版本把 `_shape_source` 塞进响应体，
+        # 使「样本 == 上游形状」这句声明自己带上一个上游不会给的键）。注记现居 README.md。
+        notes = [k for k in top if k.startswith("_")]
+        rec("PASS" if not notes else "FAIL", f"{sample_name} 顶层无注记键",
+            f"注记键={notes or '无'}（声明：样本字面即上游形状）")
+        paths, accesses, optional = derive_paths(src, "query_work_list")
+        # 去重并按 holder 路径分组；主路径缺失=FAIL，兜底变体缺失=WARN
         seen: set[tuple[str, str]] = set()
+        missing: list[str] = []
         rows_found = 0
         for holder, key in accesses:
             if (holder, key) in seen:
@@ -265,13 +294,14 @@ def check_json_cases() -> None:
             ok, where = _resolve_path(doc, (*paths[holder], key))
             if ok:
                 rows_found += 1
+            elif (holder, key) in optional:
+                rec("WARN", f"{rel_src} 兜底键在 {sample_name} 中缺席", f"{where}（OR 链非首项，允许）")
             else:
-                # 兜底链上的可选键（or item.get(...)）允许缺席，降级 WARN 并注明
-                rec("WARN", f"{rel_src} 读取路径 {where} 在 {sample_name} 中存在", f"holder={holder} key={key}（兜底/未覆盖变体）")
+                missing.append(f"{holder}→{where}")
         rec(
-            "PASS" if rows_found >= 3 else "FAIL",
-            f"{sample_name} 覆盖 {rel_src} 的读取键",
-            f"命中 {rows_found}/{len(seen)} 个键读取点（AST 导出，未写死）",
+            "PASS" if rows_found >= 1 and not missing else "FAIL",
+            f"{sample_name} 覆盖 {rel_src} 的全部主路径读取键",
+            f"命中 {rows_found}/{len(seen)} 个读取点；主路径缺失={missing or '无'}（AST 导出，未写死）",
         )
     # 关键容器逐个硬断言（缺失即 Provider 抛错/返回空 → 样本无契约价值）
     containers = [
@@ -490,7 +520,9 @@ def main() -> int:
     if fails:
         print("结论：存在 FAIL，S0.3.2 不得标记完成")
         return 1
-    print("结论：S0.3.2 全部断言通过（A 静态路径 + B 真实执行 + C 对照）")
+    print("结论：S0.3.2 无 FAIL。承重断言是「主路径读取键全覆盖（缺失即 FAIL）」+「容器层级硬断言」"
+          "+「RSS/Atom 真执行行数」；PASS 计数只是断言行数，不作强度指标。")
+    print(f"       未覆盖项 {warns} 条（WARN）全部为 OR 兜底变体或替身声明，不含主路径缺口。")
     return 0
 
 

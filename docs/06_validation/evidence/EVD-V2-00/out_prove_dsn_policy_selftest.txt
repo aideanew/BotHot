@@ -1,0 +1,3 @@
+OK  S0.1.2-p 空串 env 广播拒连地址：现行='postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'（断言成立）｜setdefault 变异体=''（断言变红）
+OK  S0.1.2-s 带空白 env 广播剥离值：现行='postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_test'（断言成立）｜setdefault 变异体='  postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_test  '（断言变红）
+SELF-TEST PASS：两条新断言对旧实现敏感

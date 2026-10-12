@@ -7,7 +7,11 @@ sqlalchemy / dotenv / pytest，而 `apps/api/tests/conftest.py` 在模块级 imp
 
 复算：`python docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py`（cwd 任意）
 
+复算：`python docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py`（cwd 任意）
+
 判定：全部断言通过打印 `ALL PASS`，否则退出码 1 并打印首个失败项。
+反证：`… prove_dsn_policy.py --self-test` 构造变异体（广播语句改回旧实现 `setdefault`），
+必须让新断言变红——证明它「能失败」而非永真（G-23）。
 """
 
 from __future__ import annotations
@@ -31,9 +35,12 @@ def check(label: str, ok: bool, detail: str = "") -> None:
     (CHECKS if ok else FAILURES).append(f"{'PASS' if ok else 'FAIL'} {label}{f' :: {detail}' if detail else ''}")
 
 
-def exec_prefix(fake_file: Path, environ: dict[str, str], dotenv_stub=None) -> dict:
-    """把 conftest 的模块前缀 exec 成独立命名空间；fake_file 只用于定位 `.env`。"""
-    tree = ast.parse(CONF.read_text(encoding="utf-8"))
+def exec_prefix(fake_file: Path, environ: dict[str, str], dotenv_stub=None, src_text: str | None = None) -> dict:
+    """把 conftest 的模块前缀 exec 成独立命名空间；fake_file 只用于定位 `.env`。
+
+    `src_text` 用于注入**变异体**源码（见 --self-test），默认注入文件当前内容。
+    """
+    tree = ast.parse(src_text if src_text is not None else CONF.read_text(encoding="utf-8"))
     body = []
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.decorator_list:
@@ -64,8 +71,43 @@ def exec_prefix(fake_file: Path, environ: dict[str, str], dotenv_stub=None) -> d
     return ns
 
 
+def self_test(fake_conftest: Path) -> int:
+    """G-23 反证：断言必须「能红」。把广播语句改回 setdefault（旧实现），
+    S0.1.2-p（空串入口）与 S0.1.2-s（带空白入口）都应变红——否则新断言是空洞的。
+    """
+    src = CONF.read_text(encoding="utf-8")
+    live = "os.environ[_TEST_PG_ENV_VAR] = PG_URL"
+    if live not in src:
+        print("FAIL 反证前提：conftest 里找不到赋值语句，无法构造变异体")
+        return 1
+    mutant = src.replace(live, "os.environ.setdefault(_TEST_PG_ENV_VAR, PG_URL)", 1)
+    test_dsn = "postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_test"
+    cases = [
+        ("S0.1.2-p 空串 env 广播拒连地址", {VAR: ""}, "refused"),
+        ("S0.1.2-s 带空白 env 广播剥离值", {VAR: f"  {test_dsn}  "}, test_dsn),
+    ]
+    rc = 0
+    for label, environ, expected in cases:
+        real_ns = exec_prefix(fake_conftest, environ, src_text=src)
+        real = real_ns["_broadcast"]
+        got = exec_prefix(fake_conftest, environ, src_text=mutant)["_broadcast"]
+        want = real_ns["_REFUSED_PG_URL"] if expected == "refused" else expected
+        ok_real, ok_mutant = real == want, got == want
+        print(f"{'OK ' if ok_real and not ok_mutant else 'BAD'} {label}"
+              f"：现行={real!r}（断言成立）｜setdefault 变异体={got!r}（断言{'未变红 ⇒ 空洞！' if ok_mutant else '变红'}）")
+        if not (ok_real and not ok_mutant):
+            rc = 1
+    print("SELF-TEST " + ("PASS：两条新断言对旧实现敏感" if rc == 0 else "FAIL"))
+    return rc
+
+
 def main() -> int:
     src = CONF.read_text(encoding="utf-8")
+
+    if "--self-test" in sys.argv[1:]:
+        st_tmp = Path(tempfile.mkdtemp(prefix="evdv200-st-")) / "apps" / "api" / "tests"
+        st_tmp.mkdir(parents=True)
+        return self_test(st_tmp / "conftest.py")
 
     # 卡片反证 ①：默认生产 DSN 常量必须彻底消失
     check("S0.1.2-a `_DEFAULT_PG_URL` 已删除", "_DEFAULT_PG_URL" not in src,
@@ -108,6 +150,23 @@ def main() -> int:
     check("S0.1.2-l 纯空白 env 视为未配置", (blank_dsn, blank_src) == ("", "unset"),
           f"{blank_dsn!r},{blank_src}")
 
+    # ④b 广播必须无条件覆盖：`setdefault` 在「键存在但为空串」时是空操作，下游 9 处
+    #     会拿到空串（SQLAlchemy 报 URL 解析错，而不是设计中的连接被拒），且本模块
+    #     解析出的规范化值丢失。此组断言对 setdefault 实现必然失败（可反证非空洞）。
+    ns_empty = exec_prefix(fake_tests, {VAR: ""})
+    check("S0.1.2-p 空串 env 也广播为拒连地址（赋值而非 setdefault）",
+          ns_empty["_broadcast"] == ns_empty["_REFUSED_PG_URL"],
+          f"_broadcast={ns_empty['_broadcast']!r}")
+    check("S0.1.2-q 纯空白 env 广播拒连地址",
+          ns_blank["_broadcast"] == ns_blank["_REFUSED_PG_URL"],
+          f"_broadcast={ns_blank['_broadcast']!r}")
+    check("S0.1.2-r 三种入口的广播值均非空串（下游永远不会读到 \"\"）",
+          all(n["_broadcast"] for n in (ns_unset, ns_empty, ns_blank)),
+          "广播值为空串/None")
+    ns_padded = exec_prefix(fake_tests, {VAR: f"  {test_dsn}  "})
+    check("S0.1.2-s 带空白的配置广播为剥离后的值",
+          ns_padded["_broadcast"] == test_dsn, f"_broadcast={ns_padded['_broadcast']!r}")
+
     # ⑤ 只有 .env 命中 ⇒ file 层胜出并向下游广播该值
     #   （dotenv_values 被替换为 stub：本证明覆盖的是 conftest 的分层与广播逻辑，
     #     python-dotenv 的解析正确性属三方库，不在本机可证范围）
@@ -138,11 +197,26 @@ def main() -> int:
                 text = ast.unparse(dflt)
                 sites.append((py.name, node.lineno, "5433" in text))
     prod = [s for s in sites if s[2]]
-    check(f"S0.1.2-o 下游自带默认回退点={len(sites)}（其中生产形态 {len(prod)}）；旧注释称 7",
-          len(sites) == len(prod) and len(sites) >= 1,
-          "存在非生产形态默认值，需复核")
+    check(f"S0.1.2-o 下游自带默认回退点={len(sites)}（其中生产形态 {len(prod)}）；旧注释称 7 ⇒ 钉死为 9",
+          len(sites) == len(prod) == 9,
+          f"实测 {len(sites)} 处、生产形态 {len(prod)} 处；期望恰 9（数量变动须同步 §3.2 表）")
     for name, lineno, is_prod in sites:
         CHECKS.append(f"  INFO 回退点 {name}:{lineno} 生产形态={is_prod}")
+
+    # ⑦ 第 10 类消费者：不经环境变量、直接 `from conftest import PG_URL`。
+    #     扫描口径必须覆盖它，否则「已列全」是假的（本轮复审指出的盲区）。
+    direct = []
+    for py in sorted(tests_dir.glob("test_*.py")):
+        tree = ast.parse(py.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.ImportFrom) and node.module == "conftest"
+                    and any(a.name == "PG_URL" for a in node.names)):
+                direct.append((py.name, node.lineno))
+    check("S0.1.2-t 直接 import conftest.PG_URL 的模块已被清点（现恰 1 处）",
+          [n for n, _ in direct] == ["test_chat_sse.py"],
+          f"实测 {direct}；数量或归属变动须同步 §3.2 表")
+    for name, lineno in direct:
+        CHECKS.append(f"  INFO 直接消费者 {name}:{lineno}（值=conftest 解析结果，未配置时=拒连地址）")
 
     for line in CHECKS:
         print(line)
