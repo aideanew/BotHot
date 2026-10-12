@@ -8,11 +8,14 @@ sqlalchemy / httpx / dotenv（实测 `python -c "import httpx"` → ModuleNotFou
 里的真实代码，不是抄本——改了函数体，这里的结论就会变。
 
 `--self-test` 提供 G-23 反证，走两条通道：
-① MUTANTS——把夹具改成 5 种「看起来还在但已失效」的 conftest 变异体（去掉 autouse /
-   删掉 delenv 循环 / 换 raising=True / 换 NO_PROXY 值 / 直写 os.environ 绕过 monkeypatch），
-   逐条确认对应断言**变红**；
+① MUTANTS——把夹具改成 6 种「看起来还在但已失效」的 conftest 变异体（去掉 autouse /
+   删掉 delenv 循环 / 换 raising=True / 换 NO_PROXY 值 / 直写 os.environ 绕过 monkeypatch /
+   不再写小写 no_proxy），逐条确认对应断言**变红**；
 ② TEXT_PROBES——文件结构类判据（NR-8..NR-12 读真实文件，改 conftest 变不红它）在**内存样本**
    上跑同一判定函数，要求基准为真、变异体为假。
+
+win32 特有的一条：`os.environ` 键大小写不敏感，「有没有写小写 no_proxy」在行为层不可观测，
+故 NR-14 用结构判据（夹具体内两种拼写各一次 setenv）兜住——这也是第 6 个变异体的捕手。
 """
 
 from __future__ import annotations
@@ -51,6 +54,9 @@ CONSUMERS = (
     "test_bots_logs_filter.py",
     "test_wb_push_hardening.py",
     "test_w3_push_scheduler.py",
+    # 复审 N-4：本步新增的用例自己也是消费方（:54 有 `webhook_url=REFUSED_HTTP_URL`），
+    # 不列进去 ⇒ 它退回字面量时无人报警。
+    "test_env_isolation.py",
 )
 
 FAILURES: list[str] = []
@@ -155,6 +161,27 @@ class sandbox:
                 os.environ[n] = v
 
 
+def setenv_spellings(node: ast.AST) -> list[str]:
+    """夹具里 `X.setenv("…")` 的实参字面量清单。
+
+    win32 的 `os.environ` 键大小写不敏感 ⇒ 「读回 `no_proxy` 是否等于契约值」这一半
+    **行为观测无法分辨夹具到底有没有写小写键**（删掉那行也照样绿，复审 N-1）。
+    故补一条与平台无关的结构判据：两种拼写必须各写一次。
+    """
+    names: list[str] = []
+    for call in ast.walk(node):
+        if (
+            isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Attribute)
+            and call.func.attr == "setenv"
+            and call.args
+            and isinstance(call.args[0], ast.Constant)
+            and isinstance(call.args[0].value, str)
+        ):
+            names.append(call.args[0].value)
+    return names
+
+
 def webhook_url_wired_to_constant(text: str) -> tuple[bool, str]:
     """NR-9-b 的判据：常量不只是「出现在文件里」，而是真的接到 `webhook_url=` 形参上。
 
@@ -232,7 +259,7 @@ def main() -> int:
             os.environ.get("HTTP_PROXY"),
         )
     check("NR-4-a 脏环境下 6 个代理变量被清空", leaked == [], f"残留={leaked}")
-    check("NR-4-b NO_PROXY 与 no_proxy 均写成契约值",
+    check("NR-4-b NO_PROXY 与 no_proxy 均写成契约值（win32 上两键折叠，小写那一半由 NR-14 兜）",
           np_val == EXPECTED_NO_PROXY and np_low == EXPECTED_NO_PROXY,
           f"NO_PROXY={np_val!r} no_proxy={np_low!r}（期望 {EXPECTED_NO_PROXY!r}）")
     check("NR-6 undo() 后宿主原貌恢复（夹具经 monkeypatch 而非直写 os.environ）",
@@ -270,7 +297,7 @@ def main() -> int:
         report.append(f"{fname}:{why}")
         if not ok:
             bad.append(fname)
-    check("NR-9-b 4 个消费方均把该常量接到 webhook_url 实参上（AST）", not bad,
+    check(f"NR-9-b {len(CONSUMERS)} 个消费方均把该常量接到 webhook_url 实参上（AST）", not bad,
           f"未接线={bad or '无'}｜" + " ".join(report))
     w3 = (TESTS / "test_w3_push_scheduler.py").read_text(encoding="utf-8")
     alias_line = next((i for i, line in enumerate(w3.splitlines(), 1) if line == "_REFUSED_WEBHOOK_URL = REFUSED_HTTP_URL"), None)
@@ -324,6 +351,11 @@ def main() -> int:
           "127.0.0.1" in ns["NO_PROXY_ISOLATION_VALUE"] and ns["NO_PROXY_ISOLATION_VALUE"] == EXPECTED_NO_PROXY,
           f"实测={ns['NO_PROXY_ISOLATION_VALUE']!r}")
 
+    # ── NR-14：两种拼写都写（win32 行为观测分辨不了的那一半，复审 N-1）────────────
+    spelled = setenv_spellings(fn)
+    check("NR-14 夹具对 NO_PROXY 与 no_proxy 各写一次（结构判据，与平台无关）",
+          {"NO_PROXY", "no_proxy"} <= set(spelled), f"setenv 实参={sorted(spelled)}")
+
     print("\n".join(CHECKS))
     for line in FAILURES:
         print(line)
@@ -344,6 +376,8 @@ MUTANTS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     ("NO_PROXY 值去掉回环", 'NO_PROXY_ISOLATION_VALUE = "127.0.0.1,localhost,::1"', 'NO_PROXY_ISOLATION_VALUE = "localhost"', ("NR-4-b", "NR-13-b")),
     ("夹具直写 os.environ 而非经 monkeypatch", 'monkeypatch.setenv("NO_PROXY", NO_PROXY_ISOLATION_VALUE)',
      'os.environ["NO_PROXY"] = NO_PROXY_ISOLATION_VALUE', ("NR-6",)),
+    # win32 上删掉小写那行，行为观测（NR-4-b）不会红——NR-14 是它唯一的捕手
+    ("夹具不再写小写 no_proxy", 'monkeypatch.setenv("no_proxy", NO_PROXY_ISOLATION_VALUE)', "pass", ("NR-14",)),
 )
 
 
@@ -442,8 +476,6 @@ def evaluate(conftest_src: str) -> list[str]:
                 red.append("NR-6")
         except Exception as exc:  # noqa: BLE001
             red.append(f"NR-4-a(异常 {type(exc).__name__})")
-        except Exception as exc:  # noqa: BLE001
-            red.append(f"NR-4-a(异常 {type(exc).__name__})")
     with sandbox():
         try:
             exec_fixture(conftest_src, seed)(FakeMonkeyPatch())  # ty: ignore[operator]
@@ -453,6 +485,8 @@ def evaluate(conftest_src: str) -> list[str]:
             red.append("NR-5")
     if "127.0.0.1" not in ns["NO_PROXY_ISOLATION_VALUE"]:
         red.append("NR-13-b")
+    if fn is not None and {"NO_PROXY", "no_proxy"} - set(setenv_spellings(fn)):
+        red.append("NR-14")
     return red
 
 

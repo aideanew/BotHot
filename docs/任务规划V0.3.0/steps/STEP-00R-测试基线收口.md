@@ -197,6 +197,8 @@ grep -n '环境代理' 'docs/任务规划V0.2.0/steps/STEP-00-测试环境与基
 
 ## 验收标准（独立验证者逐条判 PASS / FAIL / UNKNOWN）
 - [ ] `test_env_isolation.py` 在有代理环境改前 2 failed、改后 2 passed
+  （卡面原定两条用例；执行时增至三条 ⇒ 在有代理的宿主上期望改为 **改前 3 failed / 改后 3 passed**，
+  若宿主只设 `NO_PROXY` 则第 ③ 条为 skip 而非红。口径见 EVD-V2-00R §4 H-1，偏离登记 D-5）
 - [ ] 双环境全量 failed=0，两份 junit 用例结论逐条一致
 - [ ] tests 内 `localhost:9999` 命中 0
 - [ ] 未配置 DSN 时 `test_chat_sse.py` 无 error 只有 skip
@@ -226,6 +228,9 @@ cd apps/api && HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 uv r
 - `docs/06_validation/evidence/EVD-V2-00R/**`
 - `docs/任务规划V0.2.0/steps/STEP-00-测试环境与基线.md（仅末尾追加）`
 - `docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py（执行时增补：2 行 stdout UTF-8 保护 + 2 条 check() 的 detail 文案，断言表达式未动；理由见执行记录 D-1/D-6）`
+- `docs/任务规划V0.3.0/00-README.md`、`docs/任务规划V0.3.0/01-事实基线与上一步复核.md`、本卡自身
+  （**执行时增补，非卡面原定**；对应 D-7 的三处文档改动。第二轮复审 N-3 判定「申报 ≠ 授权」，
+  故此处显式列入并标注：**经人工追认前视为待批**，复核者若不同意可单独 revert 文档提交，代码侧结论不受影响）
 - `docs/06_validation/evidence/EVD-V2-00R/**（含 §6 复审记录）`
 - `.github/workflows/ci.yml（仅当 D-11 授权：注释 :28-32 + 新 job）`
 
@@ -261,9 +266,10 @@ S0R.1.3 双环境结果不一致且无法用代理/端口解释 ⇒ 升 opus 做
 
 ## 执行记录（2026-10-12，Agent 侧；静态可证项已闭，运行时项移交）
 
-证明与逐原子状态：`docs/06_validation/evidence/EVD-V2-00R/README.md`（§1 逐原子表、§2 20 条断言 +
-5 个 conftest 变异体 + 4 个源码探针反证、§3 偏离详版、§4 移交项 H-1…H-6、§5 反自证声明、
-§6 **第一轮独立复审记录**——本节 D-1…D-7 中的 D-5/D-6/D-7 与 §2 的 NR-6/NR-9-b 两处强化均由该轮复审推翻后修正）。
+证明与逐原子状态：`docs/06_validation/evidence/EVD-V2-00R/README.md`（§1 逐原子表、§2 二十一条断言 +
+六个 conftest 变异体 + 四个源码探针反证、§3 偏离详版、§4 移交项 H-1…H-6、§5 反自证声明、
+§6 **第一轮独立复审记录**、§7 **第二轮独立复审记录**——本节 D-1…D-7 中的 D-5/D-6/D-7 与 §2 的
+NR-6/NR-9-b 两处强化均由第一轮复审推翻后修正，NR-14 与消费方清单扩容由第二轮复审推翻后补）。
 
 ### 与任务书的偏离（全部为「实现形态」偏离，不改本卡目标与验收口径）
 
@@ -272,7 +278,7 @@ S0R.1.3 双环境结果不一致且无法用代理/端口解释 ⇒ 升 opus 做
 | D-1 | 未授权改 `EVD-V2-00/prove_dsn_policy.py` | 补了 2 行 `sys.stdout.reconfigure(encoding='utf-8')` | 该脚本在 cp936 控制台下打印 18 条 PASS 后、第 19 条（标签含 `⇒`）抛 `UnicodeEncodeError` 退出 rc=1 ⇒ `make evidence-check`（本卡 S0R.4.1 验收命令）在 Windows 上永远非 0，门禁拿不到结论。其两个兄弟脚本本就有这两行，属漏项。**待复核追认。**（同文件另有 D-6 两处 detail 文案修正） |
 | D-2 | `@pytest.fixture(autouse=True, scope='session')` 等价实现 | 采用 **function 级** autouse + `monkeypatch` | session 级需在夹具内手工快照/还原 6 个变量，等价但更脆；function 级由 pytest 保证 undo，且证明脚本能真实执行函数体（`prove_net_isolation.py` NR-2…NR-6）。语义差别：单用例内可临时再设代理——本卡未要求禁止。 |
 | D-3 | `test_chat_sse.py` 仅 :1208/:1272 两处守卫 | 只在 `test_ask_real_full_chain_smoke` 函数首行加 **1** 处守卫 | 两处 `create_async_engine` 都在该函数体内（第二处是嵌套 `_real_db`），首个守卫之后函数即不再下探 ⇒ 第二处不可达（`prove_net_isolation.py` NR-10-a/b 断言此结构）。 |
-| D-4 | ①`NO_PROXY` 含 127.0.0.1 | 除置 `NO_PROXY`/`no_proxy` 外，**先删除 6 个代理变量** | 单靠 `NO_PROXY` 不足以确定性：httpx 的 `trust_env` 对 `ALL_PROXY` 与大小写混用有历史差异，且 socks 代理不吃 `NO_PROXY`。删变量才是「只取决于本机监听状态」的充分条件。 |
+| D-4 | ①`NO_PROXY` 含 127.0.0.1 | 除置 `NO_PROXY`/`no_proxy` 外，**先删除 6 个代理变量** | `NO_PROXY` 单独不足以确定性：httpx 的 `trust_env` 对 `ALL_PROXY` 与大小写混用有历史差异，且 socks 代理不吃 `NO_PROXY`。删变量把结果收窄到「只取决于本机监听状态」——**这是必要条件而非充分条件**：第二轮复审后补测，本机对回环闭包端口是 DROP 而非 REJECT（见下「未闭合项」的 F-24），网络层接管形态不受 `os.environ` 支配。故判据最终锚在「不出现 HTTP 状态码」而非「出现拒连异常」，两种接管（返状态码 ⇒ 红 / 只吞包 ⇒ 绿但语义仍是未投递）都在该锚下有定义。 |
 | D-5 | S0R.1.1 两条用例 | 写了 **3** 条（新增 `test_host_proxy_state_is_not_inherited`） | 第 3 条把「宿主有代理时用例是否真的经过隔离」做成可观测信号（宿主无代理则 skip），否则前两条在干净机器上是空洞通过。 |
 | D-6 | 未在授权范围（同 D-1 文件）| 另改 `prove_dsn_policy.py` 两条 **detail 文案**（S0.1.2-b、S0.1.2-r）| `check()` 无条件打印 detail，原文写成「失败描述」句（如“conftest 仍含口令字面量”“广播值为空串/None”），**断言通过时**输出里也显示 ⇒ 一周后的复核者会误读为缺陷。改为观测值（命中计数 / 三入口实际广播值）。断言逻辑一字未动，仍是 20/20。|
 | D-7 | 本卡「允许修改」未列 `docs/任务规划V0.3.0/00-README.md`、`01-事实基线与上一步复核.md` 与本卡自身 | 三者都被本卡改动（提交 `5c8552b`）| 落库复核更正必须与本卡同批入库才自洽：01 §5 更正的是本卡引用的事实，00-README 的执行账记的就是本卡状态。复审指出此项**未申报偏离**，此处补登记；如复核认为应拆成独立提交，`git revert` 文档提交不影响代码侧结论。|
@@ -282,3 +288,12 @@ S0R.1.3 双环境结果不一致且无法用代理/端口解释 ⇒ 升 opus 做
 - S0R.1.3 / S0R.2.3 / S0R.3.1 / S0R.3.2：需 venv + 依赖 + 隔离 PG（docker），且受本会话「不实际启动服务、
   不装依赖」约束 ⇒ 全部列为移交项（EVD-V2-00R §4），本卡**不得**据此判 ✅。
 - CI 增 `evidence-check` job：与 `.github/**` 同批授权（D-11 类），未动。
+- **申报为已知限制（非缺陷，本机实测，F-24）**：本机对回环上的闭包端口（1、9、80、5547、59999）
+  一律 `TimeoutError`（1 秒超时），**不是** `ConnectionRefusedError` ⇒ 宿主网络层在 DROP 而非 REJECT，
+  且该行为与 `os.environ` 里的代理变量无关（本机实测代理变量为空）。两点后果：
+  ①`REFUSED_HTTP_URL` 的**名字**在本机是误称，但其判据不依赖 REJECT——httpx 走
+  `TimeoutException` 分支（`webhook.py:48-49`）同样不产生 HTTP 状态码、`retryable=True`；
+  ②每条经该 URL 的用例在本机约耗时 `_WEBHOOK_TIMEOUT=10` 秒（`webhook.py:12`）⇒ H-1/H-2 实跑时长与
+  「秒级返回」的预期不同，跑全量者请按此设 `--durations=10` 观察，勿误判为卡死。
+  复现：`python -c "import socket;socket.create_connection(('127.0.0.1',1),timeout=1)"`（纯 stdlib，未启服务）。
+  彻底排除「透明代理/TUN 劫持」需在该宿主上真实发起请求并比对抓包，属有依赖环境项，本机不做。

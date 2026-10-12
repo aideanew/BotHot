@@ -11,9 +11,9 @@ venv 的验收命令一律**不执行**，改为「静态可证部分实跑 + �
 
 | 原子任务 | 状态 | 本机实跑证据 |
 |---|---|---|
-| S0R.1.2 代理隔离夹具（根因修复本体） | ✅ 代码落地 + 真实执行证明 | §2 全部 20 条 PASS |
+| S0R.1.2 代理隔离夹具（根因修复本体） | ✅ 代码落地 + 真实执行证明 | §2 全部 21 条 PASS |
 | S0R.1.1 `test_env_isolation.py` | 🟡 用例已写，**运行交 venv**（`import httpx`） | §4 交接头目 H-1 |
-| S0R.2.1 `tests/fixtures/net.py` + 4 处收敛 | ✅ 落地 + 机器证明 NR-8/NR-9 | `out_evidence_check.txt` |
+| S0R.2.1 `tests/fixtures/net.py` + 卡面要求的 4 处收敛 | ✅ 落地 + 机器证明 NR-8/NR-9（判定面覆盖 5 个消费方，见 §2 NR-9 / §7 N-4） | `out_evidence_check.txt` |
 | S0R.2.2 chat_sse 未配置守卫 | ✅ 落地（1 处而非 2 处，理由见 §3.2） | NR-10-a/NR-10-b |
 | S0R.2.3 陈旧注释清零 | ✅ | NR-11 |
 | S0R.4.1 `make evidence-check` | ✅ 目标已写；**本机无 make**，逐条 recipe 等价实跑 7/7 rc=0 | `out_evidence_check.txt` |
@@ -31,8 +31,8 @@ exec `_isolate_proxy_env` 的当前函数体**，用按 `pytest.MonkeyPatch` 语
 快照恢复）驱动它。被执行的是文件里的代码，不是抄本。
 
 ```
-合计 PASS=20 FAIL=0
-SELF-TEST PASS：5 个 conftest 变异体各自让对应断言变红 + 4 个源码探针敏感
+合计 PASS=21 FAIL=0
+SELF-TEST PASS：6 个 conftest 变异体各自让对应断言变红 + 4 个源码探针敏感
 ```
 
 断言分面（完整输出见 `out_evidence_check.txt`）：
@@ -44,6 +44,7 @@ SELF-TEST PASS：5 个 conftest 变异体各自让对应断言变红 + 4 个源�
   `no_proxy=B`，进程里只剩一个条目、值为 B），故「6 个变量」在本机实际折叠为 3 个键；
   夹具在两个平台都正确（覆写两次、undo 复原宿主值），但判据强度在 win32 上等于 3 键——
   这一点写进 NR-6 的期望值算法，不在文档里假装跨平台一致（Linux CI 上仍按 6 键 + `None` 判）。
+  「小写那一遍有没有真的写」在 win32 上属**行为不可观测**，改由结构判据 NR-14 承接（第二轮复审 N-1）。
 - NR-5 干净环境（无代理变量）调用不抛 ⇒ `delenv(..., raising=False)` 生效；
 - NR-6 `undo()` 后**在 sandbox 退出之前**取样：`NO_PROXY` 回到宿主原值、`no_proxy` 回到
   宿主原状态、`HTTP_PROXY` 复原 ⇒ 夹具确实经 `monkeypatch` 记账，而不是直写 `os.environ`。
@@ -51,20 +52,25 @@ SELF-TEST PASS：5 个 conftest 变异体各自让对应断言变红 + 4 个源�
   该断言永远不可能红——复审发现后已修，并补了对应变异体。）
 - NR-7 清理动作不波及 `AIDEANBOT_TEST_PG_DSN`（广播值仍在）；
 - NR-8 `apps/api/tests` 全树 `localhost:9999` 命中 0；
-- NR-9 地址常量单点：`fixtures/net.py` 端口为 1；4 个消费方按 **AST** 判定
-  「`webhook_url=<REFUSED_HTTP_URL 或其模块级别名>` 实参确实存在」——不是「文件里出现了这个
+- NR-9 地址常量单点：`fixtures/net.py` 端口为 1；消费方清单为 5 个文件（卡面要求收敛的 4 个 +
+  本步新写的 `test_env_isolation.py`，后者是第二轮复审 N-4 补进来的——不列它则它退回字面量时无人报警）。
+  判定按 **AST**：「`webhook_url=<REFUSED_HTTP_URL 或其模块级别名>` 实参确实存在」——不是「文件里出现了这个
   名字」；test_w3 的旧常量退化为别名且文件内不再自带 URL 字面量（别名行号动态取，现 :49）；
 - NR-10 chat_sse 冒烟的**首条可执行语句**即 `if _PG_URL_SOURCE == "unset": pytest.skip(...)`，
   且所需两个符号已从 conftest 导入；
 - NR-11 「见 conftest 警告」陈旧注释命中 0；
 - NR-12 `test_env_isolation.py` 有 3 条用例、每条 ≥1 assert、宿主代理快照在首个用例之前；
-- NR-13 conftest 侧常量的契约下限（6 个键逐字、值含回环）。
+- NR-13 conftest 侧常量的契约下限（6 个键逐字、值含回环）；
+- NR-14 **结构判据（与平台无关）**：夹具体内 `monkeypatch.setenv(...)` 的实参字面量集合
+  必须同时含 `"NO_PROXY"` 与 `"no_proxy"`。补这条的原因见 §7 N-1——win32 上两拼写指向同一键，
+  「小写那一遍没写」属行为不可观测，只有读源码才探得到。
 
 变异反证（`--self-test`）两条通道：
 
-1. `MUTANTS`（改 conftest 源码后重跑判定）：去掉 `autouse` → NR-1 红；删 `delenv` 循环 →
+1. `MUTANTS`（改 conftest 源码后重跑判定，共六个）：去掉 `autouse` → NR-1 红；删 `delenv` 循环 →
    NR-4-a 红；`raising=False`→`True` → NR-5 红；把回环地址从常量里删掉 → NR-4-b 与 NR-13-b
-   同时红；**夹具直写 `os.environ` 绕过 monkeypatch** → NR-6 红。
+   同时红；**夹具直写 `os.environ` 绕过 monkeypatch** → NR-6 红（顺带 NR-14 也红，因为它不再经
+   `setenv`）；**夹具删掉小写 `no_proxy` 那一遍** → NR-14 红。
    第 4 个变异体之所以能红，是因为期望值 `EXPECTED_NO_PROXY` 在 harness 里**写死为契约字面量**
    而不从 conftest 读——否则变异体会连同期望一起改，断言永不可能失败（G-23）。
 2. `TEXT_PROBES`（NR-8..NR-12 读真实文件，改 conftest 变不红它们）：对内存样本源码跑**同一个
@@ -115,7 +121,8 @@ S0.1.2-b / S0.1.2-r 的 detail 被写成「失败描述句」——断言**通�
 - S0.1.2-b → `字面量命中 0 处（期望 0）`
 - S0.1.2-r → 三个入口的实际广播值（`｜` 分隔）
 
-**断言表达式与判据一字未动**，本文件 §2 的 20/20 与 self-test 结论不受影响。
+**断言表达式与判据一字未动**：`prove_dsn_policy.py` 仍是它自己的 20 条断言全过（输出尾行
+`ALL PASS (20 断言，回退点 9 个已列举)`），本文件 §2 的 NR 结论与 self-test 结论也不受影响。
 
 ### 3.6 win32 的 `os.environ` 键大小写不敏感（复审中发现，已写入判据而非只写注释）
 实测：`os.environ['NO_PROXY']='A'` 之后再 `os.environ['no_proxy']='B'`，进程环境里只剩
@@ -128,11 +135,27 @@ S0.1.2-b / S0.1.2-r 的 detail 被写成「失败描述句」——断言**通�
    正是本步要对付的环境）③ 就必红，把一次成功的覆写判成泄漏。现改为只快照
    「夹具承诺删除的那 6 个键」（`_DELETED_NAMES`），并把这条理由写在常量注释里。
 
+### 3.7 本机回环对闭包端口是 DROP 而非 REJECT（第二轮复审期间实测的新环境事实，F-24）
+`socket.create_connection(('127.0.0.1', P), timeout=1.0)` 在 P = 1、9、80、5547、59999 上
+**全部**返回 `TimeoutError`（耗时恰为超时值 1.0 秒），而 `os.environ` 里没有任何代理变量。
+即：本宿主网络层对回环 SYN 是**丢弃**，不是拒绝——与「`REFUSED_HTTP_URL` 会立刻 ECONNREFUSED」的直觉相反。
+
+为什么这不动摇本卡结论（也别被它误导成「夹具失效」）：
+- 判据锚的是「**不出现 HTTP 状态码**」（`test_env_isolation.py` ②、`prove_dsn_policy` 的同形判据），
+  不是「出现拒连异常」。REJECT 走 `httpx.ConnectError`、DROP 走 `httpx.ConnectTimeout`，
+  两者都命中 `webhook.py:48-51` 的失败分支、`retryable=True`、reason 里都没有 `HTTP ` ⇒ 断言在两种宿主上都成立。
+- 反过来，若某宿主的代理/TUN 真的**应答**了该请求（STEP-00 的原始症状：回 HTTP 404），
+  reason 会出现 `HTTP ` ⇒ 用例变红。**探测力正好落在需要它的位置。**
+- 代价是时间：`_WEBHOOK_TIMEOUT = 10`（`webhook.py:12`），本机每次经该 URL 的用例约阻塞十秒，
+  比「秒拒」的假设慢一个量级 ⇒ 见 §4 H-1 的时长预期，勿把慢当成挂死。
+- 名字层面：`REFUSED_HTTP_URL` 在本机是误称。不改名的理由是它已是跨四个文件的单点常量
+  （改名会牵动 NR-9 的消费方清单与卡面原文），故在此登记为已知语义偏差。
+
 ## 4. 交人工/有依赖环境的项目（附可复制命令）
 
 | # | 项 | 为什么本机不能做 | 命令 |
 |---|---|---|---|
-| H-1 | S0R.1.1 用例实跑（卡面写「改前 2 failed / 改后 2 passed」，那是它只预见 2 条用例；本文件有 3 条 ⇒ 在有代理的宿主上期望 **改前 3 failed / 改后 3 passed**，若宿主只设 `NO_PROXY` 则 ③ 为 skip 而非红） | 用例 import httpx（`WebhookPushProvider`），本机无依赖 | `cd apps/api && HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 uv run pytest tests/test_env_isolation.py -q` |
+| H-1 | S0R.1.1 用例实跑（卡面写「改前 2 failed / 改后 2 passed」，那是它只预见 2 条用例；本文件有 3 条 ⇒ 在有代理的宿主上期望 **改前 3 failed / 改后 3 passed**，若宿主只设 `NO_PROXY` 则 ③ 为 skip 而非红）。**时长预期**：在回环为 DROP 的宿主（本机即此类，见 §3.7）每条走 `REFUSED_HTTP_URL` 的用例会阻塞约 `_WEBHOOK_TIMEOUT=10` 秒，且 reason 为「webhook 请求超时」而非拒连——两者都仍满足断言 | 用例 import httpx（`WebhookPushProvider`），本机无依赖 | `cd apps/api && HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 uv run pytest tests/test_env_isolation.py -q` |
 | H-2 | S0R.1.3 双环境全量一致 | 需隔离 PG16@5547（不起服务约束） | 见卡内 `eval "$(bash scripts/test-env.sh env)"` 那条 |
 | H-3 | S0R.3.1 `test-env.sh up/down` 实跑 | 需 docker/本地 PG 二进制 | `bash scripts/test-env.sh up && eval "$(bash scripts/test-env.sh env)" && psql "${AIDEANBOT_TEST_PG_DSN/+psycopg/}" -c "select 1" && bash scripts/test-env.sh down` |
 | H-4 | S0R.3.2 连库全量 + coverage.json 入档 | 同 H-2 | `uv run pytest tests -q -rfs --cov=app --cov-report=json:.../coverage.json` |
@@ -150,6 +173,9 @@ S0.1.2-b / S0.1.2-r 的 detail 被写成「失败描述句」——断言**通�
   生产侧是否绕代理属 U-08）；根因在测试侧隔离，不在生产侧。
 - 独立验证者须重跑 `make evidence-check`（或 `out_evidence_check.txt` 首行注明的等价链），
   并对 H-1/H-2 在有依赖的机器上补判。
+- §3.7 的 F-24 是本卡**新做的主动探测**（纯 stdlib 出站连接，未启服务、未装依赖），不是引用他人结论；
+  它推翻的是我自己写在 D-4 的「充分条件」措辞，不是夹具本身——若下一位复核者只看到「21/21 全绿」
+  而没读 §3.7，最可能犯的错是「以为该 URL 一定会秒级拒连」。
 
 ## 6. 独立复审记录（第一轮，verifier 子智能体）
 
@@ -168,3 +194,19 @@ S0.1.2-b / S0.1.2-r 的 detail 被写成「失败描述句」——断言**通�
 复审**确认无需动作**的部分（独立重跑得出）：NR 20/20 与 5 变异体、`make evidence-check` 等价链 7× rc=0、
 `localhost:9999` 命中 0、D-2/D-3/D-4 的实现形态声明、F-19=32、F-16/F-20 行号、F-23 epoch 陷阱的算术、
 `git status` 干净。**复审未被推翻也未被复跑的一项**：任何需要 pytest/PG 的结论——仍是 H-1…H-6。
+
+## 7. 独立复审记录（第二轮，针对第一轮修复后的 `884572d`）
+
+第二轮复审的对象是「修复有没有引入新问题」，推翻四项（N-1…N-4，全部已处置）并给出一个
+我当时判为「理论风险」的推测（下面最后一行）——该推测随后被实测证实，反而成了本文件 §3.7 的新事实。
+
+| id | 复审发现 | 判定 | 处置 |
+|---|---|---|---|
+| N-1 | 夹具「也写了小写 `no_proxy`」在 win32 上**行为不可观测**（与 `NO_PROXY` 同一个键）⇒ 若那一遍被删掉，NR-4/NR-6 全都不会红 | FAIL（探测力缺口） | 新增结构判据 **NR-14**：AST 取 `monkeypatch.setenv(...)` 的实参字面量集合，要求含两个拼写；配对应变异体「删掉小写那一遍 → NR-14 红」证明其可失败性。断言数由 20 → 21 |
+| N-2 | `evaluate()` 里存在重复的 `except Exception as exc:`，第二个永不可达（我第一轮合并时留下的死代码） | FAIL（代码缺陷） | 删除重复分支；重跑确认 21/21 |
+| N-3 | D-7 把越路径改动**申报**了，但「允许修改」清单里仍然没有那三份文档 ⇒ 申报 ≠ 授权 | 流程缺陷 | 在卡面「允许修改」显式补入并标注「经人工追认前视为待批」；不同意可单独 revert 文档提交，代码侧结论不受影响 |
+| N-4 | `CONSUMERS` 漏了本步新写的 `test_env_isolation.py`（它自己也用 `webhook_url=REFUSED_HTTP_URL`，:54）⇒ 它退回字面量时无人报警 | FAIL（清单不完整） | 补入，消费方由 4 → 5；NR-9-b 标签改为按 `len(CONSUMERS)` 动态生成，避免再漂移 |
+| — | 推测：删代理变量只覆盖「进程环境里有代理」这一种接管形态，TUN/透明代理不受 `os.environ` 支配 | 潜在缺陷（当时不可证） | 本机实测 → 回环闭包端口一律 **DROP**（`TimeoutError`）而非 REJECT，见 §3.7 / F-24；判据改锚「不出现 HTTP 状态码」，并在卡面 D-4 撤销「充分条件」的说法 |
+
+第二轮复跑确认（不是我声明，是它独立跑出来的）：修复后 harness 结论成立、`--self-test` 全绿、
+`localhost:9999` 仍为 0 命中。它**同样未能**运行任何 pytest 用例（无 venv），故 §4 的 H-1…H-6 一项未消。
