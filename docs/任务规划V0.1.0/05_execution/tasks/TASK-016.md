@@ -44,10 +44,15 @@ web 渠道每条实时帧带 id，且与 notifications 表行 id 相同。
    删 `push_scheduler.py:184` 的 `notification_id=notification_id` ⇒ `assert frame_id` 必红。
 
 **验收标准**
-- [ ] 新连库测试通过（`test_frame_id_equals_row_id` + 管道层 2 例）——**本机不可证**
-- [ ] `test_notification_history.py` 等既有用例零回归——**本机不可证**
-- [ ] 其他 5 渠道 provider 测试零回归——**本机不可证**（静态理由：`notification_id` 只在
-  `web.py` 被读，各 provider 自建载荷 dict，无 `asdict(msg)` 外泄路径）
+> 判据更新（2026-10-12 07:19Z）：CI run `38217078901`（sha `30d98235`）backend job 三步
+> `Lint (ruff)` → `Type check (mypy)` → `Tests (pytest) + coverage + skip gate` **全部 success**。
+> 此前该树判红的原因是我引入的 **F401**（`tests/test_notification_frame_id.py` 导入未用的 `AsyncMock`），
+> 见 EVD-016 的"CI 实测"节。下面三条由"本机不可证"升为"**CI 已判、本机仍不可证**"；
+> 未闭合的是 pytest 逐条计数（日志层需鉴权）与 `compose-smoke` 结论。
+- [x] 新连库测试通过（`test_frame_id_equals_row_id` + 管道层 2 例）——**CI 判绿**（backend job pytest 步 success；本机无 `.venv`/PG 仍不可证）
+- [x] `test_notification_history.py` 等既有用例零回归——**CI 判绿**（同一步全量跑，无回归即通过）
+- [x] 其他 5 渠道 provider 测试零回归——**CI 判绿**；静态理由保留：`notification_id` 只在
+  `web.py` 被读，各 provider 自建载荷 dict，无 `asdict(msg)` 外泄路径
 
 **本卡交付后新暴露的两项（不属本卡范围，须单独裁决）**
 1. **孤儿帧窗口**：发布发生在 `:194`、提交在 `:247`，`persist` 用 savepoint（`:286`）。
