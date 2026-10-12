@@ -495,3 +495,33 @@ DSN 形状新增行 17 处，逐条核对全为占位或形状描述（`<已脱�
 规则自述、`printf '%s'` 运行时拼装 fixture）；token 前缀新增行 0 命中；
 工作树与 HEAD 树 `git grep` 旧明文凭据 0 命中。
 **仍未闭合**：TASK-001 口令轮换无证据（仓库 public，历史里的凭据是否失效未知）。
+
+## §D-12 CI 给出第一轮真实反馈（2026-10-12，本轮唯一一次机器终审）
+
+推送后 GitHub Actions 实跑（public 仓库，未认证 REST 可读 run/job 层，日志层 403 需鉴权）：
+
+| 对象 | 实测 |
+|---|---|
+| run `38215978104`（CI workflow，head_sha `f4ef58b9`） | completed / **failure** |
+| job `backend` `114700692760` | failed，失败步 **index 7 = `Lint (ruff)`** |
+| 同 run 其余 4 个 job | **全部 success** |
+| run（Security workflow，同 sha） | completed / **success** |
+
+**根因（已定位并修）**：`apps/api/tests/test_notification_frame_id.py:19`
+`from unittest.mock import AsyncMock, patch` —— `AsyncMock` 全文件 0 次引用 ⇒ **F401**。
+规则集实测来自 `apps/api/pyproject.toml:51` `select = ["E","F","I","W","UP","B"]`、
+`:52` `ignore=["B008"]`、`:47` `line-length=120`；CI 命令见 `.github/workflows/ci.yml:68` `ruff check app tests`。
+本机对 4 个改动文件跑了 AST 级 F401/E501/W29x/F841/B007 自查，除该条外无其它命中。
+
+**结构性教训（记为 G-24）**：本轮改动**通过了本机全部门禁**（cdc、preflight、gitleaks 三档、
+静态推导、三轮子智能体复审），仍在 CI 第一步就红——因为本机门禁集是 CI 的**真子集**
+（缺 ruff/mypy/pytest/docker，见 R.10 表 `:240`）。
+推论有两条，都需写进交付口径：
+1. **子智能体的"逻辑验证"不能替代机检**：它能发现"删掉关键行测试仍绿"（本轮确实发现了 3 个无鉴别力用例），
+   但发现不了"未使用的 import"这类零语义风险的机械违规。
+2. **backend job 在 step 7 失败即中止** ⇒ 同 job 内的 `mypy`/`pytest` 步骤**从未执行**，
+   所以"新增 6 例连库/管道测试是否通过"至今仍是未知，不能说"其余都绿"。
+   这条纠正了我在 §D-11 里"CI 会判 pytest 全链"的预期：修复 lint 前，pytest 根本没跑。
+
+修复后需重推并等第二次 CI：期望 backend job 走完 step 7 之后，才第一次真正执行到
+`test_notification_frame_id.py` 与全量 pytest——那才是 TASK-016 验收的机器证据。

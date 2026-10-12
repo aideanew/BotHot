@@ -100,3 +100,6 @@ cd apps/web && pnpm install --frozen-lockfile && pnpm run typecheck && pnpm run 
 | T46 | 把 R.16.4 的一致证据从**快照**改为**可重算判据命令**，并就地记"递归注记" | 免疫范围经复审收窄：**仅本节**免疫，整份文档不免疫（见 T47） |
 | T46b | 推第 10 个提交（R.16.4 判据改写）⇒ 双端一致，`0	0` | 计数不写死：`git rev-list --count 60e5723..HEAD`（当时 → 10） |
 | T47 | **第四轮复审推翻 R.16.0**（记为 G-23）："实测"标题下三行被同步证伪 | 已把 R.16.0 降格为"同步**前**快照 + 重算方式"列，并把体例入 TASK-044 待裁决 |
+| T48 | 第五轮复审（后台并行）+ 自查 Actions 状态 | 发现 **CI run `38215978104` = failure**：本机全门禁绿却一进 CI 就红 |
+| T49 | 定位根因 ruff **F401**（`AsyncMock` 导入未用）；对 4 个改动文件跑 AST 级 F401/E501/W29x/F841/B007 自查 | 同 run 其余 4 job + Security workflow 均 success；但 backend job 止于 step 7 ⇒ **mypy/pytest 从未执行**，新增 6 例是否通过仍无证据 |
+| T50 | 记 **G-24**（本机门禁集是 CI 真子集）+ 新增 R.16.5 CI 反馈节 | 交付口径由"本机全绿"降级为"**本机子集**全绿、CI 全量待判" |

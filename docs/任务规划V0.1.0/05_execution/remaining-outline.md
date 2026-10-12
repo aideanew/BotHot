@@ -225,6 +225,7 @@ id 需在 `:187` **之前**用 Python 生成，写入 `PushMessage`（可能需�
 | **G-22 → TASK-043** | **孤儿帧窗口**：帧在 `:194` 外发、事务在 `:247` 提交、落库走 savepoint ⇒ 提交失败时“有帧无行”，下一轮换 id | 复算：`grep -n "result = await provider.push\|await db.commit\|begin_nested" apps/api/app/services/push_scheduler.py` ⇒ 194 / 247 / 286 | 需裁决：①发布挂到提交之后（改投递语义）②接受并写进文档（前端保留内容窗口去重兜底） | MUST（裁决项，非编码项） |
 | **G-20 → TASK-040** | 卡片的**允许修改/禁止修改**两段之间存在**未定义空档**：既没授权也没禁止的路径，默认语义是什么？没人写过 | TASK-017 允许 = `NotificationBell.tsx` + 其测试，禁止 = `apps/api/**`、`packages/**`，而它**必须**改的 `apps/web/lib/api/notifications.ts:61-71` 两段都没列 ⇒ 该卡在自己的授权面内**结构性做不到**（R.6.1.3） | `docs/任务规划V0.1.0/05_execution/tasks/*.md` 卡模板 + 一次全量交叉核查 | **MUST**（建议默认语义定为"**未列出即禁止**"，并把这条写进模板与 `collaboration-discipline.md`） |
 | **G-23 → TASK-044** | **"实测"标签不构成时效声明**：断言当下状态的文档表行，会被记录该断言之后的提交证伪，而全仓无任何门禁能发现（G-18 的文档侧推广） | 第四轮复审实证：R.16.0 标题"当前真实状态（实测，非推断）"下三行同步后全假——`HEAD=origin/main=60e5723`（实为更晚的 HEAD）、`porcelain` 14 改 2 未跟踪（实为 0 行）、`git ls-files docs/任务规划V0.1.0 \| wc -l` = 0（实为已跟踪）。已就地改写为"同步**前**快照 + 重算方式"列 | 体例入 `collaboration-discipline.md`：凡"当前/现状"表行必须二选一——写成**可重算命令**，或显式钉 **"（当时）"**；禁用裸"实测"作为时效背书 | MUST（纪律类，与 G-18 同批裁决） |
+| **G-24 → TASK-045** | **本机门禁集是 CI 的真子集 ⇒ "全门禁绿 + 三轮复审绿"仍可能一进 CI 就红**，而交付口径里从没写这条限制 | 实证（本轮唯一机器终审）：run `38215978104`（sha `f4ef58b9`）**failure**，job `backend` 失败于 step 7 `Lint (ruff)`，同 run 其余 4 job success、Security workflow success。根因 `tests/test_notification_frame_id.py:19` 导入 `AsyncMock` 而全文 0 引用 ⇒ **F401**；规则集 `apps/api/pyproject.toml:51`、命令 `ci.yml:68`。本机缺 ruff/mypy/pytest/docker（R.10 表已列） | ①交付/验收话术里把"本机全绿"降级为"**子集**全绿"；②给 `scripts/preflight.sh` 增**纯 Python AST 版 F401/E501/I001 近似检查**（无 ruff 时可抓这类零语义违规）；③CI 反馈回写 EVD | **MUST**（这是"证据链完整"判据的边界条件） |
 
 > R.12 排期建议：G-5/G-6/G-9/G-12 四项是**门禁自身的有效性**问题——门禁不可信时，其余卡片"验收通过"都打折。
 > 故建议 R.12 与 R.6 并行、**先于** R.3/R.5 的大规模编码。
@@ -383,3 +384,22 @@ git remote -v ; git config --get http.proxy
 逐行标注采集时点，并把值位换成**重算方式**列。教训一般化：
 **"实测"这个词不构成时效声明**——凡断言当下状态的表行，要么写成可重算命令，
 要么显式钉住"当时"；否则它会在下一次提交里变成一条假的事实。
+
+## R.16.5 CI 首轮反馈（历史事实，不随后续提交变化）
+
+推送触发的 Actions 实跑结果，是本轮**唯一一次机器终审**（本机给不出，见 R.10）：
+
+| 项 | 值 | 重算方式 |
+|---|---|---|
+| CI run（sha `f4ef58b9`） | `38215978104` → **failure** | `curl -s https://api.github.com/repos/aideanew/BotHot/actions/runs?per_page=8` |
+| 失败点 | job `backend`（`114700692760`）**step index 7 `Lint (ruff)`** | `…/actions/runs/38215978104/jobs` |
+| 同 run 其余 4 job / Security workflow | 全部 **success** | 同上 |
+| 根因 | `tests/test_notification_frame_id.py:19` 导入 `AsyncMock` 全文未用 ⇒ **F401**（规则集 `pyproject.toml:51`） | `grep -n AsyncMock <该文件>` → 0 命中即已修 |
+
+**两条判据修正（比"修一个 import"更重要）**：
+1. job 在 step 7 失败即中止 ⇒ 同 job 的 `mypy`/`pytest` **从未执行**。
+   所以"新增 6 例（载荷/管道/落库三层）是否通过"**至今无证据**，
+   不得表述为"CI 除 lint 外都绿"。TASK-016 的机器证据要等修复后的**下一次** run。
+2. 本机"全门禁绿 + 三轮子智能体复审绿"对该违规**完全无感**（G-24）：
+   子智能体能查出"删掉关键行测试仍绿"这类语义缺陷，查不出未使用 import。
+   ⇒ 交付口径统一改为"**本机子集**全绿，CI 全量待判"。
