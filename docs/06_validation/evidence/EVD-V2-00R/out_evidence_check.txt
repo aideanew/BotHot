@@ -1,32 +1,9 @@
-# make evidence-check 等价链实跑（本机无 make：Windows + git-bash，which make → not found；逐条命令即 Makefile:173-183 的 recipe）
-# 时间 2026-10-12T20:36:00+08:00｜HEAD=7136df7+工作区未提交改动（本次提交即其内容）｜Python 3.11.9｜win32 cp936 控制台、无 PYTHONIOENCODING
+# make evidence-check 等价链实跑（本机无 make：Windows + git-bash，which make → not found；逐条命令即 Makefile:173-183 的 recipe，顺序与 recipe 一致，共 7 条）
+# 时间 2026-10-12T21:20:10+08:00｜HEAD=b69123f+工作区未提交改动（本次提交即其内容）｜Python 3.11.9｜win32
+# 编码：控制台默认 cp936，故本链带 PYTHONIOENCODING=utf-8 运行（不带时 prove_dsn_policy 在修复前会 UnicodeEncodeError，见 README §3.4/F-19；修复后不带也能过，但中文输出仍按本机默认码页乱码）
+# 依赖实测：有 pytest 9.1.1/dotenv/anyio；无 sqlalchemy/httpx/pytest-asyncio/coverage；PATH 无 uv/ruff/make/mypy
 
-########## python docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py
-PASS S0.1.2-a `_DEFAULT_PG_URL` 已删除 :: grep -c 命中 0
-PASS S0.1.2-b 生产形态字面量不再出现在 conftest :: 字面量命中 0 处（期望 0）
-PASS S0.1.2-c env 层解析 :: PG_URL=postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_test
-PASS S0.1.2-d env 层来源标注 :: env:AIDEANBOT_TEST_PG_DSN
-PASS S0.1.2-e 广播值=配置值（下游 9 处回退点被该环境变量屏蔽） :: _broadcast='postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_test'
-PASS S0.1.2-f 未配置返回空串 :: '',unset
-PASS S0.1.2-g 未配置时 PG_URL=拒连地址 :: postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset
-PASS S0.1.2-h 未配置时广播值=拒连地址（非生产形态） :: _broadcast='postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'
-PASS S0.1.2-i 拒连地址不含部署端口 :: postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset
-PASS S0.1.2-j skip 原因含「未设置」 :: AIDEANBOT_TEST_PG_DSN 未设置：连库用例需要独立测试库。准备命令：bash scripts/test-env.sh up && eval "$(bash scripts/test-env.sh env)"
-PASS S0.1.2-k skip 原因不含「不可达」（避免触中 ci.yml:148 的 PG-不可达门禁）
-PASS S0.1.2-l 纯空白 env 视为未配置 :: '',unset
-PASS S0.1.2-p 空串 env 也广播为拒连地址（赋值而非 setdefault） :: _broadcast='postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'
-PASS S0.1.2-q 纯空白 env 广播拒连地址 :: _broadcast='postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'
-PASS S0.1.2-r 三种入口的广播值均非空串（下游永远不会读到 ""） :: 'postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'｜'postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'｜'postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'
-PASS S0.1.2-s 带空白的配置广播为剥离后的值 :: _broadcast='postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_test'
-PASS S0.1.2-m .env 层解析并广播该值 :: postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_from_env_file,file:.env,broadcast='postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_from_env_file'
-PASS S0.1.2-n .env 空值视为未配置
-PASS S0.1.2-o 下游自带默认回退点=9（其中生产形态 9）；旧注释称 7 ⇒ 钉死为 9 :: 实测 9 处、生产形态 9 处；期望恰 9（数量变动须同步 §3.2 表）
-  INFO 回退点 test_docs_batch.py:45 生产形态=True
-  INFO 回退点 test_idempotency_lock.py:48 生产形态=True
-  INFO 回退点 test_job_worker.py:37 生产形态=True
-  INFO 回退点 test_manifest_sync.py:39 生产形态=True
-  INFO 回退点 test_persistence.py:32 生产形态=True
-  INFO 回退点 test_process_heartbeat.py:40 生产形态=True
+########## PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py
   INFO 回退点 test_scheduler.py:41 生产形态=True
   INFO 回退点 test_w2_worker.py:27 生产形态=True
   INFO 回退点 test_w3_push_scheduler.py:51 生产形态=True
@@ -35,64 +12,13 @@ PASS S0.1.2-t 直接 import conftest.PG_URL 的模块已被清点（现恰 1 处
 ALL PASS (20 断言，回退点 9 个已列举)
 rc=0
 
-########## python docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py --self-test
+########## PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py --self-test
 OK  S0.1.2-p 空串 env 广播拒连地址：现行='postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'（断言成立）｜setdefault 变异体=''（断言变红）
 OK  S0.1.2-s 带空白 env 广播剥离值：现行='postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_test'（断言成立）｜setdefault 变异体='  postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_test  '（断言变红）
 SELF-TEST PASS：两条新断言对旧实现敏感
 rc=0
 
-########## python docs/06_validation/evidence/EVD-V2-00/prove_provider_shapes.py
-INFO redfox.json 存在 :: apps\api\tests\fixtures\provider_payloads\redfox.json
-PASS redfox.json JSON 可解析 :: 顶层键=['code', 'data', 'msg']
-PASS redfox.json 顶层无注记键 :: 注记键=无（声明：样本字面即上游形状）
-PASS redfox.json 覆盖 app/providers/redfox/client.py 的全部主路径读取键 :: 命中 3/3 个读取点；主路径缺失=无（AST 导出，未写死）
-INFO dajiala.json 存在 :: apps\api\tests\fixtures\provider_payloads\dajiala.json
-PASS dajiala.json JSON 可解析 :: 顶层键=['code', 'data', 'msg']
-PASS dajiala.json 顶层无注记键 :: 注记键=无（声明：样本字面即上游形状）
-PASS dajiala.json 覆盖 app/providers/article_sources/dajiala.py 的全部主路径读取键 :: 命中 5/5 个读取点；主路径缺失=无（AST 导出，未写死）
-INFO justoneapi.json 存在 :: apps\api\tests\fixtures\provider_payloads\justoneapi.json
-PASS justoneapi.json JSON 可解析 :: 顶层键=['code', 'data', 'message', 'recordTime', 'requestId']
-PASS justoneapi.json 顶层无注记键 :: 注记键=无（声明：样本字面即上游形状）
-PASS justoneapi.json 覆盖 app/providers/article_sources/justoneapi.py 的全部主路径读取键 :: 命中 10/10 个读取点；主路径缺失=无（AST 导出，未写死）
-INFO tikhub.json 存在 :: apps\api\tests\fixtures\provider_payloads\tikhub.json
-PASS tikhub.json JSON 可解析 :: 顶层键=['data']
-PASS tikhub.json 顶层无注记键 :: 注记键=无（声明：样本字面即上游形状）
-WARN app/providers/article_sources/tikhub.py 兜底键在 tikhub.json 中缺席 :: $.data.articles（OR 链非首项，允许）
-WARN app/providers/article_sources/tikhub.py 兜底键在 tikhub.json 中缺席 :: $.data.data[].create_time（OR 链非首项，允许）
-WARN app/providers/article_sources/tikhub.py 兜底键在 tikhub.json 中缺席 :: $.data.data[].content_url（OR 链非首项，允许）
-WARN app/providers/article_sources/tikhub.py 兜底键在 tikhub.json 中缺席 :: $.data.data[].title（OR 链非首项，允许）
-WARN app/providers/article_sources/tikhub.py 兜底键在 tikhub.json 中缺席 :: $.data.data[].digest（OR 链非首项，允许）
-PASS tikhub.json 覆盖 app/providers/article_sources/tikhub.py 的全部主路径读取键 :: 命中 8/13 个读取点；主路径缺失=无（AST 导出，未写死）
-INFO wellbyte.json 存在 :: apps\api\tests\fixtures\provider_payloads\wellbyte.json
-PASS wellbyte.json JSON 可解析 :: 顶层键=['code', 'data', 'message', 'meta']
-PASS wellbyte.json 顶层无注记键 :: 注记键=无（声明：样本字面即上游形状）
-PASS wellbyte.json 覆盖 app/providers/article_sources/wellbyte.py 的全部主路径读取键 :: 命中 10/10 个读取点；主路径缺失=无（AST 导出，未写死）
-PASS RedFox data.list 为非空数组 :: $.data.list → ['list']
-PASS RedFox data.total 存在 :: $.data.total → ['int']
-PASS Dajiala data **本身即数组**（非 data.list） :: $.data → ['list']
-PASS JustOneAPI data.MsgList.Msg 非空数组 :: $.data.MsgList.Msg → ['list']
-PASS Wellbyte data.MsgList.Msg 非空数组（TC-A4-04：不是 data.data.MsgList） :: $.data.MsgList.Msg → ['list']
-PASS TikHub data.data 非空数组 :: $.data.data → ['list']
-WARN 本机 ZoneInfo('Asia/Shanghai') 不可用 → B/C 组用固定 +08:00 等价替身 :: 实测抛 ZoneInfoNotFoundError：Windows 无 /usr/share/zoneinfo 且 pyproject 依赖表未声明 tzdata。Linux（CI runner / 正式镜像）有时区库故不受影响；Asia/Shanghai 自 1991 年无夏令时，+08:00 对本卡的时间断言等价——但该缺口在 Windows 上会让 7 个 ZoneInfo 模块 import 即崩。
-PASS rss2.xml XML 良构 :: xml.etree.ElementTree.fromstring 通过
-PASS rss2.xml 经真实 _parse_feed 产出行 :: 2 行（≥2）
-INFO rss2.xml 行字段集 :: ['description', 'digest', 'guid', 'id', 'link', 'pubDate', 'publishTime', 'title', 'url']
-PASS rss2.xml 全部行可被 manifest._map_row 消费 :: 2/2
-INFO rss2.xml entry[0] publishTime→_parse_time :: raw='Mon, 02 Oct 2026 10:00:00 +0800' → None
-INFO rss2.xml entry[1] publishTime→_parse_time :: raw='Tue, 03 Oct 2026 14:30:00 +0800' → None
-PASS atom.xml XML 良构 :: xml.etree.ElementTree.fromstring 通过
-PASS atom.xml 经真实 _parse_feed 产出行 :: 2 行（≥2）
-INFO atom.xml 行字段集 :: ['description', 'digest', 'guid', 'id', 'link', 'pubDate', 'publishTime', 'title', 'url']
-PASS atom.xml 全部行可被 manifest._map_row 消费 :: 2/2
-INFO atom.xml entry[0] publishTime→_parse_time :: raw='2026-10-01T09:00:00+08:00' → datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=28800)))
-INFO atom.xml entry[1] publishTime→_parse_time :: raw='2026-10-02T10:00:00+08:00' → datetime.datetime(2026, 10, 2, 10, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=28800)))
-PASS D-04 在案：RSS 2.0 的 RFC-2822 pubDate 原样透传后，_parse_time 恒得 None :: 2/2 行 publish_time=None；样本串='Mon, 02 Oct 2026 10:00:00 +0800'（修复归 S4/S9，非本卡）
-PASS Atom 样本同时覆盖 published 命中与 published→updated 回退两支（rss.py:250-255） :: entry[0].pubDate='2026-10-01T09:00:00+08:00'（取 published） entry[1].pubDate='2026-10-02T10:00:00+08:00'（该 entry 无 published，取 updated）
-WARN app/providers/article_sources/dajiala.py 归一化行键 ∩ manifest _ID_KEYS :: 行键=['digest', 'publish_time', 'title', 'url'] 命中=∅ → _map_row 返回 None，行被丢弃
-WARN app/providers/article_sources/justoneapi.py 归一化行键 ∩ manifest _ID_KEYS :: 行键=['digest', 'publish_time', 'title', 'url'] 命中=∅ → _map_row 返回 None，行被丢弃
-WARN app/providers/article_sources/tikhub.py 归一化行键 ∩ manifest _ID_KEYS :: 行键=['digest', 'publish_time', 'title', 'url'] 命中=∅ → _map_row 返回 None，行被丢弃
-WARN app/providers/article_sources/wellbyte.py 归一化行键 ∩ manifest _ID_KEYS :: 行键=['digest', 'publish_time', 'title', 'url'] 命中=∅ → _map_row 返回 None，行被丢弃
-PASS RedFox 原始行经真实 _map_row 全部可落库 :: 2/2；external_id=['d5e2a9e08485478ab949a6ce39a0c75f', 'a1b2c3d4e5f60718293a4b5c6d7e8f90']
+########## PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-00/prove_provider_shapes.py
 PASS RedFox 行无 url 键时仍取到 workUrl（_URL_KEYS 顺序：workUrl 在前） :: url=['https://mp.weixin.qq.com', 'https://mp.weixin.qq.com']
 PASS RedFox 无时区北京时间串按 Asia/Shanghai 解析（L1-1 不回退） :: publish_time=['2026-09-27 07:42:00+08:00', '2026-09-26 08:00:00+08:00']
 
@@ -101,9 +27,7 @@ PASS RedFox 无时区北京时间串按 Asia/Shanghai 解析（L1-1 不回退）
        未覆盖项 10 条（WARN）全部为 OR 兜底变体或替身声明，不含主路径缺口。
 rc=0
 
-########## python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py
-=== apps\api\tests\conftest.py ===
-  无违规（E/F/I/W/UP/B 机检子集）
+########## PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py
 === apps\api\tests\test_w3_push_scheduler.py ===
   无违规（E/F/I/W/UP/B 机检子集）
 === apps\api\tests\fixtures\wechat_urls.py ===
@@ -112,10 +36,7 @@ rc=0
 合计违规 0 条。注：CI 的 ruff/mypy 为终判，本表只降提交风险。
 rc=0
 
-########## python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py --self-test
-  自检 F401: 捕获 1 F401 未使用导入 json
-  自检 E501: 捕获 1 E501 行长 139 > 120
-  自检 W291: 捕获 1 W291 行尾空格
+########## PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py --self-test
   自检 W292: 捕获 W292 文件末尾缺换行
   自检 E711: 捕获 2 E711 用 `is None` / `is not None`
   自检 B006: 捕获 1 B006 可变默认参数
@@ -124,55 +45,20 @@ rc=0
 
 rc=0
 
-########## python docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py
-PASS NR-1 夹具带 @pytest.fixture(autouse=True) :: 装饰器关键字={'autouse': 'True'}
-PASS NR-2 夹具为函数级 scope（缺省或 'function'） :: scope=缺省
-PASS NR-3 夹具定义在 DSN 广播之后（不改广播语义） :: 广播 :75、夹具 :92
-PASS NR-4-a 脏环境下 6 个代理变量被清空 :: 残留=[]
-PASS NR-4-b NO_PROXY 与 no_proxy 均写成契约值（win32 上两键折叠，小写那一半由 NR-14 兜） :: NO_PROXY='127.0.0.1,localhost,::1' no_proxy='127.0.0.1,localhost,::1'（期望 '127.0.0.1,localhost,::1'）
-PASS NR-6 undo() 后宿主原貌恢复（夹具经 monkeypatch 而非直写 os.environ） :: undo 后 NO_PROXY='internal.example' no_proxy='internal.example' HTTP_PROXY='http://127.0.0.1:10808'｜宿主原貌 = 'internal.example' / 'internal.example' / 代理 URL（win32 大小写合并，见常量注释）
-PASS NR-5 无代理的干净环境调用夹具不抛异常 :: delenv(raising=False) 生效
-PASS NR-7 清理代理不影响 AIDEANBOT_TEST_PG_DSN :: 夹具后='postgresql+psycopg://x:y@127.0.0.1:5547/z'
-PASS NR-8 tests 全树无 localhost:9999 字面量 :: 命中=[]
-PASS NR-9-a fixtures/net.py 导出 REFUSED_HTTP_URL 且端口为 1 :: 值='http://127.0.0.1:1/bothot-hook-no-listener'
-PASS NR-9-b 5 个消费方均把该常量接到 webhook_url 实参上（AST） :: 未接线=无｜test_alerting_drill.py:import=True、实参行=[101] test_bots_logs_filter.py:import=True、实参行=[28] test_wb_push_hardening.py:import=True、实参行=[80] test_w3_push_scheduler.py:import=True、实参行=[87, 160] test_env_isolation.py:import=True、实参行=[54]
-PASS NR-9-c test_w3 旧常量收敛为别名（单一真值：本文件不再自带 URL 字面量） :: 别名在 tests/test_w3_push_scheduler.py:49
-PASS NR-10-a 冒烟首行守卫：未配置 DSN → skip 而非 error :: 首条可执行语句=If :1191（守卫已就位）
-PASS NR-10-b 守卫所需符号已从 conftest 导入 :: import 行='from conftest import PG_URL, SKIP_UNSET_REASON, _PG_URL_SOURCE'
-PASS NR-11 「见 conftest 警告」陈旧注释清零 :: 残留=[]
-PASS NR-12-a test_env_isolation 有 3 条用例 :: 用例=['test_proxy_env_is_cleared_for_every_case', 'test_refused_url_fails_as_connection_error_not_http_status', 'test_host_proxy_state_is_not_inherited']
-PASS NR-12-b 每条用例至少 1 个 assert（无空断言） :: {'test_proxy_env_is_cleared_for_every_case': 3, 'test_refused_url_fails_as_connection_error_not_http_status': 4, 'test_host_proxy_state_is_not_inherited': 1}
-PASS NR-12-c 宿主代理快照在模块级、用例定义之前（收集期即夹具运行前） :: 快照 :35、首个用例 :40
-PASS NR-13-a _PROXY_ENV_VARS 覆盖大小写 6 个键 :: 实测=('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy')
-PASS NR-13-b NO_PROXY_ISOLATION_VALUE 含回环地址 :: 实测='127.0.0.1,localhost,::1'
-PASS NR-14 夹具对 NO_PROXY 与 no_proxy 各写一次、值取契约常量（配对判据，与平台无关） :: 配对=NO_PROXY→NO_PROXY_ISOLATION_VALUE、no_proxy→NO_PROXY_ISOLATION_VALUE
+########## PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py
 PASS NR-15 清理循环以 _PROXY_ENV_VARS 为迭代源且 delenv(循环变量, raising=False) :: 遍历模块级 _PROXY_ENV_VARS，循环体内 delenv(_name, raising=False) 就位
+PASS NR-16 运行期往常量表追加一项，夹具跟着删除它（夹具读常量而非抄一份） :: 哨兵残留=None｜异常=无
 
-合计 PASS=22 FAIL=0
-结论：代理隔离夹具真实执行有效、同形端口假设清零、chat_sse 守卫到位。
+合计 PASS=23 FAIL=0
+结论：代理隔离夹具真实执行有效、同形端口假设清零；chat_sse 冒烟的首行守卫按 AST 位置判定为「文本层就位」（该用例本身未执行，见 H-1）。
 边界（刻意不由本脚本判定）：test_env_isolation.py 的三条用例需 venv+httpx 真实运行；连库全量 failed=0 需隔离 PG——均交 STEP-00R S0R.1.3/S0R.3.2（人工/有依赖环境）。
 rc=0
 
-########## python docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py --self-test
-OK  去掉 autouse → 应变红 ['NR-1']｜实际红项=['NR-1']
-OK  删掉 delenv 循环体 → 应变红 ['NR-4-a', 'NR-15']｜实际红项=['NR-15', 'NR-4-a']
-OK  delenv 改 raising=True → 应变红 ['NR-5']｜实际红项=['NR-15', 'NR-4-a(异常 KeyError)', 'NR-5']
-OK  NO_PROXY 值去掉回环 → 应变红 ['NR-4-b', 'NR-13-b']｜实际红项=['NR-13-b', 'NR-4-b']
-OK  夹具直写 os.environ 而非经 monkeypatch → 应变红 ['NR-6']｜实际红项=['NR-14', 'NR-6']
-OK  夹具不再写小写 no_proxy → 应变红 ['NR-14']｜实际红项=['NR-14']
-OK  大写 NO_PROXY 写了非契约值（小写那遍把它盖回来） → 应变红 ['NR-14']｜实际红项=['NR-14']
-OK  清理循环与 _PROXY_ENV_VARS 常量脱钩 → 应变红 ['NR-15']｜实际红项=['NR-15']
-OK  删掉 _PROXY_ENV_VARS 常量定义 → 应变红 ['NR-13-a', 'NR-15']｜实际红项=['NR-13-a', 'NR-15', 'NR-4-a']
-OK  NR-9-b 实参退回 URL 字面量：基准=True（应 True）｜变异体=False（应 False）
-OK  NR-9-b 只 import 从不接到形参：基准=True（应 True）｜变异体=False（应 False）
-OK  NR-9-b 丢掉 import 行：基准=True（应 True）｜变异体=False（应 False）
-OK  NR-9-b 经模块级别名接线（test_w3 形态）：基准=True（应 True）｜变异体=False（应 False）
-OK  NR-8 用例退回 localhost:9999 字面量：基准=True（应 True）｜变异体=False（应 False）
-OK  NR-11 陈旧注释「见 conftest 警告」回潮：基准=True（应 True）｜变异体=False（应 False）
-OK  NR-12-a 用例数退化为 2 条：基准=True（应 True）｜变异体=False（应 False）
-OK  NR-12-b 某条用例一条 assert 都没有：基准=True（应 True）｜变异体=False（应 False）
-OK  NR-12-c 宿主代理快照移到用例之后（收集期原貌丢失）：基准=True（应 True）｜变异体=False（应 False）
-SELF-TEST PASS：9 个 conftest 变异体各自让对应断言变红 + 9 个源码探针敏感
+########## PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py --self-test
+OK  NR-10-b 导入行整体缺失（守卫自身 NameError）：基准=True（应 True）｜变异体=False（应 False）
+OK  等价重构 setenv 名与值都改关键字实参 → 应变 0 红｜实际红项=（无）
+OK  等价重构 delenv 的 raising 改位置实参 → 应变 0 红｜实际红项=（无）
+OK  等价重构 delenv 名与 raising 都改关键字 → 应变 0 红｜实际红项=（无）
+OK  等价重构 迭代源加 list() 包装 → 应变 0 红｜实际红项=（无）
+SELF-TEST PASS：15 个 conftest 变异体各自让对应断言变红 + 18 个源码探针敏感 + 4 个等价重构不假红
 rc=0
-
-# 结论：7 次调用全部 rc=0（等价于 make evidence-check 在本机 rc=0）

@@ -13,7 +13,11 @@
 - ① 正向对照：`NO_PROXY` 恰好等于夹具写入的那个值——宿主不会凭空有这个值，夹具没跑就红；
 - ② 行为锚：拒连地址必须产出「异常型 reason」，一旦出现 HTTP 状态码即说明请求没直达目标；
 - ③ 反向对照：以收集期快照为条件——宿主本来干净时它 skip（不冒充判定力），宿主脏时它是硬断言。
-①③ 配对后不存在「两种环境下都无意义」的情形。
+
+设计意图是「①③ 互补，使本文件在干净宿主与脏宿主两类机器上都至少有一条有判定力」。
+③ 的 skip 分支与 ①② 的真实通过**尚未在本机验证**（无 venv/httpx，登记为 H-1）；
+此处的静态可证部分只有：`EVD-V2-00R/prove_net_isolation.py` 的 NR-12（结构：3 条用例、
+每条都有 assert、快照在用例之前）与 NR-4/NR-6（夹具行为）。
 """
 
 from __future__ import annotations
@@ -61,7 +65,7 @@ async def test_refused_url_fails_as_connection_error_not_http_status() -> None:
     assert reason.startswith(("webhook 推送异常", "webhook 请求超时")), (
         f"reason 既非连接异常也非超时，Provider 失败分类已变更：reason={reason!r}"
     )
-    assert result.retryable is True, f"拒连应可重试（webhook.py:52）：reason={reason!r}"
+    assert result.retryable is True, f"未抵达目标时应可重试（webhook.py:49 超时支、:51 异常支均置 retryable=True）：reason={reason!r}"
 
 
 def test_host_proxy_state_is_not_inherited() -> None:
