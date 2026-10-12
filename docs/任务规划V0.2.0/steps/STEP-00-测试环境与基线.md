@@ -69,3 +69,57 @@ S0.1.3 产出 junit 且 failed=0（S0.2.1 修复后）；skip 仅限 LangBot/Red
 ### 已推翻的本卡早期结论（保留痕迹，勿复用）
 - 「Windows 缺 tzdata ⇒ 项目依赖缺口」：**错**。`uv.lock:865-868` 中 psycopg 3.3.5 依赖
   `tzdata (marker sys_platform=='win32')` ⇒ 按锁安装即得；本机崩是因本会话无 venv。
+
+---
+
+## 复核更正（2026-10-12，由 STEP-00R 回写；本节只追加，上文原样保留）
+
+### S0.2.1 的根因判断被推翻：环境代理，而非端口占用
+
+上方执行记录把 S0.2.1 判为 ✅，理由是把 URL 换成 `127.0.0.1:1` 后「端口 1 非 root 无法监听
+⇒ httpx 必抛 ConnectError ⇒ `delivered=False`」。**该推理只在无代理的环境里成立**；
+改后同一条用例仍然红。真实链路（证据
+`docs/任务规划V0.3.0/evidence/proxy_rootcause_4afaedd.txt`，@4afaedd，隔离 PG16@5547）：
+
+| 段 | 观测 | 由此得出 |
+|---|---|---|
+| §A | 进程环境存在 `http`/`https` 代理键（只列键名） | 出站流量默认被宿主代理接管 |
+| §B | 保留代理跑 `test_event_delivery_failure_no_reclaim` ⇒ `assert 0 == 1`，左侧是 `PushTask.retry_count` | 失败没推进重试簿记 |
+| §C | 有代理时直调 provider 打 `127.0.0.1:1` ⇒ `delivered=False retryable=False reason="webhook 返回 HTTP 404"` | **拿到了 HTTP 状态码** |
+| §D | 清除代理变量 ⇒ `reason="webhook 推送异常: All connection attempts failed"`、`retryable=True`，11 passed | 拒连才是用例设计的那个分支 |
+
+判据：**一次被拒绝的连接不可能产生 HTTP 状态码**——看见 404 本身就是「请求根本没到达
+`127.0.0.1:1`」的证明，404 来自中间代理自己。机制：`app/providers/push/webhook.py:33` 的
+`httpx.AsyncClient` 未显式关闭 `trust_env`（缺省 True，读 `HTTP_PROXY`/`HTTPS_PROXY`），
+`webhook.py:46` 又以 `retryable=resp.status_code >= 500` 把 4xx 判为不可重试
+⇒ `retry_count` 永不推进 ⇒ 用例红。
+
+与本节开头那条「已推翻结论」同类：**测试的成败不能取决于本机代理配置**。
+
+### 状态改判与闭合位置
+
+- S0.2.1：✅ → 🟡（根因判断错误、失败未消除）→ **由 STEP-00R 闭合**。落点：
+  `apps/api/tests/conftest.py:92` 新增 autouse `_isolate_proxy_env`（清 6 个代理变量 +
+  置 `NO_PROXY`/`no_proxy`，:87–:88 定义），拒连地址收敛为单一口径
+  `apps/api/tests/fixtures/net.py:17` `REFUSED_HTTP_URL`，并新增
+  `apps/api/tests/test_env_isolation.py` 把「代理被清干净」「失败以 ConnectError 形态出现
+  而非 HTTP 状态码」两条断言写成会因回归而红的门。
+- 本卡「已移交缺陷」项 2（三处 `localhost:9999` 同形假设）：已改为 `REFUSED_HTTP_URL`
+  （现行号 `test_alerting_drill.py:101`、`test_bots_logs_filter.py:28`、
+  `test_wb_push_hardening.py:80`——比上方记录里的 :100/:27/:79 各下移 1，因为新增了 import 行）。
+- 本卡「已移交缺陷」项 3（`test_chat_sse.py` 建引擎不在 try 内 ⇒ 特定组合下报错而非 skip）：
+  已在 `test_ask_real_full_chain_smoke`（:1180）函数首句加守卫
+  `if _PG_URL_SOURCE == "unset": pytest.skip(SKIP_UNSET_REASON)`（:1191–:1192，
+  两处 `create_async_engine` 同属本函数，一处即覆盖）。
+- 本卡「已移交缺陷」项 4（证明脚本无门禁）：已加 `Makefile:173` `evidence-check` 目标
+  （DSN 策略 + Provider 形状 + G-24 静态 + 网络隔离，含变异反证）；CI job 仍待授权。
+- 本卡「已移交缺陷」项 5（陈旧注释）：`test_r48_admin_jobs.py`、`test_scheduler.py` 已改为
+  两级解析口径描述；`ci.yml:28-32` 仍描述旧行为——改 `.github/**` 需 D-11 授权，未动。
+
+### 本步反自证声明
+
+STEP-00R 未执行 pytest（本会话无依赖，且受「不实际启动服务」约束）。静态可证部分由
+`docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py` 承担（20 断言 + 4 个变异体
+各自让对应断言变红）；运行时部分（双环境全量 `failed=0`、两份 junit 逐条一致）
+列为 EVD-V2-00R §4 移交项 H-1…H-6，附可复制命令，不得当作已验证。
+生产侧 `trust_env` 按 N-02 保持不变（浏览器/运维出站仍需代理）。

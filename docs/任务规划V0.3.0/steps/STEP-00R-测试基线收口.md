@@ -225,6 +225,7 @@ cd apps/api && HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 uv r
 - `Makefile（仅新增目标）`
 - `docs/06_validation/evidence/EVD-V2-00R/**`
 - `docs/任务规划V0.2.0/steps/STEP-00-测试环境与基线.md（仅末尾追加）`
+- `docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py（执行时增补：仅补 stdout UTF-8 保护 2 行，理由见执行记录 D-1）`
 - `.github/workflows/ci.yml（仅当 D-11 授权：注释 :28-32 + 新 job）`
 
 ## 禁止修改
@@ -254,3 +255,27 @@ S0R.1.3 双环境结果不一致且无法用代理/端口解释 ⇒ 升 opus 做
 
 ## 回滚
 `git revert <sha>`；无数据影响。
+
+---
+
+## 执行记录（2026-10-12，Agent 侧；静态可证项已闭，运行时项移交）
+
+证明与逐原子状态：`docs/06_validation/evidence/EVD-V2-00R/README.md`（§1 逐原子表、§2 20 条断言 +
+4 个变异体反证、§3 偏离登记、§4 移交项 H-1…H-6、§5 反自证声明）。
+
+### 与任务书的偏离（全部为「实现形态」偏离，不改本卡目标与验收口径）
+
+| id | 本卡要求 | 实际落点 | 理由 |
+|---|---|---|---|
+| D-1 | 未授权改 `EVD-V2-00/prove_dsn_policy.py` | 补了 2 行 `sys.stdout.reconfigure(encoding='utf-8')` | 该脚本在 cp936 控制台打印中文证据时抛 `UnicodeEncodeError`，一条断言都出不来 ⇒ `make evidence-check`（本卡 S0R.4.1 验收命令）在 Windows 上永远非 0。其两个兄弟脚本本就有这两行，属漏项。**待复核追认。**（同文件另有 D-6 一处文案修正） |
+| D-2 | `@pytest.fixture(autouse=True, scope='session')` 等价实现 | 采用 **function 级** autouse + `monkeypatch` | session 级需在夹具内手工快照/还原 6 个变量，等价但更脆；function 级由 pytest 保证 undo，且证明脚本能真实执行函数体（`prove_net_isolation.py` NR-2…NR-6）。语义差别：单用例内可临时再设代理——本卡未要求禁止。 |
+| D-3 | `test_chat_sse.py` 仅 :1208/:1272 两处守卫 | 只在 `test_ask_real_full_chain_smoke` 函数首行加 **1** 处守卫 | 两处 `create_async_engine` 都在该函数体内（第二处是嵌套 `_real_db`），首个守卫之后函数即不再下探 ⇒ 第二处不可达（`prove_net_isolation.py` NR-10-a/b 断言此结构）。 |
+| D-4 | ①`NO_PROXY` 含 127.0.0.1 | 除置 `NO_PROXY`/`no_proxy` 外，**先删除 6 个代理变量** | 单靠 `NO_PROXY` 不足以确定性：httpx 的 `trust_env` 对 `ALL_PROXY` 与大小写混用有历史差异，且 socks 代理不吃 `NO_PROXY`。删变量才是「只取决于本机监听状态」的充分条件。 |
+| D-5 | S0R.1.1 两条用例 | 写了 **3** 条（新增 `test_host_proxy_state_is_not_inherited`） | 第 3 条把「宿主有代理时用例是否真的经过隔离」做成可观测信号（宿主无代理则 skip），否则前两条在干净机器上是空洞通过。 |
+| D-6 | 未在授权范围（同 D-1 文件）| 另改 `prove_dsn_policy.py` 两条 **detail 文案**（S0.1.2-b、S0.1.2-r）| `check()` 无条件打印 detail，原文写成「失败描述」句（如“conftest 仍含口令字面量”“广播值为空串/None”），**断言通过时**输出里也显示 ⇒ 一周后的复核者会误读为缺陷。改为观测值（命中计数 / 三入口实际广播值）。断言逻辑一字未动，仍是 20/20。|
+
+### 未闭合项（阻塞，非本卡可解）
+
+- S0R.1.3 / S0R.2.3 / S0R.3.1 / S0R.3.2：需 venv + 依赖 + 隔离 PG（docker），且受本会话「不实际启动服务、
+  不装依赖」约束 ⇒ 全部列为移交项（EVD-V2-00R §4），本卡**不得**据此判 ✅。
+- CI 增 `evidence-check` job：与 `.github/**` 同批授权（D-11 类），未动。
