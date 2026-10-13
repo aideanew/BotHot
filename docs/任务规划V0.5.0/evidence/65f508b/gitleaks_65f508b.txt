@@ -1,0 +1,21 @@
+gitleaks 8.21.2 · .gitleaks.toml 原样 · 指纹（不含命中正文）
+
+[A] git 模式，--log-opts=origin/main（= Security workflow 口径，fetch-depth 0）：
+   de78125b91434caa3ef711e5382d6e955d8557af:docs/06_validation/evidence/EVD-V2-00R/out_evidence_check.txt:connection-string-embedded-password:137
+   1470b77b996a31892b2c9bea398c8a3228b2c05f:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:921
+   1470b77b996a31892b2c9bea398c8a3228b2c05f:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:926
+   1af68fc7e0ba4f9cf3851eca34af4f66240ef411:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:206
+   1af68fc7e0ba4f9cf3851eca34af4f66240ef411:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:209
+   1af68fc7e0ba4f9cf3851eca34af4f66240ef411:docs/06_validation/evidence/EVD-V2-00R/out_evidence_check.txt:connection-string-embedded-password:135
+
+[B] dir 模式，HEAD 工作树：
+   docs/06_validation/evidence/EVD-V2-00R/out_evidence_check.txt 137
+   docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py 702
+   docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py 705
+   docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py 1214
+   docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py 1219
+
+[C] 模拟修复（STEP-00C_simulated_65f508b.patch：ruff 4 处 + x:y@→x@ 两文件 + .gitleaksignore 6 指纹）后：
+   git 模式 HEAD：no leaks found；ruff check app tests：All checks passed!
+   dir 模式唯一残留 apps/api/app/core/__pycache__/*.pyc（本地未跟踪产物，CI checkout 不含）
+   prove_net_isolation.py 改占位后复跑：PASS=24 FAIL=0

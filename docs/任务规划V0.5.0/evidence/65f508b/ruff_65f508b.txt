@@ -1,0 +1,23 @@
+$ ruff 0.12.12: ruff check app tests (HEAD 65f508b 原样)
+tests/test_chat_sse.py:8:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_env_isolation.py:23:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_env_isolation.py:68:99: E501 Line too long (134 > 120)
+tests/test_kb_longlink_ingest.py:28:1: I001 [*] Import block is un-sorted or un-formatted
+Found 4 errors.
+[*] 3 fixable with the `--fix` option.
+
+$ ruff format --check app tests（CI 未执行此步；Makefile:82 执行 app/ 部分）
+Would reformat: app/api/v1/bots.py
+Would reformat: app/api/v1/system.py
+Would reformat: app/core/secret_crypto.py
+Would reformat: app/models/bothot_entities.py
+Would reformat: app/services/push_scheduler.py
+Would reformat: tests/test_alerting_drill.py
+Would reformat: tests/test_article_identity.py
+Would reformat: tests/test_env_isolation.py
+Would reformat: tests/test_extra_config_crypto.py
+Would reformat: tests/test_indexes.py
+Would reformat: tests/test_notification_frame_id.py
+Would reformat: tests/test_notification_history.py
+Would reformat: tests/test_security_middleware.py
+13 files would be reformatted, 176 files already formatted

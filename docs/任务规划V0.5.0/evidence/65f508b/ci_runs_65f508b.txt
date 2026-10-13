@@ -1,0 +1,7 @@
+GitHub Actions（aideanew/BotHot，2026-10-13 14:12 CST 读取）
+最后一次双绿：86269a2（CI success / Security success）
+其后连续失败：CI 15 次、Security 15 次（5c8552b … 65f508b）
+65f508b：CI run 38353673433 → backend 失败于 "Lint (ruff)"；frontend/compose/compose-smoke/workflow-lint 均 success
+          Security run 38353673448 → 汇总门禁失败（④ gitleaks）
+含义：backend job 在 ruff 步失败后，mypy / alembic / 契约漂移 / 文档一致性 / pytest+覆盖率+skip 门禁 共 7 步 skipped，
+      即自 5c8552b 起 15 次推送没有一次在 CI 上跑过后端测试。

@@ -1,0 +1,140 @@
+........................................................................ [  6%]
+..............................................................ss........ [ 13%]
+.............................................................s.......... [ 20%]
+........................................................................ [ 27%]
+........................................................................ [ 34%]
+........................................................................ [ 41%]
+........................................................................ [ 48%]
+........................................................................ [ 55%]
+........................................................................ [ 62%]
+........................................................................ [ 69%]
+........................................................................ [ 76%]
+........................................................................ [ 82%]
+...........................................ss........................... [ 89%]
+........................................................................ [ 96%]
+.................................s                                       [100%]
+=============================== warnings summary ===============================
+../../../../workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../../workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.15-final-0 _______________
+
+Name                                          Stmts   Miss  Cover
+-----------------------------------------------------------------
+app/__init__.py                                   0      0   100%
+app/api/__init__.py                               0      0   100%
+app/api/deps.py                                  69     17    75%
+app/api/v1/__init__.py                            0      0   100%
+app/api/v1/admin.py                             169     46    73%
+app/api/v1/auth.py                               76      0   100%
+app/api/v1/bots.py                              293    184    37%
+app/api/v1/chat.py                              243     12    95%
+app/api/v1/engines.py                            67     16    76%
+app/api/v1/extract.py                            33      3    91%
+app/api/v1/hot.py                               100     70    30%
+app/api/v1/onboarding.py                          9      2    78%
+app/api/v1/resolve.py                            22      3    86%
+app/api/v1/spaces.py                            128     18    86%
+app/api/v1/subscriptions.py                     106     29    73%
+app/api/v1/system.py                            184     20    89%
+app/core/__init__.py                              0      0   100%
+app/core/alerting.py                             75      6    92%
+app/core/cache.py                                55     10    82%
+app/core/config.py                              117      0   100%
+app/core/engine_keyring.py                       79      3    96%
+app/core/errors.py                               86      0   100%
+app/core/logging.py                              63      7    89%
+app/core/metrics.py                              76      8    89%
+app/core/middleware.py                           47      2    96%
+app/core/request_context.py                      13      1    92%
+app/core/response.py                             11      0   100%
+app/core/schema_guard.py                         22      3    86%
+app/core/secret_crypto.py                        63     10    84%
+app/core/security.py                            249     19    92%
+app/db.py                                        33      0   100%
+app/main.py                                     138     20    86%
+app/models/__init__.py                            4      0   100%
+app/models/base.py                               11      0   100%
+app/models/bothot_entities.py                   103      0   100%
+app/models/entities.py                          139      0   100%
+app/providers/__init__.py                         0      0   100%
+app/providers/aidean/__init__.py                  2      0   100%
+app/providers/aidean/client.py                   96     22    77%
+app/providers/article_sources/__init__.py        31     17    45%
+app/providers/article_sources/base.py            30      0   100%
+app/providers/article_sources/dajiala.py        116     91    22%
+app/providers/article_sources/justoneapi.py     156    131    16%
+app/providers/article_sources/rss.py            145     31    79%
+app/providers/article_sources/tikhub.py         124    100    19%
+app/providers/article_sources/wellbyte.py       164    136    17%
+app/providers/discovery/__init__.py               0      0   100%
+app/providers/discovery/registry.py             101     32    68%
+app/providers/embedding.py                       58      4    93%
+app/providers/engine_port.py                    132     25    81%
+app/providers/langbot/__init__.py                 0      0   100%
+app/providers/langbot/client.py                 135     31    77%
+app/providers/push/__init__.py                   17      0   100%
+app/providers/push/base.py                       26      0   100%
+app/providers/push/dingtalk.py                   45      9    80%
+app/providers/push/feishu.py                     41      8    80%
+app/providers/push/web.py                        25      2    92%
+app/providers/push/webhook.py                    21      4    81%
+app/providers/push/wechat_clawbot.py             28     15    46%
+app/providers/push/wechat_work.py                30     19    37%
+app/providers/raw_store.py                       39      1    97%
+app/providers/redfox/__init__.py                  2      0   100%
+app/providers/redfox/client.py                   69      3    96%
+app/providers/reranker.py                        80      8    90%
+app/providers/source_resolver.py                154     16    90%
+app/repositories/__init__.py                      0      0   100%
+app/repositories/asset.py                       127     19    85%
+app/repositories/job.py                         154     10    94%
+app/repositories/space.py                       109     11    90%
+app/repositories/subscription.py                 14      0   100%
+app/repositories/user.py                         63     10    84%
+app/services/__init__.py                          0      0   100%
+app/services/article_detail_fallback.py          53     53     0%
+app/services/article_identity.py                 28      0   100%
+app/services/auth/__init__.py                     5      0   100%
+app/services/auth/logout_token.py               129     20    84%
+app/services/auth/service.py                    134      6    96%
+app/services/auth/session_store.py               94     15    84%
+app/services/auth/state_store.py                 27      3    89%
+app/services/batch_ingest.py                     71      2    97%
+app/services/categorizer.py                      19      0   100%
+app/services/cron_expr.py                        45      5    89%
+app/services/engine_keys.py                      74      1    99%
+app/services/extractor.py                       166      8    95%
+app/services/feed_service.py                    100      3    97%
+app/services/hot_cluster.py                     149      9    94%
+app/services/hot_scorer.py                       78      4    95%
+app/services/intent.py                           21      0   100%
+app/services/job_worker.py                      250     57    77%
+app/services/jobs.py                             80     15    81%
+app/services/kb.py                              313     44    86%
+app/services/llm_summary.py                      32     16    50%
+app/services/manifest.py                        163     10    94%
+app/services/normalizer.py                       29      1    97%
+app/services/process_heartbeat.py                83      7    92%
+app/services/public_library.py                   68     10    85%
+app/services/push.py                             58      3    95%
+app/services/push_events.py                      48      0   100%
+app/services/push_scheduler.py                  168     58    65%
+app/services/push_template.py                    27      1    96%
+app/services/quality.py                          63      0   100%
+app/services/resolver.py                         24      0   100%
+app/services/roles.py                            29      0   100%
+app/services/scheduler.py                       261     64    75%
+app/services/spaces.py                          309     71    77%
+app/services/state_machine.py                    15      0   100%
+app/services/subscription.py                    324     64    80%
+-----------------------------------------------------------------
+TOTAL                                          8754   1814    79%
+1036 passed, 6 skipped, 2 warnings in 70.70s (0:01:10)

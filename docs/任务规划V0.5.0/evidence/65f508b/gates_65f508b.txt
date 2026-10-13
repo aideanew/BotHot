@@ -1,0 +1,45 @@
+# alembic
+INFO  [alembic.runtime.migration] Running upgrade ab1004w4a -> ab1005w5a, R1.2a：站内通知持久化底座（离线补投存储层）。
+INFO  [alembic.runtime.migration] Running upgrade ab1005w5a -> ab1005w5b, S2.1：bot_channels.extra_config 明文 JSON → AES-256-GCM 重加密。
+ab1005w5b (head)
+# mypy app
+Success: no issues found in 107 source files
+# gen_contracts --check
+2026-10-13T06:16:17.939890 [info     ] setup plugin alembic.autogenerate.schemas [alembic.runtime.plugins]
+2026-10-13T06:16:17.940014 [info     ] setup plugin alembic.autogenerate.tables [alembic.runtime.plugins]
+2026-10-13T06:16:17.940070 [info     ] setup plugin alembic.autogenerate.types [alembic.runtime.plugins]
+2026-10-13T06:16:17.940111 [info     ] setup plugin alembic.autogenerate.constraints [alembic.runtime.plugins]
+2026-10-13T06:16:17.940146 [info     ] setup plugin alembic.autogenerate.defaults [alembic.runtime.plugins]
+2026-10-13T06:16:17.940182 [info     ] setup plugin alembic.autogenerate.comments [alembic.runtime.plugins]
+2026-10-13T06:16:17.940211 [info     ] setup plugin alembic.ext.checkconstraint_byname [alembic.runtime.plugins]
+2026-10-13T06:16:17.952763 [warning  ] alembic head 探测失败              [app.core.schema_guard]
+Traceback (most recent call last):
+  File "/tmp/wt/apps/api/app/core/schema_guard.py", line 31, in get_alembic_head
+    return ScriptDirectory.from_config(cfg).get_current_head()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/alembic/script/base.py", line 180, in from_config
+    return ScriptDirectory(
+           ^^^^^^^^^^^^^^^^
+  File "/workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/alembic/script/base.py", line 99, in __init__
+    raise util.CommandError(
+alembic.util.exc.CommandError: Path doesn't exist: alembic.  Please use the 'init' command to create a new scripts folder.
+2026-10-13T06:16:17.966875 [warning  ] alembic head 探测失败              [app.core.schema_guard]
+Traceback (most recent call last):
+  File "/tmp/wt/apps/api/app/core/schema_guard.py", line 31, in get_alembic_head
+    return ScriptDirectory.from_config(cfg).get_current_head()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/alembic/script/base.py", line 180, in from_config
+    return ScriptDirectory(
+           ^^^^^^^^^^^^^^^^
+  File "/workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/alembic/script/base.py", line 99, in __init__
+    raise util.CommandError(
+alembic.util.exc.CommandError: Path doesn't exist: alembic.  Please use the 'init' command to create a new scripts folder.
+[ok] packages/contracts/src/bot/dto.ts 幂等一致
+[ok] packages/contracts/src/hot/dto.ts 幂等一致
+[ok] packages/contracts/src/push_event/dto.ts 幂等一致
+[ok] packages/contracts/src/knowledge/dto.ts 幂等一致
+[ok] packages/contracts/src/subscription/dto.ts 幂等一致
+[ok] packages/contracts/src/ingest/dto.ts 幂等一致
+# check_docs_consistency
+
+[ok] 文档一致性检查通过
