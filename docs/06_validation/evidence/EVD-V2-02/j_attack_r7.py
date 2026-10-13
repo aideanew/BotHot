@@ -31,7 +31,13 @@ _ensure_utf8_stdout()
 NEW = (EV / "prove_biz_delegation.py").read_text(encoding="utf-8")
 OLD = subprocess.run(["git", "show", "de78125:docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py"],
                      capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
-assert OLD.startswith("#!/usr/bin/env python"), "取不到改前版 harness"
+# 第十轮复审 10-8：这一处原先是裸 `assert`。两个坏处——`python -O` 下整条被剥掉，脚本会拿空串当
+# 「改前版 harness」继续跑，把「取不到基准」演成「两版都绿」；而真跑起来时它以 traceback 收场，
+# 崩栈在本项目里不等于裁决。所以改成立即下 FAIL 并退出 1。
+if not OLD.startswith("#!/usr/bin/env python"):
+    print("FAIL J 段：取不到改前版 harness（`git show de78125:…` 没返回可执行的正文，"
+          "没有基准就没有「改前空过」这句话的证据）")
+    raise SystemExit(1)
 KB = (ROOT / "apps/api/app/services/kb.py").read_text(encoding="utf-8")
 
 CALL = "        for anchor in (a for a in (_biz_from_url(url), article_key) if a):"

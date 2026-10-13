@@ -1,18 +1,19 @@
 # STEP-02 S2.1.3 执行留档（kb._biz_from_url 委托解析层）
-# 时间 2026-10-13T12:39:59+08:00｜HEAD=dcb1ffb｜范围内（docs/06_validation + apps/api）未提交 5 项｜全仓库未提交 8 项｜Python 3.11.9｜win32
+# 时间 2026-10-13T13:42:21+08:00｜HEAD=9a0a20a｜范围内（docs/06_validation + apps/api）未提交 3 项｜全仓库未提交 5 项｜Python 3.11.9｜win32
 # 本机依赖实测：structlog / sqlalchemy 皆无（kb.py:22-25 模块级导入）⇒ D 段只能证明「收集期即失败」，用例本身交 CI（J-5）
-# **判据条数：16 条——BD-1…BD-6 行为面、BD-7…BD-16 结构面。**
+# **判据条数：16 条——行为面 BD-1…BD-6 6 条、结构面 BD-7…BD-16 10 条（本行由 `bd_ids()` 现算，非手抄）**
 #   本文件每一段的命令都由**在库件** `replay_s213.py` 逐字重跑生成（`python docs/06_validation/evidence/
 #   EVD-V2-02/replay_s213.py`）。两道自检收尾：L 段机检「每段都留得下一条 `$ ` 命令」（只判把手在不在），
 #   M 段机检驱动自己的两条通道（取命令：把手丢了仍取到同一条、取不到就 raise；落盘：写入必须按**字节**回读
-#   逐位相同——半成品 / CRLF / BOM / 截断四种各有专属原因，重试要真的试满 5 次且每次之间真的等待。
+#   逐位相同——CRLF / BOM / 半成品 / 截断四种各有专属原因（按这个顺序判），重试要真的试满 5 次且每次之间真的等 0.3 秒（注入通道与默认值各判一次）。
 #   本轮重放就撞到过一次回填 `OSError [Errno 22]` 而驱动照过；那句 Errno 22 的成因**不再写成「瞬时占用」**：
 #   本机实测「被读柄持有」时覆盖写不抛，能稳定抛 Errno 22 的是 win32 保留字符名、抛 Errno 13 的是目标为目录）。
 #   上一版留档这些都做不到：驱动放在不入库的 `_workspace/` 里、按 `$ ` 前缀找命令又在输出时剥掉前缀，
 #   前缀一丢就**不跑而直接抄旧输出**且不报错
 #   ——这条账记在 README §4.9 S-2 / §4.10 与卡面差异表 D-11/D-12。
+# G 段的被检文件清单由 `EV/*.py` **glob 现算**，不再是我抄进 `$ ` 行的七份（第十轮复审 10-14）
 # 每段 `$` 行就是**逐字可重跑**的单行命令（heredoc 段用 `python - <<'PY' … PY`，在 git bash 下、仓库根跑）
-# 判据计数口径：BD-15 排在最前打印（它是行为面六条的前提），编号仍按追加顺序，不打乱既有 BD-1…BD-14 的锚
+# 判据计数口径：BD-15 排在最前打印（它是行为面六条的前提），编号仍按追加顺序，不打乱既有 BD 编号的锚
 # `PYTHONIOENCODING=utf-8` 现在只影响输出**好不好读**，不再是脚本**活不活得下来**的前提：见 K.1/K.4 两条裸跑
 # 凡 `in <redacted>s` 都是被**归一化**掉的 pytest 墙钟：它每次重跑必不同，留下原值就是留一份不可复现的读数
 #   （第八轮复审 id 1）。除这一处，段体里的读数全是命令的真实输出（标题与 `#` 注是我写的，不是读数）。
@@ -215,21 +216,23 @@ F-3 只把 kb 侧换成恒返回空串 → 恒等式红条数 = 3 | 字面锚红
 F-4 两侧共同退化（都恒返回空串）→ 恒等式红条数 = 0 | 字面锚红条数 = 3
 rc=0
 
-########## G 仓库静态自检（E/F/I/W/UP/B 机检子集；本轮先红后绿的记录见 README §4.5）
-$ python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py apps/api/tests/test_kb_longlink_ingest.py apps/api/tests/test_article_identity.py docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py docs/06_validation/evidence/EVD-V2-02/prove_article_identity.py docs/06_validation/evidence/EVD-V2-02/replay_s213.py docs/06_validation/evidence/EVD-V2-02/j_attack_r7.py docs/06_validation/evidence/EVD-V2-02/mutate_replay_r9.py
+########## G 仓库静态自检（E/F/I/W/UP/B 机检子集；文件清单由 glob 现算）
+$ python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py apps/api/tests/test_kb_longlink_ingest.py apps/api/tests/test_article_identity.py docs/06_validation/evidence/EVD-V2-02/block_article_identity_plugin.py docs/06_validation/evidence/EVD-V2-02/j_attack_r7.py docs/06_validation/evidence/EVD-V2-02/mutate_replay_r9.py docs/06_validation/evidence/EVD-V2-02/prove_article_identity.py docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py docs/06_validation/evidence/EVD-V2-02/replay_s213.py
 === apps\api\tests\test_kb_longlink_ingest.py ===
   无违规（E/F/I/W/UP/B 机检子集）
 === apps\api\tests\test_article_identity.py ===
   无违规（E/F/I/W/UP/B 机检子集）
-=== docs\06_validation\evidence\EVD-V2-02\prove_biz_delegation.py ===
-  无违规（E/F/I/W/UP/B 机检子集）
-=== docs\06_validation\evidence\EVD-V2-02\prove_article_identity.py ===
-  无违规（E/F/I/W/UP/B 机检子集）
-=== docs\06_validation\evidence\EVD-V2-02\replay_s213.py ===
+=== docs\06_validation\evidence\EVD-V2-02\block_article_identity_plugin.py ===
   无违规（E/F/I/W/UP/B 机检子集）
 === docs\06_validation\evidence\EVD-V2-02\j_attack_r7.py ===
   无违规（E/F/I/W/UP/B 机检子集）
 === docs\06_validation\evidence\EVD-V2-02\mutate_replay_r9.py ===
+  无违规（E/F/I/W/UP/B 机检子集）
+=== docs\06_validation\evidence\EVD-V2-02\prove_article_identity.py ===
+  无违规（E/F/I/W/UP/B 机检子集）
+=== docs\06_validation\evidence\EVD-V2-02\prove_biz_delegation.py ===
+  无违规（E/F/I/W/UP/B 机检子集）
+=== docs\06_validation\evidence\EVD-V2-02\replay_s213.py ===
   无违规（E/F/I/W/UP/B 机检子集）
 
 合计违规 0 条。注：CI 的 ruff/mypy 为终判，本表只降提交风险。
@@ -333,7 +336,8 @@ rc=0
 
 ########## J 第七轮复审的闭合实测：四发「def 还在但活绑定已换」+ 四发「调用点在但结果不进锚」+ 两发崩栈面
 # 驱动是**入库件** `j_attack_r7.py`（改前版 harness 由 `git show de78125:…` 取，改后即本包这一版）。
-# 上一版把这 92 行原样内嵌进本文件，代价是留档与在库驱动各一份、会漂移；现在命令就是驱动本身。
+# 上一版把整份攻击脚本原样内嵌进本文件，代价是留档与在库驱动各一份、会漂移；现在命令就是驱动本身
+# （原先那句「这 92 行」是个没量过的历史数——第十轮复审 10-1，已删；行数要看得 `wc -l` 现量）。
 # 临时件两个（探针 harness、kb 攻击副本）都由驱动自己删，J-11/J-12 是回读。
 $ python docs/06_validation/evidence/EVD-V2-02/j_attack_r7.py
 J-0 两版 harness 在真实 kb.py 上各自下过多少条裁决（实测，不是抄的）：
@@ -417,41 +421,61 @@ rc=0
 
 ########## M 取命令与落盘通道自证：把手丢了仍取到同一条，取不到就 raise；写入按字节回读逐位相同
 # L 只数把手，M 判的是驱动自己的两条通道：第八轮复审 id 4 说「把某段命令换成 `$ 不是命令`，L 照样报无」——那条批评成立，所以补取命令这一档；本轮重放又撞到一次回填 `OSError [Errno 22]`（磁盘上留下 L 读数位还空着的半成品，而驱动照过），所以同一档里再判「写入必须回读比对」。
-# 第九轮复审又给了三条，都已落地：① 回读要走 `read_bytes`——文本模式带换行翻译，磁盘落成 CRLF 时解码后与意图**逐字相同**，旧判据照样放行（实测 `write_out` 返回空串＝判成功）；② 「最多试 5 次 / 每次等 0.3 秒」当时没人判，`ATTEMPTS` 改 1、`sleep` 改 0 都仍 PASS，现在「第 3 次才成功」与「总失败要试满 5 次」是 M 段的真实用例；③ 半成品那条反证只判「原因非空」，把分支删掉也照样绿，现在逐个点名原因（半成品 / CRLF / BOM / 截断）。条数由 `check()` 现算并打印分组，不再手抄。
+# 第九轮复审又给了三条，都已落地：① 回读要走 `read_bytes`——文本模式带换行翻译，磁盘落成 CRLF 时解码后与意图**逐字相同**，旧判据照样放行（实测 `write_out` 返回空串＝判成功）；② 「最多试 5 次 / 每次等 0.3 秒」当时没人判，`ATTEMPTS` 改 1、`sleep` 改 0 都仍 PASS，现在「第 3 次才成功」与「总失败要试满 5 次」是 M 段的真实用例；③ 半成品那条反证只判「原因非空」，把分支删掉也照样绿，现在逐个点名原因（CRLF / BOM / 半成品 / 截断）。条数由 `check()` 现算并打印分组，不再手抄。
+# 第十轮复审又给了三条，都在这一档里判到了：① 留档**头部**那句「判据条数：16 条」原先是模板字面量（加一条 BD 判据它不会跟着变）⇒ 现在由 `bd_ids()` 从 harness 现数，并有一发反证**真的删掉一行判据**看清单跟不跟着变（把它写成 `return` 常量立刻红）；② 上面每条注入用例都自己传 `sleep=`，而 `main()` 两处调用只用默认值 ⇒ 默认 `sleep=time.sleep` 与「试满 5 次、等满 1.2 秒」的墙上时钟现在各有一条判据；③ `write_ok` 的四种原因原先把「半成品」排在最前，而生产写入点的意图**本身就带**占位符 ⇒ 任何一种字节坏都塌成同一句「回填没成功」（实测：`_disk_write` 退回文本模式后盘上 CR=269，报的却是半成品），现在按生产形状调序，两种形状各一发判据。
 $ python docs/06_validation/evidence/EVD-V2-02/replay_s213.py --self-test
-OK   重放器自证：取命令按段落版式而非 `$ ` 把手，把手丢了照样取到同一条；整段无命令 / heredoc 配对断了 / 第一条非注释行是读数 ⇒ 三种情况一律 raise；写留档按**字节**回读逐位相同，半成品 / CRLF / BOM / 截断四种各有专属原因，重试要真的试满并真的等待，写不进磁盘时报原因而不是静默过
-SELF-TEST PASS：20 条反证全过（取命令 6 条（把手在位取对、把手丢了仍取到同一条、heredoc 接配对到 PY、整段只剩注释与空行必须 raise、heredoc 没有配对 PY 必须 raise、第一条非注释行是读数必须 raise）；写入判据 5 条（字节逐位相同才算成、半成品给专属原因（点名「半成品」）、截断给字节数差、CRLF 版按字节判红（点名 CRLF）、带 BOM 判红（点名 BOM））；写入通道 9 条（临时目录里真写成、磁盘上的字节就是这一份、目标是目录时必须报原因而不是静默过、第 3 次才成功的写要救回来（ATTEMPTS 改 1 即红）、救回来时恰好试 3 次且落盘正确、两次失败之间各等 PAUSE 秒（PAUSE 归零即红）、落盘内容与意图不逐位相同时必须报红（回读真的取自磁盘）、OSError 一路试满 5 次并报出类名、PermissionError 一路试满 5 次并报出类名））——取不到命令时驱动停下，落不进磁盘时驱动也停下，两种都不许抄旧输出
+OK   重放器自证：取命令按段落版式而非 `$ ` 把手，把手丢了照样取到同一条；整段无命令 / heredoc 配对断了 / 第一条非注释行是读数 ⇒ 三种情况一律 raise；写留档按**字节**回读逐位相同，CRLF / BOM / 半成品 / 截断四种各有专属原因（半成品排在字节层两类之后，因为生产写入点的意图本来就带占位符），重试要真的试满 5 次、每次之间真的等 0.3 秒（注入通道与默认值各判一次），写不进磁盘时报原因而不是静默过；头部那句判据条数由 `bd_ids()` 从 harness 现数
+SELF-TEST PASS：30 条反证全过（取命令 6 条（把手在位取对、把手丢了仍取到同一条、heredoc 接配对到 PY、整段只剩注释与空行必须 raise、heredoc 没有配对 PY 必须 raise、第一条非注释行是读数必须 raise）；写入判据 7 条（字节逐位相同才算成、半成品给专属原因（点名「半成品」）、截断报出这两个号（写 39 字节，读回 35 字节）、CRLF 版按字节判红（点名 CRLF）、带 BOM 判红（点名 BOM）、意图自带占位符时坏在换行 ⇒ 仍须点名 CRLF（不许塌成「半成品」）、意图自带占位符而盘上只是截断 ⇒ 报字节差，不许报半成品）；写入通道 14 条（临时目录里真写成、磁盘上的字节就是这一份、不注入 read 的那次 CRLF 必须照样报红（默认回读道口不是装饰）、目标是目录时必须报原因而不是静默过、第 3 次才成功的写要救回来（ATTEMPTS 改 1 即红）、救回来时恰好试 3 次且落盘正确、两次失败之间各等 PAUSE 秒（PAUSE 归零即红）、落盘内容与意图不逐位相同时必须报红（回读真的取自磁盘）、OSError 一路试满 5 次并报出类名、PermissionError 一路试满 5 次并报出类名、注入的失败一次都不许把异常抛出门外（崩栈不是裁决）、默认 sleep 就是 time.sleep（生产路径等的是真时钟，不是被换成空函数）、默认 attempts/pause 就是模块级 ATTEMPTS/PAUSE（5/0.3）、只注入 write 的默认重试：试满 5 次且耗时 ≥ 0.72s 且报得出原因）；头部现算 3 条（行为面 id 从 BD-1 起连续（否则头部那句区间不是人话）、结构面非空、与行为面不相交（合计就是头部那个数）、删掉 BD-15 那一行 ⇒ 清单必须正好少它一条、行为面不受影响））——取不到命令时驱动停下，落不进磁盘时驱动也停下，两种都不许抄旧输出
 rc=0
 
-########## N 第九轮处置的反证电池：M 段每条新判据都配一发能把它打红的变异
+########## N 反证电池（第九轮建、第十轮扩）：M 段每条新判据都配一发能把它打红的变异
 # 这一段的存在理由：第九轮报回的两条 MAJOR，恰好是上一版电池的读数**证明不了**的（回读走文本模式 ⇒ CRLF 能骗过；`ATTEMPTS`/`PAUSE` 没人判 ⇒ 改 1 改 0 照样 PASS）。
-# 所以本轮每条新判据先发变异确认能红，再发等价写法确认不假红；变异锚找不到时报 FAIL 而不是跳过（锚点漂了就等于这条反证被悄悄注销）。`N-iso` 两行是隔离回读：仓库留档在电池运行期间一字节没动、本包不留 `_tmp_*`。
+# 所以本轮每条新判据先发变异确认能红，再发等价写法确认不假红；变异锚找不到时报 FAIL 而不是跳过（锚点漂了就等于这条反证被悄悄注销）。
+# 第十轮复审对着电池自己提了四条，都已落地：① 它原先只比 rc，**基线没绿也会让十发变异全报 OK**（实测：注入一条无关的红之后 10 发照样 OK）⇒ 现在先跑一次未变异的副本，不绿就整批判 INCONCLUSIVE（rc=2，不是 0 也不是 1）；② 每发变异还要**红在该红的判据组**，只「碰巧崩在别处」不算堵住；③ `N-iso` 那两行原先只是打印、没有判据（G-23）⇒ 现在隔离探测器自己被反证一次（故意改临时副本必须报红）；④ 它自己没有编码 guard，标签里出现 `⇒` 就整段崩在 cp936 输出流上 ⇒ 补 `_ensure_utf8_stdout()` 并让第十轮的新判据各带一发变异。文件名保留 `mutate_replay_r9.py`（第十轮只是扩它，不是另起一个）。
 $ python docs/06_validation/evidence/EVD-V2-02/mutate_replay_r9.py
-N-01 应 RED   实 RED   OK  ATTEMPTS 5→1：重试其实是装饰
-      └─ FAIL 重放器自证：[写入通道] 第 3 次才成功的写要救回来（ATTEMPTS 改 1 即红）：落盘或回读抛异常：PermissionError: [Errno 13] Permission denied
-N-02 应 RED   实 RED   OK  PAUSE 0.3→0：失败之间不等待
-      └─ FAIL 重放器自证：[写入通道] 两次失败之间各等 PAUSE 秒（PAUSE 归零即红）：实际等待 [0, 0]、PAUSE=0——不等待的重试救不了任何瞬时占用
-N-03 应 RED   实 RED   OK  删掉半成品分支
-      └─ FAIL 重放器自证：[写入判据] 半成品给专属原因（点名「半成品」）：实得 '回读与写入不是同一份字节（写 39 字节，读回 37 字节）'
-N-04 应 RED   实 RED   OK  删掉 CRLF 分支
-      └─ FAIL 重放器自证：[写入判据] CRLF 版按字节判红（点名 CRLF）：实得 '回读与写入不是同一份字节（写 39 字节，读回 43 字节）'
-N-05 应 RED   实 RED   OK  删掉 BOM 分支
-      └─ FAIL 重放器自证：[写入判据] 带 BOM 判红（点名 BOM）：实得 '回读与写入不是同一份字节（写 39 字节，读回 42 字节）'
-N-06 应 RED   实 RED   OK  字节比对永远算成
-      └─ FAIL 重放器自证：[写入判据] 半成品给专属原因（点名「半成品」）：实得 ''
-N-07 应 RED   实 RED   OK  根本不回读（write_ok 结果丢掉）
-      └─ FAIL 重放器自证：[写入通道] 落盘内容与意图不逐位相同时必须报红（回读真的取自磁盘）：落下去的是 CRLF 版本，write_out 却返回 ''——它没有把磁盘读回来比
-N-08 应 RED   实 RED   OK  失败之间不再调用 sleep
-      └─ FAIL 重放器自证：[写入通道] 两次失败之间各等 PAUSE 秒（PAUSE 归零即红）：实际等待 []、PAUSE=0.3——不等待的重试救不了任何瞬时占用
-N-09 应 RED   实 RED   OK  循环写成只跑一遍
-      └─ FAIL 重放器自证：[写入通道] 第 3 次才成功的写要救回来（ATTEMPTS 改 1 即红）：落盘或回读抛异常：PermissionError: [Errno 13] Permission denied
-N-10 应 RED   实 RED   OK  原因里不带异常类名
-      └─ FAIL 重放器自证：[写入通道] OSError 一路试满 5 次并报出类名：试了 5 次，原因 '落盘或回读抛异常'
-N-11 应 GREEN 实 GREEN OK  等价：CRLF 常量写成字面量
-N-12 应 GREEN 实 GREEN OK  等价：read_bytes 换成读文本再编码
-N-iso 仓库 `out_s213.txt` 在电池运行期间未被改动：True
-N-iso 本包目录里的临时副本残留：无
-N-总 电池全符合：12 发全部落在期望档上（10 发「改坏必须红」全红 / 2 发「等价写法不许假红」全绿）——M 段每条新判据都有能把它打红的变异
+N-00 基线 GREEN 未变异副本 rc=0（后面每一发的红才只可能来自那一发变异）
+N-iso 探测器自证（三种世界：字节变/留残留/都干净）：OK 三种都判对
+N-01 应 RED   实 RED   OK  ATTEMPTS 5→1：重试其实是装饰｜应红在『写入通道』组
+      └─ [写入通道] 第 3 次才成功的写要救回来（ATTEMPTS 改 1 即红）：落盘或回读抛异常：PermissionError: [Errno 13] Permission denied
+N-02 应 RED   实 RED   OK  PAUSE 0.3→0：失败之间不等待｜应红在『写入通道』组
+      └─ [写入通道] 两次失败之间各等 PAUSE 秒（PAUSE 归零即红）：实际等待 [0, 0]、PAUSE=0——不等待的重试救不了任何瞬时占用
+N-03 应 RED   实 RED   OK  删掉半成品分支｜应红在『写入判据』组
+      └─ [写入判据] 半成品给专属原因（点名「半成品」）：实得 '回读与写入不是同一份字节（写 39 字节，读回 37 字节）'
+N-04 应 RED   实 RED   OK  删掉 CRLF 分支｜应红在『写入判据』组
+      └─ [写入判据] CRLF 版按字节判红（点名 CRLF）：实得 '回读与写入不是同一份字节（写 39 字节，读回 43 字节）'
+N-05 应 RED   实 RED   OK  删掉 BOM 分支｜应红在『写入判据』组
+      └─ [写入判据] 带 BOM 判红（点名 BOM）：实得 '回读与写入不是同一份字节（写 39 字节，读回 42 字节）'
+N-06 应 RED   实 RED   OK  字节比对永远算成｜应红在『写入判据』组
+      └─ [写入判据] 半成品给专属原因（点名「半成品」）：实得 ''
+N-07 应 RED   实 RED   OK  根本不回读（write_ok 结果丢掉）｜应红在『写入通道』组
+      └─ [写入通道] 不注入 read 的那次 CRLF 必须照样报红（默认回读道口不是装饰）：盘上是 CRLF 版而 write_out 返回 ''
+N-08 应 RED   实 RED   OK  失败之间不再调用 sleep｜应红在『写入通道』组
+      └─ [写入通道] 两次失败之间各等 PAUSE 秒（PAUSE 归零即红）：实际等待 []、PAUSE=0.3——不等待的重试救不了任何瞬时占用
+N-09 应 RED   实 RED   OK  循环写成只跑一遍｜应红在『写入通道』组
+      └─ [写入通道] 第 3 次才成功的写要救回来（ATTEMPTS 改 1 即红）：落盘或回读抛异常：PermissionError: [Errno 13] Permission denied
+N-10 应 RED   实 RED   OK  原因里不带异常类名｜应红在『写入通道』组
+      └─ [写入通道] OSError 一路试满 5 次并报出类名：试了 5 次，原因 '落盘或回读抛异常'
+N-11 应 RED   实 RED   OK  半成品判据丢掉「意图里没有」那一半 ⇒ 塌回 10-4｜应红在『写入判据』组
+      └─ [写入判据] 意图自带占位符而盘上只是截断 ⇒ 报字节差，不许报半成品：实得 '磁盘上仍是半成品（留着 段数（含本段）： 19
+缺 `$ ` 命令的段： 无——本文件每一段都留得下重跑入口
+rc=0）——回填那一步没成功'
+N-12 应 RED   实 RED   OK  截断原因只说「长度不同」不给号数（10-9）｜应红在『写入判据』组
+      └─ [写入判据] 截断报出这两个号（写 39 字节，读回 35 字节）：实得 '回读与写入不是同一份字节（长度不同）'
+N-13 应 RED   实 RED   OK  删掉通用分支（10-10 的第 ① 档）｜应红在『写入判据』组
+      └─ [写入判据] 截断报出这两个号（写 39 字节，读回 35 字节）：实得 ''
+N-14 应 RED   实 RED   OK  把 OSError 换成别的类 ⇒ 异常逃出 write_out（10-10 的第 ② 档）｜应红在『写入通道』组
+      └─ [写入通道] 目标是目录时必须报原因而不是静默过：落盘失败却被当成成功——半成品就能冒充成品
+N-15 应 RED   实 RED   OK  默认 sleep 换成空函数（10-3：注入通道全绿也照样能骗过）｜应红在『写入通道』组
+      └─ [写入通道] 默认 sleep 就是 time.sleep（生产路径等的是真时钟，不是被换成空函数）：默认值实为 <function <lambda> at 0x0000020594854400>
+N-16 应 RED   实 RED   OK  默认 read 退回文本模式（=第九轮那条 MAJOR 的原样，10-12）｜应红在『写入通道』组
+      └─ [写入通道] 不注入 read 的那次 CRLF 必须照样报红（默认回读道口不是装饰）：盘上是 CRLF 版而 write_out 返回 ''
+N-17 应 RED   实 RED   OK  bd_ids 写成常量 ⇒ 头部那句「判据条数」又开始撒谎（10-1）｜应红在『头部现算』组
+      └─ [头部现算] 删掉 BD-15 那一行 ⇒ 清单必须正好少它一条、行为面不受影响：删了 BD-15 仍得 结构['BD-7', 'BD-8', 'BD-9', 'BD-10', 'BD-11', 'BD-12', 'BD-13', 'BD-
+N-18 应 GREEN 实 GREEN OK  等价：CRLF 常量写成字面量
+N-19 应 GREEN 实 GREEN OK  等价：字节比较把两边对调
+N-20 应 GREEN 实 GREEN OK  等价：BOM 前缀用切片比
+N-iso 仓库 `out_s213.txt` 与临时件残留：未改动、无残留（字节 42808、`_tmp_*` 无）
+N-总 电池全符合：20 发全部落在期望档上（17 发「改坏必须红且红在该红的判据组」全红 / 3 发「等价写法不许假红」全绿）＋ N-00 基线 ＋ N-iso 探测器自证 ＋ 编码三发——M 段每条判据都有能把它打红的变异，条数由 `len(SHOTS)` 现算（第九轮复审 id 7 那一类）
 rc=0
 
 ########## L 重放器自检：每段都必须留得下一条逐字可重跑的 `$ ` 命令
