@@ -1,0 +1,36 @@
+# 读数由 docs/任务规划V0.4.0/evidence/b45777a/precommit_gitleaks_scan.py 生成（2026-10-13，HEAD=d80eeaf，执行机无 gitleaks 二进制，正则/白名单经 tomllib 现读自 .gitleaks.toml）
+# 复现命令（逐条照抄可再跑）：
+#   python docs/任务规划V0.4.0/evidence/b45777a/precommit_gitleaks_scan.py docs/任务规划V0.4.0
+#   python docs/任务规划V0.4.0/evidence/b45777a/precommit_gitleaks_scan.py docs/任务规划V0.4.0 --exclude STEP-00C_proposed.patch --exclude evidence_check_b45777a.txt
+#   python docs/任务规划V0.4.0/evidence/b45777a/precommit_gitleaks_scan.py docs/任务规划V0.4.0/evidence/b45777a/precommit_gitleaks_scan.txt
+
+## 跑 1：整包待判（含两件 S0C.2 耦合件）
+规则 `connection-string-embedded-password` 现读自 .gitleaks.toml：主正则 1 条、口令白名单正则 2 条、路径豁免 1 条；待判文件 44 个。
+
+[FLAG] docs/任务规划V0.4.0/evidence/b45777a/evidence_check_b45777a.txt  1 条
+    :121  PASS NR-7 清理代理不影响 AIDEANBOT_TEST_PG_DSN :: 夹具后='postgresql+psycopg://x:‹口令已掩码›127.0.0.1:5547/z'
+
+[FLAG] docs/任务规划V0.4.0/evidence/b45777a/STEP-00C_proposed.patch  4 条
+    :20  -        os.environ[VAR] = "postgresql+psycopg://x:‹口令已掩码›127.0.0.1:5547/z"
+    :24  -    check("NR-7 清理代理不影响 AIDEANBOT_TEST_PG_DSN", dsn_kept == "postgresql+psycopg://x:‹口令已掩码›127.0.0.1:5547/z", f"夹具后={ds
+    :33  -        os.environ[VAR] = "postgresql+psycopg://x:‹口令已掩码›127.0.0.1:5547/z"
+    :39  -        if os.environ.get(VAR) != "postgresql+psycopg://x:‹口令已掩码›127.0.0.1:5547/z":
+
+合计待新增告警 5 条（已按口令白名单放行 2 类占位串）。
+⇒ 落库判读：这些行入库即成为**新提交**里的新指纹，`git apply` 的补丁正文整份都是新增行，连它引用的 `-` 行也会被当成内容扫到。要么改字面量，要么走 D-12 的登记方式，不能直接提交。
+rc=1
+
+## 跑 2：第 1 批落库集（--exclude 两件耦合件）
+规则 `connection-string-embedded-password` 现读自 .gitleaks.toml：主正则 1 条、口令白名单正则 2 条、路径豁免 1 条；待判文件 42 个。
+按 --exclude 暂不判定（**不等于干净**）：['docs/任务规划V0.4.0/evidence/b45777a/evidence_check_b45777a.txt', 'docs/任务规划V0.4.0/evidence/b45777a/STEP-00C_proposed.patch']
+
+合计待新增告警 0 条（已按口令白名单放行 2 类占位串）。
+⇒ 落库判读：提交该 pathspec 不会给 Security 添新指纹。
+rc=0
+
+## 跑 3：自扫本读数文件（必须 rc=0，否则证据自己就是新指纹）
+规则 `connection-string-embedded-password` 现读自 .gitleaks.toml：主正则 1 条、口令白名单正则 2 条、路径豁免 1 条；待判文件 1 个。
+
+合计待新增告警 0 条（已按口令白名单放行 2 类占位串）。
+⇒ 落库判读：提交该 pathspec 不会给 Security 添新指纹。
+rc=0

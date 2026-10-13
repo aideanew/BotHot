@@ -1,0 +1,13 @@
+[over] 1 条
+    tests\test_env_isolation.py:68 宽=134
+[pragma] 25 条
+    tests\test_kb_orphan_purge.py:91 宽=122
+    tests\test_manifest_sync.py:481 宽=123
+    tests\test_metadata_filter.py:174 宽=126
+    …（其余 22 条同类）
+[url-tail] 1 条
+    tests\test_resolver.py:46 宽=133
+[single-word] 0 条
+裸宽度命中 27 行；其中 ruff 真报的 1 行 = ['tests\\test_env_isolation.py:68 宽=134']
+标定成立：与 ruff_0.12.12_b45777a.txt 的唯一一条 E501 一致
+处置口径：g24 若要对齐 ruff，必须同时建模 pragma/url/单词三条豁免；否则豁免项会被当违规报出来（本地假红）。

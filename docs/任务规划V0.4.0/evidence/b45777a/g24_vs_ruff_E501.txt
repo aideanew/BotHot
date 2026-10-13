@@ -1,0 +1,3 @@
+tests/test_env_isolation.py:68
+len(line) = 112   <- g24_static_check.py:72 用 len()，判不超 120
+display width = 134   <- ruff 0.12.12 E501 按显示宽度（CJK=2），判 134>120

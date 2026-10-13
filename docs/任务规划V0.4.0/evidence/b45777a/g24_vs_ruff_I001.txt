@@ -1,0 +1,7 @@
+E501 口径：ruff 修复后的三份文件里显示宽度 >120 的行 = 0 行
+清理：探针目录已删除 = True（`_workspace/` 本就 gitignore）
+g24 对「已按 ruff 修好」的文件报 I001 2 条（rc=1）：
+    test_chat_sse.py:19 I001 import 未排序：from fastapi.testclient 应排在 conftest 之前（段 2，先 import 后 from）
+    test_env_isolation.py:29 I001 import 未排序：from fixtures.net 应排在 conftest 之前（段 2，先 import 后 from）
+互斥复现成立：按 ruff 终序改完后，本地 g24 反而报 I001 2 条。
+⇒ 陷阱：为了「本地绿」把 import 改回原序 = CI 红。S0C.1.1 只能以 ruff 为准，且 S0C.3.1 必须把 g24 的 I001 预检建模 order-by-type 或直接下线。

@@ -1,0 +1,49 @@
+diff --git a/apps/api/tests/test_chat_sse.py b/apps/api/tests/test_chat_sse.py
+index ee64534..4a25daf 100644
+--- a/apps/api/tests/test_chat_sse.py
++++ b/apps/api/tests/test_chat_sse.py
+@@ -15,7 +15,7 @@ from typing import Any
+ 
+ import httpx
+ import pytest
+-from conftest import PG_URL, SKIP_UNSET_REASON, _PG_URL_SOURCE
++from conftest import _PG_URL_SOURCE, PG_URL, SKIP_UNSET_REASON
+ from fastapi.testclient import TestClient
+ from test_repositories import _make_user
+ 
+diff --git a/apps/api/tests/test_env_isolation.py b/apps/api/tests/test_env_isolation.py
+index 3770c56..bf9de35 100644
+--- a/apps/api/tests/test_env_isolation.py
++++ b/apps/api/tests/test_env_isolation.py
+@@ -25,7 +25,7 @@ from __future__ import annotations
+ import os
+ 
+ import pytest
+-from conftest import NO_PROXY_ISOLATION_VALUE, _PROXY_ENV_VARS
++from conftest import _PROXY_ENV_VARS, NO_PROXY_ISOLATION_VALUE
+ from fixtures.net import REFUSED_HTTP_URL
+ 
+ from app.providers.push.base import PushMessage
+@@ -65,7 +65,9 @@ async def test_refused_url_fails_as_connection_error_not_http_status() -> None:
+     assert reason.startswith(("webhook 推送异常", "webhook 请求超时")), (
+         f"reason 既非连接异常也非超时，Provider 失败分类已变更：reason={reason!r}"
+     )
+-    assert result.retryable is True, f"未抵达目标时应可重试（webhook.py:49 超时支、:51 异常支均置 retryable=True）：reason={reason!r}"
++    assert result.retryable is True, (
++        f"未抵达目标时应可重试（webhook.py:49 超时支、:51 异常支均置 retryable=True）：reason={reason!r}"
++    )
+ 
+ 
+ def test_host_proxy_state_is_not_inherited() -> None:
+diff --git a/apps/api/tests/test_kb_longlink_ingest.py b/apps/api/tests/test_kb_longlink_ingest.py
+index 5ac517c..ec87e73 100644
+--- a/apps/api/tests/test_kb_longlink_ingest.py
++++ b/apps/api/tests/test_kb_longlink_ingest.py
+@@ -30,7 +30,6 @@ from __future__ import annotations
+ from urllib.parse import quote
+ 
+ import pytest
+-
+ from fixtures.wechat_urls import (
+     BIZ_A,
+     LONG_A,

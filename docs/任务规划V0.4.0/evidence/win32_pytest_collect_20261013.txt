@@ -1,0 +1,16 @@
+# win32 执行机连 pytest 的「收集」这一档都过不了（2026-10-13 本机实测，不是推断）
+# HEAD=d80eeaf  机器=win32 10.0.19045  Python=3.11.9  pytest 9.1.1
+# 复现（cwd=apps/api）：python -m pytest tests --collect-only -q -p no:cacheprovider
+# 实耗 0.73s（真·秒级），未进入任何用例，也没有 collected 行
+
+ImportError while loading conftest 'D:\Code\AideanBotHot\apps\api\tests\conftest.py'.
+tests\conftest.py:33: in <module>
+    from sqlalchemy.ext.asyncio import (  # noqa: E402
+E   ModuleNotFoundError: No module named 'sqlalchemy'
+
+# 退出码：实测 rc=4（usage error），上面正文共 4 行——这是 conftest 载入失败的收场形状
+# ⇒ 判读一：崩栈不是裁决——这一跑的 stdout 里没有 collected 行，所以本包任何 collected N items / 覆盖率读数
+#   都不可能是本机产的。（注意别把这条读成「win32 跑不了测试所以可以不管」：它恰恰说明
+#   「本机全绿」这四个字在 win32 上无从证伪，见 00-README §5。）
+# ⇒ 判读二：b45777a 两份全量读数（末行 1037 passed, 5 skipped in 56.05s / 1036 passed, 6 skipped in 27.63s）
+#   产在 aarch64 Linux 沙箱，证据是同目录 probes_b45777a.txt 里的 /workspace/work/BotHot 路径；本包 00-README §6 的每条命令都缺「哪台机器」标注，见同文件 §7。

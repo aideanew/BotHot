@@ -1,0 +1,15 @@
+# 代理根因复现 @4afaedd（2026-10-12 18:0x CST，隔离 PG16@5547）
+## A. 进程环境存在 http/https 代理（只列键名，不列值）
+['http', 'https']
+## B. 保留代理环境跑失败用例
+        → failed PushLog + 重试簿记 → **重投领取为空**（at-most-once 锚定：
+        # 投递回执：failed PushLog 落库且错误信息非空
+        assert logs[0].status == "failed"
+E       assert 0 == 1
+E        +  where 0 = <app.models.bothot_entities.PushTask object at 0xffffa83e3410>.retry_count
+1 failed in 0.70s
+## C. 直接调用 WebhookPushProvider 打 127.0.0.1:1（有代理）
+delivered= False retryable= False reason= webhook 返回 HTTP 404
+## D. 清除代理变量后
+delivered= False retryable= True reason= webhook 推送异常: All connection attempts failed
+11 passed in 0.71s
