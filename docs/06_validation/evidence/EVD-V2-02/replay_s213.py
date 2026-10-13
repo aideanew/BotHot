@@ -56,6 +56,10 @@ RELPATH = lambda p: p.relative_to(ROOT).as_posix()  # noqa: E731 - 只是把路�
 # 禁的「没有裁决」第三态，与两份 harness 同一个症状），后者每次重跑必然不同（留着就等于留一份
 # 不可复现的读数）。所以先钉输出流，再把墙钟归一化成 `in <redacted>s`。
 TIMING = re.compile(r"\bin \d+\.\d+s\b")
+# 解释器的对象表示里带内存地址（`<function <lambda> at 0x0000020594854400>`）。第十一轮复审在临时
+# worktree 里整份重放、与在库留档逐行对比，抓到这处地址每次重跑必不同——它和墙钟是同一类读数，
+# 当时却只归一化了墙钟。口径统一：两类都归一化，且都在文件头声明（声明里写了几个形状就得归一化几个）。
+MEMADDR = re.compile(r"\b0x[0-9a-fA-F]{5,}\b")
 
 
 def _ensure_utf8_stdout() -> None:
@@ -182,7 +186,11 @@ def write_ok(intent: str, raw: bytes) -> str:
         head = raw[:len(BOM)]
         return f"落下去的带 BOM（前 {len(BOM)} 字节 {head!r}）：编码被改写"
     if PLACEHOLDER in text and PLACEHOLDER not in intent:
-        return f"磁盘上仍是半成品（留着 {PLACEHOLDER}）——回填那一步没成功"
+        # 这句**不许把占位标记本身打印出来**（第十一轮复审的 MAJOR）：这一条原因会变成 M 段的一行
+        # 读数落进留档，而 L 的回填原先是对整份文件做全局替换——标记在段体里出现几次就被填几次，
+        # 于是整段 L 输出被塞进另一条判据的读数里，且回读比对看不见（意图早已是污染后的串）。
+        # 现在回填只认唯一一处（见 `main()`），这里也不再复制标记。
+        return "磁盘上仍是半成品（留着 L 段读数位那个占位标记）——回填那一步没成功"
     return f"回读与写入不是同一份字节（写 {len(want)} 字节，读回 {len(raw)} 字节）"
 
 
@@ -230,9 +238,15 @@ def write_out(text: str, *, write=_disk_write, read=_disk_read, sleep=time.sleep
 def run_cmd(cmd: str, title: str, notes: str = "") -> str:
     r = subprocess.run([BASH, "-c", cmd], capture_output=True, text=True,
                        encoding="utf-8", errors="replace", cwd=ROOT, env=ENV)
-    out = TIMING.sub("in <redacted>s", ((r.stdout or "") + (r.stderr or "")).rstrip())
-    print(f"{title[:60]} … rc={r.returncode}")
-    return f"{title}\n{notes}$ {cmd}\n{out}\nrc={r.returncode}\n"
+    raw = ((r.stdout or "") + (r.stderr or "")).rstrip()
+    out = MEMADDR.sub("0x<redacted>", TIMING.sub("in <redacted>s", raw))
+    rc = r.returncode
+    if rc == 2:
+        # 三档退出码里最容易被读错的一档：2 是「压根没测到」，不是「测出红」。它在留档里必须
+        # 明写出来，否则读者把 INCONCLUSIVE 当 1 读，就是拿「没测」冒充「测出不合格」。
+        out += "\n**INCONCLUSIVE：判据没跑，别把这一档读成真红**"
+    print(f"{title[:60]} … rc={rc}")
+    return f"{title}\n{notes}$ {cmd}\n{out}\nrc={rc}\n"
 
 
 K_TITLE = "########## K.1 BD 裸跑（cp936 输出流，guard 在位）"
@@ -285,16 +299,32 @@ G_TITLE = "########## G 仓库静态自检（E/F/I/W/UP/B 机检子集；文件�
 G_TEST_FILES = ("apps/api/tests/test_kb_longlink_ingest.py", "apps/api/tests/test_article_identity.py")
 
 
-def g_section() -> str:
-    """G 段：仓库静态自检，**文件清单由 `EV/*.py` glob 现算**（第十轮复审 10-14）。
+def g_section() -> tuple[str, list[str]]:
+    """G 段：仓库静态自检，**文件清单由 `EV/*.py` glob 现算**（第十轮复审 10-14）。返回 (段文本, 缺陷)。
 
     上一版这一串的七个文件名是我手改进留档的 `$ ` 行里的（`git show d80eeaf -- out_s213.txt`
     就能看到那行 `$` 被改过一次），后果是新入库的 `block_article_identity_plugin.py` 一直游离在
     门禁之外，而且没有任何命令判「清单与包内文件相符」。现在加一个 `.py` 进本包就自动进门禁。
     两处 `apps/api/tests` 文件是被检对象的另一端，不在本包，仍按名登记。
+
+    **这一段的读数必须承重**（第十一轮复审 NIT①）：上一版它只是把 `g_section()` 的文本塞进留档，
+    `defects` 一个字都不收——实测往本包放一份有违规的 `.py`，G 段自己记 `rc=1`、表里写「合计违规 1 条」，
+    驱动整趟仍 rc=0 交付。静态门禁报了红而驱动绿，等于门禁只在正文里好看。现在三判：末行必须 `rc=0`、
+    必须出现「合计违规 0 条」、表里 `===` 的份数必须等于命令里列出的份数（少一份就是 glob 与命令脱节）。
     """
     files = [RELPATH(p) for p in sorted(EV.glob("*.py"))]
-    return run_cmd(f"python {RELPATH(G24)} " + " ".join([*G_TEST_FILES, *files]), G_TITLE)
+    listed_names = [*G_TEST_FILES, *files]
+    text = run_cmd(f"python {RELPATH(G24)} " + " ".join(listed_names), G_TITLE)
+    defects: list[str] = []
+    if not text.rstrip().endswith("rc=0"):
+        defects.append(f"G 段静态自检没下绿裁决：末行 {text.rstrip().splitlines()[-1]!r}")
+    if "合计违规 0 条" not in text:
+        defects.append("G 段静态自检报的不是「合计违规 0 条」——门禁红了就不许交出绿留档")
+    blocks = len(re.findall(r"(?m)^=== ", text))
+    if blocks != len(listed_names):
+        defects.append(f"G 段命令列出 {len(listed_names)} 份文件，表里只有 {blocks} 份——"
+                       f"清单与被检结果脱节（glob 现算的那几份与写进命令的那几份不是同一批）")
+    return text, defects
 
 
 #: 段落来源登记表（第十轮复审 10-8 逼出来的显式数据结构）。
@@ -318,7 +348,7 @@ print('缺 `$ ` 命令的段：', bad or '无——本文件每一段都留得�
 PY"""
 
 
-def self_test() -> int:
+def self_test(listing: bool = False) -> int:
     """M 段：判的不是留档内容，而是「驱动自己会不会静默交出一份假留档」这两条通道还在不在。
 
     第八轮复审 id 4 指出 L 段机检只看 `$ ` 把手在不在，把命令换成 `$ 不是命令` 它照样报「无」。
@@ -533,6 +563,11 @@ def self_test() -> int:
           "" if beh_ids == [f"BD-{i}" for i in range(1, len(beh_ids) + 1)] else f"实得 {beh_ids!r}")
     check(g4, "结构面非空、与行为面不相交（合计就是头部那个数）",
           "" if str_ids and not set(beh_ids) & set(str_ids) else f"行为 {beh_ids!r} 结构 {str_ids!r}")
+    # 第十一轮复审 10-1 的残余：头部那句写的是两个**区间**（`BD-1…BD-6` 与 `BD-7…BD-16`），
+    # 而当时只判了行为面区间连续——结构面若从 BD-9 起跳，头部照样拼出「BD-7…BD-16」却与磁盘不符。
+    check(g4, "两个区间首尾相接、合起来是 BD-1…BD-N（头部那两句区间才是人话）",
+          "" if beh_ids + str_ids == [f"BD-{i}" for i in range(1, len(beh_ids) + len(str_ids) + 1)]
+          else f"拼接实得 {(beh_ids + str_ids)!r}")
     tmpd = pathlib.Path(tempfile.mkdtemp(prefix="bd_head_"))
     try:
         src_lines = (EV / "prove_biz_delegation.py").read_text(encoding="utf-8-sig").splitlines(keepends=True)
@@ -554,6 +589,12 @@ def self_test() -> int:
     for item in ran:
         group, label = item.split("｜", 1)
         groups.setdefault(group, []).append(label)
+    if listing:
+        # 给反证电池enumerate判据用的机器可读档（每行 `组｜判据名`）。电池拿它算「哪些判据至今
+        # 没有一发能把它打红的变异」——没有这一档，那句「每条判据都配了变异」就只能是形容词。
+        for item in ran:
+            print(item)
+        return 1 if fails else 0
     tally = "；".join(f"{k} {len(v)} 条（{'、'.join(v)}）" for k, v in groups.items())
     for f in fails:
         print(f"FAIL 重放器自证：{f}")
@@ -590,7 +631,9 @@ def main() -> int:
     for title, body in sections:
         letter = title.split()[1]
         if letter == "G":
-            rendered.append(g_section())
+            g_text, g_defects = g_section()
+            rendered.append(g_text)
+            defects += g_defects
             continue
         try:
             cmd = extract_cmd(body)
@@ -660,12 +703,18 @@ def main() -> int:
 #   上一版留档这些都做不到：驱动放在不入库的 `_workspace/` 里、按 `$ ` 前缀找命令又在输出时剥掉前缀，
 #   前缀一丢就**不跑而直接抄旧输出**且不报错
 #   ——这条账记在 README §4.9 S-2 / §4.10 与卡面差异表 D-11/D-12。
-# G 段的被检文件清单由 `EV/*.py` **glob 现算**，不再是我抄进 `$ ` 行的七份（第十轮复审 10-14）
+# G 段的被检文件清单由 `EV/*.py` **glob 现算**，不再是我抄进 `$ ` 行的七份（第十轮复审 10-14）；
+#   这一段自己承重（第十一轮复审 NIT①）：驱动核对「命令里列出的份数 == 表里 `===` 的份数」且末行必须
+#   `rc=0`、必须出现「合计违规 0 条」，任何一条不符都进缺陷清单、整趟 rc=1——上一版 G 报了红而驱动照样绿
 # 每段 `$` 行就是**逐字可重跑**的单行命令（heredoc 段用 `python - <<'PY' … PY`，在 git bash 下、仓库根跑）
 # 判据计数口径：BD-15 排在最前打印（它是行为面六条的前提），编号仍按追加顺序，不打乱既有 BD 编号的锚
 # `PYTHONIOENCODING=utf-8` 现在只影响输出**好不好读**，不再是脚本**活不活得下来**的前提：见 K.1/K.4 两条裸跑
-# 凡 `in <redacted>s` 都是被**归一化**掉的 pytest 墙钟：它每次重跑必不同，留下原值就是留一份不可复现的读数
-#   （第八轮复审 id 1）。除这一处，段体里的读数全是命令的真实输出（标题与 `#` 注是我写的，不是读数）。
+# 段体里有**三类**读数不是命令的原样输出，都在 `run_cmd()` 里统一处理，声明与实现一一对应：
+#   ① pytest 墙钟 `\bin \d+\.\d+s\b` → `in <redacted>s`（每次重跑必不同，留原值就是留一份不可复现的读数，
+#      第八轮复审 id 1）；② 解释器对象表示里的内存地址 `0x…` → `0x<redacted>`（同一类「每次必不同」，
+#      第十一轮复审 NIT③ 抓到上一版只归一化了①却写着「除这一处全是真实输出」）；
+#   ③ 任何一档 `rc=2` 时末行补一句 `**INCONCLUSIVE…**` 标注——那是「压根没测到」，不能让人读成真红。
+#   除这三处，段体里的读数全是命令的真实输出（标题与 `#` 注是我写的，不是读数）。
 
 """
     # 两段式落 L：先把 L 段连同占位符写进去，再跑 L 的命令，最后回填——这样 L 的读数描述的是
@@ -692,7 +741,7 @@ def main() -> int:
     # N 段：本轮新判据的「改坏必须红 / 等价不许假红」电池。它必须在留档落盘**之前**跑——
     # 电池会把整个证据包（含 out_s213.txt）拷进临时目录，拷到半成品就等于把半成品当成了基准。
     n = run_cmd(f"python {RELPATH(EV / 'mutate_replay_r9.py')}",
-                "########## N 反证电池（第九轮建、第十轮扩）：M 段每条新判据都配一发能把它打红的变异",
+                "########## N 反证电池：M 段每条判据都要有一发能把它打红的变异（覆盖率现算，缺一条就 rc≠0）",
                 "# 这一段的存在理由：第九轮报回的两条 MAJOR，恰好是上一版电池的读数**证明不了**的"
                 "（回读走文本模式 ⇒ CRLF 能骗过；`ATTEMPTS`/`PAUSE` 没人判 ⇒ 改 1 改 0 照样 PASS）。\n"
                 "# 所以本轮每条新判据先发变异确认能红，再发等价写法确认不假红；变异锚找不到时报 FAIL 而不是跳过"
@@ -703,7 +752,14 @@ def main() -> int:
                 "只「碰巧崩在别处」不算堵住；③ `N-iso` 那两行原先只是打印、没有判据（G-23）⇒ 现在"
                 "隔离探测器自己被反证一次（故意改临时副本必须报红）；④ 它自己没有编码 guard，"
                 "标签里出现 `⇒` 就整段崩在 cp936 输出流上 ⇒ 补 `_ensure_utf8_stdout()` 并让第十轮的"
-                "新判据各带一发变异。文件名保留 `mutate_replay_r9.py`（第十轮只是扩它，不是另起一个）。\n")
+                "新判据各带一发变异。文件名保留 `mutate_replay_r9.py`（第十轮只是扩它，不是另起一个）。\n"
+                "# 第十一轮复审又对着电池自己提了三条，都已落地：① 它把 `rc≠0` 一律折成 RED，所以「崩在别处」"
+                "与 rc=2（判据压根没跑）都会伪装成「这一发变异打中了」⇒ 现在三档分开读，rc=2 或 rc≠0 却一条"
+                "可读 FAIL 都没有的都判 INCONCLUSIVE；② 末句「每条判据都有能把它打红的变异」当时是形容词"
+                "（M 有 30 条，变异只有 17 发）⇒ 现在电池先跑 `replay_s213.py --list-checks` 拿到判据全清单，"
+                "再按每一发红出来的 `[组] 判据名` 记账，末尾报「覆盖 n / 共 m 条」并把没有变异的判据**点名列出**，"
+                "少一条就 rc≠0；③ 编码三发全绿时原先一声不出（等于注销），绿档不可证 ⇒ 现在三发各自把实得"
+                "读数打出来（裸跑 rc、关 guard rc、抽靶后 rc），锚点不命中也逐发报而不只在批级兜。\n")
     body = header + "\n".join(rendered) + "\n" + j + "\n" + "\n".join(k_chunks) + "\n" + m + "\n" + n
     err = write_out(body + "\n" + L_HEAD + "$ " + L_CMD + "\n" + PLACEHOLDER + "\n")
     if err:
@@ -712,16 +768,42 @@ def main() -> int:
     lr = subprocess.run([BASH, "-c", L_CMD], capture_output=True, text=True,
                         encoding="utf-8", errors="replace", cwd=ROOT, env=ENV)
     lout = ((lr.stdout or "") + (lr.stderr or "")).rstrip() + f"\nrc={lr.returncode}"
-    err = write_out(OUT.read_text(encoding="utf-8").replace(PLACEHOLDER, lout))
+    # 回填是**定位**而不是全局替换（第十一轮复审的 MAJOR）：上一版 `read_text().replace(标记, lout)`
+    # 没有 `count=1`，而 `write_ok` 的半成品原因里当时正好打印着这个标记——那一行作为 M 段读数已经
+    # 落进留档，于是全局替换把整段 L 输出塞进了另一条判据的读数中间（在库的 `out_s213.txt` N-11 那发
+    # 就是事故现场），而字节回读比不出来：写下去的意图本身就是污染后的串。现在两处一起堵：
+    # 读数里不再出现标记（见 `write_ok`），且这里要求「磁盘上恰好一处」，多一处就拒绝交付而不是静默自我污染。
+    pending = OUT.read_text(encoding="utf-8")
+    slots = pending.count(PLACEHOLDER)
+    if slots != 1:
+        print(f"FAIL 交付：L 读数位的占位标记在磁盘上有 {slots} 处，应为恰好 1 处——"
+              f"多出来的那一处是某段读数把标记打印了出来，回填会把它一起替换掉（自我污染）；"
+              f"少出来的那一处是 L 段没落下去。两种都不许交出这份留档")
+        return 1
+    err = write_out(pending.replace(PLACEHOLDER, lout, 1))
     if err:
         print(f"FAIL 交付：L 的回填没成功，磁盘上不是这一份——{err}")
         return 1
     written = OUT.read_text(encoding="utf-8")
+    # 第二张登记表在这里承重（第十一轮复审 MINOR⑤：`CODE` 当时只被赋值、从不被读，
+    # 而文档却写着「用 ARCHIVED/CODE 两张注册表核对」——G-23 禁的就是这种永不失败的断言）。
+    # 输入侧的 `found != want` 只保证**旧留档**里 A–I 齐；这一条保证**交出去的这一份**
+    # 归档段 + 现生成段一个都不少，`python -O` 那种「缺整段却报逐字节相同」的形状落在它身上。
+    got_letters = sorted({m.group(1) for m in re.finditer(r"(?m)^########## ([A-Z]+)", written)})
+    want_letters = sorted({*ARCHIVED, *CODE})
+    if got_letters != want_letters:
+        print(f"FAIL 交付：落下去的留档段集合与两张登记表不符——期望 {want_letters}，实得 {got_letters}"
+              f"（缺的那几段是没跑还是被剥掉了，看标题；这一趟不能当成交付）")
+        return 1
     print(lout)
-    print(f"写出 {OUT}（{len(written.splitlines())} 行）｜回读逐字节相同（比对走 `read_bytes`，不经换行翻译）")
+    print(f"写出 {OUT}（{len(written.splitlines())} 行、{len(got_letters)} 段）｜"
+          f"回读逐字节相同（比对走 `read_bytes`，不经换行翻译）")
     return 0 if "缺 `$ ` 命令的段： 无" in written else 1
 
 
 if __name__ == "__main__":
-    # `--self-test` 只判取命令这条路（M 段跑的就是它），不重写留档；不带它才整份重放
-    raise SystemExit(self_test() if "--self-test" in sys.argv[1:] else main())
+    # `--self-test` 只判取命令这条路（M 段跑的就是它），不重写留档；不带它才整份重放；
+    # `--list-checks` 只把 M 段那批判据按 `组｜判据名` 打一份清单，给反证电池算覆盖率用
+    _args = sys.argv[1:]
+    raise SystemExit(self_test(listing="--list-checks" in _args)
+                     if ("--self-test" in _args or "--list-checks" in _args) else main())

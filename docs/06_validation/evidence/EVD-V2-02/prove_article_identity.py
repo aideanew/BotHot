@@ -122,7 +122,14 @@ def load_impl(source: str | None = None) -> ModuleType:
 
     if source is None:
         spec = importlib.util.spec_from_file_location(MODNAME, IMPL)
-        assert spec is not None and spec.loader is not None
+        if spec is None or spec.loader is None:
+            # 这句原先是一行裸 `assert`（第十一轮复审 NIT②，也是 10-8 的残余）：`python -O` 下整行
+            # 被剥掉，接着以 `TypeError: module() takes at most 2 arguments` 收场——零裁决。
+            # 而这一档的真实后果是「判据压根没跑」，按本项目退出码映射该走 2（INCONCLUSIVE），
+            # 不能读成 1（测出不合格），更不能读成崩栈。
+            print(f"INCONCLUSIVE 目标加载不了：`spec_from_file_location({MODNAME}, {IMPL})` "
+                  f"给不出可执行的 spec——一条判据都没跑")
+            raise SystemExit(2)
         mod = importlib.util.module_from_spec(spec)
         sys.modules[MODNAME] = mod
         setattr(app.services, "article_identity", mod)
