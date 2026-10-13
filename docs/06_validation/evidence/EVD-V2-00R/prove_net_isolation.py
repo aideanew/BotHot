@@ -177,69 +177,316 @@ CONTRACT_VALUE_EXPRS = {"NO_PROXY_ISOLATION_VALUE", repr(EXPECTED_NO_PROXY)}
 SENTINEL_VAR = "AIDEANBOT_SENTINEL_PROXY_VAR"
 
 
-def call_arg(call: ast.Call, index: int, param: str) -> ast.expr | None:
-    """按形参槽位取实参——位置写法与关键字写法等价，两种都要认。
+def call_arg(call: ast.Call, index: int, *params: str) -> ast.expr | None:
+    """按形参槽位取实参——位置写法、关键字写法、`**{字面量字典}` 展开三种都要认。
 
-    第四轮复审用 `setenv(name="NO_PROXY", value=…)`、`delenv(_name, False)`、
+    第四轮复审用 `setenv(name=…, value=…)`、`delenv(_name, False)`、
     `delenv(name=_name, raising=False)` 三条**合法重构**实测出「改法等价却判红」，
     那是判据自身的缺陷（假红会把人训练成忽略门禁）。槽位名取自 pytest.MonkeyPatch 签名。
+    第五轮复审再反过来用 `setenv(**{"name": "NO_PROXY", "value": "evil.example"})` 实测出
+    另一头的漏洞：只读 `kw.arg` 的话，字典展开整条被跳过 ⇒ 坏写全绿通过。
+    同一个通道既不能因为合法写法变红，也不能因为换一种传法就看不见——所以两边一起补。
     """
     if len(call.args) > index:
         return call.args[index]
     for kw in call.keywords:
-        if kw.arg == param:
+        if kw.arg in params:
             return kw.value
+        if kw.arg is None and isinstance(kw.value, ast.Dict):
+            for key, val in zip(kw.value.keys, kw.value.values, strict=False):
+                if isinstance(key, ast.Constant) and isinstance(key.value, str) and key.value in params:
+                    return val
     return None
 
 
-def setenv_writes(node: ast.AST) -> dict[str, list[str]]:
-    """夹具内所有 `setenv(名, 值)` 调用，按名收集**每一次**写入的值表达式。
+#: 写环境变量的手段。第四轮只列 `setenv`，于是
+#: `os.environ.setdefault("NO_PROXY", "evil.example")` 全绿通过——本脚本的沙箱把 `NO_PROXY`
+#: 预置成宿主值（NR-6 要靠它观测 undo 复原），setdefault 因此是**空操作**，行为面根本看不见
+#: 这次写入（第五轮复审 D1）。`setdefault`/`update` 只在接收者像 `os.environ` 时才算，
+#: 免得把无关字典的方法误当成环境写入。
+_ENV_WRITE_ATTRS = frozenset({"setenv", "putenv", "setdefault", "update"})
+_ENV_NAME_PARAMS = ("name", "key")
+_ENV_VALUE_PARAMS = ("value", "default", "v")
+#: NR-14 关心的两种拼写。
+_PROXY_SPELLINGS = ("NO_PROXY", "no_proxy")
+#: 契约值的等价写法：直接引常量、常量本身就是那个字面量、套一层 `str()`/`.strip()`、
+#: 或 f-string 里只有那一个占位（第五轮复审 C10 实测 `str(NO_PROXY_ISOLATION_VALUE)` 假红）。
+_CONTRACT_CALL_WRAPPERS = frozenset({"str"})
+_CONTRACT_VALUE_METHODS = frozenset({"strip", "lstrip", "rstrip"})
+#: 平台身份读数（NR-17 禁的就是这些）。
+_PLATFORM_ROOTS = frozenset({"os", "sys", "platform", "sysconfig"})
+_PLATFORM_ATTRS = frozenset({"name", "platform", "system", "uname", "getwindowsversion", "machine"})
+_PLATFORM_STRINGS = frozenset({
+    "nt", "posix", "java", "cli", "win32", "cygwin", "aix", "darwin",
+    "linux", "freebsd", "openbsd", "netbsd", "sunos",
+})
 
-    只记第一次（`setdefault`）是第四轮复审抓出的 fail-open：`NO_PROXY` 先契约值、
-    后 `"localhost"` 的连写，以及 `if os.name != "nt": setenv("NO_PROXY", "evil")`
-    这一类平台守卫后的坏写，都能在全绿的情况下让夹具在非本平台上失效。
+
+def _is_contract_value(expr: ast.expr | None) -> bool:
+    """这个值表达式是否**必然**取到契约值（而不是「看起来像」）。"""
+    if expr is None:
+        return False
+    if ast.unparse(expr) in CONTRACT_VALUE_EXPRS:
+        return True
+    if isinstance(expr, ast.Call):
+        if (
+            isinstance(expr.func, ast.Name)
+            and expr.func.id in _CONTRACT_CALL_WRAPPERS
+            and len(expr.args) == 1
+            and not expr.keywords
+        ):
+            return _is_contract_value(expr.args[0])
+        if (
+            isinstance(expr.func, ast.Attribute)
+            and expr.func.attr in _CONTRACT_VALUE_METHODS
+            and not expr.args
+            and not expr.keywords
+        ):
+            return _is_contract_value(expr.func.value)
+    if isinstance(expr, ast.JoinedStr) and len(expr.values) == 1 and isinstance(expr.values[0], ast.FormattedValue):
+        return _is_contract_value(expr.values[0].value)
+    return False
+
+
+def _names(expr: ast.expr | None, bound: dict[str, set[str] | None]) -> set[str] | None:
+    """静态解析「这个表达式可能取到哪些字符串名」；解析不了返回 None（= 不可判）。
+
+    不可判**不等于放过**：NR-14 v4 对不可判名照样要求契约值（举证责任压回写入方），
+    第五轮复审的 f-string 名（D2）与循环变量名（D3）就是靠这一条变红的。
     """
-    writes: dict[str, list[str]] = {}
-    for call in ast.walk(node):
-        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == "setenv"):
+    if expr is None:
+        return None
+    if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
+        return {expr.value}
+    if isinstance(expr, ast.JoinedStr):
+        parts: list[str] = []
+        for piece in expr.values:
+            if isinstance(piece, ast.Constant) and isinstance(piece.value, str):
+                parts.append(piece.value)
+            elif isinstance(piece, ast.FormattedValue):
+                got = _names(piece.value, bound)
+                if not got or len(got) != 1:
+                    return None
+                parts.append(next(iter(got)))
+            else:
+                return None
+        return {"".join(parts)}
+    if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Add):
+        left, right = _names(expr.left, bound), _names(expr.right, bound)
+        if left and right and len(left) == 1 and len(right) == 1:
+            return {next(iter(left)) + next(iter(right))}
+        return None
+    if isinstance(expr, (ast.Tuple, ast.List, ast.Set)):
+        out: set[str] = set()
+        for element in expr.elts:
+            got = _names(element, bound)
+            if not got:
+                return None
+            out |= got
+        return out
+    if isinstance(expr, ast.Name):
+        return bound.get(expr.id)
+    return None
+
+
+def _binding_map(node: ast.AST) -> dict[str, set[str] | None]:
+    """夹具内「名字 → 它可能取到的字符串集合」的保守解析，只看字面量赋值、海象与 for 目标。"""
+    bound: dict[str, set[str] | None] = {}
+    for stmt in ast.walk(node):
+        if isinstance(stmt, ast.For) and isinstance(stmt.target, ast.Name):
+            bound[stmt.target.id] = _names(stmt.iter, bound)
+        elif isinstance(stmt, ast.Assign):
+            val = _names(stmt.value, bound)
+            for target in stmt.targets:
+                if isinstance(target, ast.Name):
+                    bound[target.id] = val
+        elif isinstance(stmt, ast.NamedExpr) and isinstance(stmt.target, ast.Name):
+            bound[stmt.target.id] = _names(stmt.value, bound)
+    return bound
+
+
+def _dict_items(call: ast.Call) -> list[tuple[ast.expr | None, ast.expr | None]]:
+    """`update({...})` 与 `update(k=…)` 里的键值对，摊平成 (key, value) 表达式。"""
+    items: list[tuple[ast.expr | None, ast.expr | None]] = []
+    for arg in call.args:
+        if isinstance(arg, ast.Dict):
+            items.extend(zip(arg.keys, arg.values, strict=False))
+    for kw in call.keywords:
+        if kw.arg is not None:
+            items.append((ast.Constant(value=kw.arg), kw.value))
+    return items
+
+
+def env_writes(node: ast.AST) -> list[tuple[str, set[str] | None, ast.expr | None, int]]:
+    """夹具里所有「写环境变量」的动作：(手段, 目标名集合或 None, 值表达式, 行号)。
+
+    覆盖 `*.setenv` / `os.environ.setdefault` / `os.environ.update({...})` /
+    `os.environ[…] = …` / `os.putenv` 五类落点——这个集合不是想到的，是第五轮复审
+    D1–D4 逐条试出来的：每一条都是「判据全绿而夹具已经不做隔离」的实测形态。
+    """
+    bound = _binding_map(node)
+    writes: list[tuple[str, set[str] | None, ast.expr | None, int]] = []
+    for stmt in ast.walk(node):
+        if isinstance(stmt, ast.Assign):
+            for target in stmt.targets:
+                if isinstance(target, ast.Subscript) and ast.unparse(target.value).endswith("environ"):
+                    writes.append(("os.environ[…]=", _names(target.slice, bound), stmt.value, stmt.lineno))
             continue
-        name = call_arg(call, 0, "name")
-        value = call_arg(call, 1, "value")
-        if isinstance(name, ast.Constant) and isinstance(name.value, str):
-            writes.setdefault(name.value, []).append(ast.unparse(value) if value is not None else "（缺值实参）")
+        if not (isinstance(stmt, ast.Call) and isinstance(stmt.func, ast.Attribute)):
+            continue
+        attr = stmt.func.attr
+        if attr not in _ENV_WRITE_ATTRS:
+            continue
+        if attr in ("setdefault", "update") and not ast.unparse(stmt.func.value).endswith("environ"):
+            continue
+        if attr == "update":
+            for key, val in _dict_items(stmt):
+                writes.append(("os.environ.update", _names(key, bound), val, stmt.lineno))
+            continue
+        name_arg = call_arg(stmt, 0, *_ENV_NAME_PARAMS)
+        value_arg = call_arg(stmt, 1, *_ENV_VALUE_PARAMS)
+        writes.append((f".{attr}", _names(name_arg, bound), value_arg, stmt.lineno))
     return writes
 
 
 def no_proxy_pairings(node: ast.AST) -> tuple[bool, str]:
-    """NR-14 的加强形态：两种拼写的**每一次**写入都必须取契约值。
+    """NR-14 的加强形态：代理两种拼写的**每一次**写入都必须取契约值，且两种拼写都得真写。
 
     口径演进（每一版都是被反证逼出来的，不是自己想到就写下的）：
     - v1 只比「字面量名集合」⇒ `setenv("NO_PROXY", "localhost")` 混过去；
-    - v2 按位置取 (名, 值) 配对，但 `setdefault` 只记第一条 ⇒ 好写之后追加坏写全绿；
-    - v3（本版）收集全部写入 + 位置/关键字通吃 + `ast.walk` 深入嵌套分支 ⇒
-      双写覆写、平台守卫坏写都红，而合法的关键字写法不假红。
+    - v2 按位置取 (名, 值) 配对，但同名只记第一条 ⇒ 好写之后追加坏写全绿；
+    - v3 收集全部写入 + 位置/关键字通吃 + `ast.walk` 深入嵌套分支 ⇒ 双写覆写与平台守卫
+      坏写都红，而合法的关键字写法不假红；
+    - v4（本版）写入手段扩到 `os.environ.setdefault`/`update`/下标赋值/`putenv`，名扩到
+      f-string/拼接/循环变量/`**` 展开，**名字解析不了也照样要求契约值**；同时保留
+      「两种拼写都必须被证明写过」——否则把小写那行删掉又是全绿（第四轮的 MUTANT 还在）。
     """
-    writes = setenv_writes(node)
-    bad = [
-        f"{n}→{v!r}"
-        for n in ("NO_PROXY", "no_proxy")
-        for v in (writes.get(n) or ["（未写）"])
-        if v not in CONTRACT_VALUE_EXPRS
-    ]
-    pairing = "、".join(f"{k}→[{', '.join(v)}]" for k, v in sorted(writes.items())) or "无"
-    return not bad, f"写入={pairing}" + (f"｜不合格={bad}" if bad else "")
+    writes = env_writes(node)
+    hit: set[str] = set()
+    bad: list[str] = []
+    for kind, names, value, lineno in writes:
+        spelled = "" if names is None else "/".join(sorted(names))
+        shown = ast.unparse(value) if value is not None else "（缺值实参）"
+        if names is None:
+            relevant = True  # 名不可判 ⇒ 按「可能写到代理变量」处理
+        else:
+            relevant = bool(set(names) & set(_PROXY_SPELLINGS))
+            hit |= set(names) & set(_PROXY_SPELLINGS)
+        if relevant and not _is_contract_value(value):
+            bad.append(f"{kind}{spelled or '(名不可判)'}@L{lineno} 值={shown!r}")
+    missing = [n for n in _PROXY_SPELLINGS if n not in hit]
+    seen = "、".join(
+        f"{kind}{('/'.join(sorted(names)) if names else '(名不可判)')}→"
+        f"{ast.unparse(value) if value is not None else '（缺值实参）'}"
+        for kind, names, value, _ in writes
+    ) or "无"
+    detail = f"写入面={seen}"
+    if missing:
+        detail += f"｜从未证明写入={missing}"
+    if bad:
+        detail += f"｜不合格={bad}"
+    return not bad and not missing, detail
+
+
+def platform_reads(node: ast.AST) -> list[str]:
+    """夹具内的平台身份读数（NR-17 的判据本体）。
+
+    为什么是「一处都不许有」而不是「只许包无害语句」：本夹具存在的理由就是让测试出站
+    与**宿主**设置无关，而 win32 上 `NO_PROXY`/`no_proxy` 折叠成同一个键这件事，已经由
+    「两种拼写都无条件写契约值」解决了。再写平台守卫，等于把隔离的正确性交给运行平台，
+    而本机只能观测 win32 那一半——第四轮 P-2 是 `if os.name != "nt":` 包住坏写，
+    第五轮 D5 是它的镜像：`if os.name == "nt":` 包住清理循环，Linux CI 上一个代理变量
+    都不清，NR-4-a/NR-15/NR-16 全绿。同一种平台盲，两面都得堵。
+    真要引入平台分支，得先改这条契约并交人工裁决，而不是在夹具里悄悄加。
+    """
+    hits: list[str] = []
+    for n in ast.walk(node):
+        if (
+            isinstance(n, ast.Attribute)
+            and isinstance(n.value, ast.Name)
+            and n.value.id in _PLATFORM_ROOTS
+            and n.attr in _PLATFORM_ATTRS
+        ):
+            hits.append(f"{n.value.id}.{n.attr}@L{n.lineno}")
+        elif isinstance(n, ast.Compare) and any(
+            isinstance(c, ast.Constant) and isinstance(c.value, str) and c.value in _PLATFORM_STRINGS
+            for c in n.comparators
+        ):
+            hits.append(f"与平台字面量比较@L{n.lineno}")
+    return hits
+
+
+def _mentions_constant(expr: ast.expr, aliases: set[str]) -> bool:
+    """迭代源是否**引用**模块常量（直接或裹在可迭代包装/推导式里）。
+
+    硬写的同值元组/列表不算——那是 NR-15 要抓的形态，所以 `ast.Tuple`/`ast.List`/`ast.Set`
+    字面量这一路走到底都是 False。包装形态可嵌套（`tuple(sorted(…))`），推导式看它的 iter
+    （`[x for x in _PROXY_ENV_VARS]`），别名看 `_constant_aliases`（海象 `(_v := _PROXY_ENV_VARS)`）。
+    """
+    if isinstance(expr, ast.Name):
+        return expr.id == "_PROXY_ENV_VARS" or expr.id in aliases
+    if isinstance(expr, ast.Call):
+        return any(_mentions_constant(a, aliases) for a in expr.args)
+    if isinstance(expr, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):
+        return any(_mentions_constant(gen.iter, aliases) for gen in expr.generators)
+    return False
+
+
+def _constant_aliases(node: ast.AST) -> set[str]:
+    """夹具里被绑到 `_PROXY_ENV_VARS` 的局部名（`x = _PROXY_ENV_VARS`、`(x := _PROXY_ENV_VARS)`）。"""
+    found: set[str] = set()
+    for stmt in ast.walk(node):
+        if isinstance(stmt, ast.Assign):
+            targets, value = stmt.targets, stmt.value
+        elif isinstance(stmt, ast.NamedExpr):
+            targets, value = [stmt.target], stmt.value
+        else:
+            continue
+        if _mentions_constant(value, found):
+            for target in targets:
+                if isinstance(target, ast.Name):
+                    found.add(target.id)
+    return found
+
+
+def _guarded_by_membership(call: ast.Call, target: str, loop: ast.For) -> bool:
+    """`delenv(_name)` 省略 `raising` 是否安全：必须由 `_name in os.environ` 一类的守卫包着。
+
+    `raising` 默认 True，变量不存在就抛——所以「省略」本身不等价，**加守卫**才等价
+    （第五轮复审 C7 实测出的那条假红）。
+    """
+    for stmt in ast.walk(loop):
+        if not isinstance(stmt, ast.If):
+            continue
+        test = stmt.test
+        if not (
+            isinstance(test, ast.Compare)
+            and len(test.ops) == 1
+            and isinstance(test.ops[0], ast.In)
+            and isinstance(test.left, ast.Name)
+            and test.left.id == target
+            and ast.unparse(test.comparators[0]).endswith("environ")
+        ):
+            continue
+        if any(node is call for node in ast.walk(stmt)):
+            return True
+    return False
 
 
 def delenv_loop_wired(node: ast.AST, tree: ast.Module) -> tuple[bool, str]:
-    """清理动作必须「遍历 `_PROXY_ENV_VARS` 常量」，且 `delenv(<循环变量>, raising=False)`。
+    """清理动作必须「遍历 `_PROXY_ENV_VARS` 常量」，且逐名 `delenv(<循环变量>, 不抛)`。
 
     行为判据（NR-4-a）预设的是**本脚本自己抄的那份清单**，所以「夹具改成硬写六个字面量」在当下
     照样绿——将来常量新增一项（如新代理变量）而夹具没跟上时，无人报警。这条结构判据把
     「单一真值来源」钉住。
-    两个细节都是被反证逼出来的（不做反证就不会发现）：
+    每个细节都是被反证逼出来的（不做反证就不会发现）：
     - 只查「循环源码里出现 `_PROXY_ENV_VARS` 这个名字」不够：把常量定义整行删掉后名字还在，
       运行时才 NameError ⇒ 必须同时确认它是 **conftest 模块级真实赋值过的名字**；
-    - 迭代源必须是 `Name` 节点，元组字面量（哪怕内容与常量一模一样）不算接线。
+    - 迭代源硬写的同值元组不算接线；一层可迭代包装（`list(…)`）算等价（第四轮补）；
+    - 第五轮 C1–C8 八发实测假红后再放宽**写法**（不放宽**语义**）：包装可嵌套、`reversed`/`map`
+      也算、推导式源也算、海象别名也算、`raising=0` 等价 `False`、`delenv(**{…})` 等价、
+      以及 `if _name in os.environ:` 守卫下省略 `raising` 等价。
+      语义一条没松：仍然必须是「遍历那个常量 + 用循环变量名删」，运行期一致性另由 NR-16 兜。
     """
     assigned: set[str] = set()
     for n in tree.body:
@@ -254,42 +501,27 @@ def delenv_loop_wired(node: ast.AST, tree: ast.Module) -> tuple[bool, str]:
         assigned.update(t.id for t in targets if isinstance(t, ast.Name))
     if "_PROXY_ENV_VARS" not in assigned:
         return False, "conftest 模块级没有 `_PROXY_ENV_VARS` 的赋值（夹具无从引用）"
+    aliases = _constant_aliases(node)
     for loop in ast.walk(node):
-        if not (isinstance(loop, ast.For) and _iterates_constant(loop)):
+        if not (isinstance(loop, ast.For) and _mentions_constant(loop.iter, aliases)):
             continue
         target = ast.unparse(loop.target)
         for call in ast.walk(loop):
-            if (
+            if not (
                 isinstance(call, ast.Call)
                 and isinstance(call.func, ast.Attribute)
                 and call.func.attr == "delenv"
-                and (arg0 := call_arg(call, 0, "name")) is not None
+                and (arg0 := call_arg(call, 0, *_ENV_NAME_PARAMS)) is not None
                 and ast.unparse(arg0) == target
-                and (arg1 := call_arg(call, 1, "raising")) is not None
-                and ast.unparse(arg1) == "False"
             ):
-                return True, f"遍历模块级 _PROXY_ENV_VARS，循环体内 delenv({target}, raising=False) 就位"
+                continue
+            arg1 = call_arg(call, 1, "raising")
+            if arg1 is not None and ast.unparse(arg1) in {"False", "0"}:
+                return True, f"遍历模块级 _PROXY_ENV_VARS，循环体内 delenv({target}, raising 假值) 就位"
+            if arg1 is None and _guarded_by_membership(call, target, loop):
+                return True, f"遍历模块级 _PROXY_ENV_VARS，delenv({target}) 由 `{target} in os.environ` 守卫"
         break
     return False, "找不到「遍历模块级 _PROXY_ENV_VARS + delenv(循环变量, raising=False)」的循环"
-
-
-_ITER_WRAPPERS = {"list", "tuple", "sorted"}
-
-
-def _iterates_constant(loop: ast.For) -> bool:
-    """迭代源必须是模块常量本身，或它的一层可迭代包装（`list(_PROXY_ENV_VARS)`）。
-
-    硬写的同值元组不算接线——那正是 NR-15 要抓的形态；包装只放宽**写法**，
-    「夹具与常量同源」这条语义不变（行为面另由 NR-16 的运行期哨兵兜住）。
-    包装形态是第四轮复审用合法重构实测出假红后补的。
-    """
-    it = loop.iter
-    if isinstance(it, ast.Name):
-        return it.id == "_PROXY_ENV_VARS"
-    if isinstance(it, ast.Call) and isinstance(it.func, ast.Name) and it.func.id in _ITER_WRAPPERS and it.args:
-        first = it.args[0]
-        return isinstance(first, ast.Name) and first.id == "_PROXY_ENV_VARS"
-    return False
 
 
 def literal_hits(texts: dict[str, str], needle: str) -> list[str]:
@@ -547,6 +779,17 @@ def main() -> int:
         f"哨兵残留={survived!r}｜异常={err or '无'}",
     )
 
+    # ── NR-17：夹具内不得出现平台判定（第五轮复审 D5 的镜像形状）────────────────────
+    # NR-16 是运行期哨兵，但它跑在**本机平台**上：`if os.name == "nt":` 包住清理循环，
+    # win32 上照样删得干干净净 ⇒ 结构判据（循环还在、遍历常量、delenv 形状对）全绿，
+    # 运行期哨兵也全绿，只有 Linux CI 上隔离整个失效。这类平台盲必须用结构面直接禁掉。
+    reads = platform_reads(fn)
+    check(
+        "NR-17 隔离夹具内没有任何平台身份读数（os.name / sys.platform / platform.* / 与 'nt' 一类比较）",
+        not reads,
+        f"平台读数={reads or '无'}｜夹具的隔离必须与运行平台无关",
+    )
+
     print("\n".join(CHECKS))
     for line in FAILURES:
         print(line)
@@ -611,6 +854,38 @@ MUTANTS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
      '    for _n in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):\n'
      "        monkeypatch.delenv(_n, raising=False)\n",
      ("NR-16",)),
+    # ── 第五轮补：D1–D5 五条实测旁路，逐条钉成变异体（都在本机复现过「改前 red=[]」）──
+    # D1：沙箱预置了 NO_PROXY（NR-6 要靠它看 undo），所以 setdefault 是空操作，行为面看不见
+    ("用 os.environ.setdefault 坏写（沙箱里是空操作，v3 只认 setenv 所以全绿）",
+     'monkeypatch.setenv("NO_PROXY", NO_PROXY_ISOLATION_VALUE)',
+     'monkeypatch.setenv("NO_PROXY", NO_PROXY_ISOLATION_VALUE)\n'
+     '    os.environ.setdefault("NO_PROXY", "evil.example")',
+     ("NR-14",)),
+    # D2：名字不写作字符串字面量而是 f-string，v3 的 `isinstance(name, ast.Constant)` 直接跳过
+    ("f-string 名 + 平台守卫的坏写（名不是字面量 ⇒ v3 看不见）",
+     'monkeypatch.setenv("NO_PROXY", NO_PROXY_ISOLATION_VALUE)',
+     'monkeypatch.setenv("NO_PROXY", NO_PROXY_ISOLATION_VALUE)\n'
+     '    if os.name != "nt":\n        monkeypatch.setenv(f"NO_PROXY", "evil.example")',
+     ("NR-14", "NR-17")),
+    # D3：名字来自循环变量（值来自硬写的元组）
+    ("循环变量名的坏写（名是 Name 节点，v3 不解析）",
+     'monkeypatch.setenv("NO_PROXY", NO_PROXY_ISOLATION_VALUE)',
+     'monkeypatch.setenv("NO_PROXY", NO_PROXY_ISOLATION_VALUE)\n'
+     '    for _n in ("NO_PROXY",):\n        monkeypatch.setenv(_n, "evil.example")',
+     ("NR-14",)),
+    # D4：实参整个走 `**` 展开，v3 的 call_arg 只看 kw.arg ⇒ 关键字通道被绕过
+    ("** 字典展开的坏写（关键字通道看不见展开）",
+     'monkeypatch.setenv("NO_PROXY", NO_PROXY_ISOLATION_VALUE)',
+     'monkeypatch.setenv("NO_PROXY", NO_PROXY_ISOLATION_VALUE)\n'
+     '    monkeypatch.setenv(**{"name": "NO_PROXY", "value": "evil.example"})',
+     ("NR-14",)),
+    # D5：P-2 的镜像——守卫包住的不是坏写而是**清理循环本身**。win32 上守卫为真，
+    # 于是 NR-4-a/NR-15/NR-16 三层（含运行期哨兵）全部照绿，只有 Linux CI 上代理变量一个不清。
+    ("清理循环被 if os.name == 'nt' 包住（win32 三层全绿，Linux 隔离整个失效）",
+     "    for _name in _PROXY_ENV_VARS:\n        monkeypatch.delenv(_name, raising=False)",
+     '    if os.name == "nt":\n        for _name in _PROXY_ENV_VARS:\n'
+     "            monkeypatch.delenv(_name, raising=False)",
+     ("NR-17",)),
 )
 
 
@@ -625,6 +900,24 @@ EQUIV_REFACTORINGS: tuple[tuple[str, str, str], ...] = (
     ("delenv 名与 raising 都改关键字", "monkeypatch.delenv(_name, raising=False)",
      "monkeypatch.delenv(name=_name, raising=False)"),
     ("迭代源加 list() 包装", "for _name in _PROXY_ENV_VARS:", "for _name in list(_PROXY_ENV_VARS):"),
+    # ── 第五轮补：C1–C8/C10 九发**合法等价**写法，修之前每发都假红（本机实测 red 非空）──
+    # 放宽的只是写法：仍然必须遍历那个常量、仍然用循环变量名去删、值仍然必然是契约值。
+    ("delenv 的 raising 写成 0", "monkeypatch.delenv(_name, raising=False)", "monkeypatch.delenv(_name, raising=0)"),
+    ("迭代源改列表推导", "for _name in _PROXY_ENV_VARS:", "for _name in [x for x in _PROXY_ENV_VARS]:"),
+    ("迭代源嵌套两层包装", "for _name in _PROXY_ENV_VARS:", "for _name in tuple(sorted(_PROXY_ENV_VARS)):"),
+    ("迭代源用 reversed()", "for _name in _PROXY_ENV_VARS:", "for _name in reversed(_PROXY_ENV_VARS):"),
+    ("迭代源用 map(str, …)", "for _name in _PROXY_ENV_VARS:", "for _name in map(str, _PROXY_ENV_VARS):"),
+    ("delenv 整个改 ** 展开", "monkeypatch.delenv(_name, raising=False)",
+     'monkeypatch.delenv(**{"name": _name, "raising": False})'),
+    ("省略 raising 但加 in os.environ 守卫",
+     "    for _name in _PROXY_ENV_VARS:\n        monkeypatch.delenv(_name, raising=False)",
+     "    for _name in _PROXY_ENV_VARS:\n        if _name in os.environ:\n            monkeypatch.delenv(_name)"),
+    ("海象别名后再遍历",
+     "    for _name in _PROXY_ENV_VARS:\n        monkeypatch.delenv(_name, raising=False)",
+     "    if (_vars := _PROXY_ENV_VARS):\n        for _name in _vars:\n"
+     "            monkeypatch.delenv(_name, raising=False)"),
+    ("契约值套一层 str()", 'monkeypatch.setenv("NO_PROXY", NO_PROXY_ISOLATION_VALUE)',
+     'monkeypatch.setenv("NO_PROXY", str(NO_PROXY_ISOLATION_VALUE))'),
 )
 
 
@@ -942,6 +1235,8 @@ def evaluate(conftest_src: str) -> list[str]:
             red.append("NR-14")
         if not delenv_loop_wired(fn, tree)[0]:
             red.append("NR-15")
+        if platform_reads(fn):
+            red.append("NR-17")
     return red
 
 

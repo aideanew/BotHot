@@ -11,7 +11,7 @@ venv 的验收命令一律**不执行**，改为「静态可证部分实跑 + �
 
 | 原子任务 | 状态 | 本机实跑证据 |
 |---|---|---|
-| S0R.1.2 代理隔离夹具（根因修复本体） | ✅ 代码落地 + 真实执行证明 | §2 全部 23 条 PASS |
+| S0R.1.2 代理隔离夹具（根因修复本体） | ✅ 代码落地 + 真实执行证明 | §2 全部 24 条 PASS |
 | S0R.1.1 `test_env_isolation.py` | 🟡 用例已写，**运行交 venv**（`import httpx`） | §4 交接头目 H-1 |
 | S0R.2.1 `tests/fixtures/net.py` + 卡面要求的 4 处收敛 | ✅ 落地 + 机器证明 NR-8/NR-9（判定面覆盖 5 个消费方，见 §2 NR-9 / §7 N-4） | `out_evidence_check.txt` |
 | S0R.2.2 chat_sse 未配置守卫 | ✅ 落地（1 处而非 2 处，理由见 §3.2） | NR-10-a/NR-10-b |
@@ -24,15 +24,19 @@ venv 的验收命令一律**不执行**，改为「静态可证部分实跑 + �
 
 ## 2. 代理隔离的机器证明（`prove_net_isolation.py`）
 
-不能 `import conftest`（模块级 import sqlalchemy/dotenv/pytest，本机皆无），故沿用
+不能 `import conftest`（模块级 import `sqlalchemy`，本机 `ModuleNotFoundError`；第五轮复审纠正了
+本节的旧口径——原先写的是「sqlalchemy/dotenv/pytest 本机皆无」，实测 `pytest` 可导入（9.1.1）、
+`dotenv` 可导入。普查读数：**有** `pytest` / `dotenv` / `anyio`，**无** `sqlalchemy` / `httpx` /
+`structlog` / `pytest_asyncio` / `coverage` / `psycopg`，PATH 里 `uv` / `ruff` / `make` / `mypy` / `gh`
+全都不存在——见 `out_evidence_check.txt` 的依赖实测行，本节不再凭回忆写「本机皆无」），故沿用
 EVD-V2-00 已确立的机制：AST 剔除三方 import 后 exec 前缀取真实常量，再**剥掉装饰器
 exec `_isolate_proxy_env` 的当前函数体**，用按 `pytest.MonkeyPatch` 语义实现的替身
 （`setenv`/`delenv(raising=)`/`undo` 全部作用在真实 `os.environ`，前后由 `sandbox`
 快照恢复）驱动它。被执行的是文件里的代码，不是抄本。
 
 ```
-合计 PASS=23 FAIL=0
-SELF-TEST PASS：15 个 conftest 变异体各自让对应断言变红 + 18 个源码探针敏感 + 4 个等价重构不假红
+合计 PASS=24 FAIL=0
+SELF-TEST PASS：20 个 conftest 变异体各自让对应断言变红 + 18 个源码探针敏感 + 13 个等价重构不假红
 ```
 
 （两个数字都由脚本按 `len(MUTANTS)`/`len(TEXT_PROBES)`/`len(EQUIV_REFACTORINGS)` 动态打印；
@@ -65,44 +69,80 @@ SELF-TEST PASS：15 个 conftest 变异体各自让对应断言变红 + 18 个�
 - NR-12 `test_env_isolation.py` 有 3 条用例、每条 ≥1 assert、宿主代理快照在首个用例之前；
 - NR-13 conftest 侧常量的契约下限（6 个键逐字、值含回环）；
 - NR-14 **结构判据（与平台无关，「每一次写入」都算）**：夹具对 `NO_PROXY` 与 `no_proxy` 的
-   **每一次** `setenv` 写入，第二个实参都必须解析为 `NO_PROXY_ISOLATION_VALUE` 或契约字面量；
+   **每一次**环境写入，值都必须解析为 `NO_PROXY_ISOLATION_VALUE` 或契约字面量；
    某拼写一次都没写也算不合格。补这条的原因见 §7 N-1——win32 上两拼写指向同一键，
-   「小写那一遍没写」属行为不可观测。判据形态演进三轮，每一轮都是被反证逼出来的：
+   「小写那一遍没写」属行为不可观测。判据形态演进四轮，每一轮都是被反证逼出来的：
    v1 只比「字面量名集合」→ `setenv("NO_PROXY", "localhost")` 混过去；
    v2 按位置配对但 `setdefault` 只记第一条 → 「先契约值、后坏写」的双写全绿（第四轮复审实测）；
-   v3（现版）收集全部写入 + 位置/关键字实参通吃 + `ast.walk` 深入嵌套分支 →
+   v3 收集全部写入 + 位置/关键字实参通吃 + `ast.walk` 深入嵌套分支 →
    双写、以及 `if os.name != "nt": setenv("NO_PROXY", "evil")` 这类**平台守卫后的坏写**
-   （win32 行为面永远看不见它）都红，而 `setenv(name=…, value=…)` 这种等价写法不假红（§2 通道③）。
-- NR-15 **结构判据：清理必须遍历模块级 `_PROXY_ENV_VARS`**（迭代源是该 `Name`，或它的一层
-  `list/tuple/sorted` 包装；循环体内 `delenv(循环变量, raising=False)`，实参按槽位取，
-  位置与关键字写法都认）。理由是行为判据 NR-4-a 预设的是**本脚本自己抄的那份清单**——夹具改成
-  硬写六个字面量时当下仍全绿，将来常量新增一项而夹具没跟上就无人报警；把常量定义整行删掉时，
-  这条与 NR-13-a 一起红。
+   （win32 行为面永远看不见它）都红，而 `setenv(name=…, value=…)` 这种等价写法不假红（§2 通道③）；
+   **v4（现版）**补的是 v3 的两个隐含前提——「写入只可能是 `monkeypatch.setenv`」和「名字是字符串字面量」：
+   ①手段扩到 `os.environ.setdefault` / `os.environ.update({...})` / `os.environ[…] =` / `os.putenv`
+   （第五轮复审 D1：`os.environ.setdefault("NO_PROXY","evil.example")` 全绿——本脚本沙箱把
+   `NO_PROXY` 预置成宿主值好让 NR-6 观测 undo，setdefault 因此是空操作，行为面看不见这次写入）；
+   ②名字扩到 f-string / 拼接 / 循环变量 / `**{字面量字典}` 展开，且**名字解析不了也照样要求契约值**
+   （D2/D3/D4：v3 的 `isinstance(name, ast.Constant)` 一跳就跳过整条写入）。
+   「两种拼写都必须被证明写过」这一半没松：否则删掉小写那行又回到全绿。
+- NR-15 **结构判据：清理必须遍历模块级 `_PROXY_ENV_VARS`**（迭代源是该 `Name`，或它的可迭代包装
+  ——可嵌套 `tuple(sorted(…))`、`reversed`/`map`、推导式源 `[x for x in …]`、海象别名
+  `(_vars := _PROXY_ENV_VARS)`；循环体内 `delenv(循环变量, 假值 raising)`，实参按槽位取，
+  位置/关键字/`**{…}` 展开都认，`if _name in os.environ:` 守卫下省略 `raising` 也算）。理由是行为判据
+  NR-4-a 预设的是**本脚本自己抄的那份清单**——夹具改成硬写六个字面量时当下仍全绿，将来常量新增一项
+  而夹具没跟上就无人报警；把常量定义整行删掉时，这条与 NR-13-a 一起红。
+  放宽的只有**写法**：迭代源是硬写的同值元组/列表仍然不算接线（那是 NR-15 要抓的形态本身）。
 - NR-16 **行为判据：运行期哨兵**（往常量表追加 `AIDEANBOT_SENTINEL_PROXY_VAR`，夹具必须跟着删它）。
   它是 NR-15 的盲区补位：第四轮复审 P-3 造出「真接线循环留在 `if False:` 里、活路径改硬写同值元组」
   的夹具，结构判据照绿（那个循环确实还在文件里），只有注入哨兵看**行为**才能分辨「读常量」与「抄一份」。
   反向亦然：纯写法变化（`list(常量)`）会被结构判据误伤，哨兵却不受影响——两条判据互为补位，
   不是一条款的两遍。
+- NR-17 **结构判据：隔离夹具内不得出现任何平台身份读数**（`os.name` / `sys.platform` /
+  `platform.*` / `sysconfig.*`，或与 `"nt"`/`"win32"`/`"linux"` 一类平台字面量比较）。
+  它是 NR-16 的盲区补位，方向正相反：NR-16 是**运行期**哨兵，因而跑在本机平台上——
+  第五轮复审 D5 造的 `if os.name == "nt":` 包住整个清理循环，win32 上守卫为真，
+  于是 NR-4-a（六键真的清了）、NR-15（循环仍在遍历常量）、NR-16（哨兵真的被删）三层全绿，
+  而 Linux CI 上一个代理变量都不清。这正是第四轮 P-2（守卫后的坏写）的镜像形状：
+  同一种平台盲，两面都得用结构面直接禁掉。
+  **契约性质**：这是设计约束而不是观测结论——夹具存在的意义就是让测试出站与宿主/平台无关，
+  win32 的键折叠已由「两种拼写无条件都写契约值」解决。将来若真要按平台分支，必须先改这条契约
+  并交人工裁决，而不是在夹具里加守卫（加守卫当场红 NR-17，变异体 ⑳ 就是钉这一条的）。
 
 变异反证（`--self-test`）：先要求**基准（未变异 conftest）全绿**——否则「变异体让某条变红」
 这个信号毫无意义（这条闸门上线当场就抓到我自己写的 `getattr(n, "targets", [n.target])`：
 默认值是即时求值，`ast.Assign` 没有 `.target` ⇒ 直接 AttributeError，见 §8）。三条通道——
 前两条形如「改坏必须红」，第三条方向相反（「改写法必须不假红」），每条都必要：
 
-1. `MUTANTS`（改 conftest 源码后重跑 `evaluate()`，共十五个体）：
+1. `MUTANTS`（改 conftest 源码后重跑 `evaluate()`，共二十个变异体）：
    ①去掉 `autouse` → NR-1；②删 `delenv` 循环体 → NR-4-a + NR-15；③`raising=False`→`True` → NR-5；
    ④把回环地址从常量里删掉 → NR-4-b + NR-13-b；⑤**夹具直写 `os.environ` 绕过 monkeypatch** →
-   NR-6（顺带 NR-14 也红，因为它不再经 `setenv`）；⑥**删掉小写 `no_proxy` 那一遍** → NR-14；
+   NR-6（第五轮前它还顺带让 NR-14 红，因为 v3 只认 `setenv`；v4 认得 `os.environ[…] =` 这条通道，
+   该写入因此「被看见且值合法」⇒ 现在**只** NR-6 红，反证职责由 NR-6 独立承担，见 §10.5）；
+   ⑥**删掉小写 `no_proxy` 那一遍** → NR-14；
    ⑦**大写那遍写非契约值**（小写那遍随后把同一个键盖回契约值 ⇒ win32 行为面 NR-4-b 仍绿）→ NR-14；
    ⑧**清理循环与常量脱钩（改硬写元组）** → NR-15 + NR-16；⑨**删掉常量定义整行** → NR-13-a + NR-15
    （必须判红而非 harness 崩溃，否则没有「哪条红」的可核对信号）；
    ⑩`scope="session"`（`autouse` 仍为 True，只有 NR-2 能红）；⑪广播行被改名/挪走 → NR-3；
    ⑫夹具顺手 `delenv` 掉 DSN 变量（清了广播值）→ NR-7；
    ⑬同一拼写「先契约值、后坏写」双写 → NR-14（v2 判据的漏检，见上）；
-   ⑭`if os.name != "nt": setenv("NO_PROXY", "evil.example")` 平台守卫后的坏写 → NR-14（本机永不执行）；
-   ⑮真接线循环塞进 `if False:`、活路径改硬写同值元组 → 只有 NR-16 红（结构判据的盲区）。
-   末六个个体是第四轮复审逼出来的：此前 `evaluate()` 只重放 NR-1/4/5/6/13/14/15，
+   ⑭`if os.name != "nt": setenv("NO_PROXY", "evil.example")` 平台守卫后的坏写 → NR-14（本机永不执行），
+   第五轮起 **同时** NR-17 红（夹具里出现 `os.name` 读数本身就被禁，见 §2 NR-17）；
+   ⑮真接线循环塞进 `if False:`、活路径改硬写同值元组 → 只有 NR-16 红（结构判据的盲区）；
+   ⑯**`os.environ.setdefault("NO_PROXY", "evil.example")`** → NR-14（第五轮 D1：沙箱本就预置了
+   `NO_PROXY`——NR-6 要靠它看 undo——所以 setdefault 是**空操作**，行为面永远看不见这发坏写；
+   而 v3 判据只认 `setenv`，结构面也绿）；
+   ⑰**f-string 名 + 平台守卫** `if os.name != "nt": setenv(f"NO_PROXY", "evil")` → NR-14 + NR-17
+   （第五轮 D2：名字不再是 `ast.Constant`，v3 的 `isinstance(name, ast.Constant)` 直接跳过整条）；
+   ⑱**循环变量名** `for _n in ("NO_PROXY",): setenv(_n, "evil")` → NR-14（第五轮 D3：名是 `Name` 节点）；
+   ⑲**`**` 字典展开** `setenv(**{"name": "NO_PROXY", "value": "evil"})` → NR-14
+   （第五轮 D4：`call_arg` 只看 `kw.arg`，关键字通道被展开式绕过——这发与等价通道里的
+   `delenv(**{…})` 是同一个语法的两面，坏写必须红、合法写法必须绿）；
+   ⑳**清理循环被 `if os.name == "nt":` 包住** → 只有 NR-17 红（第五轮 D5，⑭ 的镜像：
+   守卫包住的不再是坏写，而是**隔离本身**。win32 上守卫为真 ⇒ NR-4-a/NR-15/NR-16 三层
+   ——含运行期哨兵——**全部照绿**，只有 Linux CI 上一个代理变量都不清）。
+   ⑩…⑮ 六个个体是第四轮复审逼出来的：此前 `evaluate()` 只重放 NR-1/4/5/6/13/14/15，
    NR-2/NR-3/NR-7 三条判据**没有任何通道能证明它们会红**。
+   ⑯…⑳ 五个个体是第五轮复审逼出来的，且**每条都先在我自己机器上跑出过「改前 red=[]」**
+   （逐条读数见 §10.1，不在这里转述）。
    ④之所以能红，是因为期望值 `EXPECTED_NO_PROXY` 在 harness 里**写死为契约字面量**
    而不从 conftest 读——否则变异体会连同期望一起改，断言永不可能失败（G-23）。
 2. `TEXT_PROBES`（NR-8..NR-12 读真实文件，改 conftest 变不红它们）：对内存样本源码跑**同一个
@@ -116,12 +156,21 @@ SELF-TEST PASS：15 个 conftest 变异体各自让对应断言变红 + 18 个�
    「NR-10-b 两条（导入行少 `SKIP_UNSET_REASON` / 导入行整体缺失，守卫自身 NameError）」。
    后九条即第三轮补的 NR-8/NR-11/NR-12 与第四轮补的 NR-9-a/NR-9-c/NR-10-a/NR-10-b：
    补之前它们「0 命中就绿」却**没有任何通道证明能红**。
-3. `EQUIV_REFACTORINGS`（第四条通道在第四轮加入，方向相反，共四个）：**等价重构必须保持全绿**。
-   样本为 `setenv(name=…, value=…)`、`delenv(_name, False)`、`delenv(name=_name, raising=False)`、
-   `for _name in list(_PROXY_ENV_VARS):`——语义与现写法完全一致。前两条通道证明「改坏会红」，
+3. `EQUIV_REFACTORINGS`（第四条通道在第四轮加入，方向相反，共十三条）：**等价重构必须保持全绿**。
+   第四轮四条：`setenv(name=…, value=…)`、`delenv(_name, False)`、`delenv(name=_name, raising=False)`、
+   `for _name in list(_PROXY_ENV_VARS):`；第五轮再加九条（C1–C8/C10，每修一条之前都实测假红）：
+   `raising=0`、迭代源改列表推导 `[x for x in 常量]`、两层包装 `tuple(sorted(常量))`、`reversed(常量)`、
+   `map(str, 常量)`、`delenv(**{"name": _name, "raising": False})`、
+   `if _name in os.environ: delenv(_name)`（省略 `raising` 但有成员守卫）、
+   海象别名 `if (_vars := 常量): for _name in _vars:`、契约值套一层 `str(NO_PROXY_ISOLATION_VALUE)`。
+   这些与现写法语义完全一致。前两条通道证明「改坏会红」，
    只有这一条能证明「判据没把合法写法也判红」。这不是假想风险：复审实测修订前
    `setenv(name=…, value=…)` 会让 NR-14 变红、`list(常量)` 会让 NR-15 变红，
    而脆性判据的实际后果是门禁被人当噪声关掉（G-23 的反面同样致命）。
+   第五轮那条「ten ordinary equivalent rewrites」的批评成立得比第四轮更狠：一轮之内判据在
+   NR-15 上假红 8 次、NR-14 上假红 1 次 ⇒ **放宽的只能是写法，绝不能是语义**（仍必须遍历那个常量、
+   仍必须用循环变量名去删、值仍必须能证明是契约值），这一点写进 `delenv_loop_wired()` 的文档串，
+   并由 ⑯–⑳ 五个变异体反向钉住（放宽后它们依然红）。
 
 ## 3. 与 V0.3.0 规划文本的偏离（已核代码后决定，非疏漏）
 
@@ -221,7 +270,7 @@ S0.1.2-b / S0.1.2-r 的 detail 被写成「失败描述句」——断言**通�
   并对 H-1/H-2 在有依赖的机器上补判。
 - §3.7 的 F-24 是本卡**新做的主动探测**（纯 stdlib 出站连接，未启服务、未装依赖），不是引用他人结论；
   它推翻的是我自己写在 D-4 的「充分条件」措辞，不是夹具本身——若下一位复核者只看到 §2 那行
-  「合计 PASS=23」而没读 §3.7，最可能犯的错是「以为该 URL 一定会秒级拒连」。
+  「合计 PASS=24」而没读 §3.7，最可能犯的错是「以为该 URL 一定会秒级拒连」。
   （此处的数字会随判据增删而漂移，凡引用它都以 `prove_net_isolation.py` 当场输出为准，
   不以本句为准——第四轮复审就是拿旧数字对不上新脚本这一件事来检查我的。）
 
@@ -264,7 +313,7 @@ S0.1.2-b / S0.1.2-r 的 detail 被写成「失败描述句」——断言**通�
 第三轮派的是只读复核子智能体（要求：不改文件、不实跑服务）。它的输出**一部分成立、一部分我复现不出来**，
 两栏都记，避免「复审说过」被当成「事实」。
 
-### 8.1 成立并已采纳（四处强化；该轮时点为 22 条断言 / 九个体 / 九探，第四轮之后是 23 / 十五 / 十八 + 四条等价重构，见 §9）
+### 8.1 成立并已采纳（四处强化；该轮时点为 22 条断言 / 九个变异体 / 九探，第四轮之后是 23 / 十五 / 十八 + 四条等价重构，见 §9；第五轮之后是 24 / 二十 / 十八 + 十三条等价重构，见 §10）
 
 | 项 | 成立的理由（不是因为它说了，而是我自己核过） | 落点 |
 |---|---|---|
@@ -322,7 +371,7 @@ baseline 闸门上线当场抓到**我自己**写的缺陷：`getattr(n, "target
 | P-1 | `no_proxy_pairings()` 用 `setdefault` 收集 ⇒ 同名**只记第一条**写入；「先契约值、后坏写」的双写全绿 | `[]`（用例 2） | `['NR-14']`：改为收集**全部**写入、逐条要求契约值（§2 NR-14 v3），并落为变异体 ⑬ |
 | P-2 | 坏写藏在平台守卫里（`if os.name != "nt": setenv("NO_PROXY","evil")`）在本机**行为不可观测**，而 v2 判据按「配对」组织，嵌套分支里的写入取不到 | `[]`（用例 3） | `['NR-14']`：改用 `ast.walk` 深入嵌套 + 名字/值各自按槽位取；落为变异体 ⑭ |
 | P-3 | NR-15 只要求「夹具体内存在一个遍历 `_PROXY_ENV_VARS` 的循环」⇒ 把真接线循环塞进 `if False:`、活路径改硬写同值元组，结构判据照绿 | `[]`（用例 10） | `['NR-16']`：新增**运行期哨兵**——往常量表追加 `AIDEANBOT_SENTINEL_PROXY_VAR`，夹具必须真的遍历常量才会删它；落为变异体 ⑮ |
-| P-4 | `evaluate()` 只重放 NR-1/4/5/6/13/14/15 ⇒ NR-2（scope）、NR-3（广播先于夹具）、NR-7（不清 DSN）**没有任何通道能证明会红**，属 G-23 禁止的「永不可能失败」形态 | 用例 1 / 8 / 9 全部 `[]` | `['NR-2']` / `['NR-3']` / `['NR-7']`：`evaluate()` 扩到重放这 3 条 + 三个变异体 ⑩⑪⑫ |
+| P-4 | `evaluate()` 只重放 NR-1/4/5/6/13/14/15 ⇒ NR-2（scope）、NR-3（广播先于夹具）、NR-7（不清 DSN）**没有任何通道能证明会红**，属 G-23 禁止的「永不可能失败」形态 | **第五轮复核更正过此格**（原写「用例 1 / 8 / 9 全部 `[]`」）：⑩ `scope="session"` → `[]`、⑪ 广播改名 → `[]`、⑫ 用**字面名** `delenv("AIDEANBOT_TEST_PG_DSN", …)` → `[]`，但⑫ 按变异体实际写法用**常量名** `delenv(_TEST_PG_ENV_VAR, …)` → `['NR-4-a(异常 NameError)','NR-5']`——即修前它并非「绿」而是**被别的判据误抓**（删掉未定义的别名后夹具体 exec 就 NameError）。读数取自 `git show b69123f` 副本的 `evaluate()`，可复跑（§10.1） | `['NR-2']` / `['NR-3']` / `['NR-7']`：`evaluate()` 扩到重放这 3 条 + 三个变异体 ⑩⑪⑫；NR-7 有了自己的判据后，⑫ 不再靠 NameError 碰运气 |
 | P-5 | NR-9-a、NR-9-c、NR-10-a、NR-10-b 同样只读真实文件、无反证通道（与第三轮补 NR-8/11/12 的缺陷同形，我上轮只补了一半） | 未复现（性质同上，判定函数根本没有可注入样本的入口） | 抽出 `refused_url_shape` / `alias_only` / `smoke_guard_shape` / `guard_symbols_imported` 四个判定函数，新增九探（探针总数 9 → 18） |
 
 ### 9.2 成立并已采纳（脆性类：合法写法被判红）
@@ -364,8 +413,114 @@ baseline 闸门上线当场抓到**我自己**写的缺陷：`getattr(n, "target
 
 - 断言 22 → **23**（新增 NR-16）；`MUTANTS` 九 → **十五**；`TEXT_PROBES` 九 → **十八**；
   新增 `EQUIV_REFACTORINGS` **四**条（第三条反证通道）。
-- `evaluate()` 覆盖的 conftest 判据由 8 条扩到 11 条（补 NR-2/NR-3/NR-7）。
+- `evaluate()` 覆盖的 conftest 判据**由 9 条扩到 13 条**（第五轮复核更正：原写「8 条扩到 11 条」
+  两头都不对——补 NR-2/NR-3/NR-7 是三条，但同轮还让 NR-16 进了 `evaluate()`，
+  且修前基线本就是 9 条而非 8 条）。读数不是回忆：对 `git show b69123f` 与 `git show 1470b77`
+  两份副本的 `evaluate()` 函数体做 AST 扫描、收集其中出现过的 `NR-*` 字面量，
+  得 9 → 13；本第五轮处置再加 NR-17 ⇒ **14** 条。
 - 三个测试文件侧修复：悬空行号、docstring 过度声明、结论行措辞。
 - 未变化：夹具源码本身（`conftest.py:91-97` 一字未动——本轮改的全是判据与证据层），
   `REFUSED_HTTP_URL`、`_PROXY_ENV_VARS`、`NO_PROXY_ISOLATION_VALUE` 三个契约常量，以及 §4 的 H-1…H-6。
+
+## 10. 独立复审记录（第五轮，针对 `1470b77`）——先复现，再处置
+
+第五轮复核者的总评是「四条修复与账目是真的、可复现；但 NR-14 仍被任何非字符串字面量的名字写法
+和 `os.environ.setdefault` 绕过，NR-15/NR-16 被 `if os.name == "nt":` 包住清理循环绕过——
+正是本轮声称关掉的那一类平台盲的两面；另有十条合法等价写法假红，以及两处记账不实」。
+
+纪律照旧：**每一发都先在我自己机器上喂给 `evaluate()` 跑出读数，复现出来才算缺陷**，
+处置表里的「修前 / 修后」两列全部是实测差值，不是转述。复现用的两份修前副本由
+`git show 1470b77:…/prove_net_isolation.py`（旁路与脆性的修前线）与
+`git show b69123f:…`（§9.1 P-4 的修前线）取，逐条读数可同样复跑；
+修后线固化在 harness 里：单命令 `--self-test` 即复跑 二十变异 + 十八探针 + 十三等价。
+
+### 10.1 成立并已采纳（旁路类：判据本该红却绿）
+
+| id | 攻击体 | 修前 `evaluate()` red | 修后 red | 处置 |
+|---|---|---|---|---|
+| D1 | `os.environ.setdefault("NO_PROXY", "evil.example")` 追加在契约写入之后 | `[]` | `['NR-14']` | NR-14 v4 把写入手段扩到 `setenv`/`putenv`/`setdefault`/`update`/下标赋值五类；落为变异体 ⑯。**这条尤其阴**：沙箱为了让 NR-6 能看 `undo` 而预置了 `NO_PROXY`，所以 `setdefault` 在行为面是**空操作**——只有结构面能红 |
+| D2 | `if os.name != "nt": monkeypatch.setenv(f"NO_PROXY", "evil.example")` | `[]` | `['NR-14', 'NR-17']` | 名字解析扩到 f-string / `+` 拼接 / 循环变量 / `**` 展开，且**名不可判时照样要求契约值**（举证责任压回写入方，见 §10.3）；平台读数由 NR-17 直接禁；落为变异体 ⑰ |
+| D3 | `for _n in ("NO_PROXY",): monkeypatch.setenv(_n, "evil.example")` | `[]` | `['NR-14']` | 同 D2 的名字通道（`_binding_map` 把 `for` 目标、字面量赋值、海象绑定都算上）；落为变异体 ⑱ |
+| D4 | `monkeypatch.setenv(**{"name": "NO_PROXY", "value": "evil.example"})` | `[]` | `['NR-14']` | `call_arg` 补 `kw.arg is None` 的字典展开分支；落为变异体 ⑲。这一发与等价通道里的 `delenv(**{…})` 是同一语法的两面：**坏写必须红、合法写法必须绿** |
+| D5 | 清理循环整体包进 `if os.name == "nt":` | `[]` | `['NR-17']` | **新增 NR-17**（下节详述）；落为变异体 ⑳ |
+
+D5 值得单独记：它是第四轮 ⑭ 的**镜像**——⑭ 是「守卫包住坏写」，D5 是「守卫包住隔离本身」。
+win32 上守卫为真，于是三层判据（行为面 NR-4-a、结构面 NR-15、运行期哨兵 NR-16）**全部照绿**，
+只有 Linux CI 上一个代理变量都不清。前两轮我给 NR-14 加过平台盲区（§9.1 P-2），
+却没给「清理侧」加同一条——**同一形状的盲区必须在两侧同时堵**，这已经是我第二次在这上面被抓住了。
+
+### 10.2 NR-17（本轮新增判据）：隔离夹具内不得出现平台身份读数
+
+- 判据：`_isolate_proxy_env` 函数体内不得有下述读数——根为 `os`/`sys`/`platform`/`sysconfig` 且属性属于
+  `name`/`platform`/`system`/`uname`/`getwindowsversion`/`machine` 的属性访问（即 `os.name`、
+  `sys.platform`、`platform.system()`、`sysconfig.platform` 这一类），**以及**任何与平台字面量
+  （`nt`/`posix`/`java`/`cli`/`win32`/`cygwin`/`aix`/`darwin`/`linux`/`freebsd`/`openbsd`/`netbsd`/`sunos`）
+  做的比较。
+- 为什么必须是结构判据而不是行为判据：本机的运行期哨兵 NR-16 跑在**本机平台**上，
+  平台分支在 win32 上永远「表现正确」——**行为不可观测的缺陷只能由契约面承接**（与 §3.6 的
+  键折叠同一处置思路，那条也是这么落到 NR-14 的）。
+- 为什么它是**契约变更**而非纯技术判断：「夹具与平台无关」是本项目对隔离的设计要求，
+  真要引入平台分支必须先改这条契约并交人工裁决，而不是在夹具里悄悄加 `if os.name`。
+  因此它由变异体 ⑳ 钉住，而不是留在注释里。
+- 实测（本机）：`PASS NR-17 隔离夹具内没有任何平台身份读数… :: 平台读数=无`；
+  基准 conftest 全绿，D2/D5 两发各自让 NR-17 变红。
+
+### 10.3 成立并已采纳（脆性类：合法等价写法被判红）
+
+同一轮里判据在**另一头**假红了九次——修前逐发实测（对 `1470b77` 版 `evaluate()`），修后全部归零：
+
+| 等价写法 | 修前 red | 修后 red |
+|---|---|---|
+| `delenv(_name, raising=0)` | `['NR-15']` | `[]` |
+| `for _name in [x for x in _PROXY_ENV_VARS]:`（列表推导） | `['NR-15']` | `[]` |
+| `for _name in tuple(sorted(_PROXY_ENV_VARS)):`（两层包装） | `['NR-15']` | `[]` |
+| `for _name in reversed(_PROXY_ENV_VARS):` | `['NR-15']` | `[]` |
+| `for _name in map(str, _PROXY_ENV_VARS):` | `['NR-15']` | `[]` |
+| `delenv(**{"name": _name, "raising": False})` | `['NR-15']` | `[]` |
+| `if _name in os.environ: delenv(_name)`（省略 `raising`） | `['NR-15']` | `[]` |
+| `if (_vars := _PROXY_ENV_VARS): for _name in _vars:` | `['NR-15']` | `[]` |
+| `setenv("NO_PROXY", str(NO_PROXY_ISOLATION_VALUE))` | `['NR-14']` | `[]` |
+
+处置原则只有一句：**放宽的只能是写法，语义一条没松**——`delenv_loop_wired()` 仍然要求
+「遍历那个常量 + 用循环变量名去删」，运行期一致性另由 NR-16 兜；NR-14 仍然要求
+「两种拼写都被证明写过 + 每一次写入都取契约值」。九条写法全部固化为 `EQUIV_REFACTORINGS`
+回归样本（通道由四条扩到十三条），所以「这次改绿了」不等于「判据不再脆」——下一个人改坏判据会当场红。
+上表最后一条的修法是：值侧允许一层 `str()` 包装与 `strip()` 族无参方法调用；
+倒数第二条（成员守卫下省略 `raising`）由 `_guarded_by_membership()` 精确识别
+「守卫用的名字就是被删的那个名字」，而不是「体内只要出现过 `in os.environ` 就放行」。
+
+### 10.4 成立但属记账层面（三处，全部可核）
+
+| 复审断言 | 我的复现 | 处置 |
+|---|---|---|
+| §2 开头写「模块级 import sqlalchemy/dotenv/pytest，本机皆无」——对 pytest 与 dotenv **不成立**，且与同目录 `out_evidence_check.txt` 里的依赖普查自相矛盾 | 逐个 `importlib.import_module` 实测：**有** pytest（9.1.1）/ dotenv / anyio，**无** sqlalchemy / httpx / structlog / pytest_asyncio / coverage / psycopg；`shutil.which` 实测 PATH 里 uv/ruff/make/mypy/gh **全都不存在** | 该句改为按实测列出「有/无」两份清单（六个缺失包 + 五个缺失工具），并把读数指向 `out_evidence_check.txt` 的依赖实测行——**以命令输出为准，不以我的回忆为准**；本轮重新整份生成的该文件把这条普查放在第 4 行 |
+| §9.5 写「`evaluate()` 判据由 8 条扩到 11 条」 | 对两份历史副本的 `evaluate()` 函数体做 AST 扫描收集 `NR-*` 字面量：`b69123f` = 9 条、`1470b77` = 13 条、本轮 = 14 条（补 NR-17）。原表述两头都错，且漏了 NR-16 也是同轮进 `evaluate()` 的 | 已按实测改写 §9.5，并写明扫描方法，让下一个复核者能复跑而不是信我 |
+| §9.1 P-4「用例 1 / 8 / 9 全部 `[]`」对第三发不成立 | 用 `b69123f` 版 `evaluate()` 跑四个变体：⑩ `[]`、⑪ `[]`、⑫ 字面名写法 `[]`、⑫ **变异体实际写法**（`delenv(_TEST_PG_ENV_VAR, …)`）= `['NR-4-a(异常 NameError)', 'NR-5']` | 已把该格换成上面这段带四个读数的表述：修前那一发不是「绿」，而是**被别的判据误抓**——NameError 恰好掩盖了「没有 NR-7 这条判据」的事实。这类「碰巧红」必须点名，否则我会以为自己早就有覆盖 |
+
+### 10.5 本轮净变化（可核对）
+
+- 断言 **23 → 24**（新增 NR-17）；`MUTANTS` **十五 → 二十**；`TEXT_PROBES` **十八（未变）**；
+  `EQUIV_REFACTORINGS` **四 → 十三**；`evaluate()` 可输出的判据标签 **13 → 14**。
+  这些数字全部由脚本按 `len(...)` 动态打印，与本文文字不一致时以输出为准。
+- **一处反证集中红（不是新增判据的副作用，而是 v4 放宽写入通道的直接结果）**：变异体 ⑤
+  （夹具直写 `os.environ`）由 `['NR-14', 'NR-6']` 变成 `['NR-6']`——因为 v4 现在认得
+  `os.environ[…] =` 这条写入通道，该写入「被看见且值合法」，NR-14 不该再红。
+  NR-6 是行为面判据（夹具必须经 `monkeypatch` 而非直写环境），反证职责仍完整；
+  已在 §2 ⑤ 就地更正，不留旧说法。
+- 判据侧新增/改写的函数：`env_writes()`（五类写入）、`_names()` + `_binding_map()`
+  （名字静态解析，不可判 ⇒ 举证责任倒置）、`_is_contract_value()`（`str()`/`strip` 族/单占位 f-string）、
+  `platform_reads()`（NR-17）、`delenv_loop_wired()`（写法放宽、语义不松）、
+  `_guarded_by_membership()`、`call_arg()`（`**` 展开）。
+- **未变化**：`apps/api/tests/conftest.py`（`git diff 1470b77 -- apps/api/tests/conftest.py` 为空，
+  夹具源码 `:91-97` 一字未动）、`tests/fixtures/net.py`（同样为空）、
+  三个契约常量、§4 的 H-1…H-6。本轮改的全是判据与证据层。
+
+### 10.6 残留欠账（明账，不粉饰）
+
+| 项 | 实测 | 为什么本轮不修 |
+|---|---|---|
+| 「把遍历逻辑抽到模块级 helper、夹具只调用它」这种**合法**重构会假红 | 修后 `evaluate()` 给 `['NR-15', 'NR-4-a(异常 NameError)', 'NR-5', 'NR-16(异常 NameError)']` | 两个原因叠加：① harness 只 exec 夹具体，模块级函数不在命名空间里 ⇒ 得到的是 NameError 转成的红，而不是一次干净判定；② NR-15 的契约就是「**夹具自己**在体内遍历常量」——要接住 helper 化就得让判据沿调用图找被调函数，而「那个函数是否活、是否无条件执行」正是静态面看不见的一面（⑮ 靠运行期哨兵 NR-16 才堵得住）。本轮选择把契约写在明处：确需 helper 化时先改判据并交人工裁决，而不是让判据悄悄变宽 |
+| NR-14 的举证责任倒置有代价 | 夹具里任何**名字解析不了**的环境写入都必须取契约值，否则红；反之，字面的非代理名（实测 `setenv("AIDEANBOT_X", "1")`）判据不动 | 这是 D2/D3 两条旁路的对价：宁可让「解析不了」落到红的一侧，也不能让它落到绿的一侧。后果是夹具若将来要设置一个名字来自模块常量的环境变量，需要显式改判据——可接受，因为夹具的职责就是隔离，往里加别的写入本就该被追问 |
+| NR-17 禁的是**读数**，不是「所有平台差异」 | 变异体 ⑳ 钉住；改这条属契约变更 | 若某天确实需要「Windows 上少清一个变量」，必须先经人工裁决改契约，不能在夹具里加 `if os.name`。这条边界写在这里，是为了让下一个人不会把它当成可绕的实现细节 |
+| harness 自身的静态门禁覆盖不到 `docs/**` | `scripts/g24_static_check.py` 的 `DEFAULT_FILES` 是硬编码清单，`Makefile` 调它时不带参数 | 本轮按现有清单跑（E501 计数与基线一致、无新增违规）。真正的终判是 CI 的 `ruff check app tests`（H-1 那类交接头目之外的 J-2），而 `docs/**` 下的验证脚本按当前清单不在 lint 范围——**这一句就是这条欠账的账目**，不假装它已闭合 |
 
