@@ -52,14 +52,29 @@ BASH = r"C:\Program Files\Git\bin\bash.exe"
 ENV = {**os.environ, "PYTHONIOENCODING": "utf-8"}
 TMPNG = (EV / "_tmp_ng.py").relative_to(ROOT).as_posix()
 RELPATH = lambda p: p.relative_to(ROOT).as_posix()  # noqa: E731 - 只是把路径转成命令里的 posix 形式
-# 段落标题里的 `⇒` 与 pytest 汇总行的墙钟：前者在 win32 默认 cp936 输出流上编不出来（本项目
-# 禁的「没有裁决」第三态，与两份 harness 同一个症状），后者每次重跑必然不同（留着就等于留一份
-# 不可复现的读数）。所以先钉输出流，再把墙钟归一化成 `in <redacted>s`。
-TIMING = re.compile(r"\bin \d+\.\d+s\b")
+# 段落标题里的 `⇒` 在 win32 默认 cp936 输出流上编不出来（本项目禁的「没有裁决」第三态，与两份
+# harness 同一个症状），所以先钉输出流。再往下是**读数归一化登记表**：一张表同时管三件事——
+# `apply_norm()` 按它改写段体、M 段按它发正反两档判据、留档头部那句「命中 N 处」按它现算。
+# 为什么每行都带「必须命中」与「必须不命中」两个样本（第十二轮复审 B3）：上一版头部用模板字面量
+# 写着「段体里有三类读数……都在 `run_cmd()` 里统一处理」，而实测在库留档里 `0x<redacted>`
+# **一处都没有**（墙钟那式 2 处、③ 的标注 1 处）——「处理了」这句话只能靠留档恰好含有那个形状
+# 才谈得上被证，留档里没有就永远假不了（G-23）。现在每条规则自带靶子，不跑子进程也能把
+# 「命中」与「不该命中」两档都试出来；`0x12` 那种短串是故意留在反例里的（阈值 5 位不是装饰）。
+NORMALIZATIONS = (
+    # (类名, 正则, 替换文本, 必须命中的样本, 必须不命中的样本)
+    ("墙钟", r"\bin \d+\.\d+s\b", "in <redacted>s", "in 12.34s", "in 5s"),
+    ("内存地址", r"\b0x[0-9a-fA-F]{5,}\b", "0x<redacted>",
+     "<function x at 0x7ffa1b2c3d40>", "<function x at 0x12>"),
+)
 # 解释器的对象表示里带内存地址（`<function <lambda> at 0x0000020594854400>`）。第十一轮复审在临时
-# worktree 里整份重放、与在库留档逐行对比，抓到这处地址每次重跑必不同——它和墙钟是同一类读数，
-# 当时却只归一化了墙钟。口径统一：两类都归一化，且都在文件头声明（声明里写了几个形状就得归一化几个）。
-MEMADDR = re.compile(r"\b0x[0-9a-fA-F]{5,}\b")
+# worktree 里整份重放、与在库留档逐行对比抓到它每次重跑必不同——它和 pytest 汇总行的墙钟是同一类
+# 读数，当时却只归一化了墙钟。口径统一：登记表里有几条，头部就得报几条的命中处数。
+INCON = "rc=2 补注"
+INCON_MARK = "**INCONCLUSIVE：判据没跑，别把这一档读成真红**"
+NORM_CLASSES = tuple(name for name, *_ in NORMALIZATIONS) + (INCON,)
+NORM_RE = {name: re.compile(pat) for name, pat, *_ in NORMALIZATIONS}
+# 每段命令输出的命中处数在这里累加，头部那句「命中现算」读它；M 段用**另开的字典**驱动同一个函数。
+NORM_HITS: dict[str, int] = {name: 0 for name in NORM_CLASSES}
 
 
 def _ensure_utf8_stdout() -> None:
@@ -235,16 +250,98 @@ def write_out(text: str, *, write=_disk_write, read=_disk_read, sleep=time.sleep
     return last
 
 
+def apply_norm(text: str, rc: int, hits: dict[str, int]) -> str:
+    """把登记表里每一条归一化作用到一段命令输出上，命中处数累加进 `hits`；`rc == 2` 补 ③ 那句标注。
+
+    单独成一个函数（而不是写在 `run_cmd` 里）：M 段要在**不跑子进程**的前提下把它驱动起来，
+    拿一段带墙钟、带对象地址、rc 各档的假输出，看改写、计数与标注是不是都和登记表一一对上。
+    上一版这些形状只有写在 `run_cmd` 里、只能等留档恰好撞出来才算被看过（第十二轮复审 B3）。
+    """
+    for name, _pat, rep, _pos, _neg in NORMALIZATIONS:
+        text, n = NORM_RE[name].subn(rep, text)
+        hits[name] = hits.get(name, 0) + n
+    if rc == 2:
+        text += "\n" + INCON_MARK
+        hits[INCON] = hits.get(INCON, 0) + 1
+    return text
+
+
+def norm_ledger(counts: dict[str, int], text: str) -> tuple[str, list[str]]:
+    """头部那句「命中 N 处」的正文与缺陷清单——同一个数由**两条独立通道**得到再比一次。
+
+    ① `run_cmd` 每跑一段就地经 `apply_norm()` 累加的 `counts`；
+    ② 对交付正文（从第一条 `########## ` 起，头部那段声明不参与）把每处的替换文本再数一遍。
+    两条不符即缺陷：只留 ① 时，「把 `run_cmd` 里的调用删掉」会让计数一路是 0 而正文照样带着
+    `<redacted>`；只留 ② 时，替换文本写进注释里就能凭空凑数。0 处也照样打印 0——
+    「这一趟没撞到」和「这条规则不在」是两句话，上一版把后者混进了前者。
+    """
+    cut = text.find("########## ")
+    readings = text if cut < 0 else text[cut:]
+    defects: list[str] = []
+    for name, _pat, rep, _pos, _neg in NORMALIZATIONS:
+        again = readings.count(rep)
+        if counts.get(name, 0) != again:
+            defects.append(f"归一化「{name}」两条通道不符：`apply_norm` 累加 {counts.get(name, 0)} 处，"
+                           f"正文里替换文本再数是 {again} 处")
+    again = readings.count(INCON_MARK)
+    if counts.get(INCON, 0) != again:
+        defects.append(f"归一化「{INCON}」两条通道不符：累加 {counts.get(INCON, 0)} 处，"
+                       f"正文里标注再数是 {again} 处")
+    headline = ("# 读数归一化命中**现算**（两条通道相符才交付）："
+                + "｜".join(f"{name} {counts.get(name, 0)} 处" for name in NORM_CLASSES)
+                + "（0 也照写：这一趟没撞到，不等于登记表里没这条规则）")
+    return headline, defects
+
+
+#: 每一段**末行那条 `rc=`** 的预期档。缺这张表时的形状（第十二轮自查）：G 段在第十一轮被修成
+#: 「报了红就不交付」，而 M（驱动自证）与 N（反证电池）报了红却照样落进留档、整趟 rc=0——
+#: 读者要自己从十九段读数里发现哪一段红了，那不是交付者该留的活。
+#: A 段是**改前红重放**（把在库件换成修复前的形状再跑一次），它必须一直红，红了才叫证明了这条修复承重；
+#: D 段是**本机无 structlog / sqlalchemy**，pytest 连收集都跑不起来 ⇒ 2（「压根没测到」），不是 1。
+EXPECTED_RC = {"A": 1, "D": 2}
+
+
+def rc_gate(text: str) -> list[str]:
+    """逐段核末行 `rc=N` 与 `EXPECTED_RC`；`rc=2` 的那段必须带着 ③ 那句标注。"""
+    defects: list[str] = []
+    for title, body in split_sections(text):
+        m = re.match(r"########## ([A-Z])", title)
+        letter = m.group(1) if m else "?"
+        lines = [ln for ln in body.splitlines() if ln.strip()]
+        tail = re.fullmatch(r"rc=(\d+)", lines[-1]) if lines else None
+        if not tail:
+            defects.append(f"{letter} 段末行不是 `rc=N` 形状（{lines[-1][:40]!r}）——这一段的裁决读不出来")
+            continue
+        got, want = int(tail.group(1)), EXPECTED_RC.get(letter, 0)
+        if got != want:
+            defects.append(f"{letter} 段末行 rc={got}，登记表要的是 rc={want}"
+                           f"（红就是红，别让它只在段体里出声而整趟照样交付）")
+        if got == 2 and INCON_MARK not in body:
+            defects.append(f"{letter} 段 rc=2 却没有 ③ 那句标注——「压根没测到」会被读成真红")
+    return defects
+
+
+def stray_copy(here: pathlib.Path, ev: pathlib.Path) -> str:
+    """这一份驱动有没有权重写留档：只有**在册那一份**有权。空串=有权，非串=点名拒收。
+
+    为什么要这一条（第十二轮实测）：复核时把一份打了变异的驱动副本放进本包（`_v12_a2d.py`）直接跑，
+    `EV` 由 `__file__` 推出、正指着仓库里的证据包，于是 `OUT` 就是**在库的** `out_s213.txt`——
+    变异版把整份留档重写了，N 段标题当场变成 M 段。反证电池的副本不受影响：它整包拷进临时目录，
+    `__file__` 与 `EV/replay_s213.py` 仍是同一个路径，写的也只是它自己那份副本。
+    """
+    reg = (ev / "replay_s213.py").resolve()
+    return "" if here.resolve() == reg else (
+        f"跑的是 {here.name}，而有权重写 `{reg.name}` 同级留档的只有在册那一份——"
+        f"变异副本请拷到临时目录里跑（`mutate_replay_r9.py` 的 `stage()` 就是这么做的）")
+
+
 def run_cmd(cmd: str, title: str, notes: str = "") -> str:
     r = subprocess.run([BASH, "-c", cmd], capture_output=True, text=True,
                        encoding="utf-8", errors="replace", cwd=ROOT, env=ENV)
     raw = ((r.stdout or "") + (r.stderr or "")).rstrip()
-    out = MEMADDR.sub("0x<redacted>", TIMING.sub("in <redacted>s", raw))
     rc = r.returncode
-    if rc == 2:
-        # 三档退出码里最容易被读错的一档：2 是「压根没测到」，不是「测出红」。它在留档里必须
-        # 明写出来，否则读者把 INCONCLUSIVE 当 1 读，就是拿「没测」冒充「测出不合格」。
-        out += "\n**INCONCLUSIVE：判据没跑，别把这一档读成真红**"
+    # 三档退出码里最容易被读错的一档：2 是「压根没测到」，不是「测出红」，它必须明写在段体末尾。
+    out = apply_norm(raw, rc, NORM_HITS)
     print(f"{title[:60]} … rc={rc}")
     return f"{title}\n{notes}$ {cmd}\n{out}\nrc={rc}\n"
 
@@ -295,27 +392,45 @@ def k_sections() -> tuple[list[str], list[str]]:
 
 
 G24 = ROOT / "docs/06_validation/evidence/EVD-V2-00/g24_static_check.py"
-G_TITLE = "########## G 仓库静态自检（E/F/I/W/UP/B 机检子集；文件清单由 glob 现算）"
+G_TITLE = "########## G 仓库静态自检（E/F/I/W/UP/B 机检子集；被检清单由在库登记表 `EV_PY` 给出）"
 G_TEST_FILES = ("apps/api/tests/test_kb_longlink_ingest.py", "apps/api/tests/test_article_identity.py")
+
+#: 本包**登记在册**的证明脚本：G 段的被检清单取自这张表，不再 `EV.glob("*.py")` 现算。
+#: 第十一轮复审 NIT② 之后我把它改成了 glob，代价反过来落在自己身上（第十二轮实测）：复核智能体
+#: 往本包丢了一份 `_v12_a2d.py` 做临时副本，glob 当场把它吸收进被检清单——留档里那条 `$ ` 命令和
+#: `===` 表跟着一起变，「读者看到的被检文件集」被一次复核动作改写了，而没有任何一条判据说这不行。
+#: 现在清单是登记的，包内出现**未登记**的 `.py` 判缺陷、登记了却不在包里也判缺陷（当场点名，
+#: 既不静默扩清单，也不静默少检）。新入库一份证明脚本 = 同时进这张表，改一处就够。
+EV_PY = ("block_article_identity_plugin.py", "j_attack_r7.py", "mutate_replay_r9.py",
+         "prove_article_identity.py", "prove_biz_delegation.py", "replay_s213.py")
 
 
 def g_section() -> tuple[str, list[str]]:
-    """G 段：仓库静态自检，**文件清单由 `EV/*.py` glob 现算**（第十轮复审 10-14）。返回 (段文本, 缺陷)。
+    """G 段：仓库静态自检，被检清单 = `G_TEST_FILES` + `EV_PY`。返回 (段文本, 缺陷)。
 
     上一版这一串的七个文件名是我手改进留档的 `$ ` 行里的（`git show d80eeaf -- out_s213.txt`
     就能看到那行 `$` 被改过一次），后果是新入库的 `block_article_identity_plugin.py` 一直游离在
-    门禁之外，而且没有任何命令判「清单与包内文件相符」。现在加一个 `.py` 进本包就自动进门禁。
-    两处 `apps/api/tests` 文件是被检对象的另一端，不在本包，仍按名登记。
+    门禁之外，而且没有任何命令判「清单与包内文件相符」。第十轮复审 10-14 因此改成 glob，
+    第十二轮又发现 glob 会把复核临时件一并吸进清单（见 `EV_PY` 上方那段），所以现在是
+    **登记清单 + 双向相符判据**：既不漏检，也不被外来文件悄悄改写。
 
     **这一段的读数必须承重**（第十一轮复审 NIT①）：上一版它只是把 `g_section()` 的文本塞进留档，
     `defects` 一个字都不收——实测往本包放一份有违规的 `.py`，G 段自己记 `rc=1`、表里写「合计违规 1 条」，
     驱动整趟仍 rc=0 交付。静态门禁报了红而驱动绿，等于门禁只在正文里好看。现在三判：末行必须 `rc=0`、
-    必须出现「合计违规 0 条」、表里 `===` 的份数必须等于命令里列出的份数（少一份就是 glob 与命令脱节）。
+    必须出现「合计违规 0 条」、表里 `===` 的份数必须等于命令里列出的份数（少一份就是清单与命令脱节）。
     """
-    files = [RELPATH(p) for p in sorted(EV.glob("*.py"))]
+    present = sorted(p.name for p in EV.glob("*.py"))
+    extra = [p for p in present if p not in EV_PY]
+    missing = [p for p in EV_PY if p not in present]
+    files = [RELPATH(EV / p) for p in EV_PY]
     listed_names = [*G_TEST_FILES, *files]
     text = run_cmd(f"python {RELPATH(G24)} " + " ".join(listed_names), G_TITLE)
     defects: list[str] = []
+    if extra:
+        defects.append(f"本包有未登记在册的 .py：{extra}——把它们放进被检清单，就等于让一次复核动作"
+                       f"改写留档的 `$ ` 命令与 `===` 表；要进门禁就登记进 `EV_PY`，是临时件就删掉")
+    if missing:
+        defects.append(f"登记在册的 .py 不在包里：{missing}——清单与被检对象脱节，这一列就是漏检")
     if not text.rstrip().endswith("rc=0"):
         defects.append(f"G 段静态自检没下绿裁决：末行 {text.rstrip().splitlines()[-1]!r}")
     if "合计违规 0 条" not in text:
@@ -323,7 +438,7 @@ def g_section() -> tuple[str, list[str]]:
     blocks = len(re.findall(r"(?m)^=== ", text))
     if blocks != len(listed_names):
         defects.append(f"G 段命令列出 {len(listed_names)} 份文件，表里只有 {blocks} 份——"
-                       f"清单与被检结果脱节（glob 现算的那几份与写进命令的那几份不是同一批）")
+                       f"清单与被检结果脱节（登记的那几份与跑出来的那几份不是同一批）")
     return text, defects
 
 
@@ -344,6 +459,7 @@ parts = re.split(r'(?m)^(########## .*)$', t)
 bad = [parts[i].split()[1] for i, p in enumerate(parts) if p.startswith('########## ')
        and not any(ln.startswith('$ ') for ln in parts[i + 1].splitlines())]
 print('段数（含本段）：', len([p for p in parts if p.startswith('########## ')]))
+print('其中不同段字母：', len({p.split()[1][:1] for p in parts if p.startswith('########## ')}))
 print('缺 `$ ` 命令的段：', bad or '无——本文件每一段都留得下重跑入口')
 PY"""
 
@@ -585,6 +701,86 @@ def self_test(listing: bool = False) -> int:
     finally:
         shutil.rmtree(tmpd, ignore_errors=True)
 
+    # 读数归一化（第十二轮复审 B3）。上一版头部那句「段体里有三类读数……都在 `run_cmd()` 里统一处理」
+    # 是模板字面量：实测在库留档里墙钟 2 处、③ 的标注 1 处、② **一处都没有**——那句声明只能靠留档
+    # 恰好撞出那个形状才谈得上被证，撞不出来就永远假不了（G-23 禁的就是这种永不失败的断言）。
+    # 现在每条规则自带「必须命中 / 必须不命中」两档靶子，不跑子进程也判得动；计数与正文再走两条通道对账。
+    # 反样本不是凑数：`in 5s` 缺小数、`0x12` 不足 5 位，把阈值放宽就当场红。
+    g5 = "归一化"
+    for name, _pat, rep, pos, neg in NORMALIZATIONS:
+        hit: dict[str, int] = {}
+        rewrote = apply_norm(pos, 0, hit)
+        check(g5, f"{name}：正样本必须被改写且计一处",
+              "" if rep in rewrote and pos not in rewrote and hit.get(name) == 1
+              else f"改写后还留着原样本，或计数不是 1：{hit!r}")
+        keep: dict[str, int] = {}
+        kept = apply_norm(neg, 0, keep)
+        check(g5, f"{name}：反样本（差一位/缺小数）不许动",
+              "" if kept == neg and keep.get(name, 0) == 0 else f"被误改写或计数不是 0：{keep!r}")
+    h2: dict[str, int] = {}
+    marked = apply_norm("某段读数", 2, h2)
+    check(g5, "rc=2 才补 ③ 那句标注（末行与计数都要跟上）",
+          "" if marked.endswith(INCON_MARK) and h2.get(INCON) == 1 else f"补注={marked.endswith(INCON_MARK)}、计数 {h2!r}")
+    for rc in (0, 1):
+        h3: dict[str, int] = {}
+        plain = apply_norm("某段读数", rc, h3)
+        check(g5, f"rc={rc} 不许补 ③ 的标注（真红与没测到是两档）",
+              "" if plain == "某段读数" and h3.get(INCON, 0) == 0 else f"被补了标注或计数 {h3!r}")
+    check(g5, "run_cmd 真的调 apply_norm 并把 NORM_HITS 传进去（登记了却不调＝头部那几处计数是空的）",
+          "" if "apply_norm(raw, rc, NORM_HITS)" in inspect.getsource(run_cmd)
+          else "run_cmd 源码里没有那条调用——头部那句就又是一句叙述")
+    probe_txt = ("########## Z 探针段\n$ cmd\n读数 "
+                 + "／读数 ".join(rep for _n, _p, rep, _a, _b in NORMALIZATIONS)
+                 + "\n" + INCON_MARK + "\nrc=0\n")
+    want_counts = {name: 1 for name in NORM_CLASSES}
+    led_head, led_bad = norm_ledger(want_counts, probe_txt)
+    check(g5, "账：两条通道相符时不给缺陷（三类各一处都认下来）",
+          "" if not led_bad else f"{len(led_bad)} 处不符：{led_bad[0]}")
+    off = dict(want_counts)
+    off[NORM_CLASSES[0]] = 0
+    _, led_bad2 = norm_ledger(off, probe_txt)
+    check(g5, f"账：故意少算 {NORM_CLASSES[0]} 一处 ⇒ 必须点名它（这条核对才可假）",
+          "" if len(led_bad2) == 1 and NORM_CLASSES[0] in led_bad2[0] else f"实得 {len(led_bad2)} 处")
+    check(g5, "头部那句把登记表里每一类都点到了（少一类就是又一句好听的话）",
+          "" if all(name in led_head for name in NORM_CLASSES) else "有一类没出现在正文里")
+
+    # 段末裁决（第十二轮自查）：G 段在第十一轮被修成「报了红就不交付」，而 M/N 报了红却照样落进留档、
+    # 整趟 rc=0——读者得自己从十九段读数里找哪一段红了。这张 `EXPECTED_RC` 把「哪一段该出什么档」
+    # 变成登记，A 段（改前红重放）必须一直红，D 段（本机无依赖）必须是 2 而不是 1。
+    g6 = "段末裁决"
+
+    def sec(letter: str, rc: int, with_mark: bool = False) -> str:
+        return (f"########## {letter} 探针段\n$ cmd\n读数\n"
+                + (INCON_MARK + "\n" if with_mark else "") + f"rc={rc}\n")
+
+    good_probe = sec("A", 1) + sec("D", 2, True) + sec("B", 0)
+    check(g6, "登记的三档预期（A 红 / D 没测到 / B 绿）各自自证干净（登记表被改写就红）",
+          "" if not rc_gate(good_probe) else f"{len(rc_gate(good_probe))} 处：{rc_gate(good_probe)[0]}")
+    for probe, who, shape in ((sec("B", 1), "B", "该绿的段报了红"),
+                              (sec("D", 2), "D", "rc=2 却没带那句标注")):
+        got = rc_gate(probe)
+        check(g6, f"探针：{shape}必须点出 {who} 段",
+              "" if any(who in d for d in got) else "rc_gate 沉默——这一段就能无声交付")
+    check(g6, "探针：末行不是 `rc=N` 形状的段也要报（不许当成没这条判据）",
+          "" if rc_gate("########## C 探针段\n$ cmd\n读数\nrc=没测\n") else "沉默")
+    check(g6, "EXPECTED_RC 的键都得在探针里出现过（空挂的登记等于没登记）",
+          "" if set(EXPECTED_RC) <= set("ADB") else f"实登记 {sorted(EXPECTED_RC)!r}")
+
+    # 落盘权（第十二轮实测的事故形状）：复核时把一份打了变异的驱动副本放进本包直接跑，
+    # `OUT` 跟着指到仓库里的 `out_s213.txt`，留档就被变异版重写了（N 段标题当场变成 M 段）。
+    # `EV_PY` 那条相符判据堵的是「别把外来 .py 算进被检清单」，这一条堵的是「别拿外来 .py 当交付者」。
+    g7 = "落盘权"
+    check(g7, "在册件自己有权重写留档（判绿的那一档）",
+          "" if not stray_copy(EV / "replay_s213.py", EV) else "在册件被自己的判定拒了")
+    check(g7, "本包里的变异副本 _v12_a2d.py 必须被拒（第十二轮那起事故的原样）",
+          "" if stray_copy(EV / "_v12_a2d.py", EV) else "变异副本也被当成有权落盘的那一份")
+    tmpz = pathlib.Path(tempfile.mkdtemp(prefix="stray_"))
+    try:
+        check(g7, "临时目录里那份同名件允许落盘（它写的是自己那一份，不是仓库）",
+              "" if not stray_copy(tmpz / "replay_s213.py", tmpz) else "反证电池的副本通道被堵死了")
+    finally:
+        shutil.rmtree(tmpz, ignore_errors=True)
+
     groups: dict[str, list[str]] = {}
     for item in ran:
         group, label = item.split("｜", 1)
@@ -606,13 +802,21 @@ def self_test(listing: bool = False) -> int:
           "写留档按**字节**回读逐位相同，CRLF / BOM / 半成品 / 截断四种各有专属原因（半成品排在"
           "字节层两类之后，因为生产写入点的意图本来就带占位符），"
           f"重试要真的试满 {ATTEMPTS} 次、每次之间真的等 {PAUSE} 秒（注入通道与默认值各判一次），"
-          "写不进磁盘时报原因而不是静默过；头部那句判据条数由 `bd_ids()` 从 harness 现数")
+          "写不进磁盘时报原因而不是静默过；头部那句判据条数由 `bd_ids()` 从 harness 现数；"
+          "读数归一化每一条都有正/反两档靶子且计数与正文两条通道对账；"
+          "每段末行 `rc=` 与 `EXPECTED_RC` 相符；本包里的变异副本没有落盘权")
     print(f"SELF-TEST PASS：{len(ran)} 条反证全过（{tally}）"
           f"——取不到命令时驱动停下，落不进磁盘时驱动也停下，两种都不许抄旧输出")
     return 0
 
 
 def main() -> int:
+    why = stray_copy(pathlib.Path(__file__), EV)
+    if why:
+        # 变异副本抢先拒收：留档是**在这一步之后**才被重写的，等到收尾的段集合判据出声时，
+        # 磁盘上那份已经被改坏了（第十二轮实测：本包里跑一份 `_v12_a2d.py`，N 段标题当场变成 M 段）。
+        print(f"FAIL 交付：{why}")
+        return 1
     if not OUT.exists():
         # 自举依赖：A–I 段的命令是从**上一版留档**里取的，留档不在就无命令可跑。本轮实测把
         # `out_s213.txt` 删掉后，驱动直接以 `FileNotFoundError` traceback 收场——那不是裁决，按项目纪律落 FAIL。
@@ -660,63 +864,6 @@ def main() -> int:
             print(f"FAIL 交付：{d}")
         return 1
 
-    ts = datetime.datetime.now().astimezone().isoformat(timespec="seconds")[:25]
-    hh = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
-                        capture_output=True, text=True, env=ENV, cwd=ROOT).stdout.strip()
-    # HEAD 之外到底还带不带未提交改动，是让 `git status` 说的，不是我抄的（第八轮复审 id 7：
-    # 上一版把「+工作区未提交改动」和 Python 版本号写死在模板里，在干净工作树上跑也会自称有改动）
-    # 计数口径也要说清（第九轮复审 id 5）：本留档只担保 `docs/06_validation` + `apps/api` 两条路径，
-    # 全仓库另有未跟踪项时（`_workspace/`、规划目录……），只报范围内的数字会让人以为整棵树干净。
-    # 两个**历史**实测形状：dcb1ffb 那次重放时工作区有 7 个待提交文件，头部只报「6 项」（步卡在
-    # `docs/任务规划V0.3.0/` 下，不在担保路径里）——所以「范围内」与「全仓库」两句话分开说，各自带号数。
-    # 本轮这一趟跑出来的号数**不在注释里抄**（第十轮复审 10-5：上一版把「现在再跑则是范围内 0 项 /
-    # 全局 3 项」写死在这里，同一次提交里留档第 2 行却是「5 项 / 8 项」，两句话当场互相矛盾；
-    # 抄来的工作区形状一 commit 就腐烂）——要看就读本文件生成物的第 2 行，那才是 `_porcelain` 现算的。
-    def _porcelain(*pathspec: str) -> int:
-        args = ["git", "status", "--porcelain"]
-        if pathspec:
-            args += ["--", *pathspec]
-        r = subprocess.run(args, capture_output=True, text=True, env=ENV, cwd=ROOT)
-        return len([ln for ln in (r.stdout or "").splitlines() if ln.strip()])
-
-    scoped, total = _porcelain("docs/06_validation", "apps/api"), _porcelain()
-    if scoped:
-        state = f"范围内（docs/06_validation + apps/api）未提交 {scoped} 项｜全仓库未提交 {total} 项"
-    elif total:
-        state = f"范围内干净｜全仓库另有 {total} 项未提交，本留档不担保它们"
-    else:
-        state = "工作树干净（全局 `git status --porcelain` 为空）"
-    pyv, plat = sys.version.split()[0], sys.platform
-    head_bd = bd_headline()  # 第十轮复审 10-1：这一句从前是模板字面量，加一条判据它不会跟着变
-    head_retry = f"重试要真的试满 {ATTEMPTS} 次且每次之间真的等 {PAUSE} 秒（注入通道与默认值各判一次）"
-    head_causes = "CRLF / BOM / 半成品 / 截断四种各有专属原因（按这个顺序判）"
-    header = f"""# STEP-02 S2.1.3 执行留档（kb._biz_from_url 委托解析层）
-# 时间 {ts}｜HEAD={hh}｜{state}｜Python {pyv}｜{plat}
-# 本机依赖实测：structlog / sqlalchemy 皆无（kb.py:22-25 模块级导入）⇒ D 段只能证明「收集期即失败」，用例本身交 CI（J-5）
-{head_bd}
-#   本文件每一段的命令都由**在库件** `replay_s213.py` 逐字重跑生成（`python docs/06_validation/evidence/
-#   EVD-V2-02/replay_s213.py`）。两道自检收尾：L 段机检「每段都留得下一条 `$ ` 命令」（只判把手在不在），
-#   M 段机检驱动自己的两条通道（取命令：把手丢了仍取到同一条、取不到就 raise；落盘：写入必须按**字节**回读
-#   逐位相同——{head_causes}，{head_retry}。
-#   本轮重放就撞到过一次回填 `OSError [Errno 22]` 而驱动照过；那句 Errno 22 的成因**不再写成「瞬时占用」**：
-#   本机实测「被读柄持有」时覆盖写不抛，能稳定抛 Errno 22 的是 win32 保留字符名、抛 Errno 13 的是目标为目录）。
-#   上一版留档这些都做不到：驱动放在不入库的 `_workspace/` 里、按 `$ ` 前缀找命令又在输出时剥掉前缀，
-#   前缀一丢就**不跑而直接抄旧输出**且不报错
-#   ——这条账记在 README §4.9 S-2 / §4.10 与卡面差异表 D-11/D-12。
-# G 段的被检文件清单由 `EV/*.py` **glob 现算**，不再是我抄进 `$ ` 行的七份（第十轮复审 10-14）；
-#   这一段自己承重（第十一轮复审 NIT①）：驱动核对「命令里列出的份数 == 表里 `===` 的份数」且末行必须
-#   `rc=0`、必须出现「合计违规 0 条」，任何一条不符都进缺陷清单、整趟 rc=1——上一版 G 报了红而驱动照样绿
-# 每段 `$` 行就是**逐字可重跑**的单行命令（heredoc 段用 `python - <<'PY' … PY`，在 git bash 下、仓库根跑）
-# 判据计数口径：BD-15 排在最前打印（它是行为面六条的前提），编号仍按追加顺序，不打乱既有 BD 编号的锚
-# `PYTHONIOENCODING=utf-8` 现在只影响输出**好不好读**，不再是脚本**活不活得下来**的前提：见 K.1/K.4 两条裸跑
-# 段体里有**三类**读数不是命令的原样输出，都在 `run_cmd()` 里统一处理，声明与实现一一对应：
-#   ① pytest 墙钟 `\bin \d+\.\d+s\b` → `in <redacted>s`（每次重跑必不同，留原值就是留一份不可复现的读数，
-#      第八轮复审 id 1）；② 解释器对象表示里的内存地址 `0x…` → `0x<redacted>`（同一类「每次必不同」，
-#      第十一轮复审 NIT③ 抓到上一版只归一化了①却写着「除这一处全是真实输出」）；
-#   ③ 任何一档 `rc=2` 时末行补一句 `**INCONCLUSIVE…**` 标注——那是「压根没测到」，不能让人读成真红。
-#   除这三处，段体里的读数全是命令的真实输出（标题与 `#` 注是我写的，不是读数）。
-
-"""
     # 两段式落 L：先把 L 段连同占位符写进去，再跑 L 的命令，最后回填——这样 L 的读数描述的是
     # **交付出去的这一份**（含 L 自己），而不是它运行前那一刻还没写完的版本。
     m = run_cmd(f"python {RELPATH(pathlib.Path(__file__))} --self-test",
@@ -760,14 +907,101 @@ def main() -> int:
                 "再按每一发红出来的 `[组] 判据名` 记账，末尾报「覆盖 n / 共 m 条」并把没有变异的判据**点名列出**，"
                 "少一条就 rc≠0；③ 编码三发全绿时原先一声不出（等于注销），绿档不可证 ⇒ 现在三发各自把实得"
                 "读数打出来（裸跑 rc、关 guard rc、抽靶后 rc），锚点不命中也逐发报而不只在批级兜。\n")
-    body = header + "\n".join(rendered) + "\n" + j + "\n" + "\n".join(k_chunks) + "\n" + m + "\n" + n
+    ts = datetime.datetime.now().astimezone().isoformat(timespec="seconds")[:25]
+    hh = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                        capture_output=True, text=True, env=ENV, cwd=ROOT).stdout.strip()
+    # HEAD 之外到底还带不带未提交改动，是让 `git status` 说的，不是我抄的（第八轮复审 id 7：
+    # 上一版把「+工作区未提交改动」和 Python 版本号写死在模板里，在干净工作树上跑也会自称有改动）
+    # 计数口径也要说清（第九轮复审 id 5）：本留档只担保 `docs/06_validation` + `apps/api` 两条路径，
+    # 全仓库另有未跟踪项时（`_workspace/`、规划目录……），只报范围内的数字会让人以为整棵树干净。
+    # 两个**历史**实测形状：dcb1ffb 那次重放时工作区有 7 个待提交文件，头部只报「6 项」（步卡在
+    # `docs/任务规划V0.3.0/` 下，不在担保路径里）——所以「范围内」与「全仓库」两句话分开说，各自带号数。
+    # 本轮这一趟跑出来的号数**不在注释里抄**（第十轮复审 10-5：上一版把「现在再跑则是范围内 0 项 /
+    # 全局 3 项」写死在这里，同一次提交里留档第 2 行却是「5 项 / 8 项」，两句话当场互相矛盾；
+    # 抄来的工作区形状一 commit 就腐烂）——要看就读本文件生成物的第 2 行，那才是 `_porcelain` 现算的。
+    def _porcelain(*pathspec: str) -> int:
+        args = ["git", "status", "--porcelain"]
+        if pathspec:
+            args += ["--", *pathspec]
+        r = subprocess.run(args, capture_output=True, text=True, env=ENV, cwd=ROOT)
+        return len([ln for ln in (r.stdout or "").splitlines() if ln.strip()])
+
+    scoped, total = _porcelain("docs/06_validation", "apps/api"), _porcelain()
+    if scoped:
+        state = f"范围内（docs/06_validation + apps/api）未提交 {scoped} 项｜全仓库未提交 {total} 项"
+    elif total:
+        state = f"范围内干净｜全仓库另有 {total} 项未提交，本留档不担保它们"
+    else:
+        state = "工作树干净（全局 `git status --porcelain` 为空）"
+    pyv, plat = sys.version.split()[0], sys.platform
+    head_bd = bd_headline()  # 第十轮复审 10-1：这一句从前是模板字面量，加一条判据它不会跟着变
+    head_retry = f"重试要真的试满 {ATTEMPTS} 次且每次之间真的等 {PAUSE} 秒（注入通道与默认值各判一次）"
+    head_causes = "CRLF / BOM / 半成品 / 截断四种各有专属原因（按这个顺序判）"
+    # 段末 `rc=` 与归一化命中都在**全部段跑完之后**才判（M/N 也在其中）：上一版的顺序是头部先写、
+    # 段落后跑，于是头部那句「三类读数都处理了」描述的是上一版留档而不是这一趟（第十二轮复审 B3）。
+    sections_text = "\n".join(rendered) + "\n" + j + "\n" + "\n".join(k_chunks) + "\n" + m + "\n" + n
+    head_norm, norm_bad = norm_ledger(NORM_HITS, sections_text)
+    hits_at_header = dict(NORM_HITS)
+    late = rc_gate(sections_text) + norm_bad
+    if late:
+        for d in late:
+            print(f"FAIL 交付：{d}")
+        return 1
+    header = f"""# STEP-02 S2.1.3 执行留档（kb._biz_from_url 委托解析层）
+# 时间 {ts}｜HEAD={hh}｜{state}｜Python {pyv}｜{plat}
+# 本机依赖实测：structlog / sqlalchemy 皆无（kb.py:22-25 模块级导入）⇒ D 段只能证明「收集期即失败」，用例本身交 CI（J-5）
+{head_bd}
+#   本文件每一段的命令都由**在库件** `replay_s213.py` 逐字重跑生成（`python docs/06_validation/evidence/
+#   EVD-V2-02/replay_s213.py`）。两道自检收尾：L 段机检「每段都留得下一条 `$ ` 命令」（只判把手在不在），
+#   M 段机检驱动自己的两条通道（取命令：把手丢了仍取到同一条、取不到就 raise；落盘：写入必须按**字节**回读
+#   逐位相同——{head_causes}，{head_retry}。
+#   本轮重放就撞到过一次回填 `OSError [Errno 22]` 而驱动照过；那句 Errno 22 的成因**不再写成「瞬时占用」**：
+#   本机实测「被读柄持有」时覆盖写不抛，能稳定抛 Errno 22 的是 win32 保留字符名、抛 Errno 13 的是目标为目录）。
+#   上一版留档这些都做不到：驱动放在不入库的 `_workspace/` 里、按 `$ ` 前缀找命令又在输出时剥掉前缀，
+#   前缀一丢就**不跑而直接抄旧输出**且不报错
+#   ——这条账记在 README §4.9 S-2 / §4.10 与卡面差异表 D-11/D-12。
+# G 段的被检清单由**在库登记表** `EV_PY` 给出，不再是 `EV/*.py` glob 现算（第十二轮实测：复核时丢进
+#   本包的一份变异副本被 glob 当场吸收进清单，`$ ` 命令与 `===` 表跟着一起变）；包内出现未登记的 `.py`
+#   或登记件缺档都进缺陷清单。上一版这七个文件名是我手抄进 `$ ` 行的（第十轮复审 10-14）；
+#   这一段自己承重（第十一轮复审 NIT①）：驱动核对「命令里列出的份数 == 表里 `===` 的份数」且末行必须
+#   `rc=0`、必须出现「合计违规 0 条」，任何一条不符都进缺陷清单、整趟 rc=1——上一版 G 报了红而驱动照样绿
+# 每段 `$` 行就是**逐字可重跑**的单行命令（heredoc 段用 `python - <<'PY' … PY`，在 git bash 下、仓库根跑）
+# 判据计数口径：BD-15 排在最前打印（它是行为面六条的前提），编号仍按追加顺序，不打乱既有 BD 编号的锚
+# `PYTHONIOENCODING=utf-8` 现在只影响输出**好不好读**，不再是脚本**活不活得下来**的前提：见 K.1/K.4 两条裸跑
+# 每一段末行那条 `rc=` 与登记表 `EXPECTED_RC` 逐段核对：A 段（改前红重放）须 1、D 段（本机无依赖）须 2、
+#   其余须 0。上一版只把 G 段那一条红线接进缺陷清单，M 与 N 报了红照样落进留档、整趟 rc=0 交付
+#   （第十二轮自查）——读者得自己从十九段读数里发现哪一段红了，那不是交付者该留的活。
+{head_norm}
+#   三类各是什么：① pytest 墙钟 `\\bin \\d+\\.\\d+s\\b` → `in <redacted>s`（每次重跑必不同，留原值就是
+#   留一份不可复现的读数，第八轮复审 id 1）；② 解释器对象表示里的内存地址 `0x…` → `0x<redacted>`
+#   （同一类「每次必不同」，第十一轮复审 NIT③ 抓到上一版只归一化了①却写着「除这一处全是真实输出」）；
+#   ③ 任何一档 `rc=2` 时末行补一句 INCONCLUSIVE 标注——那是「压根没测到」，不能让人读成真红。
+#   上一版这里写的是「段体里有**三类**读数」这种不带号数的声明，而 ② 那一类在留档里一处都没有
+#   （第十二轮复审 B3）：声明只能靠留档恰好撞出那个形状才谈得上被证，撞不出来就永远假不了。现在命中
+#   处数由 `apply_norm()` 逐段累加、再对正文把替换文本数一遍，两条通道不符就不交付；每条规则另带
+#   「必须命中 / 必须不命中」两档靶子，M 段不跑子进程也判得动。除这些命中处，段体里的读数全是命令的真实输出。
+
+"""
+    body = header + sections_text
+    # 段集合先在**落盘之前**核一遍（落盘之后再发现，磁盘上已经是一份缺段的留档了：第十二轮实测
+    # 本包里那份变异副本跑完就把在库 `out_s213.txt` 的 N 段标题重写成了 M 段，收尾判据只能拒收、
+    # 不能 undo）。L 段此刻还在占位符上，所以这一趟只核 A–N，L 留给落盘后那一遍。
+    pre_letters = sorted({x.group(1) for x in re.finditer(r"(?m)^########## ([A-Z]+)", sections_text)})
+    pre_want = sorted({*ARCHIVED, "G", "J", "K", "M", "N"})
+    if pre_letters != pre_want:
+        print(f"FAIL 交付：还没落盘，段集合就已经与登记表不符——期望 {pre_want}，实得 {pre_letters}；"
+              f"这一趟拒绝写盘（写下去就是一份缺段的留档，而磁盘上的旧那份已经被覆盖）")
+        return 1
     err = write_out(body + "\n" + L_HEAD + "$ " + L_CMD + "\n" + PLACEHOLDER + "\n")
     if err:
         print(f"FAIL 交付：L 段还没落下去，拒绝交出半成品——{err}")
         return 1
     lr = subprocess.run([BASH, "-c", L_CMD], capture_output=True, text=True,
                         encoding="utf-8", errors="replace", cwd=ROOT, env=ENV)
-    lout = ((lr.stdout or "") + (lr.stderr or "")).rstrip() + f"\nrc={lr.returncode}"
+    # L 的读数也走 `apply_norm`：头部那句「除这些命中处，段体里全是真实输出」要对着**交付的整份**成立，
+    # 漏掉 L 就等于让一段没归一化的读数混进留档（真撞出墙钟时，头部那句计数还会少算）。
+    lraw = ((lr.stdout or "") + (lr.stderr or "")).rstrip()
+    lout = apply_norm(lraw, lr.returncode, NORM_HITS) + f"\nrc={lr.returncode}"
     # 回填是**定位**而不是全局替换（第十一轮复审的 MAJOR）：上一版 `read_text().replace(标记, lout)`
     # 没有 `count=1`，而 `write_ok` 的半成品原因里当时正好打印着这个标记——那一行作为 M 段读数已经
     # 落进留档，于是全局替换把整段 L 输出塞进了另一条判据的读数中间（在库的 `out_s213.txt` N-11 那发
@@ -785,6 +1019,16 @@ def main() -> int:
         print(f"FAIL 交付：L 的回填没成功，磁盘上不是这一份——{err}")
         return 1
     written = OUT.read_text(encoding="utf-8")
+    # 交付出去的**这一份**再走一遍收尾闸门：段末 `rc=` 与登记表相符、归一化两条通道对得上账、
+    # 且 L 回填没有再贡献新的命中（贡献了就说明头部那句描述的不是这一份）。
+    final = rc_gate(written) + norm_ledger(NORM_HITS, written)[1]
+    if NORM_HITS != hits_at_header:
+        final.append(f"L 回填后又归一化了读数：头部那句写的是 {hits_at_header}，这一趟结束时是 {NORM_HITS}"
+                     f"——声明描述的不是交付出去的这一份")
+    if final:
+        for d in final:
+            print(f"FAIL 交付：{d}")
+        return 1
     # 第二张登记表在这里承重（第十一轮复审 MINOR⑤：`CODE` 当时只被赋值、从不被读，
     # 而文档却写着「用 ARCHIVED/CODE 两张注册表核对」——G-23 禁的就是这种永不失败的断言）。
     # 输入侧的 `found != want` 只保证**旧留档**里 A–I 齐；这一条保证**交出去的这一份**
@@ -796,7 +1040,8 @@ def main() -> int:
               f"（缺的那几段是没跑还是被剥掉了，看标题；这一趟不能当成交付）")
         return 1
     print(lout)
-    print(f"写出 {OUT}（{len(written.splitlines())} 行、{len(got_letters)} 段）｜"
+    print(f"写出 {OUT}（{len(written.splitlines())} 行、{len(got_letters)} 个段字母——"
+          f"标题行比它多，因为 K.1–K.6 共用一个字母，两个基数都现算，见 L 段那两行）｜"
           f"回读逐字节相同（比对走 `read_bytes`，不经换行翻译）")
     return 0 if "缺 `$ ` 命令的段： 无" in written else 1
 

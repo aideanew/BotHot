@@ -21,14 +21,20 @@
   `--list-checks` 拿驱动自报的判据全清单当分母，再按每一发红出来的 `[组] 判据名` 记账，末尾报
   「覆盖 n / m 条」并点名列出没有变异的判据；③ 编码三发全绿时原先一声不出（等于悄悄注销）⇒
   现在三发各自把实得读数打出来，绿档也留得下读数。
+- 第十二轮：驱动那一版把「段体里有三类读数」写进留档头部却没有号数，而 ② 那一类在留档里一处都没有；
+  同一批还撞起另一起事故——复核时把打了变异的驱动副本放进本包直接跑，`OUT` 跟着指到在库留档，
+  整份 `out_s213.txt` 被变异版重写（N 段标题当场变成 M 段），而 `N-iso` 只 glob `_tmp_*`，那份
+  `_v12_a2d.py` 在它眼里不存在。所以这里给归一化 / 段末裁决 / 落盘权三组新判据各配了变异，并把探测器的
+  形状口径从 `_tmp_*` 改成「以 `_` 开头的文件」（`__pycache__` 是目录，不算残留——见 `residues`）。
 
 三条老纪律不变：
 1. **锚点失效即失败**：变异锚 `old` 若在 `replay_s213.py` 里找不到，这一发直接 FAIL 而不是跳过——
    锚点漂了就说明判据被改过而电池没跟上，跳过等于把这条反证悄悄注销。
 2. **期望分三档**：`RED` 的变异必须让副本给出**可读裁决**且红在指定判据组；`GREEN` 的等价写法必须 `rc=0`；
    其余（rc=2、rc≠0 却无裁决）一律 INCONCLUSIVE，算电池不合格，而不是算打中。
-3. **临时副本一律在系统临时目录**，跑完即删，仓库里不留任何 `_tmp_*`；`OUT` 由副本自己指着副本目录，
-   所以变异出来的驱动**不会**重写仓库里的 `out_s213.txt`——这一条由探测器自证。
+3. **临时副本一律在系统临时目录**，跑完即删，仓库里不留任何以 `_` 开头的文件；`OUT` 由副本自己指着
+   副本目录，所以变异出来的驱动**不会**重写仓库里的 `out_s213.txt`——这一条由探测器自证，而驱动自己
+   另有一条「落盘权」判据（`stray_copy()`）：不在册的那一份连写盘的资格都没有。
 """
 
 from __future__ import annotations
@@ -138,6 +144,57 @@ SHOTS: list[tuple[str, str, str, str, str]] = [
     ("结构面回写成行为面 ⇒「与行为面不相交」没人判（头部现算/结构面非空、与行为面不相交）",
      "return sorted(beh, key=key), sorted(strct, key=key)",
      "return sorted(beh, key=key), sorted(beh, key=key)", "RED", "头部现算"),
+    # ↓ 归一化（第十二轮复审 B3：头部那句「三类读数都处理了」从前是模板字面量）
+    ("墙钟阈值放宽一位 ⇒ 正样本（带小数）不再被改写",
+     '("墙钟", r"\\bin \\d+\\.\\d+s\\b", "in <redacted>s", "in 12.34s", "in 5s"),',
+     '("墙钟", r"\\bin \\d+s\\b", "in <redacted>s", "in 12.34s", "in 5s"),', "RED", "归一化"),
+    ("墙钟正则去掉「必须有小数」⇒ 反样本 in 5s 也被吞（阈值不是装饰）",
+     '("墙钟", r"\\bin \\d+\\.\\d+s\\b", "in <redacted>s", "in 12.34s", "in 5s"),',
+     '("墙钟", r"\\bin \\d+\\.?\\d*s\\b", "in <redacted>s", "in 12.34s", "in 5s"),', "RED", "归一化"),
+    ("地址位数下限抬到 20 ⇒ 真实对象表示不再命中",
+     '("内存地址", r"\\b0x[0-9a-fA-F]{5,}\\b", "0x<redacted>",',
+     '("内存地址", r"\\b0x[0-9a-fA-F]{20,}\\b", "0x<redacted>",', "RED", "归一化"),
+    ("地址位数下限降到 2 ⇒ `0x12` 那种短串也被当成地址",
+     '("内存地址", r"\\b0x[0-9a-fA-F]{5,}\\b", "0x<redacted>",',
+     '("内存地址", r"\\b0x[0-9a-fA-F]{2,}\\b", "0x<redacted>",', "RED", "归一化"),
+    ("rc=2 那一档改成 rc=3 ⇒ 没测到的段落再没有标注",
+     "    if rc == 2:\n        text += ", "    if rc == 3:\n        text += ", "RED", "归一化"),
+    ("rc != 0 就补标注 ⇒ 真红与没测到塌成一档",
+     "    if rc == 2:\n        text += ", "    if rc >= 0:\n        text += ", "RED", "归一化"),
+    ("计数写到空字典里 ⇒ 头部那句「命中 N 处」永远是 0（登记了却没人记账）",
+     "out = apply_norm(raw, rc, NORM_HITS)", "out = apply_norm(raw, rc, {})", "RED", "归一化"),
+    ("账的两条通道永远算相符 ⇒ 这道对账不可假",
+     "if counts.get(name, 0) != again:", "if True:", "RED", "归一化"),
+    ("账的原因里丢掉类名 ⇒ 少算了也不点名是哪一类",
+     'defects.append(f"归一化「{name}」两条通道不符：`apply_norm` 累加 {counts.get(name, 0)} 处，"',
+     'defects.append(f"归一化两条通道不符：累加 {counts.get(name, 0)} 处，"', "RED", "归一化"),
+    ("头部那句只点第一类 ⇒ 又变成一句不带全号数的漂亮话",
+     '+ "｜".join(f"{name} {counts.get(name, 0)} 处" for name in NORM_CLASSES)',
+     '+ "｜".join(f"{name} {counts.get(name, 0)} 处" for name in NORM_CLASSES[:1])', "RED", "归一化"),
+    # ↓ 段末裁决（第十一轮只修了 G 段那条红线，M/N 报红照样整趟 rc=0 交付）
+    ("每段一律预期 rc=0 ⇒ A 段（改前红重放）那条登记被抹平",
+     "got, want = int(tail.group(1)), EXPECTED_RC.get(letter, 0)",
+     "got, want = int(tail.group(1)), 0", "RED", "段末裁决"),
+    ("末行 rc 与预期不符也不管 ⇒ 红段能无声交付",
+     "        got, want = int(tail.group(1)), EXPECTED_RC.get(letter, 0)\n        if got != want:",
+     "        got, want = int(tail.group(1)), EXPECTED_RC.get(letter, 0)\n        if False:",
+     "RED", "段末裁决"),
+    ("rc=2 少了那句标注也不报 ⇒ 没测到会被读成真红",
+     "if got == 2 and INCON_MARK not in body:", "if False:", "RED", "段末裁决"),
+    ("末行根本不是 rc=N 的段被静默跳过（不留崩栈，只留沉默）",
+     "        if not tail:\n"
+     '            defects.append(f"{letter} 段末行不是 `rc=N` 形状（{lines[-1][:40]!r}）——这一段的裁决读不出来")\n'
+     "            continue",
+     "        if not tail:\n            continue", "RED", "段末裁决"),
+    ("登记表里空挂一条 Q ⇒ 那条登记从没被探针走过",
+     'EXPECTED_RC = {"A": 1, "D": 2}', 'EXPECTED_RC = {"A": 1, "D": 2, "Q": 1}', "RED", "段末裁决"),
+    # ↓ 落盘权（第十二轮实测：本包里那份变异副本 `_v12_a2d.py` 跑起来就把在库留档重写了）
+    ("落盘权判定反过来 ⇒ 在册件被拒、变异副本有权写盘",
+     'return "" if here.resolve() == reg else (', 'return "" if here.resolve() != reg else (',
+     "RED", "落盘权"),
+    ("在册件的路径锚到上一层 ⇒ 临时目录那份同名件也被当成有权者",
+     'reg = (ev / "replay_s213.py").resolve()', 'reg = (ev.parent / "replay_s213.py").resolve()',
+     "RED", "落盘权"),
     # 等价写法：语义不变，判据必须照样全绿——假红同样是缺陷（它会把好改动挡在门外）
     ("等价：CRLF 常量写成字面量", 'if raw.replace(CRLF, b"\\n") == want:',
      'if raw.replace(b"\\r\\n", b"\\n") == want:', "GREEN", ""),
@@ -148,6 +205,8 @@ SHOTS: list[tuple[str, str, str, str, str]] = [
     ("等价：落盘改走 write_bytes（落下去的是同一份字节）",
      'OUT.write_text(text, encoding="utf-8", newline="\\n")',
      'OUT.write_bytes(text.encode("utf-8"))', "GREEN", ""),
+    ("等价：归一化计数换个写法（累加顺序不影响和）",
+     "hits[name] = hits.get(name, 0) + n", "hits[name] = n + hits.get(name, 0)", "GREEN", ""),
 ]
 
 
@@ -228,38 +287,74 @@ def hits_of(proc: subprocess.CompletedProcess[str],
     return hit
 
 
+#: 临时件的形状：以 `_` 开头的**文件**（`_tmp_ng.py`、K 段的 `_tmp_noarrow.py`、J 段的
+#: `_harness_prefix_r7.py`，以及第十二轮复核时丢进本包的 `_v12_a2d.py`）。
+#: 从前这里只 glob `_tmp_*`，于是同一批里那份 `_v12_*` 就在包里待着而探测器一声不出（第十二轮实测）。
+#: 目录不算：`__pycache__` 也是 `_` 开头，把它算成残留会让每一发真电池都假红。
+def residues(dir_: pathlib.Path) -> list[str]:
+    return sorted(p.name for p in dir_.iterdir() if p.is_file() and p.name.startswith("_"))
+
+
 def isolate(before: bytes, path: pathlib.Path) -> tuple[str, str]:
-    """两条隔离判据：留档字节没变、同目录不留 `_tmp_*`。返回 (原因, 读数)，空原因才算绿。"""
+    """两条隔离判据：留档字节没变、同目录不留临时件。返回 (原因, 读数)，空原因才算绿。"""
     now = path.read_bytes() if path.exists() else b""
     why = "" if now == before else f"运行期间 `{path.name}` 字节变了：{len(before)} → {len(now)}"
-    left = sorted(p.name for p in path.parent.glob("_tmp_*"))
+    left = residues(path.parent)
     if left:
         why = f"{why}；同目录留下临时副本：{left}" if why else f"同目录留下临时副本：{left}"
-    return why, f"字节 {len(now)}、`_tmp_*` {left or '无'}"
+    return why, f"字节 {len(now)}、临时件 {left or '无'}"
 
 
-def isolate_selfcheck() -> str:
+def isolate_selfcheck() -> tuple[str, int]:
     """反证探测器自己（第十轮复审 10-6：`N-iso` 原先只是 print，没有任何形状能把它打红）。
 
-    在临时目录里造三种世界：字节变了 / 留下 `_tmp_*` / 两者都没有。前两种必须报红，第三种必须报绿
-    ——只会在坏消息上吱一声、或永远沉默的探测器都不算判据（G-23）。
+    在临时目录里造五种世界：① 留档字节变了 / ② 留下 `_tmp_*` / ③ 留下 `_v12_*`（第十二轮那种非
+    `_tmp` 前缀的变异副本）/ ④ 只有**正常命名**的在库件与 `__pycache__` 目录 / ⑤ 什么都没有。
+    前三次必须报红，后两次必须报绿——只会在坏消息上吱一声、永远沉默、或见文件就咬的探测器
+    都不算判据（G-23）。返回 `(原因, 走过的世界数)`：那句「几种都判对」的号数由现场数出来，
+    不是我抄进 print 的（第十轮抄的是「三种」，这一版加到五种，抄的话现在正说着谎）。
     """
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="iso_r10_"))
+    worlds = 0
     try:
         doc = tmp / "out_s213.txt"
         doc.write_bytes(b"abc")
-        why, _ = isolate(b"xyz", doc)
-        if not why:
-            return "探测器对「留档字节变了」报绿——`N-iso` 不可假"
+
+        def one(want_why: bool, shape: str, before: bytes = b"abc") -> str:
+            nonlocal worlds
+            worlds += 1
+            why, _ = isolate(before, doc)
+            if want_why and not why:
+                return f"探测器对「{shape}」报绿——`N-iso` 不可假"
+            if not want_why and why:
+                return f"探测器对「{shape}」报红（{why}）——见什么都咬的探测器等于没判"
+            return ""
+
+        def swap(old: str, new: str) -> None:
+            if (tmp / old).exists():
+                (tmp / old).unlink()
+            (tmp / new).write_text("", encoding="utf-8")
+
         (tmp / "_tmp_evil.py").write_text("", encoding="utf-8")
-        why, _ = isolate(b"abc", doc)
-        if not why:
-            return "探测器对「同目录留下 _tmp_*」报绿——同上"
-        (tmp / "_tmp_evil.py").unlink()
-        why, _ = isolate(b"abc", doc)
+        for want, shape, before in ((True, "留档字节变了", b"xyz"),
+                                    (True, "同目录留下 _tmp_*", b"abc")):
+            why = one(want, shape, before)
+            if why:
+                return why, worlds
+        swap("_tmp_evil.py", "_v12_a2d.py")
+        why = one(True, "同目录留下 _v12_*")
         if why:
-            return f"两种坏形状都没有时探测器仍报红（{why}）——它只会一味响，等于没判"
-        return ""
+            return why, worlds
+        swap("_v12_a2d.py", "prove_something.py")
+        (tmp / "__pycache__").mkdir()
+        why = one(False, "只有正常命名件与 `__pycache__` 目录")
+        if why:
+            return why, worlds
+        (tmp / "prove_something.py").unlink()
+        why = one(False, "两种坏形状都没有")
+        if why:
+            return why, worlds
+        return "", worlds
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -375,11 +470,11 @@ def main() -> int:
 
     # 探测器自证：`N-iso` 那两行必须有能红起来的形状（10-6）
     bad += encoding_probe()
-    iso_why = isolate_selfcheck()
+    iso_why, iso_worlds = isolate_selfcheck()
     if iso_why:
         bad.append(f"隔离探测器不可假：{iso_why}")
-    print(f"N-iso 探测器自证（三种世界：字节变/留残留/都干净）："
-          f"{'OK 三种都判对' if not iso_why else 'BAD ' + iso_why}")
+    print(f"N-iso 探测器自证（{iso_worlds} 种世界：字节变 / `_tmp_*` / `_v12_*` / 只有正常命名件与目录 /"
+          f" 都干净）：{'OK ' + str(iso_worlds) + ' 种都判对' if not iso_why else 'BAD ' + iso_why}")
 
     snapshot = REPO_OUT.read_bytes() if REPO_OUT.exists() else b""
     covered: set[tuple[str, str]] = set()
@@ -428,10 +523,15 @@ def main() -> int:
     if iso_reason:
         bad.append(f"隔离被破坏：{iso_reason}")
 
-    # 覆盖率：分母 = 驱动自报的判据清单，分子 = 全部 RED 变异命中的判据并集。少了就点名列出并判红
-    # ——这一档把末句「每条判据都有能把它打红的变异」从形容词改成读数。
-    uncovered = [f"[{g}] {lab}" for g, lab in baseline if (g, lab) not in covered]
-    print(f"N-覆 覆盖率：{len(covered)} / {len(baseline)} 条判据各有一发「改坏会红」的变异"
+    # 覆盖率：分母 = 驱动自报的判据清单（按 `norm()` 塌数去重），分子 = 全部 RED 变异命中的判据并集。
+    # 少了就点名列出并判红——这一档把末句「每条判据都有能把它打红的变异」从形容词改成读数。
+    # 去重是必需的（第十二轮实测）：`rc=0 不许补…` 与 `rc=1 不许补…` 塌数后同名，一发变异同时堵住两条，
+    # 当时报的是「覆盖 49 / 共 50 条」却又写着「每条都配到了变异」——两个读数当场互相矛盾。
+    uniq = list(dict.fromkeys(baseline))
+    uncovered = [f"[{g}] {lab}" for g, lab in uniq if (g, lab) not in covered]
+    dup = len(baseline) - len(uniq)
+    print(f"N-覆 覆盖率：{len(covered)} / {len(uniq)} 条判据各有一发「改坏会红」的变异"
+          f"（清单 {len(baseline)} 行，塌数后同名 {dup} 行——那一发同时堵住它们）"
           + (f"；未覆盖 {len(uncovered)} 条：{uncovered}" if uncovered else "——每条都配到了变异"))
     if uncovered:
         bad.append(f"{len(uncovered)} 条判据至今没有任何变异能把它打红：{uncovered}")
@@ -443,12 +543,12 @@ def main() -> int:
     if bad:
         print(f"N-总 电池判红：{len(bad)} 处不符"
               f"（应红 {want_red} 发实红 {red_n} 发、其中 INCONCLUSIVE {incon_n} 发 / "
-              f"等价不许假红 {want_green} 发实绿 {green_n} 发 / 覆盖 {len(covered)}/{len(baseline)}）")
+              f"等价不许假红 {want_green} 发实绿 {green_n} 发 / 覆盖 {len(covered)}/{len(uniq)}）")
         return 1
     print(f"N-总 电池全符合：{len(SHOTS)} 发全部落在期望档上"
           f"（{want_red} 发「改坏必须红、且红在该红的判据组」全红，INCONCLUSIVE {incon_n} 发 / "
           f"{want_green} 发「等价写法不许假红」全绿）＋ N-00 基线 ＋ N-iso 探测器自证 ＋ 编码三发；"
-          f"覆盖面 {len(covered)}/{len(baseline)} 条判据由 `--list-checks` 现算，非手抄"
+          f"覆盖面 {len(covered)}/{len(uniq)} 条判据由 `--list-checks` 现算后按 `norm()` 塌数去重，非手抄"
           f"（发数由 `len(SHOTS)` 现算）")
     return 0
 
