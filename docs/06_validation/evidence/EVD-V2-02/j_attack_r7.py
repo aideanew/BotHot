@@ -133,5 +133,9 @@ shutil.rmtree(tmp, ignore_errors=True)
 print("J-12 临时 kb 副本目录已删除：", not tmp.exists())
 for b in bad:
     print("FAIL 攻击对照：", b)
-print(f"J-13 对照自洽性：{'通过（10 发攻击的改前/改后两侧都符合预期）' if not bad else f'{len(bad)} 处不符'}")
+verdict = (f"通过（{len(ATTACKS)} 发攻击 + {len(CRASHES)} 发崩栈，改前/改后两侧都符合预期）"
+           if not bad else f"{len(bad)} 处不符")
+print(f"J-13 对照自洽性：{verdict}｜发数由 len(ATTACKS)/len(CRASHES) 现算"
+      f"（第九轮复审 id 7：先前这里写死「10 发攻击」，实际是 {len(ATTACKS)}+{len(CRASHES)}，"
+      f"与 J-0 写死条数同一类缺陷）")
 raise SystemExit(0 if not bad else 1)

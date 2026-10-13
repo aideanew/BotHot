@@ -17,3 +17,5 @@ coverage/
 .staging/
 apps/web/vitest-report/
 apps/api/pytest-report.xml
+_workspace/
+_workspace_audit/
