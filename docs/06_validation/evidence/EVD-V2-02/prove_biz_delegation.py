@@ -18,13 +18,23 @@
 - 反面 BD-11：函数体里不许再出现 `biz`/`__biz`/`mid`/`sn` 字面量（防「委托了但本地又解一遍」的半委托）；
 - 反面 BD-12/BD-13（第五轮复审 id 3/id 10 的处置）：函数体**形状**白名单（只允许 文档串 / 委托导入 /
   委托绑定 / 返回委托结果的 `.biz`，此外任何嵌套定义、控制流、越界调用、越界属性一律红）+
-  顶层同名定义必须**只有一个**。
+  模块作用域里**只有被 exec 的那一份**绑定（含 `x = `、`del x`、`if True: def x`、`globals()['x']=`、
+  属性形态的 `sys.modules[__name__].x = / del`、模块级 `__getattr__`、星号导入——第七轮复审 N1/N2）。
+- 证明面 BD-14（第六轮复审 D2 起、第七轮复审 N3/N4 加固）：**越过函数边界一跳**，判委托结果是否
+  经**数据流**真的喂进 `_find_source_by_anchor` 的 `Source.external_id` 那一侧，并要求宿主定义唯一、
+  实参语义上是 URL、调用点不许自己解析入参。「共现」不算数：调用还在但结果被丢弃也是绿。
+- 反面 BD-16（第七轮复审 N1/N2 的处置）：**封闭世界假设**——整份文件里不许出现任何能改写模块
+  命名空间的设施（`sys.modules`、`globals()/locals()/vars()`、`exec()/eval()`、指向命名空间或目标名的
+  `setattr()/delattr()`、星号导入、模块级 `__getattr__`）。攻击面是 Python 的名字查找协议而不是某条
+  语法，往绑定扫描里逐个补形状永远慢一步；要引入其中之一必须先经人工裁决改契约。
 
 三档裁决（rc 可分流，别让「没测到」冒充「测出红」）：
-`0` 全绿 / `1` 有判据红 / `2` INCONCLUSIVE——`_biz_from_url` 整个不在文件里时判据无从判定，
+`0` 全绿 / `1` 有判据红 / `2` INCONCLUSIVE——`_biz_from_url` 整个不在文件里、或**整份文件解析不了**
+（第七轮复审 N4/N5b 实测这两种输入原先是 traceback），判据无从判定，
 这种状态若也打印 FAIL 清单，读者会把它当成普通的红基线（A–G 报告 B3/B4 的教训）。
-`--self-test` 里这条映射测**两层**：内存里 `run()` 的返回值，以及真实子进程的退出码（后者用
-临时目录副本 + `--kb=` 驱动，工作树不动）——第五轮复审 id 5 指出只测前者等于没测到 `sys.exit`。
+`--self-test` 里这条映射测**两层**：内存里 `run()` 返回值，以及真实子进程的退出码（后者用
+临时目录副本 + `--kb=` 驱动，工作树不动）——第五轮复审 id 5 指出只测前者等于没测到 `sys.exit`；
+第七轮复审后子进程那层还额外要求**任何一档都不许以 traceback 收场**。
 
 `--self-test` 三条反证通道（与 prove_article_identity.py 同一方法论）：
 ① `MUTANTS` 把函数体改成「看起来还在但已失效」的形态（含**退回旧实现**），逐条要求指定判据红；
@@ -66,6 +76,24 @@ failed: list[str] = []
 _quiet = False  # self-test 里复用 run() 时抑制逐条打印，但绝不抑制裁决本身
 
 
+def _ensure_utf8_stdout() -> None:
+    """把输出流钉在 UTF-8 上，让「少带一个环境变量」不成为崩溃源。
+
+    win32 控制台与重定向管道默认 cp936，编不出本文件里的 `⇒`：裸跑
+    `python prove_biz_delegation.py --self-test`（不带 `PYTHONIOENCODING=utf-8`）原先
+    在 print 处 `UnicodeEncodeError` 崩掉。按本项目规矩**崩掉不等于裁决**，而这条崩溃
+    和三档退出码、和判据都无关，纯粹是环境噪音——噪音门禁会被关掉，所以在此自愈。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError, ValueError):
+            pass
+
+
+_ensure_utf8_stdout()
+
+
 def check(label: str, ok: bool, detail: object = "") -> None:
     (passed if ok else failed).append(label)
     if not _quiet:
@@ -99,11 +127,41 @@ def _target_names(target: ast.AST | None, out: set[str]) -> None:
         _target_names(target.value, out)
 
 
+def _attr_bound(node: ast.AST) -> set[str]:
+    """语句以**属性形态**绑定的名字：`x.NAME = …`、`x.NAME += …`、`del x.NAME`、`x.NAME: T = …`。
+
+    第七轮复审 N1/N2 实测：`sys.modules[__name__]._biz_from_url = lambda url: ""` 与
+    `del sys.modules[__name__]._biz_from_url` 都是模块作用域里**静态可见**的语句，
+    而旧的 `_target_names` 只摊平 `Name`/`Tuple`/`List`/`Starred` ⇒ 目标名一个字没动地出现在
+    属性里，绑定扫描看不见，于是 def 还在、活绑定已换，15 条判据全绿。
+    只认「属性名恰好等于目标名」这一种，因为 `foo._biz_from_url = …` 在真实代码里没有正当用途。
+    """
+    targets: list[ast.expr] = []
+    if isinstance(node, ast.Assign):
+        targets = list(node.targets)
+    elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+        targets = [node.target]
+    elif isinstance(node, ast.Delete):
+        targets = list(node.targets)
+    out: set[str] = set()
+    for target in targets:
+        for sub in ast.walk(target):
+            if isinstance(sub, ast.Attribute):
+                out.add(sub.attr)
+    return out
+
+
 def _binds_target(node: ast.AST) -> bool:
     """这个**语句**是否动过模块作用域里的 `kb._biz_from_url` 绑定（含解绑）。"""
-    out: set[str] = set()
+    out: set[str] = _attr_bound(node)
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
         out.add(node.name)
+        # PEP 562：模块级 `def __getattr__` 能给「查不到的名字」造一个返回值，
+        # 于是 `del X` 之后 `from kb import X` 仍可拿到假的（第七轮复审 N2b）。
+        if node.name == "__getattr__" and any(
+            isinstance(c, ast.Constant) and c.value == TARGET_NAME for c in ast.walk(node)
+        ):
+            return True
     elif isinstance(node, ast.Assign):
         for t in node.targets:
             _target_names(t, out)
@@ -116,6 +174,9 @@ def _binds_target(node: ast.AST) -> bool:
         for t in node.targets:
             _target_names(t, out)
     elif isinstance(node, (ast.Import, ast.ImportFrom)):
+        if isinstance(node, ast.ImportFrom) and any(a.name == "*" for a in node.names):
+            # 星号导入绑的是**对方模块说了算**的一堆名字，静态面无法穷举 ⇒ 保守算动过绑定
+            return True
         for a in node.names:
             out.add(a.asname or a.name.split(".")[0])
     elif isinstance(node, (ast.For, ast.AsyncFor)):
@@ -127,19 +188,28 @@ def _binds_target(node: ast.AST) -> bool:
 
 
 def _dynamic_rebind(stmt: ast.AST) -> str | None:
-    """语句里是否出现「callee 是 globals()/exec()/setattr() 之类」且同时提到目标名。
+    """语句里是否出现「callee 是 globals()/exec()/setattr() 之类」且**同一条语句**提到目标名。
 
     这类写入 AST 的绑定扫描看不见（`globals()['_biz_from_url'] = lambda …` 在语法上只是
-    一次下标赋值），但运行时确实换掉了活绑定，所以按名字共现保守判红。"""
-    if TARGET_NAME not in ast.unparse(stmt):
-        return None
-    for n in ast.walk(stmt):
-        if not isinstance(n, ast.Call):
+    一次下标赋值），但运行时确实换掉了活绑定，所以按名字共现保守判红。
+
+    共现的单位是**单条语句**，不是「整份外层容器」：第七轮复审的等价样本
+    `class KBService: … def _r7_touch(self, rec): setattr(rec, "url", "x")` 里，
+    类体别处有一句 `_biz_from_url(url)`，若按整份 ClassDef 的 unparse 判共现，
+    一个和命名空间毫无关系的 `setattr` 就能把 BD-13 判红——那是假红，而假红门禁会被关掉。
+    方法体内的 `globals()['_biz_from_url'] = …` 仍会红：那条语句自己就提到目标名。"""
+    for sub in ast.walk(stmt):
+        if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)):
             continue
-        func = n.func
-        callee = func.id if isinstance(func, ast.Name) else (func.attr if isinstance(func, ast.Attribute) else "")
-        if callee in _DYNAMIC_REBIND_CALLEES:
-            return f"{callee}@{n.lineno}"
+        if TARGET_NAME not in ast.unparse(sub):
+            continue
+        for n in ast.walk(sub):
+            if not isinstance(n, ast.Call):
+                continue
+            func = n.func
+            callee = func.id if isinstance(func, ast.Name) else (func.attr if isinstance(func, ast.Attribute) else "")
+            if callee in _DYNAMIC_REBIND_CALLEES:
+                return f"{callee}@{n.lineno}"
     return None
 
 
@@ -527,46 +597,185 @@ def j_executable(src: str) -> tuple[bool, object]:
     return err is None and biz is not None, err
 
 
-def _caller_anchor_fn(tree: ast.AST) -> ast.AST | None:
-    """找 `_find_source_by_anchor`（kb.py:336 的**async** def，它是 kb.py:343 那处委托调用的宿主）。"""
-    return next(
-        (n for n in ast.walk(tree)
-         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "_find_source_by_anchor"),
-        None,
-    )
+#: BD-16 的封闭世界名单：能改写模块命名空间、或给查不到的名字伪造结果的设施。
+#: `getattr()` **不在**名单里——它只读，造不出绑定。`setattr`/`delattr` 只在
+#: 「接收者是命名空间」或「属性名正是目标名」时才算：实测 `kb.py` 里 `getattr` 有 9 处、
+#: `setattr`/`delattr`/`exec`/`eval`/`vars`/`globals`/`locals`/`sys.modules`/星号导入/`__getattr__`
+#: 全部零命中，所以这条今天就能绿，且不会误伤 ORM 对象上的正当 `setattr(rec, "url", u)`。
+_NAMESPACE_CALLEES = frozenset({"globals", "locals", "vars", "exec", "eval"})
+_DYNAMIC_WRITE_CALLEES = frozenset({"setattr", "delattr"})
+
+
+def j_closed_world(src: str) -> tuple[bool, object]:
+    """BD-16：整份文件里一个「改写模块命名空间」的设施都不许有（活绑定的封闭世界假设）。
+
+    为什么不继续往 BD-13 的绑定扫描里逐个补形状：第七轮复审 N1/N2 实测的四发
+    （`sys.modules[__name__]._biz_from_url = lambda url: ""`、`del sys.modules[__name__]._biz_from_url`、
+    后者 + 模块级 `def __getattr__`、`from kb_legacy import *` 且对方 `__all__` 点名目标名）
+    都是「绑定已换而 AST 里没有那次绑定」——攻击面是 Python 的**名字查找协议**，不是某条语法，
+    补形状永远慢一步。反过来立「封闭世界」才是可判定的契约：本文件不许碰 `sys.modules`、
+    `globals()`/`locals()`/`vars()`、`exec()`/`eval()`、指向命名空间或目标名的
+    `setattr()`/`delattr()`、星号导入、模块级 `__getattr__`；要用其中之一必须先经人工裁决改契约。
+    扫描范围是**整份文件**而不是只顶层——顶层调用一个体内含 `exec` 的函数与直接 `exec` 等价。
+    """
+    hits: list[str] = []
+    for n in ast.walk(ast.parse(src)):
+        if (isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)
+                and n.value.id == "sys" and n.attr == "modules"):
+            hits.append(f"sys.modules@{n.lineno}")
+        elif isinstance(n, ast.Call):
+            callee = n.func.id if isinstance(n.func, ast.Name) else (
+                n.func.attr if isinstance(n.func, ast.Attribute) else "")
+            if callee in _NAMESPACE_CALLEES:
+                hits.append(f"{callee}()@{n.lineno}")
+            elif callee in _DYNAMIC_WRITE_CALLEES:
+                recv = ast.unparse(n.args[0]) if n.args else ""
+                second = n.args[1] if len(n.args) > 1 else None
+                to_ns = recv.startswith(("sys.modules", "globals()", "locals()", "vars("))
+                to_target = isinstance(second, ast.Constant) and second.value == TARGET_NAME
+                if to_ns or to_target:
+                    hits.append(f"{callee}→{'命名空间' if to_ns else TARGET_NAME}@{n.lineno}")
+        elif isinstance(n, ast.ImportFrom) and any(a.name == "*" for a in n.names):
+            hits.append(f"星号导入@{n.lineno}")
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "__getattr__":
+            hits.append(f"def __getattr__@{n.lineno}")
+    return not hits, sorted(set(hits))
+
+
+#: 委托调用的宿主（锚定查询），与 `kb.py:336` 同名。
+HOST_NAME = "_find_source_by_anchor"
+#: 实参在语义上得是 URL：与目标函数自己的形参同名，或名字里含这个子串。
+_URL_HINT = "url"
+#: 锚点最终要比的列（`kb.py:348`）。
+_EXT_ID = "Source.external_id"
+
+
+def _caller_anchor_fns(tree: ast.AST) -> list[ast.AST]:
+    """所有叫 `_find_source_by_anchor` 的定义，按行号排。
+
+    第六轮用的是 `next(ast.walk(...))`——walk 是 BFS 且不受行号约束，同名重复时它可能取到
+    **早该被后写覆盖的那份**，于是证明的仍是死代码（第七轮复审 N4 实测：三份同名方法、
+    活的那份不用委托结果，`rc=0` 且 15 条判据全绿）。"""
+    found = [n for n in ast.walk(tree)
+             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == HOST_NAME]
+    return sorted(found, key=lambda n: n.lineno)
+
+
+def _bind_targets(node: ast.AST) -> list[ast.expr]:
+    if isinstance(node, ast.Assign):
+        return list(node.targets)
+    if isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr, ast.For, ast.AsyncFor)):
+        return [node.target]
+    return []
+
+
+def _bind_values(node: ast.AST) -> list[ast.expr]:
+    """这个绑定语句的右值：`Assign`/`AnnAssign`/`NamedExpr` 取 value，`For` 取 iter。"""
+    if isinstance(node, ast.Assign):
+        return [node.value]
+    if isinstance(node, (ast.AnnAssign, ast.NamedExpr)):
+        return [node.value] if node.value is not None else []
+    if isinstance(node, (ast.For, ast.AsyncFor)):
+        return [node.iter]
+    return []
+
+
+def _flows_into_anchor(fn: ast.AST, call_ids: set[int], sites: list[ast.AST]) -> tuple[bool, object]:
+    """委托结果是否**真的流进** `_EXT_ID` 那一侧（只做名字传播，≤3 跳）。
+
+    第七轮复审 N3 实测：把 `kb.py:343` 换成「`_biz_from_url(url)` 单独一句、结果丢掉，
+    锚元组改由 kb 内的第二个解析器提供」，旧的 BD-14 四条**全是共现检查**（有调用、有比较、
+    实参是入参、没自己 split），照样全绿。本函数把「共现」换成「数据流」：第 0 跳收
+    值里直接含委托调用的绑定名，再沿别名传两跳，最后要求锚点那一侧引用其中之一
+    （或调用本身直接写在那一侧里）。
+    """
+    names: set[str] = set()
+    for node in ast.walk(fn):
+        for val in _bind_values(node):
+            if any(id(s) in call_ids for s in ast.walk(val)):
+                for target in _bind_targets(node):
+                    _target_names(target, names)
+    for site in sites:
+        if any(id(s) in call_ids for s in ast.walk(site)):
+            return True, f"委托调用直接写在锚点侧@{site.lineno}"
+    for _ in range(2):
+        before = set(names)
+        for node in ast.walk(fn):
+            for val in _bind_values(node):
+                if any(isinstance(s, ast.Name) and s.id in names for s in ast.walk(val)):
+                    for target in _bind_targets(node):
+                        _target_names(target, names)
+        if names == before:
+            break
+    for site in sites:
+        reached = sorted({s.id for s in ast.walk(site) if isinstance(s, ast.Name) and s.id in names})
+        if reached:
+            return True, f"{sorted(names)} → 锚点侧引用 {reached}@{site.lineno}"
+    return False, (f"委托结果绑到的名字 {sorted(names) or '（无：结果被丢弃）'} 到不了 {_EXT_ID} 那一侧"
+                   f"（锚点侧 {len(sites)} 处）")
 
 
 def j_call_site(src: str) -> tuple[bool, object]:
-    """BD-14：委托结果必须真的**喂进锚定查询**，且调用点不许自己解析 URL。
+    """BD-14：委托结果必须**经数据流**喂进锚定查询；宿主定义必须唯一；调用点不许自己解析 URL。
 
     为什么要有这条：BD-1…BD-13 全部只围着 `_biz_from_url` 自己转（`get_fn_node` 只取那个函数），
     第六轮复审 D2 实测把 `kb.py:343` 的 `_biz_from_url(url)` 换成 `url.split("__biz=")[-1]…`
     之后 13 条判据照样全绿——「函数内部正确」和「这个正确实现真的在起作用」是两件事，
-    卡面标题写的是后者。"""
+    卡面标题写的是后者。第七轮复审又把「后者」往三个方向各推一发（结果丢弃 / 本地第二解析器
+    当真锚 / 传错入参），并把宿主的重名定义也测了一发，本条据此从四条共现检查改成六条。
+    """
     tree = ast.parse(src)
-    fn = _caller_anchor_fn(tree)
-    if fn is None:
-        return False, "kb.py 里没有 _find_source_by_anchor——锚定查询改名了，本判据的口径需要重定"
+    hosts = _caller_anchor_fns(tree)
+    if not hosts:
+        return False, f"kb.py 里没有 {HOST_NAME}——锚定查询改名了，本判据的口径需要重定"
     bad: list[str] = []
+    if len(hosts) > 1:
+        bad.append(f"同名宿主定义 {len(hosts)} 处 @{[h.lineno for h in hosts]}——Python 取末位为活绑定，"
+                   "早前那份是死代码，判据不能证明一段没人调用的代码")
+    fn = hosts[-1]
+    defs = _top_defs(src)
+    target_params = {a.arg for a in defs[-1].args.args} if defs else set()
     params = {a.arg for a in fn.args.args}
-    calls = [
-        n for n in ast.walk(fn)
-        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == TARGET_NAME
-    ]
+    calls = [n for n in ast.walk(fn)
+             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == TARGET_NAME]
     if not calls:
         bad.append("调用点没有对 _biz_from_url 的调用（委托结果到不了查询）")
-    if not any(_arg_is_param(c, fn) for c in calls):
+    if calls and not any(_arg_is_param(c, fn) for c in calls):
         bad.append(f"调用点的实参不是它自己的入参 {sorted(params)}")
-    sql = [n for n in ast.walk(fn)
-           if isinstance(n, ast.Compare) and ast.unparse(n.left).startswith("Source.external_id")]
-    if not sql:
-        bad.append("没有 Source.external_id 比较——锚点没进查询条件")
+    if calls and not any(_arg_is_url_like(c, params, target_params) for c in calls):
+        bad.append(f"调用点传给委托的实参语义上不是 URL（入参 {sorted(params)} 里既不含 "
+                   f"{_URL_HINT} 也与目标形参 {sorted(target_params) or '（样本无目标 def）'} 不同名）")
+    sites = [n for n in ast.walk(fn)
+             if isinstance(n, (ast.Compare, ast.Call)) and _EXT_ID in ast.unparse(n)]
+    if not sites:
+        bad.append(f"没有 {_EXT_ID} 比较——锚点没进查询条件")
+    if calls and sites:
+        flowed, flow_detail = _flows_into_anchor(fn, {id(c) for c in calls}, sites)
+        if not flowed:
+            bad.append(f"数据流断链：{flow_detail}")
+    else:
+        flow_detail = "（调用或锚点侧缺失，数据流无从谈）"
     for n in ast.walk(fn):
         if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
                 and n.func.attr in _CALLER_PARSE_METHODS
                 and isinstance(n.func.value, ast.Name) and n.func.value.id in params):
             bad.append(f"调用点自己解析入参 .{n.func.attr}()@{n.lineno}")
-    return not bad, bad or [f"调用 {len(calls)} 处、external_id 比较 {len(sql)} 处@{fn.lineno}"]
+    return not bad, bad or [f"调用 {len(calls)} 处、锚点侧 {len(sites)} 处、数据流 {flow_detail}@{fn.lineno}"
+                           f"（同名宿主 {len(hosts)} 份）"]
+
+
+def _arg_is_url_like(call: ast.Call, params: set[str], target_params: set[str]) -> bool:
+    """委托调用的实参在**语义**上得是 URL：与目标函数自己的形参同名，或名字里含 `url`。
+
+    第七轮复审 N3c 实测 `_biz_from_url(article_key)` 全绿——「实参必须是入参」只保证传的是
+    它自己的某个参数，不保证传的是**哪一个**。代价写在 README §7：若哪天宿主把 URL 形参改名成
+    `link`，本判据会红并要人来更正，那是契约变更而不是判据缺陷。
+    """
+    for arg in list(call.args) + [kw.value for kw in call.keywords]:
+        if (isinstance(arg, ast.Name) and arg.id in params
+                and (arg.id in target_params or _URL_HINT in arg.id.lower())):
+            return True
+    return False
 
 
 # ── 行为面 ────────────────────────────────────────────────────────────────
@@ -657,6 +866,16 @@ def run(src: str, label: str = "") -> int:
     """对一份 kb.py 源码下裁决并打印。可重复调用（先清空全局账）。"""
     passed.clear()
     failed.clear()
+    err = parse_err(src)
+    if err is not None:
+        say(
+            f"INCONCLUSIVE 目标文件解析不了：{err}\n"
+            "              结构面要 AST、行为面要 exec，两者都无从判定；\n"
+            "              把它打印成 FAIL 清单会冒充红基线，把它让它 traceback 上去则违反"
+            "「崩掉不等于判红」。故单独一档。"
+        )
+        say(f"合计 未判定 PASS=0 FAIL=0（INCONCLUSIVE，rc={RC_INCONCLUSIVE}）")
+        return RC_INCONCLUSIVE
     if not has_target(src):
         say(
             "INCONCLUSIVE kb.py 里没有 _biz_from_url 这个函数——S2.1.3 未落地，或函数被改名。\n"
@@ -678,6 +897,7 @@ def run(src: str, label: str = "") -> int:
     check("BD-12 函数体形状在白名单内（不许长出自己的逻辑）", *j_body_shape(src))
     check("BD-13 模块作用域只有被 exec 的那一份绑定", *j_single_definition(src))
     check("BD-14 委托结果确实喂进锚定查询（调用点不许自己解析）", *j_call_site(src))
+    check("BD-16 全文件无改写模块命名空间的设施（活绑定的封闭世界假设）", *j_closed_world(src))
     say(f"\n合计 PASS={len(passed)} FAIL={len(failed)}")
     for lbl in failed:
         say(f"  FAIL {lbl}")
@@ -697,13 +917,18 @@ def _kb_override() -> Path | None:
     return None
 
 
+def _read_kb(path: Path) -> str:
+    """按 `utf-8-sig` 读：CPython 自己允许源文件带 BOM，判据不许因为 BOM 而崩（第七轮复审 N5b）。"""
+    return path.read_text(encoding="utf-8-sig")
+
+
 def main() -> int:
     path = _kb_override() or KB
     if not path.exists():
         print(f"FAIL kb.py 不存在：{path}")
         return RC_FAIL
     label = path.relative_to(REPO).as_posix() if path.is_relative_to(REPO) else str(path)
-    return run(path.read_text(encoding="utf-8"), label)
+    return run(_read_kb(path), label)
 
 
 # ── 反证①：函数体变异必须让指定判据红 ──────────────────────────────────────
@@ -739,6 +964,11 @@ _HANDROLLED = (
 )
 _ALIAS_IMPORT = "    from app.services.article_identity import parse_wechat_url as pw\n\n"
 _PLAIN_IMPORT = "    from app.services.article_identity import parse_wechat_url\n\n"
+
+#: 第七轮复审的调用点变异锚：`kb.py:343` 那一行（实测本文件里唯一），与宿主方法尾部锚。
+#: 刻意用**行内**形态而不是正则找函数：锚失配必须由 `src.count(old) != 1` 报出来。
+_CALLER_LINE = "        for anchor in (a for a in (_biz_from_url(url), article_key) if a):"
+_HOST_TAIL = "        ).scalar_one_or_none()\n        return row\n"
 
 MUTANTS: list[tuple[str, str, str, set[str]]] = [
     ("退回旧实现：只读 biz（D-01b 本体复活）", NEW_BODY, OLD_BODY,
@@ -795,6 +1025,41 @@ MUTANTS: list[tuple[str, str, str, set[str]]] = [
     ("装饰器引用未定义名字（行为面压根没跑，必须判红而不是把脚本崩掉）",
      "def _biz_from_url(url: str) -> str:", "@_probe_cache\ndef _biz_from_url(url: str) -> str:",
      {"BD-1", "BD-3", "BD-12", "BD-15"}),
+    # ── 第七轮复审 N1/N2/N3/N4：改前实测 N1/N2a/N2b 15 条全绿、N3 三发全绿、N4 全绿，
+    #    而 N4/N5b 的另两种构造直接把脚本崩成 traceback（崩溃不是裁决，见档位自证）。
+    ("属性形态重绑：sys.modules[__name__].目标名 = lambda（绑定扫描原先看不见）", NEW_BODY,
+     NEW_BODY + "\nimport sys\n\nsys.modules[__name__]." + TARGET_NAME + " = lambda url: ''\n",
+     {"BD-13", "BD-16"}),
+    ("属性形态解绑：del sys.modules[__name__].目标名", NEW_BODY,
+     NEW_BODY + "\nimport sys\n\ndel sys.modules[__name__]." + TARGET_NAME + "\n",
+     {"BD-13", "BD-16"}),
+    ("del 之后用模块级 __getattr__ 造出同名假实现（PEP 562）", NEW_BODY,
+     NEW_BODY + "\nimport sys\n\ndel sys.modules[__name__]." + TARGET_NAME + "\n\n\n"
+     "def __getattr__(name):\n"
+     f'    if name == "{TARGET_NAME}":\n        return lambda url: ""\n'
+     "    raise AttributeError(name)\n",
+     {"BD-13", "BD-16"}),
+    ("星号导入把目标名从别的模块带进来（静态面无法穷举对方导出了什么）", NEW_BODY,
+     NEW_BODY + "\nfrom app.services.kb_legacy import *\n", {"BD-13", "BD-16"}),
+    ("委托结果被丢弃：调用还在，锚却只用 article_key（共现检查全绿）", _CALLER_LINE,
+     "        _biz_from_url(url)\n"
+     "        for anchor in (a for a in (article_key,) if a):",
+     {"BD-14"}),
+    # 期望集合按「这条判据的职责边界」写：调用点里自己 split 是 BD-14 的事，
+    # BD-16 只管命名空间写入，这里它**应当**保持绿——写成期望红就是拿判据当万能胶。
+    ("委托结果被丢弃 + kb 里第二份解析器当真锚", _CALLER_LINE,
+     "        _biz_from_url(url)\n"
+     '        for anchor in (a for a in (url.split("__biz=")[-1].split("&")[0], article_key) if a):',
+     {"BD-14"}),
+    ("传错实参：把 article_key 当 URL 交给委托函数（实参是入参但不是那个入参）", _CALLER_LINE,
+     _CALLER_LINE.replace("_biz_from_url(url)", "_biz_from_url(article_key)"), {"BD-14"}),
+    ("宿主同名重复定义、活的是后面那份不用委托结果的", _HOST_TAIL,
+     _HOST_TAIL +
+     '\n    async def _find_source_by_anchor(self, article_key: str, url: str):\n'
+     '        """后写的这份才是活绑定，它自己 split 出锚。"""\n'
+     '        for anchor in (a for a in (url.split("__biz=")[-1].split("&")[0], article_key) if a):\n'
+     "            return None\n        return None\n",
+     {"BD-14"}),
 ]
 
 # ── 反证②：结构判据的坏样本必须判假 ────────────────────────────────────────
@@ -871,6 +1136,20 @@ PROBES: list[tuple[str, object, str, str]] = [
      _CALLER_BAD, _CALLER_OK),
     ("BD-14 调用点没有 external_id 比较", j_call_site,
      _CALLER_OK.replace("Source.external_id == anchor", "Source.title == anchor"), _CALLER_OK),
+    # ── 第七轮复审处置新增判据/新臂的样本对（每条都要「坏样本判假 + 好样本判真」两个方向）──
+    ("BD-14 委托结果被丢弃（调用还在，锚里没有它）", j_call_site,
+     _CALLER_OK.replace("for anchor in (a for a in (_biz_from_url(url), article_key) if a):",
+                        "_biz_from_url(url)\n    for anchor in (a for a in (article_key,) if a):"),
+     _CALLER_OK),
+    ("BD-14 实参换成 article_key（是入参，但不是 URL）", j_call_site,
+     _CALLER_OK.replace("_biz_from_url(url)", "_biz_from_url(article_key)"), _CALLER_OK),
+    ("BD-14 宿主同名重复定义（活的是后写那份）", j_call_site,
+     _CALLER_OK + "\n" + _CALLER_OK.replace("_biz_from_url(url)", "url.split('=')[-1]"), _CALLER_OK),
+    ("BD-16 属性形态重绑（sys.modules[__name__].目标名 = …）", j_closed_world,
+     _FULL_DELEGATION + "\nimport sys\n\nsys.modules[__name__]._biz_from_url = lambda url: ''\n",
+     _FULL_DELEGATION),
+    ("BD-16 星号导入 / 模块级 __getattr__ 这类命名空间设施", j_closed_world,
+     _FULL_DELEGATION + "\nfrom app.services.kb_legacy import *\n", _FULL_DELEGATION),
 ]
 
 # ── 反证③：等价写法必须不假红 ──────────────────────────────────────────────
@@ -902,17 +1181,34 @@ EQUIVS: list[tuple[str, str, str]] = [
     ("调用点先把委托结果存成局部变量", "        for anchor in (a for a in (_biz_from_url(url), article_key) if a):",
      "        biz_anchor = _biz_from_url(url)\n"
      "        for anchor in (a for a in (biz_anchor, article_key) if a):"),
+    # 第七轮：数据流判据与封闭世界判据都是**收紧**，收紧的代价必须由等价通道来量。
+    ("委托结果经两跳别名才进锚（换写法不该红）", "        for anchor in (a for a in (_biz_from_url(url), article_key) if a):",
+     "        biz_anchor = _biz_from_url(url)\n"
+     "        first = biz_anchor\n"
+     "        for anchor in (a for a in (first, article_key) if a):"),
+    ("正当 setattr：接收者是 ORM 对象、属性名也不是目标名（BD-16 不许连坐）", _HOST_TAIL,
+     _HOST_TAIL + '\n    def _r7_touch(self, rec):\n        setattr(rec, "url", "x")\n        return rec\n'),
 ]
+
+
+def parse_err(src: str) -> str | None:
+    """能否解析；不能则给一句可打印的原因。
+
+    单独拎出来是因为第七轮复审有两发把**脚本自己**崩掉了（BOM 开头的文件、以及构造得不
+    合法的重复定义攻击体）。`SyntaxError` 顺着 `ast.parse` 抛到 `main()` 时，读者拿到的是
+    traceback 而不是裁决——而这条项目里早就立过规矩：**崩掉不等于判红**。
+    """
+    try:
+        ast.parse(src)
+    except SyntaxError as exc:
+        return f"{type(exc).__name__}@第 {exc.lineno} 行：{exc.msg}"
+    return None
 
 
 def _parses(src: str) -> bool:
     """反证通道自身的守门：变异体必须能解析。解析不了的变异体会让结构判据以
     SyntaxError 的形式「变红」，看起来像缺陷被抓住，实际是锚写错了——必须单独判 FAIL。"""
-    try:
-        ast.parse(src)
-        return True
-    except SyntaxError:
-        return False
+    return parse_err(src) is None
 
 
 def _strip_target(src: str) -> str:
@@ -929,7 +1225,7 @@ def self_test() -> int:
     rc = 0
     # `--self-test --kb=<路径>`：基准跟着换（第六轮复审指出改前这里恒读真实 kb.py，
     # 于是「在副本上自证」的通道名不副实）。基准里没有委托锚就说明副本不对，早退。
-    src = (_kb_override() or KB).read_text(encoding="utf-8")
+    src = _read_kb(_kb_override() or KB)
     if not has_target(src):
         print("INCONCLUSIVE kb.py 里连 _biz_from_url 都没有 ⇒ S2.1.3 未落地或函数被改名，"
               "变异/样本两条通道的基准都无从构造")
@@ -946,47 +1242,86 @@ def self_test() -> int:
     rc_base = run(src)
     rc_missing = run(_strip_target(src))
     rc_red = run(src.replace(NEW_BODY, OLD_BODY))
+    rc_broken = run(src + "\ndef _probe_broken(:\n    pass\n")
     _quiet = False
     for name, got, want in (
         ("基准（未变形）", rc_base, RC_GREEN),
         ("删掉目标函数", rc_missing, RC_INCONCLUSIVE),
         ("退回旧实现", rc_red, RC_FAIL),
+        ("文件解析不了", rc_broken, RC_INCONCLUSIVE),
     ):
         if got != want:
             print(f"FAIL 档位自证：{name} 应返回 rc={want}，实得 rc={got}")
             rc = 1
     if rc == 0:
         print(f"OK   档位自证：绿 rc={RC_GREEN} / 目标缺失 rc={RC_INCONCLUSIVE}（INCONCLUSIVE）"
-              f" / 有判据红 rc={RC_FAIL} 三档分得开")
+              f" / 有判据红 rc={RC_FAIL} / 解析不了也按 {RC_INCONCLUSIVE} 档报，"
+              f"不把 traceback 冒充裁决（第七轮复审 N4/N5b 实测改前是崩溃）三档分得开")
 
     # 退出码自证：三档必须真的映射到**进程退出码**，而不只是停在 run() 的返回值上
     # （第五轮复审 id 5 的坦白：`sys.exit` 那一步没被跑到，等于没测）。
     # 用临时目录里的 kb.py 副本 + `--kb=` 驱动，工作树一个字节都不动。
+    #
+    # 子进程刻意在 **cp936**（win32 控制台与重定向管道的默认编码）下跑，而不是原先固定注入的
+    # utf-8——把环境变量写死在驱动里，等于把「裸跑就崩」这一类失效永远挡在自证之外。
+    # 坦白一句：这一层**测不到** `_ensure_utf8_stdout()`，因为 `main()` 全程只打 GBK 编得出的
+    # 字符；真正编不出 `⇒` 的是 self_test 自己的标签打印，所以另有一档把**父进程本身**放进被测面。
     tmp = Path(tempfile.mkdtemp(prefix="bd_tiers_"))
     offenders: list[str] = []
     try:
-        for name, want, body in (
-            ("基准（未变形）", RC_GREEN, src),
-            ("删掉目标函数", RC_INCONCLUSIVE, _strip_target(src)),
-            ("退回旧实现", RC_FAIL, src.replace(NEW_BODY, OLD_BODY)),
+        for name, want, body, enc in (
+            ("基准（未变形）", RC_GREEN, src, "utf-8"),
+            ("基准（未变形）@cp936 控制台", RC_GREEN, src, "cp936"),
+            ("基准带 BOM", RC_GREEN, "\ufeff" + src, "cp936"),
+            ("删掉目标函数", RC_INCONCLUSIVE, _strip_target(src), "cp936"),
+            ("退回旧实现", RC_FAIL, src.replace(NEW_BODY, OLD_BODY), "cp936"),
+            ("文件解析不了", RC_INCONCLUSIVE, src + "\ndef _probe_broken(:\n    pass\n", "cp936"),
         ):
             copy = tmp / "kb.py"
             copy.write_text(body, encoding="utf-8")
-            got = subprocess.run(  # noqa: S603 - 只跑本文件自己
+            r = subprocess.run(  # noqa: S603 - 只跑本文件自己
                 [sys.executable, str(Path(__file__).resolve()), f"--kb={copy}"],
                 capture_output=True, text=True, encoding="utf-8",
-                env={**os.environ, "PYTHONIOENCODING": "utf-8"}, check=False,
-            ).returncode
+                env={**os.environ, "PYTHONIOENCODING": enc}, check=False,
+            )
+            got = r.returncode
             if got != want:
-                offenders.append(f"{name} 应 rc={want}，子进程实得 rc={got}")
+                offenders.append(f"{name}[{enc}] 应 rc={want}，子进程实得 rc={got}")
+            # 崩溃（traceback 上 stderr）无论落在哪一档都算失效：裁决必须是脚本自己打印的
+            if "Traceback (most recent call last)" in (r.stderr or ""):
+                offenders.append(f"{name}[{enc}] 以 traceback 结束，而不是给出裁决")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     if offenders:
         print("FAIL 退出码自证：" + "；".join(offenders))
         rc = 1
     else:
-        print(f"OK   退出码自证：子进程真实退出码三档分得开"
-              f"（绿 {RC_GREEN} / 目标缺失 {RC_INCONCLUSIVE} / 有判据红 {RC_FAIL}）")
+        print(f"OK   退出码自证：子进程真实退出码分得开，且无一把它崩成 traceback"
+              f"（绿 {RC_GREEN}×3 含 BOM / 目标缺失 {RC_INCONCLUSIVE} / 有判据红 {RC_FAIL} / "
+              f"解析不了 {RC_INCONCLUSIVE}；除基准外全在 win32 默认的 cp936 输出流下跑）")
+
+    # 把**父进程自己**放进被测面：`--self-test` 的 MUTANTS/PROBES/EQUIVS 标签里带 `⇒`，
+    # GBK/cp936 编不出它——不带 `PYTHONIOENCODING=utf-8` 的裸跑原先在 print 处
+    # `UnicodeEncodeError` 崩掉（rc=1，既非绿也非红，正是本项目禁止的「没有裁决」第三种形态）。
+    # 只有让被测对象是打印 ⇒ 的那一层，`_ensure_utf8_stdout()` 才是承重代码而不是装饰。
+    # `BD_NO_NEST` 防止这一档无限递归自调。
+    if os.environ.get("BD_NO_NEST") != "1":
+        r = subprocess.run(  # noqa: S603 - 只跑本文件自己
+            [sys.executable, str(Path(__file__).resolve()), "--self-test"],
+            capture_output=True, text=True, encoding="utf-8",
+            env={**os.environ, "PYTHONIOENCODING": "cp936", "BD_NO_NEST": "1"}, check=False,
+        )
+        crashed = "Traceback (most recent call last)" in (r.stderr or "")
+        if r.returncode != 0 or crashed:
+            # 崩在 print 里时子进程的 stdout 缓冲区会随解释器异常退出一起丢掉，所以两级兜底
+            lines = (r.stderr or "").strip().splitlines() or (r.stdout or "").strip().splitlines()
+            why = lines[-1] if lines else "子进程输出随崩溃丢失（裸跑该命令可看到 UnicodeEncodeError）"
+            print(f"FAIL 编码自证：--self-test 在 cp936 输出流下 rc={r.returncode}"
+                  + ("，收场异常：" if crashed else "，末行：") + why)
+            rc = 1
+        else:
+            print("OK   编码自证：--self-test 全程在编不出 `⇒` 的 cp936 输出流下跑完，rc=0 无 traceback"
+                  "（改前此处是 UnicodeEncodeError，见 README §4.8 / 差异表 D-11）")
 
     base = evaluate(src)
     if base:
@@ -1077,6 +1412,7 @@ def evaluate(src: str) -> set[str]:
         "BD-12": j_body_shape,
         "BD-13": j_single_definition,
         "BD-14": j_call_site,
+        "BD-16": j_closed_world,
     }
     for bid, judge in structural.items():
         try:

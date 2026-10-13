@@ -30,6 +30,8 @@ from __future__ import annotations
 import ast
 import importlib
 import importlib.util
+import os
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -82,6 +84,24 @@ EXPECTED_FIELDS = ["biz", "mid", "idx", "sn", "short_token", "host"]
 
 _passed: list[str] = []
 _failed: list[str] = []
+
+
+def _ensure_utf8_stdout() -> None:
+    """把输出流钉在 UTF-8 上，让「少带一个环境变量」不成为崩溃源。
+
+    win32 控制台与重定向管道默认 cp936，编不出本文件里的 `⇒`：裸跑
+    `python prove_article_identity.py --self-test`（不带 `PYTHONIOENCODING=utf-8`）原先在
+    print 处 `UnicodeEncodeError` 崩掉。按本项目规矩**崩掉不等于裁决**，这条崩溃与判据、
+    与三档退出码都无关，纯粹是环境噪音——噪音门禁会被关掉，所以在此自愈。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError, ValueError):
+            pass
+
+
+_ensure_utf8_stdout()
 
 
 def check(label: str, ok: bool, detail: object = "") -> None:
@@ -517,7 +537,8 @@ _JUDGES: list[tuple[str, object, str, str]] = [
     ("PI-3 纯函数（属性写）", j_no_mutation, "def f(o):\n    o.mid = '1'\n    return o\n", "impl"),
     ("PI-4 字段序", j_field_order, "class WechatUrlParts:\n    mid: str = ''\n    biz: str = ''\n", "impl"),
     ("PI-4 缺类", j_field_order, "class Other:\n    biz: str = ''\n", "impl"),
-    ("PI-5 冻结", j_frozen, "from dataclasses import dataclass\n@dataclass(frozen=False)\nclass WechatUrlParts:\n    biz: str = ''\n", "impl"),
+    ("PI-5 冻结", j_frozen, "from dataclasses import dataclass\n@dataclass(frozen=False)\n"
+     "class WechatUrlParts:\n    biz: str = ''\n", "impl"),
     ("PI-6 缺省值漂移", j_default_idx, '_DEFAULT_IDX = ""\n', "impl"),
     ("PI-6 常量被删", j_default_idx, "x = 1\n", "impl"),
     ("PI-8 用例 import pytest", j_no_pytest_import, "import pytest\n", "test"),
@@ -653,6 +674,24 @@ def self_test() -> int:
             rc = 1
         else:
             print(f"OK   等价重构 {label} → 判据全真、用例全绿")
+
+    if not os.environ.get("PI_NO_NEST"):
+        r = subprocess.run(  # noqa: S603 - 只跑本文件自己
+            [sys.executable, str(Path(__file__).resolve()), "--self-test"],
+            capture_output=True, text=True, encoding="utf-8",
+            env={**os.environ, "PYTHONIOENCODING": "cp936", "PI_NO_NEST": "1"}, check=False,
+        )
+        crashed = "Traceback (most recent call last)" in (r.stderr or "")
+        if r.returncode != 0 or crashed:
+            # 崩在 print 里时子进程的 stdout/stderr 缓冲区会随解释器异常退出一起丢掉——
+            # traceback 文本本身也含 `⇒`，写 stderr 时二次失败，所以这里必须留兜底
+            lines = (r.stderr or "").strip().splitlines() or (r.stdout or "").strip().splitlines()
+            why = lines[-1] if lines else "子进程输出随崩溃丢失（裸跑该命令可看到 UnicodeEncodeError）"
+            print(f"FAIL 编码自证：--self-test 在 cp936 输出流下 rc={r.returncode}"
+                  + ("，收场异常：" if crashed else "，末行：") + why)
+            rc = 1
+        else:
+            print("OK   编码自证：--self-test 全程在编不出 `⇒` 的 cp936 输出流下跑完，rc=0 无 traceback")
 
     print(
         f"\nSELF-TEST {'PASS' if rc == 0 else 'FAIL'}："

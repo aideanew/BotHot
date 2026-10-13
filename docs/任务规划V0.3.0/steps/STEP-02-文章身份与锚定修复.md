@@ -69,10 +69,13 @@ cd apps/api && uv run pytest tests/test_article_identity.py -q --cov=app.service
 **交付**：`kb._biz_from_url` 改为委托 `parse_wechat_url(url).biz`（同时识别 `__biz` 与 `biz`）；补测试
 
 **执行步骤**：
-1. [x] 先写断言 `_biz_from_url(LONG_A)!=''` 红（`out_s213.txt` A 段：`合计 PASS=5 FAIL=10`，rc=1；
-   判据集已从落地当时的 11 条增至 15 条，同一份 OLD_BODY 在现行判据下的重放即 A 段这组数——
-   当时报的是 `PASS=2 FAIL=9`，两条数的都是「同一件事在当轮判据集下的读数」，以可复跑的 A 段为准）
-2. [x] 改实现转绿（`out_s213.txt` B 段：`合计 PASS=15 FAIL=0`，rc=0；C 段三条反证通道全过）
+1. [x] 先写断言 `_biz_from_url(LONG_A)!=''` 红（`out_s213.txt` A 段：`合计 PASS=6 FAIL=10`，rc=1；
+   判据集已从落地当时的 11 条增至 16 条，同一份 OLD_BODY 在现行判据下的重放即 A 段这组数——
+   当时报的是 `PASS=2 FAIL=9`、第六轮 `PASS=5`、第七轮起 `PASS=6`。多出来的那条 PASS 是 **BD-16**
+   （OLD_BODY 里没有任何命名空间设施，契约面照旧绿），另五条 PASS 是 BD-15/BD-4/BD-10/BD-13/BD-14，
+   以可复跑的 A 段为准）
+2. [x] 改实现转绿（`out_s213.txt` B 段：`合计 PASS=16 FAIL=0`，rc=0；C 段三条反证通道 +
+   档位自证 + 子进程退出码自证 + 编码自证全过）
 
 **验收命令**：
 ```bash
@@ -263,27 +266,61 @@ eval "$(bash scripts/test-env.sh env)" && cd apps/api && uv run pytest tests/tes
 D4：BD-12 漏检 `AnnAssign` 右值、多目标赋值、下标、装饰器；D5：装饰器引用模块级名字时 harness 带 traceback 崩，
 既不是绿也不是红），D3/D6 是陈旧计数与欠记账 ⇒ 闭合为 BD-13 改判**活绑定** + 新增 BD-14（调用点→`Source.external_id`
 那一跳）+ 新增 BD-15（exec 护栏）+ BD-12 四个漏检面 + `--self-test` 认 `--kb=`，记账在 §4.7，本卡 D-09；
+第五份即第七轮复审，它对处置批 `5288f1f` 报来 N1–N5 五组，其中 N1–N4 本机全部复现成立（N1/N2：
+`sys.modules[__name__]._biz_from_url = …`、`del` 同一形态、`del` + 模块级 `def __getattr__`、`from x import *`
+四种**属性/协议形态**的重绑全部空过——BD-13 只摊平 `Name` 类绑定目标；N3：BD-14 的四条检查是**共现**而非
+数据流，「结果丢弃」「另起本地解析器当真锚」「`_biz_from_url(article_key)` 传错实参」三发空过；
+N4：旧 BD-14 用 `next(ast.walk(...))` 取宿主，同名重复时可能证明到被后写覆盖的那一份），N5 一半成立
+（追加 `this is not python` 其实是合法表达式语句、根本没绕过任何东西；但「攻击体自身解析不了」与
+「文件带 BOM」两发确实把脚本崩成 traceback）⇒ 闭合为 BD-13 认属性形态与 `__getattr__`/星号导入 +
+新增 **BD-16 封闭世界**（整份文件禁用命名空间改写设施，见 §4.8）+ BD-14 由共现改**数据流**并要求宿主唯一、
+实参语义上是 URL + 解析不了单落 INCONCLUSIVE 档、读文件走 `utf-8-sig`、退出码自证加「任何一档不许以
+traceback 收场」；本轮另被自己的等价通道抓出一条**假红**并收窄（`_dynamic_rebind` 原先按整条顶层语句
+的 unparse 判共现，`setattr(rec, "url", …)` 会与调用点的 `_biz_from_url(url)` 在同一份类体里共现而误判
+BD-13），记账在 §4.8，本卡 D-10；
+再没有第六份复审报告——收尾时（准备提交、按卡面命令裸跑一遍）**自查**出两处，记账在 §4.9、本卡 D-11：
+一是 `--self-test` 在不带 `PYTHONIOENCODING` 的 cp936 输出流上以 `UnicodeEncodeError` 崩掉（又是
+「没有裁决」那一类，与被测代码无关，纯粹是脚本自己的 print）；二是更要紧的一条——留档重放器按 `$ ` 前缀
+找命令、输出时又把前缀剥掉，前缀一丢它就**不跑而直接抄旧输出且不报错**，于是「A–J 全部段落同一版重放」
+这句话当时只剩 J 段可证。两处都按「能被一条命令反驳」的标准重做：编码面加 `_ensure_utf8_stdout()` +
+self-test 第三道闸门，重放面把驱动提为在库件 `replay_s213.py`/`j_attack_r7.py` 并加 L 段机检。
 S2.1.4/S2.1.5/S2.2/S2.3 未做（`asset.py` 零改动，复审 G 段独立确认）。
 
 交付：`apps/api/app/services/article_identity.py`、`apps/api/tests/test_article_identity.py`（14 条用例）、
 `apps/api/app/services/kb.py`（仅 `_biz_from_url`，`kb.py:587-591`）、
 `apps/api/tests/test_kb_longlink_ingest.py`（5 条用例 ×参数化）、
-`docs/06_validation/evidence/EVD-V2-02/{README.md, prove_article_identity.py, block_article_identity_plugin.py, prove_biz_delegation.py, out_s213.txt}`。
+`docs/06_validation/evidence/EVD-V2-02/{README.md, prove_article_identity.py, block_article_identity_plugin.py, prove_biz_delegation.py, j_attack_r7.py, replay_s213.py, out_s213.txt}`。
 
 证据（每条可由他人复跑）：
 - 真实 pytest：`cd apps/api && PYTHONPATH=. python -m pytest tests/test_article_identity.py -q --noconftest` → `14 passed`
 - 改前红重放：见 EVD-V2-02 §3 两条命令（红 `Interrupted: 1 error during collection` / 绿 `14 passed`）
 - 纯 stdlib 证明：`prove_article_identity.py` → `合计 PASS=12 FAIL=0`、`PI-11 27/27=100.0%`
 - 反证：`--self-test` → `12 个实现变异体各自让指定用例变红 + 17 个判据样本对敏感 + 4 个等价重构不假红`
-- S2.1.3 委托：`prove_biz_delegation.py` 改前红 `PASS=5 FAIL=10`（rc=1）→ 改后绿 `PASS=15 FAIL=0`（rc=0）
-  （判据由落地当时的 11 条增至 15 条：第五轮加 BD-12 形状白名单、BD-13 唯一定义，第六轮加 BD-14 调用点那一跳、
-  BD-15 exec 护栏；BD-13 在第六轮由「数顶层 def」改判「模块作用域只有被 exec 的那一份绑定」），
-  `--self-test` 前两行为三档自证（`绿 rc=0 / 目标缺失 rc=2（INCONCLUSIVE） / 有判据红 rc=1 三档分得开`，
-  第二行用临时副本起**真实子进程**读回退出码，不再只看 `run()` 返回值；第六轮起 `--self-test` 也认 `--kb=`），
-  结论行 `16 个函数体变异 + 21 个判据样本对 + 9 个等价写法不假红`；原始输出 `out_s213.txt` A–I 九段，
+- S2.1.3 委托：`prove_biz_delegation.py` 改前红 `PASS=6 FAIL=10`（rc=1）→ 改后绿 `PASS=16 FAIL=0`（rc=0）
+  （判据由落地当时的 11 条增至 16 条：第五轮加 BD-12 形状白名单、BD-13 唯一定义，第六轮加 BD-14 调用点那一跳、
+  BD-15 exec 护栏，第七轮加 BD-16 封闭世界；BD-13 在第六轮由「数顶层 def」改判「模块作用域只有被 exec 的那一份
+  绑定」，第七轮再认**属性形态**绑定与 `__getattr__`/星号导入；A 段的 `PASS=6` 是**新版 harness** 上的读数，
+  旧版同命令读数是 `PASS=5`，差的那一条就是 BD-16 在 OLD_BODY 副本上也判绿），
+  `--self-test` 前三行为三道自证（① 档位：`绿 rc=0 / 目标缺失 rc=2（INCONCLUSIVE） / 有判据红 rc=1 / 解析不了也按 2 档`；
+  ② 退出码：用临时副本起**真实子进程**读回退出码，不再只看 `run()` 返回值——第六轮起 `--self-test` 也认 `--kb=`，
+  第七轮起副本清单含「带 BOM 基准」与「解析不了副本」且**任何一档出现 traceback 即 FAIL**；
+  ③ 编码：把整套 `--self-test` 嵌套跑在编不出 `⇒` 的 cp936 输出流下，rc 必须为 0 且无 traceback），
+  结论行 `24 个函数体变异 + 26 个判据样本对 + 11 个等价写法不假红`；原始输出 `out_s213.txt` A–L **十五段**
+  （第七轮起整份重放而非追加：判据 15→16 后 A–I 的读数本身会变，例 I-2 由 `['BD-13']` 变 `['BD-13','BD-16']`
+  ——而「重放」这句话此前不可证，自查轮起由 L 段机检兜住），
   其中 H 段是第五轮三条空过的闭合实测（H-1/H-2 rc=1、H-3 追加式 rc=1、H-4 前置式**只**红 BD-13、H-5 定义计数），
   I 段是第六轮四条的闭合实测（I-1…I-4 四种重绑各红 BD-13、I-5…I-7 漏检面各红 BD-12、
-  I-8 调用点就地解析红 BD-14、I-9 钉住「后写覆盖」这一语言事实、I-10 装饰器变异 `rc=1` 且 `stderr 无 traceback`）
+  I-8 调用点就地解析红 BD-14、I-9 钉住「后写覆盖」这一语言事实、I-10 装饰器变异 `rc=1` 且 `stderr 无 traceback`），
+  J 段是第七轮八发空过的**两版 harness 对照**实测（J-1…J-4 属性形态重绑/解绑/`__getattr__`/星号导入：改前
+  `rc=0` 全绿 ⇒ 改后各红 BD-13+BD-16；J-5…J-8 结果丢弃/本地第二解析器当真锚/传错实参/宿主同名重复：改前
+  `rc=0` 全绿 ⇒ 改后各红 BD-14；J-9/J-10 崩栈面：改前 `rc=1` 且 stderr 是 traceback ⇒ 改后落 INCONCLUSIVE=2 /
+  带 BOM 照样 16 条全绿），
+  K 段（K.1–K.4）是自查轮的编码面实测（K.1/K.3 用 `PYTHONIOENCODING=` 显式清空环境变量裸跑两份 harness 的
+  `--self-test`：各 `rc=0`、`stderr 里 traceback 行数=0`；K.2/K.4 用 `sed` 把 `_ensure_utf8_stdout()` 的调用行
+  换成 `pass` 生成临时副本，在**可读的 utf-8 父流**下打印出 `FAIL 编码自证…rc=1`，证明第三道闸门承重；
+  副本用完即删并由 `ls` 证明已删），
+  L 段是重放器自检（`段数（含本段）： 15` / `缺 \`$ \` 命令的段： 无`——它读的是**已交付的这份文件**，
+  于是「每一段都留得下逐字可重跑的入口」这句话机器可判，不必再靠人相信驱动真跑了它）
 
 偏离与补充登记（D-01 起，均需人工追认；不同意可单独 revert 文档，代码结论不受影响）：
 
@@ -298,6 +335,8 @@ S2.1.4/S2.1.5/S2.2/S2.3 未做（`asset.py` 零改动，复审 G 段独立确认
 | D-07 | S2.1.3 验证处置批（不改 `kb.py`，`git diff c10b229 -- apps/api/app/services/kb.py` 为空）：① `prove_biz_delegation.py` 的 BD-7 改认别名（`import … as pw`、`p = parse_wechat_url`），样本对 5→6、等价写法 3→5；② `_parses()` 闸门补全到反证②通道；③ 证明脚本退出码改三档 `0/1/2`（`2`=目标函数不存在，INCONCLUSIVE），并由 `--self-test` 首道闸门实测三档互异；④ `test_kb_longlink_ingest.py` 的恒等式用例每条参数化**另带字面期望**（五个值取自磁盘 kb.py 真实执行）；⑤ 自查（`g24_static_check.py`）发现并修掉该新文件的 I001 import 段序与证明脚本的 F401 死导入。理由与复现逐条见 `EVD-V2-02/README.md` §4.4/§4.5、`out_s213.txt` C/F/G 段 | 验证层增量 + 用例判定力增量，非行为变更 |
 | D-08 | S2.1.3 第五轮处置批（仍不改 `kb.py`，`git diff c10b229 -- apps/api/app/services/kb.py` 依旧为空）：堵三条**空过**——① BD-12 函数体**形状白名单**（只容 导入/赋值/返回 四类语句、只容 `parse_wechat_url` 与其别名为唯一可调用根、属性只容 `.biz`、实参必须是入参；嵌套 `def`/`class`/条件/循环/推导式/comprehension/lambda/异常 等一律越界），手搓 `split("?")` + `"bi"+"z"` 的解析器从此过不了；② `_shadowed()` 剔除被本地重新绑定的别名（`def pw` 遮蔽 `import … as pw`、`parse_wechat_url = _ext` 重绑两种形态），BD-7 不再把「名字出现过」当成「调用走的是委托」；③ BD-13 顶层同名定义**必须唯一**，且 `_top_defs()`/`get_fn_node` 按 Python 模块作用域取**末位**（改前取首位，等于证明了一段死代码）。另：BD-3 恒等式样本由 6 条字面扩为 26 条（6 字面 + 20 条**差分语料**，期望取自营运的解析层，与 `test_kb_longlink_ingest.py` 的字面锚互补——字面锚抓两侧共同退化）、`--kb=<路径>` 让三档退出码在**真实子进程**上自证、反证通道加 `_biz()` 自守（变异体导入缺失时红判据而非炸 harness）。判据 11→13、变异 5→10、样本对 6→10、等价写法 5→7 | 验证层增量，非行为变更 |
 | D-09 | S2.1.3 第六轮处置批（仍不改 `kb.py`，`git diff c10b229 -- apps/api/app/services/kb.py` 复跑仍为空）：堵 D1–D5 五条**空过/崩栈**——① BD-13 从「数顶层 def」改判**活绑定**：`_module_bindings()` 收遍模块作用域所有动过该名字的语句（`Assign`/带值 `AnnAssign`/`AugAssign`/`Delete`/`For`/`With as`/walrus/`Import` 别名/嵌在顶层 `if`·`try`·`with` 里的 def），并对 `globals()`/`locals()`/`vars()`/`exec`/`eval`/`setattr`/`delattr` 与目标名同现者按动态重绑记账，于是 lambda 顶替、`globals()['_biz_from_url']=…`、`if True: def`、`del` 四发各红 BD-13；② 新增 **BD-14** 让证明越出函数边界一跳：宿主 `_find_source_by_anchor`（`kb.py:336`，`async def`）必须有对目标名的调用、实参是其入参、结果进到 `Source.external_id` 的比较，且不许对自己的入参做 `split`/`partition`/`strip` 一类加工；③ 新增 **BD-15** exec 护栏，exec 失败时把行为面六条各记一次红并给可读原因，不再让 traceback 冒充「既非绿也非红」的第三态；④ BD-12 补四个漏检面（`ast.Subscript` 进禁用节点、`Assign`+`AnnAssign` 统一处理且目标须为单个 `Name`、右值须落到委托根、入参不许被重绑、多目标/元组目标不再整条跳过、`decorator_list` 非空即红）；⑤ `--self-test` 也认 `--kb=<路径>`（改前恒读真实 `kb.py`，「在临时副本上自证」名不副实）。另记 D6：BD-12 白名单**欠接纳**实测 7 发合法改写里 5 发会红（见 §4.7 D6 与 §7），已当作明账写而不是宣称白名单完备。判据 13→15、变异 10→16、样本对 10→21、等价写法 7→9 | 验证层增量，非行为变更 |
+| D-10 | S2.1.3 第七轮处置批（仍不改 `kb.py`，`git diff c10b229 -- apps/api/app/services/kb.py` 复跑仍为空）：堵 N1–N4 八发**空过** + N5 两发**崩栈**——① BD-13 的绑定扫描认**属性形态**（`_attr_bound()` 收 `Assign`/`AugAssign`/`AnnAssign`/`NamedExpr`/`Delete` 目标里的 `ast.Attribute.attr`）、认模块级 `def __getattr__` 体内点名目标名（PEP 562）、认星号导入（保守算动过绑定）；② 新增 **BD-16 封闭世界**：整份文件禁用 `sys.modules`、`globals()/locals()/vars()`、`exec()/eval()`、指向命名空间或目标名的 `setattr()/delattr()`、星号导入、模块级 `__getattr__`——理由是攻击面是 Python 的名字查找协议而不是某条语法，补形状永远慢一步，立可判定契约才是收敛；③ BD-14 由**共现**改**数据流**（`_flows_into_anchor()`：先收值里含委托调用的绑定名，沿别名传两跳到不动点，要求 `Source.external_id` 那一侧引用其中之一），并加两条——宿主同名定义必须唯一（`_caller_anchor_fns` 按行号取末位 = 活绑定语义）、实参**语义上是 URL**（与目标形参同名或含 `url`）；④ `run()` 加 `parse_err()` 闸门，解析不了落 INCONCLUSIVE=2 而不是 traceback，读文件统一 `utf-8-sig`（BOM 是 CPython 合法输入），退出码自证副本清单加「带 BOM 基准」「解析不了副本」且**任何一档 stderr 出现 traceback 即 FAIL**；⑤ 被自己的 EQUIVS 通道抓出一条**假红**并收窄：`_dynamic_rebind` 原先按「整条顶层语句 unparse 里目标名与 `setattr` 同现」判动态重绑，而类体 unparse 含整个类 ⇒ 调用点那句 `_biz_from_url(url)` 与任意 `setattr(rec, "url", …)` 共现即误判 BD-13，现把共现单位收窄到**单条语句**（`def`/`class` 头除外）。判据 15→16、变异 16→24、样本对 21→26、等价写法 9→11；`out_s213.txt` 由 A–I 九段改为 A–J **十段且整份重放**（判据条数变了，旧 A–I 读数与当前代码不符，例 I-2 `['BD-13']`→`['BD-13','BD-16']`、A 段 `PASS=5`→`PASS=6`，两者均已本机实测）。N5 中「文件末尾追加 `this is not python`」一发**复现不成立**（该行是合法表达式语句），已按事实记账而非当作被堵住 | 验证层增量，非行为变更 |
+| D-11 | S2.1.3 **提交前自查**处置批（第七轮之后无人再报，本批由自己抓出；仍不改 `kb.py`，`git diff c10b229 -- apps/api/app/services/kb.py` 复跑仍为空）：① 编码崩溃面——两份 harness 的 `--self-test` 在不带 `PYTHONIOENCODING` 的 win32 默认 cp936 输出流上以 `UnicodeEncodeError` 收场（标签里的 `⇒` 编不出），与被测代码无关却正是本项目禁的「没有裁决」第三态；处置为 `_ensure_utf8_stdout()`（对 `sys.stdout/stderr` 各 `reconfigure(encoding="utf-8", errors="replace")`，失败静默）+ self-test **第三道闸门**把整套 `--self-test` 嵌套跑在 cp936 下要求 `rc=0` 且无 traceback，并把子进程退出码那层的 `enc` 维度补齐、如实注明**这一层看不见 guard**（`main()` 打印全是 GBK 可编码字符，第一版反证因此是装饰性的）。② 留档谎话——原重放驱动按 `$ ` 前缀找命令、输出时又把前缀剥掉，前缀一丢它**不跑而直接抄旧输出且不报错**，「A–J 全部段落同一版重放」当时只剩 J 段可证；处置为把驱动提为在库件 `replay_s213.py`（按版面而非前缀取命令、重放时重新带上 `$ `）与 `j_attack_r7.py`，并新增 **L 段机检**「每一段必须留得下一条逐字可重跑的 `$ \` 命令」。③ `out_s213.txt` 由 A–J 十段改为 **A–L 十五段**（新增 K.1–K.4 编码面、L 自检），G 段静态扫描扩至六份文件（含两份新驱动），顺带修掉 `prove_article_identity.py` 一条既有 E501。判据/变异/样本对/等价写法**四条计数本批一律未变**（16/24/26/11），变的是自证层。理由与复现见 `EVD-V2-02/README.md` §4.9、`out_s213.txt` C/K/L 段 | 验证层增量 + 一处留档诚信更正，非行为变更 |
 
 交接头目：J-1 卡面覆盖率门禁命令、J-2 `ruff check app tests` 终判（本机无 ruff，I001 已按仓库真实段序修正但属推断）、
 J-3 三条未实测口径需真实抓取样本、J-4 连库全量回归（S2.3）、
