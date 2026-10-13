@@ -69,8 +69,10 @@ cd apps/api && uv run pytest tests/test_article_identity.py -q --cov=app.service
 **交付**：`kb._biz_from_url` 改为委托 `parse_wechat_url(url).biz`（同时识别 `__biz` 与 `biz`）；补测试
 
 **执行步骤**：
-1. [x] 先写断言 `_biz_from_url(LONG_A)!=''` 红（`out_s213.txt` A 段：`合计 PASS=2 FAIL=9`，rc=1）
-2. [x] 改实现转绿（`out_s213.txt` B 段：`合计 PASS=11 FAIL=0`，rc=0；C 段三条反证通道全过）
+1. [x] 先写断言 `_biz_from_url(LONG_A)!=''` 红（`out_s213.txt` A 段：`合计 PASS=5 FAIL=10`，rc=1；
+   判据集已从落地当时的 11 条增至 15 条，同一份 OLD_BODY 在现行判据下的重放即 A 段这组数——
+   当时报的是 `PASS=2 FAIL=9`，两条数的都是「同一件事在当轮判据集下的读数」，以可复跑的 A 段为准）
+2. [x] 改实现转绿（`out_s213.txt` B 段：`合计 PASS=15 FAIL=0`，rc=0；C 段三条反证通道全过）
 
 **验收命令**：
 ```bash
@@ -250,12 +252,17 @@ eval "$(bash scripts/test-env.sh env)" && cd apps/api && uv run pytest tests/tes
 
 状态：**部分完成**。S2.1.1/S2.1.2 已交付并经第一轮独立复审处置完毕（提交 `78e3378`，
 其父为 `1470b77`）；S2.1.3 本轮交付（`kb._biz_from_url` 委托解析层，提交 `c10b229`）——它在工作区的形态被
-第二轮复审记为 F1/G2 两条，D-05/D-06 与下段的锚更正即其处置；S2.1.3 自身另经三份独立验证
+第二轮复审记为 F1/G2 两条，D-05/D-06 与下段的锚更正即其处置；S2.1.3 自身另经四份独立验证
 （前两份用 A–G 分组编号与 1a–6 表格编号，合并后四项成立已修、三项复现不成立，逐条记账在
 `EVD-V2-02/README.md` §4.4，本卡 D-07 申报随之而来的验证层增量）；第三份即第五轮复审，它对处置批 `b45777a`
 报来三条「空过」（BD-7 认别名后不认遮蔽、重复同名定义后者静默盖掉前者、手搓 `split("?")` 解析器绕开全部
 正向判据），本机三条全部复现成立，闭合为 BD-12 形状白名单 + BD-13 唯一定义 + 差分语料，记账在 §4.6，
-本卡新增 D-08；
+本卡 D-08；第四份即第六轮复审，它对处置批 `a15a55b` 报来 D1–D6 六条，其中 D1–D5 本机全部复现成立
+（D1：BD-13 数顶层 def 仍不保证「末位绑定就是被证明的那份」——lambda 赋值 / `globals()[…] =` / 顶层 `if` 里的 def /
+`del` 四种写法都空过；D2：把调用点 `_biz_from_url(url)` 换成就地 `split` 后 13 条判据全绿，证明面不越出函数边界；
+D4：BD-12 漏检 `AnnAssign` 右值、多目标赋值、下标、装饰器；D5：装饰器引用模块级名字时 harness 带 traceback 崩，
+既不是绿也不是红），D3/D6 是陈旧计数与欠记账 ⇒ 闭合为 BD-13 改判**活绑定** + 新增 BD-14（调用点→`Source.external_id`
+那一跳）+ 新增 BD-15（exec 护栏）+ BD-12 四个漏检面 + `--self-test` 认 `--kb=`，记账在 §4.7，本卡 D-09；
 S2.1.4/S2.1.5/S2.2/S2.3 未做（`asset.py` 零改动，复审 G 段独立确认）。
 
 交付：`apps/api/app/services/article_identity.py`、`apps/api/tests/test_article_identity.py`（14 条用例）、
@@ -268,12 +275,15 @@ S2.1.4/S2.1.5/S2.2/S2.3 未做（`asset.py` 零改动，复审 G 段独立确认
 - 改前红重放：见 EVD-V2-02 §3 两条命令（红 `Interrupted: 1 error during collection` / 绿 `14 passed`）
 - 纯 stdlib 证明：`prove_article_identity.py` → `合计 PASS=12 FAIL=0`、`PI-11 27/27=100.0%`
 - 反证：`--self-test` → `12 个实现变异体各自让指定用例变红 + 17 个判据样本对敏感 + 4 个等价重构不假红`
-- S2.1.3 委托：`prove_biz_delegation.py` 改前红 `PASS=3 FAIL=10`（rc=1）→ 改后绿 `PASS=13 FAIL=0`（rc=0）
-  （判据由 11 条增至 13 条：新增 BD-12 形状白名单、BD-13 唯一定义），
+- S2.1.3 委托：`prove_biz_delegation.py` 改前红 `PASS=5 FAIL=10`（rc=1）→ 改后绿 `PASS=15 FAIL=0`（rc=0）
+  （判据由落地当时的 11 条增至 15 条：第五轮加 BD-12 形状白名单、BD-13 唯一定义，第六轮加 BD-14 调用点那一跳、
+  BD-15 exec 护栏；BD-13 在第六轮由「数顶层 def」改判「模块作用域只有被 exec 的那一份绑定」），
   `--self-test` 前两行为三档自证（`绿 rc=0 / 目标缺失 rc=2（INCONCLUSIVE） / 有判据红 rc=1 三档分得开`，
-  第二行用临时副本起**真实子进程**读回退出码，不再只看 `run()` 返回值），
-  结论行 `10 个函数体变异 + 10 个判据样本对 + 7 个等价写法不假红`；原始输出 `out_s213.txt` A–H 八段，
-  其中 H 段是第五轮三条空过的闭合实测（H-1/H-2 rc=1、H-3 追加式 rc=1、H-4 前置式**只**红 BD-13、H-5 定义计数）
+  第二行用临时副本起**真实子进程**读回退出码，不再只看 `run()` 返回值；第六轮起 `--self-test` 也认 `--kb=`），
+  结论行 `16 个函数体变异 + 21 个判据样本对 + 9 个等价写法不假红`；原始输出 `out_s213.txt` A–I 九段，
+  其中 H 段是第五轮三条空过的闭合实测（H-1/H-2 rc=1、H-3 追加式 rc=1、H-4 前置式**只**红 BD-13、H-5 定义计数），
+  I 段是第六轮四条的闭合实测（I-1…I-4 四种重绑各红 BD-13、I-5…I-7 漏检面各红 BD-12、
+  I-8 调用点就地解析红 BD-14、I-9 钉住「后写覆盖」这一语言事实、I-10 装饰器变异 `rc=1` 且 `stderr 无 traceback`）
 
 偏离与补充登记（D-01 起，均需人工追认；不同意可单独 revert 文档，代码结论不受影响）：
 
@@ -287,6 +297,7 @@ S2.1.4/S2.1.5/S2.2/S2.3 未做（`asset.py` 零改动，复审 G 段独立确认
 | D-06 | S2.1.3 的委托把 `+`→空格、非 str 抛错两条修复**一并带进 kb 侧**（委托即继承解析口径）；同时按第二轮复审纠正两处陈旧描述：`article_identity.py` 模块 docstring 与 `test_article_identity.py` 头注释原把「只读 `biz`」写成 kb 的**现在时**，实为改前状态；行号锚 `kb.py:587-593` → `587-591` | 文案与锚随实现同步，非行为变更 |
 | D-07 | S2.1.3 验证处置批（不改 `kb.py`，`git diff c10b229 -- apps/api/app/services/kb.py` 为空）：① `prove_biz_delegation.py` 的 BD-7 改认别名（`import … as pw`、`p = parse_wechat_url`），样本对 5→6、等价写法 3→5；② `_parses()` 闸门补全到反证②通道；③ 证明脚本退出码改三档 `0/1/2`（`2`=目标函数不存在，INCONCLUSIVE），并由 `--self-test` 首道闸门实测三档互异；④ `test_kb_longlink_ingest.py` 的恒等式用例每条参数化**另带字面期望**（五个值取自磁盘 kb.py 真实执行）；⑤ 自查（`g24_static_check.py`）发现并修掉该新文件的 I001 import 段序与证明脚本的 F401 死导入。理由与复现逐条见 `EVD-V2-02/README.md` §4.4/§4.5、`out_s213.txt` C/F/G 段 | 验证层增量 + 用例判定力增量，非行为变更 |
 | D-08 | S2.1.3 第五轮处置批（仍不改 `kb.py`，`git diff c10b229 -- apps/api/app/services/kb.py` 依旧为空）：堵三条**空过**——① BD-12 函数体**形状白名单**（只容 导入/赋值/返回 四类语句、只容 `parse_wechat_url` 与其别名为唯一可调用根、属性只容 `.biz`、实参必须是入参；嵌套 `def`/`class`/条件/循环/推导式/comprehension/lambda/异常 等一律越界），手搓 `split("?")` + `"bi"+"z"` 的解析器从此过不了；② `_shadowed()` 剔除被本地重新绑定的别名（`def pw` 遮蔽 `import … as pw`、`parse_wechat_url = _ext` 重绑两种形态），BD-7 不再把「名字出现过」当成「调用走的是委托」；③ BD-13 顶层同名定义**必须唯一**，且 `_top_defs()`/`get_fn_node` 按 Python 模块作用域取**末位**（改前取首位，等于证明了一段死代码）。另：BD-3 恒等式样本由 6 条字面扩为 26 条（6 字面 + 20 条**差分语料**，期望取自营运的解析层，与 `test_kb_longlink_ingest.py` 的字面锚互补——字面锚抓两侧共同退化）、`--kb=<路径>` 让三档退出码在**真实子进程**上自证、反证通道加 `_biz()` 自守（变异体导入缺失时红判据而非炸 harness）。判据 11→13、变异 5→10、样本对 6→10、等价写法 5→7 | 验证层增量，非行为变更 |
+| D-09 | S2.1.3 第六轮处置批（仍不改 `kb.py`，`git diff c10b229 -- apps/api/app/services/kb.py` 复跑仍为空）：堵 D1–D5 五条**空过/崩栈**——① BD-13 从「数顶层 def」改判**活绑定**：`_module_bindings()` 收遍模块作用域所有动过该名字的语句（`Assign`/带值 `AnnAssign`/`AugAssign`/`Delete`/`For`/`With as`/walrus/`Import` 别名/嵌在顶层 `if`·`try`·`with` 里的 def），并对 `globals()`/`locals()`/`vars()`/`exec`/`eval`/`setattr`/`delattr` 与目标名同现者按动态重绑记账，于是 lambda 顶替、`globals()['_biz_from_url']=…`、`if True: def`、`del` 四发各红 BD-13；② 新增 **BD-14** 让证明越出函数边界一跳：宿主 `_find_source_by_anchor`（`kb.py:336`，`async def`）必须有对目标名的调用、实参是其入参、结果进到 `Source.external_id` 的比较，且不许对自己的入参做 `split`/`partition`/`strip` 一类加工；③ 新增 **BD-15** exec 护栏，exec 失败时把行为面六条各记一次红并给可读原因，不再让 traceback 冒充「既非绿也非红」的第三态；④ BD-12 补四个漏检面（`ast.Subscript` 进禁用节点、`Assign`+`AnnAssign` 统一处理且目标须为单个 `Name`、右值须落到委托根、入参不许被重绑、多目标/元组目标不再整条跳过、`decorator_list` 非空即红）；⑤ `--self-test` 也认 `--kb=<路径>`（改前恒读真实 `kb.py`，「在临时副本上自证」名不副实）。另记 D6：BD-12 白名单**欠接纳**实测 7 发合法改写里 5 发会红（见 §4.7 D6 与 §7），已当作明账写而不是宣称白名单完备。判据 13→15、变异 10→16、样本对 10→21、等价写法 7→9 | 验证层增量，非行为变更 |
 
 交接头目：J-1 卡面覆盖率门禁命令、J-2 `ruff check app tests` 终判（本机无 ruff，I001 已按仓库真实段序修正但属推断）、
 J-3 三条未实测口径需真实抓取样本、J-4 连库全量回归（S2.3）、

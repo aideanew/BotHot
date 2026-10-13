@@ -24,7 +24,7 @@
 |---|---|---|
 | S2.1.1 先红用例（`test_article_identity.py`，14 条） | ✅ 真实执行 + 改前红可重放 | §2 两条通道 + §3 `block_article_identity_plugin.py` |
 | S2.1.2 实现（`article_identity.py`：`WechatUrlParts` + `parse_wechat_url`） | ✅ 真实加载、语句覆盖 27/27=100% | §2 |
-| S2.1.3 `kb._biz_from_url` 委托 | ✅ 改前红可重放 + 改后 11 判据全绿 + 三条反证通道 | §2 通道 C（`prove_biz_delegation.py`）、`out_s213.txt` A–E |
+| S2.1.3 `kb._biz_from_url` 委托 | ✅ 改前红可重放 + 改后 15 判据全绿 + 三条反证通道 | §2 通道 C（`prove_biz_delegation.py`）、`out_s213.txt` A–I |
 | S2.1.4 删 LIKE 兜底 / S2.1.5 片段长度守卫 | ⏳ 未做 | — |
 | S2.2 规范键 | ⛔ 阻塞于 ADR-0011 / D-V2-01（人拍板） | — |
 
@@ -64,7 +64,7 @@ PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-02/prove_articl
   **每条用例体内都有 assert/raise**（防空壳）；
 - **执行面** PI-10/PI-11：真实调用 14 个用例函数、真实语句覆盖 100%。
 
-**通道 C — S2.1.3 委托的机器证明**（`prove_biz_delegation.py`，BD-1…BD-11）。
+**通道 C — S2.1.3 委托的机器证明**（`prove_biz_delegation.py`，BD-1…BD-15）。
 为什么这条通道必须另建：`kb.py:22-25` 在模块级 import `structlog` 与 `sqlalchemy`，本机两者
 皆无（实测收集期 `ModuleNotFoundError: No module named 'structlog'`，见 `out_s213.txt` D 段）
 ⇒ `tests/test_kb_longlink_ingest.py` 在本机**跑不了**，不是没写。替代机制是 EVD-V2-00 已确立的
@@ -73,13 +73,13 @@ AST 切片：从磁盘上的 `kb.py` 里取出 `_biz_from_url` 这**一个**函�
 
 ```bash
 PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py
-# → 合计 PASS=13 FAIL=0（改前同一命令：PASS=3 FAIL=10，rc=1；红态由 OLD_BODY 回写临时副本重放，
+# → 合计 PASS=15 FAIL=0（改前同一命令：PASS=5 FAIL=10，rc=1；红态由 OLD_BODY 回写临时副本重放，
 #    不 mv、不改工作树，命令与输出都在 out_s213.txt A 段）
 
 PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py --self-test
 # → 首行「OK 档位自证：绿 rc=0 / 目标缺失 rc=2（INCONCLUSIVE） / 有判据红 rc=1 三档分得开」
 # → 次行「OK 退出码自证：子进程真实退出码三档分得开（绿 0 / 目标缺失 2 / 有判据红 1）」
-# → SELF-TEST PASS：10 个函数体变异各自让指定判据变红 + 10 个判据样本对敏感 + 7 个等价写法不假红
+# → SELF-TEST PASS：16 个函数体变异各自让指定判据变红 + 21 个判据样本对敏感 + 9 个等价写法不假红
 ```
 
 **三档退出码**（第二轮复审 B3/B4：目标函数被整个删掉时，原先也打印一份 FAIL 清单、rc=1，
@@ -90,12 +90,16 @@ PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-02/prove_biz_de
 所以第二道闸门把三种源码形态各写成临时目录里的 `kb.py` 副本，用 `--kb=<路径>` 起**真实子进程**
 读回退出码——工作树仍然一个字节没动。
 
-判据分四面：行为面 BD-1…BD-6（长链出号主、与解析侧在**差分语料**上恒等、伪 `biz=` 不退化、
+判据分五面：行为面 BD-1…BD-6（长链出号主、与解析侧在**差分语料**上恒等、伪 `biz=` 不退化、
 `%3D%3D` 同值、脏类型统一归零）、结构面 BD-7…BD-9（真有调用且调用名没被本地重新绑定、委托源必须是
 `app.services.article_identity`、kb 侧不留第二份解析）、反面 BD-10/BD-11（不许 `except` 兜底伪造身份、
-不许残留参数字面量做半委托）、反面 BD-12/BD-13（函数体**形状**白名单 + 顶层同名定义只能有一个）。
+不许残留参数字面量做半委托）、反面 BD-12/BD-13（函数体**形状**白名单 + 模块作用域只有被 exec 的那一份
+绑定）、边界外扩面 BD-14/BD-15（BD-14：委托结果确实喂进锚定查询且调用点不许自己解析；
+BD-15：目标函数能被单独 exec——它是行为面六条的前提，打印时排在最前，编号按追加顺序以免打乱既有锚）。
 一条实测副产品值得记住：**半委托**（委托但空串时回退本地再解析一次）在行为面几乎看不出问题，
 却同时让 BD-9/BD-11 转红、并把 BD-6 的 int 抛错路径**带回来**——这正是「只测行为」抓不到的形态。
+另一条同类副产品是第六轮的 D2：**函数内部正确**与「这个正确实现真的在起作用」是两件事，
+前者管不到后者，所以证明面必须越过函数边界一次（BD-14）。
 反证通道自身也修过两处：多行变异体原先用**不含缩进**的锚，替换后首行变 8 空格、根本解析不了，
 于是结构判据以 `IndentationError` 冒充「致红」；已加 `_parses()` 闸门单独立判 FAIL（复审 D 类）。
 第二轮复审 3c 指出该闸门原先**只盖住 MUTANTS/EQUIVS 两条通道**，PROBES 直接把样本喂给判定函数，
@@ -121,6 +125,7 @@ PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-02/prove_biz_de
 （嵌套 `def`/`class`、控制流、三元与布尔表达式、别的调用点、别的属性、**任何字符串字面量**——
 最后这条正是为了堵 `"bi" + "z"` 那种拆开字面量绕 BD-11 的写法）；BD-13 判顶层同名定义计数，
 `_top_defs()`/`get_fn_node()` 一并改成**只看顶层、取末位**。
+（第五轮只做到「数顶层 def」，第六轮 D1 证明这仍然不够——非 def 的模块级绑定照样能换掉活绑定，见 §4.7。）
 `_shadowed()` 同时把 ①② 两类遮蔽从 BD-7 的可用别名表里剔掉，所以这三发现在是三条判据同时红
 （外加差分语料那条行为面），不是靠单点。`PROBES` 6→10、`EQUIVS` 5→7 的增量即由此而来
 ——新增的两条 EQUIVS（`biz = parse_wechat_url(url).biz; return biz`、
@@ -267,6 +272,34 @@ E 段卡面命令、`78e3378` 副本逐字节一致、范围与禁改路径。�
 的计数，出处已在 §4.4 标明（报告本身是外部输入，不是仓库产物），无需动作。
 `id 9` 的「卡文件不在允许修改清单内」属自我申报，§6 与卡面 D-05/D-07 已登记，非隐藏越界。
 
+## 4.7 第六轮复审（对处置批 `a15a55b`）——四条活绑定空过 + 越界证明 + 崩栈面的复现与闭合
+
+复审报告给了 6 条 DEFECT（D1–D6）。**D1–D5 在本机全部复现成立**，D6 是措辞与记账。
+复现锚**不是一次性脚本**：六发攻击体全部固化进 harness——`MUTANTS` 16 条里本轮新增 6 条、
+`PROBES` 21 条里本轮新增 11 条，单命令 `--self-test` 即可复跑；原始读数在 `out_s213.txt` I 段
+（I-1…I-10，逐条标了对应的复审编号）。首轮我用一个临时脚本 `_workspace/repro_r6.py` 试探，
+九发全 `rc=0`、红判据为空集——该脚本已删除，**不作为证据锚**（本包惯例：可复跑的证据只有
+`prove_*.py` 与被引用的 `out_*.txt`）。
+
+| id | 复审意见 | 本机复现（改前） | 落点（改后，均可复跑） |
+|---|---|---|---|
+| D1 | BD-13 只数**顶层 def**，而模块作用域里非 def 的绑定同样能换掉活绑定：`_biz_from_url = lambda url: ''`、`globals()['_biz_from_url'] = …`、`if True: def _biz_from_url`（顶层 `if` 不产生作用域）、`del _biz_from_url` | 四发全部 `evaluate()` 空集、`run()` rc=0，而同一份源码 import 进来 `_biz_from_url(LONG_A)` 给的是 `''`／名字直接消失 | `_module_bindings()` 收遍模块作用域所有动过该名字的语句（`Assign`/`AnnAssign` 带值/`AugAssign`/`Delete`/`For`/`With as`/walrus/`Import` 别名/嵌套在顶层 `if`·`try`·`with` 里的 def），并对 `globals()`/`locals()`/`vars()`/`exec`/`eval`/`setattr`/`delattr` 与目标名同现的语句按「动态重绑」记账；BD-13 改判「**只有被 exec 的那一份 def 动过绑定**」⇒ 四发各红 BD-13（`out_s213.txt` I-1…I-4），I-9 另用最小源码钉住「后写覆盖」这条语言事实 |
+| D2 | 证明面不越出函数边界：把 `kb.py:343` 的 `_biz_from_url(url)` 换成就地 `url.split("__biz=")[-1]…`，13 条判据全绿——函数内部对，但委托结果根本不再进查询，而卡面标题写的正是「号主锚不再为空串」 | `rc=0`、红判据空集（BD-9/BD-11 只扫 `get_fn_node`，看不见调用点） | 新增 **BD-14**：`_find_source_by_anchor`（`kb.py:336`，是 `async def`——写判据时第一版按 `FunctionDef` 找不到它，先红了一次）必须①有对目标名的调用、②实参是其自身入参、③结果进到 `Source.external_id` 的比较里、④不许对自己的入参做 `split`/`partition`/`strip` 一类加工 ⇒ 该发变异红 BD-14（I-8），`external_id` 改名、去掉调用两发坏样本各红一次（`PROBES` 21 条里占两条） |
+| D3 | README 两处陈旧计数（`:27` 的「11 判据 / A–E」、`:67` 的「BD-1…BD-11」） | 复现成立（本轮之前一次改判据没同步过 §1/§2 的表） | 现为 `15 判据 / A–I`、`BD-1…BD-15`；并把「每轮改判据必须回头扫 §1 §2 §6 §7」当作固定动作 |
+| D4 | BD-12 白名单有四个漏检面：`AnnAssign` 的右值与入参重绑没查（只查 `ast.Assign`）、多目标/元组目标整条跳过、`List`/`Tuple`/`Subscript` 不在禁用节点里、`decorator_list` 从不看 | 四发 `rc=0`：`url: str = parse_wechat_url(url).biz; return url`、`parse_wechat_url, extra = …`、`return [parse_wechat_url(url).biz][0]`、`@staticmethod` | `ast.Subscript` 进禁用节点；绑定语句统一处理 `Assign`+`AnnAssign`（目标必须是单个 `Name`、右值必须落到委托根、入参不许被重绑）；`decorator_list` 非空即红 ⇒ 四发各红 BD-12（I-5…I-7 与 `PROBES` 的装饰器样本） |
+| D5 | 装饰器引用模块级名字时 `run()` 直接带 `NameError` traceback 崩掉——三档退出码一条都没打印，「崩」既不是绿也不是红，常崩的门禁会被当噪音关掉 | 复现成立（改前 stderr 有 traceback、stdout 停在目标行） | `_try_load()` 兜住 exec，`run()` 先下 **BD-15**「目标函数能被单独 exec」，exec 不成则六条行为判据各记一次红（占位实现调用即抛，红得可读）；MUTANT `装饰器引用未定义名字` 钉住 ⇒ I-10 实测 `rc=1`、`stderr 里有无 traceback = False` |
+| D6 | §7 只承认「白名单按当前 7 条 EQUIVS 校准」，没给出**欠接纳**的实数 | 复现成立（本轮量了） | 实测：7 发「仍然委托、只是换个写法」的形态里 **5 发会红 BD-12**（`if not url:` 前置守卫、加一行日志、`str(...)` 包一层、`biz_of_url(url)` 门面、把解析层挪进子包），只有「先取 `parts`/`biz` 局部变量」这 2 发绿。写进 §7 当作明账，不写成「白名单已完备」 |
+
+一条复审附带提到、我改掉的次要项：`--self-test` 原先恒读真实 `kb.py`，`--kb=<路径>` 只作用于
+`main()`——于是「在临时副本上自证」这话名不副实。现在 `self_test()` 也走 `_kb_override()`，
+基准里没有委托锚时早退并说明原因。
+
+不采信/不收紧的一条：D1 里「用 `importlib` + 打桩 `sys.modules` 把整份 `kb.py` 真 import 进来，
+直接断言活绑定 identity」。**不做**的理由不是嫌麻烦：打桩出来的 `structlog`/`sqlalchemy` 与真实
+依赖的行为并不等价，一旦证据依赖打桩，它证明的就不再是「这台机器上的 kb.py」，而是
+「打桩 + kb.py」这个组合；改判 AST 绑定集合是同一结论的弱证明，但**不引入新的环境假设**。
+代价（动态 exec 类花招仍可能漏）写进 §7。
+
 ## 5. 交人工 / 有依赖环境的项目
 
 | # | 项 | 为什么本机不能做 | 命令 |
@@ -287,13 +320,14 @@ E 段卡面命令、`78e3378` 副本逐字节一致、范围与禁改路径。�
   两点读数口径要注意：①「一个 hunk」是**默认上下文**下的 `git diff`，加 `-U0` 会因
   docstring/导入块与 return 行之间的空行而拆成 2 个 hunk；②`grep -c '^-'` 数出来是 6，
   因为把 `--- a/…` 文件头也算进去了——以 numstat 的 `3/5` 为准。
-- **两轮处置批（§4.4/§4.5 的第二轮、§4.6 的第五轮）都没有再动 `kb.py`**：
+- **三轮处置批（§4.4/§4.5 的第二轮、§4.6 的第五轮、§4.7 的第六轮）都没有再动 `kb.py`**：
   `git diff c10b229 -- apps/api/app/services/kb.py` 为空（本轮复跑确认）。
   改动面只有 `prove_biz_delegation.py`（判据、档位、通道自守）、`test_kb_longlink_ingest.py`
   （用例的第二条锚 + import 段序，第二轮改）、本 README 与 `out_s213.txt`
-  （重新整份生成，A–H 八段；H 段就是第五轮三条空过的闭合实测）。
+  （重新整份生成，A–I 九段；H 段是第五轮三条空过的闭合实测，I 段是第六轮 D1/D2/D4/D5 的）。
   harness 新增的 `--kb=<路径>` 只服务于 self-test 的子进程退出码自证，
-  **默认路径仍是 `apps/api/app/services/kb.py`**，验收命令不变。
+  **默认路径仍是 `apps/api/app/services/kb.py`**，验收命令不变；第六轮起
+  `--self-test` 也认这个开关（改前它恒读真实 `kb.py`，「在临时副本上自证」名不副实）。
 - 新增文件都在卡面「允许修改」或「证据路径」内：`tests/test_kb_longlink_ingest.py` 是卡面
   允许路径；`prove_biz_delegation.py`、`out_s213.txt`、`block_article_identity_plugin.py` 与本
   README 落在证据路径 `docs/06_validation/evidence/EVD-V2-02/`。
@@ -320,9 +354,22 @@ E 段卡面命令、`78e3378` 副本逐字节一致、范围与禁改路径。�
   `str.split("?")` 手搓解析就绕过了它，也绕过了「把 `"biz"` 拆成 `"bi" + "z"`」的 BD-11。
   充分性现在靠 BD-12（形状白名单，含「除文档串与导入路径外不许出现任何字符串字面量」）
   加 BD-3 的 26 条差分语料。**仍然不是全域等价性证明**：语料是有限的 26 条，白名单是按
-  当前 7 条 EQUIVS 校准的。真要改形状，先加 EQUIV 再加实现——顺序反了就是假红门禁。
-- BD-13 只判**顶层**同名定义计数：嵌在别的函数里的同名 `_biz_from_url` 不是模块属性，
-  `from app.services.kb import _biz_from_url` 拿不到它，所以那种形态由 `has_target()`
-  直接落进 INCONCLUSIVE（rc=2），不会伪装成红基线。
+  当前 9 条 EQUIVS 校准的。真要改形状，先加 EQUIV 再加实现——顺序反了就是假红门禁。
+- BD-12 白名单**欠接纳**（会误伤合法重构）的实数，第六轮量了（§4.7 D6）：7 发「仍然委托、
+  只是换个写法」的形态里 **5 发会红**（前置 `if not url:` 守卫、加一行日志、`str(...)` 包一层、
+  `biz_of_url(url)` 门面、把解析层挪进子包），只有「先取 `parts`/`biz` 局部变量」这 2 发绿。
+  读 BD-12 时按「宁严勿宽的显式契约」理解，别当「合法形状的完备刻画」；误伤了就照上一条补 EQUIV。
+- BD-13 判的是**活绑定**：模块作用域里唯一动过 `_biz_from_url` 这个名字的语句，就是被 exec 的
+  那份 def。它因此能抓住 lambda 赋值、`globals()[...] =`、顶层 `if` 里的 def、`del`（§4.7 D1）。
+  两个残余盲区要写明白：①**动态 exec 类花招**（如运行时 `exec("def _biz_from_url…")`）只靠
+  「目标名与 `exec`/`setattr` 等同现」的启发式记账，构造得刻意就能绕开；②嵌在别的函数里的同名
+  `_biz_from_url` 不是模块属性，`from app.services.kb import _biz_from_url` 拿不到它，那种形态由
+  `has_target()` 直接落进 INCONCLUSIVE（rc=2），不会伪装成红基线。
+- BD-14 只往函数边界外走**一跳**：宿主是 `_find_source_by_anchor`，判据是「目标名的调用结果
+  最终进到 `Source.external_id` 的比较里」。它不覆盖第二跳（例如锚被算出来后在 `select()` 之外
+  被丢弃）、也不覆盖 kb 的其余调用方（`_ensure_source` 等）——那属于 J-5/J-4 的连库面。
+- BD-15 是**崩栈护栏**，不是行为判据：它只保证「目标函数能被单独 exec」，exec 不成时把六条行为
+  判据各记一次红并给出可读原因，而不是让 `run()` 带着 traceback 退出（改前那种「既不是绿也不是红」
+  的第三态会被当噪音关掉，见 §4.7 D5）。
 - F 段的 F-3/F-4 是**判定力模拟**：用 `lambda u: ""` 顶替实现来问「这条锚会不会空过」，
   不是对磁盘代码的执行——对磁盘代码的真实执行只有 F-1/F-2 与 B 段。两者的结论不可互换。

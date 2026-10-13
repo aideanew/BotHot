@@ -1,13 +1,15 @@
 # STEP-02 S2.1.3 执行留档（kb._biz_from_url 委托解析层）
-# 时间 2026-10-13T08:08:40+08:00｜HEAD=b45777a+工作区未提交改动（第五轮复审处置批：BD-12 形状白名单 + BD-13 唯一定义 + 差分语料）｜Python 3.11.9｜win32｜全链 PYTHONIOENCODING=utf-8
+# 时间 2026-10-13T08:44:17+08:00｜HEAD=a15a55b+工作区未提交改动（第六轮复审处置批：BD-13 改判活绑定 + 新增 BD-14 调用点 / BD-15 可 exec）｜Python 3.11.9｜win32｜全链 PYTHONIOENCODING=utf-8
 # 本机依赖实测：structlog / sqlalchemy 皆无（kb.py:22-25 模块级导入）⇒ D 段只能证明「收集期即失败」，用例本身交 CI（J-5）
-# A/B/C/F/G/H 用的是**同一版** prove_biz_delegation.py（BD-7 认别名且不认被遮蔽的别名 + BD-12 形状白名单 + BD-13 唯一定义 + 三档退出码含子进程实证）
+# A/B/C/F/G/H/I 用的是**同一版** prove_biz_delegation.py（15 条判据：BD-1…BD-6 行为面、BD-7…BD-15 结构面）
 # 每段 `$` 行就是**逐字可重跑**的单行命令（本文档不再对命令做折行排版）
+# 判据计数口径：BD-15 排在最前打印（它是行为面六条的前提），编号仍按追加顺序，不打乱既有 BD-1…BD-13 的锚
 
 ########## A 改前红重放（不动工作区 kb.py：把 NEW_BODY 换回 OLD_BODY 写成临时副本再 exec）
 $ python -c "import sys; sys.path.insert(0,'docs/06_validation/evidence/EVD-V2-02'); import prove_biz_delegation as P; src=P.KB.read_text(encoding='utf-8'); assert P.NEW_BODY in src; tmp=P.KB.with_name('_kb_prefix_replay.py'); tmp.write_text(src.replace(P.NEW_BODY,P.OLD_BODY),encoding='utf-8'); P.KB=tmp; rc=P.main(); tmp.unlink(); print('replay 临时文件已删除：', not tmp.exists()); sys.exit(rc)"
-目标：apps/api/app/services/_kb_prefix_replay.py 的 _biz_from_url（按 AST 取顶层最后一个同名定义后真实 exec）
+目标：apps/api/app/services/_kb_prefix_replay.py 的 _biz_from_url（按模块作用域活绑定取那份 def，真实 exec 后再下裁决）
 
+PASS BD-15 目标函数能被单独 exec（行为面六条的前提）
 FAIL BD-1 长链解出号主 biz（改前红：旧实现返回空串） :: "_biz_from_url(LONG_A)=''"
 FAIL BD-2 同 biz 不同 mid 的两篇都能解出同一号主 :: "=''"
 FAIL BD-3 与 parse_wechat_url(...).biz 恒等（口径单点，26 个样本含 20 条差分） :: [('https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ=', '', 'MjM5MjgwNTQ1MQ=='), ('https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ=', '', 'MjM5MjgwNTQ1MQ=='), ('https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ=', '', 'MjM5MjgwNTQ1MQ=='), ('https://mp.weixin.qq.com/s?biz=OTHER&__biz=MjM5M', 'OTHER', 'MjM5MjgwNTQ1MQ=='), ('https://mp.weixin.qq.com/s?__biz=MjM5+MjgwNTQ1MQ', '', 'MjM5+MjgwNTQ1MQ=='), ('https://mp.weixin.qq.com/s?__biz=MjM5%2BMjgwNTQ1', '', 'MjM5+MjgwNTQ1MQ==')]
@@ -19,10 +21,11 @@ FAIL BD-8 委托源必须是 app.services.article_identity :: ['urllib.parse', '
 FAIL BD-9 kb 侧无第二份 URL 解析（parse_qs/urlparse/urllib 导入归零） :: ['parse_qs', 'urlparse', 'import:urllib.parse']
 PASS BD-10 无 except 兜底（不许把失败伪造成身份）
 FAIL BD-11 无残留参数字面量（不许半委托） :: ['biz']
-FAIL BD-12 函数体形状在白名单内（不许长出自己的逻辑） :: ["字符串字面量 ''@592", "字符串字面量 ''@593", "字符串字面量 'biz'@592", '嵌套/控制流 IfExp@593', '绑定右值不合法 Call@591', '绑定右值不合法 Call@592', '越界导入 urllib.parse', '越界属性 .get@592', '越界属性 .query@591', '非委托调用 get@592', '非委托调用 parse_qs@591', '非委托调用 urlparse@591']
-PASS BD-13 顶层只有一个 _biz_from_url 定义（后者会遮蔽前者）
+FAIL BD-12 函数体形状在白名单内（不许长出自己的逻辑） :: ["字符串字面量 ''@592", "字符串字面量 ''@593", "字符串字面量 'biz'@592", '嵌套/控制流 IfExp@593', '嵌套/控制流 Subscript@593', '绑定右值不合法 Call@591', '绑定右值不合法 Call@592', '越界导入 urllib.parse', '越界属性 .get@592', '越界属性 .query@591', '非委托调用 get@592', '非委托调用 parse_qs@591', '非委托调用 urlparse@591']
+PASS BD-13 模块作用域只有被 exec 的那一份绑定
+PASS BD-14 委托结果确实喂进锚定查询（调用点不许自己解析）
 
-合计 PASS=3 FAIL=10
+合计 PASS=5 FAIL=10
   FAIL BD-1 长链解出号主 biz（改前红：旧实现返回空串）
   FAIL BD-2 同 biz 不同 mid 的两篇都能解出同一号主
   FAIL BD-3 与 parse_wechat_url(...).biz 恒等（口径单点，26 个样本含 20 条差分）
@@ -39,8 +42,9 @@ rc=1 （预期 1 = 有判据红；与「目标缺失」那档 INCONCLUSIVE=2 分
 
 ########## B 改后绿（工作区真实 kb.py）
 $ python docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py
-目标：apps/api/app/services/kb.py 的 _biz_from_url（按 AST 取顶层最后一个同名定义后真实 exec）
+目标：apps/api/app/services/kb.py 的 _biz_from_url（按模块作用域活绑定取那份 def，真实 exec 后再下裁决）
 
+PASS BD-15 目标函数能被单独 exec（行为面六条的前提）
 PASS BD-1 长链解出号主 biz（改前红：旧实现返回空串）
 PASS BD-2 同 biz 不同 mid 的两篇都能解出同一号主
 PASS BD-3 与 parse_wechat_url(...).biz 恒等（口径单点，26 个样本含 20 条差分）
@@ -53,13 +57,14 @@ PASS BD-9 kb 侧无第二份 URL 解析（parse_qs/urlparse/urllib 导入归零�
 PASS BD-10 无 except 兜底（不许把失败伪造成身份）
 PASS BD-11 无残留参数字面量（不许半委托）
 PASS BD-12 函数体形状在白名单内（不许长出自己的逻辑）
-PASS BD-13 顶层只有一个 _biz_from_url 定义（后者会遮蔽前者）
+PASS BD-13 模块作用域只有被 exec 的那一份绑定
+PASS BD-14 委托结果确实喂进锚定查询（调用点不许自己解析）
 
-合计 PASS=13 FAIL=0
+合计 PASS=15 FAIL=0
 边界：本脚本只证明委托接线与解析口径；`test_kb_longlink_ingest.py` 的 pytest 实跑需 structlog+sqlalchemy（kb.py:22-25 模块级导入，本机皆无，实测收集期 ModuleNotFoundError），交 EVD-V2-02 §5 J-1/J-5。
 rc=0 （预期 0）
 
-########## C 三条反证通道 + 三档档位自证（_strip_target 只作用于内存副本，工作树未被改动）
+########## C 三条反证通道 + 档位自证 + 子进程退出码自证（_strip_target 只作用于内存副本，工作树未被改动）
 $ python docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py --self-test
 OK   档位自证：绿 rc=0 / 目标缺失 rc=2（INCONCLUSIVE） / 有判据红 rc=1 三档分得开
 OK   退出码自证：子进程真实退出码三档分得开（绿 0 / 目标缺失 2 / 有判据红 1）
@@ -74,6 +79,12 @@ OK   委托名被重绑到手搓解析器（正面判据仍看得见那次导入
 OK   顶层同名重复定义·前置式（真委托仍在最后，只有 BD-13 抓得到） → 致红 ['BD-13']
 OK   顶层同名重复定义·追加式（报告 id 10 原样攻击：live 是假函数） → 致红 ['BD-1', 'BD-12', 'BD-13', 'BD-2', 'BD-3', 'BD-4', 'BD-5', 'BD-7', 'BD-8']
 OK   调用期抛异常（导入不存在的模块）：判据必须记下红而不是把通道崩掉 → 致红 ['BD-1', 'BD-12', 'BD-2', 'BD-3', 'BD-4', 'BD-5', 'BD-6']
+OK   模块作用域把名字改绑成 lambda（import 拿到的不是被证明的那份 def） → 致红 ['BD-13']
+OK   顶层 if 里再 def 一份（模块作用域没有块级作用域，def 绑的是模块属性） → 致红 ['BD-13']
+OK   globals() 动态重绑（AST 的绑定扫描看不见这次写入） → 致红 ['BD-13']
+OK   del 掉目标名（活绑定直接消失，判据面却什么都没看见） → 致红 ['BD-13']
+OK   调用点换成就地 split 解析（BD-1…BD-13 只管函数体，抓不到） → 致红 ['BD-14']
+OK   装饰器引用未定义名字（行为面压根没跑，必须判红而不是把脚本崩掉） → 致红 ['BD-1', 'BD-12', 'BD-15', 'BD-2', 'BD-3', 'BD-4', 'BD-5', 'BD-6']
 OK   BD-7 调用被删（只剩导入）：好样本判真 / 坏样本判假
 OK   BD-7 别名链造假（改名的导入没被调用，调的是本地假函数）：好样本判真 / 坏样本判假
 OK   BD-8 委托到别的模块：好样本判真 / 坏样本判假
@@ -84,6 +95,17 @@ OK   BD-7 别名被本地 def 遮蔽（看着像委托，调的是假函数）�
 OK   BD-12 函数体长出自己的逻辑（手搓解析器，无 parse_qs 字样）：好样本判真 / 坏样本判假
 OK   BD-13 顶层出现第二个同名定义（后者遮蔽前者）：好样本判真 / 坏样本判假
 OK   BD-7 正确导入未被使用、同名伪源导入把它遮蔽：好样本判真 / 坏样本判假
+OK   BD-13 模块作用域被 lambda 覆盖（def 还在但不是活绑定）：好样本判真 / 坏样本判假
+OK   BD-13 顶层 if 内再 def 一份（模块作用域没有块级作用域）：好样本判真 / 坏样本判假
+OK   BD-13 globals() 动态重绑（绑定扫描的盲区）：好样本判真 / 坏样本判假
+OK   BD-13 del 掉目标名：好样本判真 / 坏样本判假
+OK   BD-12 AnnAssign 把入参重新绑定（原先只查 ast.Assign）：好样本判真 / 坏样本判假
+OK   BD-12 多目标绑定换掉委托名：好样本判真 / 坏样本判假
+OK   BD-12 下标绕回字符串加工：好样本判真 / 坏样本判假
+OK   BD-12 装饰器换了最终绑定：好样本判真 / 坏样本判假
+OK   BD-15 装饰器引用模块级名字 ⇒ 单独 exec 必崩：好样本判真 / 坏样本判假
+OK   BD-14 调用点不再用委托结果：好样本判真 / 坏样本判假
+OK   BD-14 调用点没有 external_id 比较：好样本判真 / 坏样本判假
 OK   等价重构 关键字实参形式 → 判据全绿
 OK   等价重构 模块属性调用形式 → 判据全绿
 OK   等价重构 先取局部变量再返回 → 判据全绿
@@ -91,8 +113,10 @@ OK   等价重构 改名导入后调用（import … as pw） → 判据全绿
 OK   等价重构 转绑局部变量后调用 → 判据全绿
 OK   等价重构 先把 .biz 取到局部变量再返回 → 判据全绿
 OK   等价重构 导入整模块并改名后调用 → 判据全绿
+OK   等价重构 带类型注解的局部绑定（AnnAssign 与 Assign 同权） → 判据全绿
+OK   等价重构 调用点先把委托结果存成局部变量 → 判据全绿
 
-SELF-TEST PASS：10 个函数体变异各自让指定判据变红 + 10 个判据样本对敏感 + 7 个等价写法不假红
+SELF-TEST PASS：16 个函数体变异各自让指定判据变红 + 21 个判据样本对敏感 + 9 个等价写法不假红
 rc=0 （预期 0）
 
 ########## D 真实 pytest 收集（证明本机只能走 A/B/C/F）
@@ -121,7 +145,7 @@ C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\site-packages
 =========================== short test summary info ===========================
 ERROR tests/test_kb_longlink_ingest.py
 !!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
-1 warning, 1 error in 0.27s
+1 warning, 1 error in 0.29s
 rc=2 （预期 2 = 收集期失败，不是用例失败；rc 取 pytest 退出码本身，不是管道尾状态。决定性行是 `app\services\kb.py:22: in <module> import structlog`）
 
 ########## E 卡面 S2.1.3 验收命令按字面跑（本机无 uv，用同解释器代跑）
@@ -134,7 +158,7 @@ C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\site-packages
     self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-5 passed, 9 deselected, 1 warning in 0.05s
+5 passed, 9 deselected, 1 warning in 0.07s
 rc=0 （预期 0）
 # 注意：该命令选中的是 S2.1.2 的解析层用例，不覆盖本步交付物（kb 委托）——卡面命令指向的文件与 S2.1.3 的交付不一致，已登记为任务书缺陷。
 
@@ -203,7 +227,7 @@ defs = [(d.lineno, h.ast.unparse(d.body[-1])) for d in h._top_defs(dup)]
 print("H-5 顶层同名定义共", len(defs), "处：", defs,
       "⇒ get_fn_node 取末位（Python 的模块作用域绑定），改前取的是首位")
 PY
-H-0 基准（未变形）rc = 0 （判据 13 条全绿）
+H-0 基准（未变形）rc = 0 （判据 15 条全绿）
 H-1 别名被本地 def 遮蔽（报告 id 3a2） | 解析 = True | 红判据 = ['BD-12', 'BD-3', 'BD-7'] | rc = 1
 H-2 委托名被重绑到手搓解析器（报告 id 3c） | 解析 = True | 红判据 = ['BD-12', 'BD-3', 'BD-7'] | rc = 1
 H-3 追加同名定义（报告 id 10 原样：live 是假函数） | 解析 = True | 红判据 = ['BD-1', 'BD-12', 'BD-13', 'BD-2', 'BD-3', 'BD-4', 'BD-5', 'BD-7', 'BD-8'] | rc = 1
@@ -211,3 +235,64 @@ H-4 前置同名定义（真委托仍在末位，只剩 BD-13 抓得到） | 解
 H-5 顶层同名定义共 2 处： [(587, 'return parse_wechat_url(url).biz'), (598, "return ''")] ⇒ get_fn_node 取末位（Python 的模块作用域绑定），改前取的是首位
 rc=0 （预期 0）
 # H-1/H-2/H-3 是**改前在本机实测过**的三条空过（报告 id 3a2 / 3c / 10，当时均 rc=0、判据全绿）；本轮之后分别红 BD-7+BD-12+BD-3、BD-7+BD-12+BD-3、BD-13 加行为面。H-4 是本轮补的第二向（重复定义放前面）：live 仍是真委托，正面判据全绿，只红 BD-13 ⇒ BD-13 是这一类的唯一防线，不是冗余。
+
+########## I 第六轮复审的闭合实测：四条「def 还在但活绑定已换」+ 三发 BD-12 漏检 + 调用点回归 + 崩栈面（工作树未动）
+$ python - <<'PY'
+import subprocess
+import sys
+import tempfile
+import types
+from pathlib import Path
+
+sys.path.insert(0, 'docs/06_validation/evidence/EVD-V2-02')
+import prove_biz_delegation as h
+
+src = h.KB.read_text(encoding='utf-8')
+h._quiet = True
+CALL = "for anchor in (a for a in (_biz_from_url(url), article_key) if a):"
+attacks = {
+    "I-1 模块作用域把名字改绑成 lambda（D1a）": src + "\n_biz_from_url = lambda url: ''\n",
+    "I-2 globals() 动态重绑（D1b）": src + "\nglobals()['_biz_from_url'] = lambda url: ''\n",
+    "I-3 顶层 if 内再 def 一份（D1c）": src + "\nif True:\n    def _biz_from_url(url: str) -> str:\n        return ''\n",
+    "I-4 del 掉目标名（D1d）": src + "\ndel _biz_from_url\n",
+    "I-5 AnnAssign 把入参重新绑定（D4a）": src.replace(
+        h.NEW_BODY, h._PLAIN_IMPORT + "    url: str = parse_wechat_url(url).biz\n    return url\n"),
+    "I-6 多目标绑定换掉委托名（D4b）": src.replace(
+        h.NEW_BODY, h._PLAIN_IMPORT
+        + "    parse_wechat_url, extra = parse_wechat_url, None\n\n    return parse_wechat_url(url).biz\n"),
+    "I-7 下标绕回字符串加工（D4c）": src.replace(
+        h.NEW_BODY, h._PLAIN_IMPORT + "    return [parse_wechat_url(url).biz][0]\n"),
+    "I-8 调用点改成就地 split 解析（D2）": src.replace(
+        CALL, 'for anchor in (a for a in (url.split("__biz=")[-1].split("&")[0], article_key) if a):'),
+}
+for name, m in attacks.items():
+    print(name, "| 解析 =", h._parses(m), "| 红判据 =", sorted(h.evaluate(m)), "| rc =", h.run(m))
+
+mod = types.ModuleType('kb_live_binding')
+exec(compile("def _biz_from_url(url):\n    return 'real'\n_biz_from_url = lambda url: 'fake'\n", '<kb>', 'exec'),
+     mod.__dict__)
+print("I-9 活绑定语义实测：def 之后再赋值，import 拿到的是", repr(mod._biz_from_url('x')),
+      "⇒ 只数 def 的 BD-13 会去证明一段死代码")
+
+tmp = Path(tempfile.mkdtemp(prefix='bd_i10_'))
+copy = tmp / 'kb.py'
+copy.write_text(src.replace('def _biz_from_url(url: str) -> str:',
+                            '@_probe_cache\ndef _biz_from_url(url: str) -> str:', 1), encoding='utf-8')
+proc = subprocess.run([sys.executable, 'docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py',
+                       f'--kb={copy}'], capture_output=True, text=True, encoding='utf-8')
+verdicts = [ln for ln in proc.stdout.splitlines() if ln.startswith(('FAIL BD-15', 'FAIL BD-12', '合计'))]
+print("I-10 装饰器变异体（D5 的崩栈面）：rc =", proc.returncode,
+      "| stderr 里有无 traceback =", 'Traceback' in proc.stderr, "|", verdicts)
+PY
+I-1 模块作用域把名字改绑成 lambda（D1a） | 解析 = True | 红判据 = ['BD-13'] | rc = 1
+I-2 globals() 动态重绑（D1b） | 解析 = True | 红判据 = ['BD-13'] | rc = 1
+I-3 顶层 if 内再 def 一份（D1c） | 解析 = True | 红判据 = ['BD-13'] | rc = 1
+I-4 del 掉目标名（D1d） | 解析 = True | 红判据 = ['BD-13'] | rc = 1
+I-5 AnnAssign 把入参重新绑定（D4a） | 解析 = True | 红判据 = ['BD-12'] | rc = 1
+I-6 多目标绑定换掉委托名（D4b） | 解析 = True | 红判据 = ['BD-12'] | rc = 1
+I-7 下标绕回字符串加工（D4c） | 解析 = True | 红判据 = ['BD-12'] | rc = 1
+I-8 调用点改成就地 split 解析（D2） | 解析 = True | 红判据 = ['BD-14'] | rc = 1
+I-9 活绑定语义实测：def 之后再赋值，import 拿到的是 'fake' ⇒ 只数 def 的 BD-13 会去证明一段死代码
+I-10 装饰器变异体（D5 的崩栈面）：rc = 1 | stderr 里有无 traceback = False | ['FAIL BD-15 目标函数能被单独 exec（行为面六条的前提） :: "NameError: name \'_probe_cache\' is not defined"', "FAIL BD-12 函数体形状在白名单内（不许长出自己的逻辑） :: ['装饰器 1 处（首个 _probe_cache）']", '合计 PASS=7 FAIL=8']
+rc=0 （预期 0）
+# 结论：I-1…I-8 每发都至少红一条指定判据（BD-13 / BD-12 / BD-14），改前这八发在本机实测全部 rc=0、判据全绿；I-9 用一段最小源码钉住「后写覆盖」这条语言事实（BD-13 改判「活绑定」的依据）；I-10 是 D5 的反面证据——装饰器变异体现在给出 rc=1 的裁决，stderr 里不再出现 traceback。
