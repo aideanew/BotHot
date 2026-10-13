@@ -250,9 +250,12 @@ eval "$(bash scripts/test-env.sh env)" && cd apps/api && uv run pytest tests/tes
 
 状态：**部分完成**。S2.1.1/S2.1.2 已交付并经第一轮独立复审处置完毕（提交 `78e3378`，
 其父为 `1470b77`）；S2.1.3 本轮交付（`kb._biz_from_url` 委托解析层，提交 `c10b229`）——它在工作区的形态被
-第二轮复审记为 F1/G2 两条，D-05/D-06 与下段的锚更正即其处置；S2.1.3 自身另经两份独立验证
-（A–G 分组编号 + 1a–6 表格编号），四项成立已修、三项复现不成立，逐条记账在
-`EVD-V2-02/README.md` §4.4，本卡新增 D-07 申报随之而来的验证层增量；
+第二轮复审记为 F1/G2 两条，D-05/D-06 与下段的锚更正即其处置；S2.1.3 自身另经三份独立验证
+（前两份用 A–G 分组编号与 1a–6 表格编号，合并后四项成立已修、三项复现不成立，逐条记账在
+`EVD-V2-02/README.md` §4.4，本卡 D-07 申报随之而来的验证层增量）；第三份即第五轮复审，它对处置批 `b45777a`
+报来三条「空过」（BD-7 认别名后不认遮蔽、重复同名定义后者静默盖掉前者、手搓 `split("?")` 解析器绕开全部
+正向判据），本机三条全部复现成立，闭合为 BD-12 形状白名单 + BD-13 唯一定义 + 差分语料，记账在 §4.6，
+本卡新增 D-08；
 S2.1.4/S2.1.5/S2.2/S2.3 未做（`asset.py` 零改动，复审 G 段独立确认）。
 
 交付：`apps/api/app/services/article_identity.py`、`apps/api/tests/test_article_identity.py`（14 条用例）、
@@ -265,9 +268,12 @@ S2.1.4/S2.1.5/S2.2/S2.3 未做（`asset.py` 零改动，复审 G 段独立确认
 - 改前红重放：见 EVD-V2-02 §3 两条命令（红 `Interrupted: 1 error during collection` / 绿 `14 passed`）
 - 纯 stdlib 证明：`prove_article_identity.py` → `合计 PASS=12 FAIL=0`、`PI-11 27/27=100.0%`
 - 反证：`--self-test` → `12 个实现变异体各自让指定用例变红 + 17 个判据样本对敏感 + 4 个等价重构不假红`
-- S2.1.3 委托：`prove_biz_delegation.py` 改前红 `PASS=2 FAIL=9`（rc=1）→ 改后绿 `PASS=11 FAIL=0`（rc=0），
-  `--self-test` 首行为三档自证（`绿 rc=0 / 目标缺失 rc=2（INCONCLUSIVE） / 有判据红 rc=1 三档分得开`），
-  结论行 `5 个函数体变异 + 6 个判据样本对 + 5 个等价写法不假红`；原始输出 `out_s213.txt` A–G 七段
+- S2.1.3 委托：`prove_biz_delegation.py` 改前红 `PASS=3 FAIL=10`（rc=1）→ 改后绿 `PASS=13 FAIL=0`（rc=0）
+  （判据由 11 条增至 13 条：新增 BD-12 形状白名单、BD-13 唯一定义），
+  `--self-test` 前两行为三档自证（`绿 rc=0 / 目标缺失 rc=2（INCONCLUSIVE） / 有判据红 rc=1 三档分得开`，
+  第二行用临时副本起**真实子进程**读回退出码，不再只看 `run()` 返回值），
+  结论行 `10 个函数体变异 + 10 个判据样本对 + 7 个等价写法不假红`；原始输出 `out_s213.txt` A–H 八段，
+  其中 H 段是第五轮三条空过的闭合实测（H-1/H-2 rc=1、H-3 追加式 rc=1、H-4 前置式**只**红 BD-13、H-5 定义计数）
 
 偏离与补充登记（D-01 起，均需人工追认；不同意可单独 revert 文档，代码结论不受影响）：
 
@@ -280,6 +286,7 @@ S2.1.4/S2.1.5/S2.2/S2.3 未做（`asset.py` 零改动，复审 G 段独立确认
 | D-05 | 本卡文件自身被修改（勾选 + 本节），不在「允许修改」清单内；证据目录累计新增四文件（`block_article_identity_plugin.py`、`prove_biz_delegation.py`、`out_s213.txt`，另第一轮已提交的 `README.md` 改动）——落在卡面「证据路径」内，非越路径。本行原写「两文件」，第二轮复审 F 段指出与提交实数不符，已更正 | 越路径申报 + 计数更正 |
 | D-06 | S2.1.3 的委托把 `+`→空格、非 str 抛错两条修复**一并带进 kb 侧**（委托即继承解析口径）；同时按第二轮复审纠正两处陈旧描述：`article_identity.py` 模块 docstring 与 `test_article_identity.py` 头注释原把「只读 `biz`」写成 kb 的**现在时**，实为改前状态；行号锚 `kb.py:587-593` → `587-591` | 文案与锚随实现同步，非行为变更 |
 | D-07 | S2.1.3 验证处置批（不改 `kb.py`，`git diff c10b229 -- apps/api/app/services/kb.py` 为空）：① `prove_biz_delegation.py` 的 BD-7 改认别名（`import … as pw`、`p = parse_wechat_url`），样本对 5→6、等价写法 3→5；② `_parses()` 闸门补全到反证②通道；③ 证明脚本退出码改三档 `0/1/2`（`2`=目标函数不存在，INCONCLUSIVE），并由 `--self-test` 首道闸门实测三档互异；④ `test_kb_longlink_ingest.py` 的恒等式用例每条参数化**另带字面期望**（五个值取自磁盘 kb.py 真实执行）；⑤ 自查（`g24_static_check.py`）发现并修掉该新文件的 I001 import 段序与证明脚本的 F401 死导入。理由与复现逐条见 `EVD-V2-02/README.md` §4.4/§4.5、`out_s213.txt` C/F/G 段 | 验证层增量 + 用例判定力增量，非行为变更 |
+| D-08 | S2.1.3 第五轮处置批（仍不改 `kb.py`，`git diff c10b229 -- apps/api/app/services/kb.py` 依旧为空）：堵三条**空过**——① BD-12 函数体**形状白名单**（只容 导入/赋值/返回 四类语句、只容 `parse_wechat_url` 与其别名为唯一可调用根、属性只容 `.biz`、实参必须是入参；嵌套 `def`/`class`/条件/循环/推导式/comprehension/lambda/异常 等一律越界），手搓 `split("?")` + `"bi"+"z"` 的解析器从此过不了；② `_shadowed()` 剔除被本地重新绑定的别名（`def pw` 遮蔽 `import … as pw`、`parse_wechat_url = _ext` 重绑两种形态），BD-7 不再把「名字出现过」当成「调用走的是委托」；③ BD-13 顶层同名定义**必须唯一**，且 `_top_defs()`/`get_fn_node` 按 Python 模块作用域取**末位**（改前取首位，等于证明了一段死代码）。另：BD-3 恒等式样本由 6 条字面扩为 26 条（6 字面 + 20 条**差分语料**，期望取自营运的解析层，与 `test_kb_longlink_ingest.py` 的字面锚互补——字面锚抓两侧共同退化）、`--kb=<路径>` 让三档退出码在**真实子进程**上自证、反证通道加 `_biz()` 自守（变异体导入缺失时红判据而非炸 harness）。判据 11→13、变异 5→10、样本对 6→10、等价写法 5→7 | 验证层增量，非行为变更 |
 
 交接头目：J-1 卡面覆盖率门禁命令、J-2 `ruff check app tests` 终判（本机无 ruff，I001 已按仓库真实段序修正但属推断）、
 J-3 三条未实测口径需真实抓取样本、J-4 连库全量回归（S2.3）、

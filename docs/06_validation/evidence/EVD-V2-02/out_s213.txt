@@ -1,46 +1,49 @@
 # STEP-02 S2.1.3 执行留档（kb._biz_from_url 委托解析层）
-# 时间 2026-10-12T22:25:53+08:00｜HEAD=c10b229+工作区未提交改动（第二轮复审处置批）｜Python 3.11.9｜win32｜全链 PYTHONIOENCODING=utf-8
+# 时间 2026-10-13T08:08:40+08:00｜HEAD=b45777a+工作区未提交改动（第五轮复审处置批：BD-12 形状白名单 + BD-13 唯一定义 + 差分语料）｜Python 3.11.9｜win32｜全链 PYTHONIOENCODING=utf-8
 # 本机依赖实测：structlog / sqlalchemy 皆无（kb.py:22-25 模块级导入）⇒ D 段只能证明「收集期即失败」，用例本身交 CI（J-5）
-# A/B/C/F/G 用的是**同一版** prove_biz_delegation.py（BD-7 认别名 + 三档退出码 + 三通道 _parses 闸门之后）
+# A/B/C/F/G/H 用的是**同一版** prove_biz_delegation.py（BD-7 认别名且不认被遮蔽的别名 + BD-12 形状白名单 + BD-13 唯一定义 + 三档退出码含子进程实证）
 # 每段 `$` 行就是**逐字可重跑**的单行命令（本文档不再对命令做折行排版）
 
 ########## A 改前红重放（不动工作区 kb.py：把 NEW_BODY 换回 OLD_BODY 写成临时副本再 exec）
 $ python -c "import sys; sys.path.insert(0,'docs/06_validation/evidence/EVD-V2-02'); import prove_biz_delegation as P; src=P.KB.read_text(encoding='utf-8'); assert P.NEW_BODY in src; tmp=P.KB.with_name('_kb_prefix_replay.py'); tmp.write_text(src.replace(P.NEW_BODY,P.OLD_BODY),encoding='utf-8'); P.KB=tmp; rc=P.main(); tmp.unlink(); print('replay 临时文件已删除：', not tmp.exists()); sys.exit(rc)"
-目标：apps/api/app/services/_kb_prefix_replay.py 的 _biz_from_url（按 AST 取出后真实 exec）
+目标：apps/api/app/services/_kb_prefix_replay.py 的 _biz_from_url（按 AST 取顶层最后一个同名定义后真实 exec）
 
 FAIL BD-1 长链解出号主 biz（改前红：旧实现返回空串） :: "_biz_from_url(LONG_A)=''"
 FAIL BD-2 同 biz 不同 mid 的两篇都能解出同一号主 :: "=''"
-FAIL BD-3 与 parse_wechat_url(...).biz 恒等（口径单点，6 个样本） :: [('https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ=', '', 'MjM5MjgwNTQ1MQ=='), ('https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ=', '', 'MjM5MjgwNTQ1MQ=='), ('https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ=', '', 'MjM5MjgwNTQ1MQ==')]
+FAIL BD-3 与 parse_wechat_url(...).biz 恒等（口径单点，26 个样本含 20 条差分） :: [('https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ=', '', 'MjM5MjgwNTQ1MQ=='), ('https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ=', '', 'MjM5MjgwNTQ1MQ=='), ('https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ=', '', 'MjM5MjgwNTQ1MQ=='), ('https://mp.weixin.qq.com/s?biz=OTHER&__biz=MjM5M', 'OTHER', 'MjM5MjgwNTQ1MQ=='), ('https://mp.weixin.qq.com/s?__biz=MjM5+MjgwNTQ1MQ', '', 'MjM5+MjgwNTQ1MQ=='), ('https://mp.weixin.qq.com/s?__biz=MjM5%2BMjgwNTQ1', '', 'MjM5+MjgwNTQ1MQ==')]
 PASS BD-4 短链伪 biz= 向后兼容（旧实现能解，委托后不许退化）
 FAIL BD-5 `%3D%3D` 与 `==` 同值（前提：样本确有差异，否则失去判定力） :: "enc→'' raw→''"
 FAIL BD-6 脏类型归零且不抛（None/bytes/int；旧实现只对 int 抛 AttributeError，对 None 与 bytes 静默返回空串——实测，非推断） :: '抛=[(\'42\', "AttributeError: \'int\' object has no attribute \'decode\'")] 非空=[]'
-FAIL BD-7 函数体内确有对 parse_wechat_url 的调用 :: '调用点 0 处、别名 无'
+FAIL BD-7 函数体内确有对 parse_wechat_url 的调用 :: '调用点 0 处、可用别名 无、裸名可信=True'
 FAIL BD-8 委托源必须是 app.services.article_identity :: ['urllib.parse', 'urllib.parse.parse_qs', 'urllib.parse.urlparse']
 FAIL BD-9 kb 侧无第二份 URL 解析（parse_qs/urlparse/urllib 导入归零） :: ['parse_qs', 'urlparse', 'import:urllib.parse']
 PASS BD-10 无 except 兜底（不许把失败伪造成身份）
 FAIL BD-11 无残留参数字面量（不许半委托） :: ['biz']
+FAIL BD-12 函数体形状在白名单内（不许长出自己的逻辑） :: ["字符串字面量 ''@592", "字符串字面量 ''@593", "字符串字面量 'biz'@592", '嵌套/控制流 IfExp@593', '绑定右值不合法 Call@591', '绑定右值不合法 Call@592', '越界导入 urllib.parse', '越界属性 .get@592', '越界属性 .query@591', '非委托调用 get@592', '非委托调用 parse_qs@591', '非委托调用 urlparse@591']
+PASS BD-13 顶层只有一个 _biz_from_url 定义（后者会遮蔽前者）
 
-合计 PASS=2 FAIL=9
+合计 PASS=3 FAIL=10
   FAIL BD-1 长链解出号主 biz（改前红：旧实现返回空串）
   FAIL BD-2 同 biz 不同 mid 的两篇都能解出同一号主
-  FAIL BD-3 与 parse_wechat_url(...).biz 恒等（口径单点，6 个样本）
+  FAIL BD-3 与 parse_wechat_url(...).biz 恒等（口径单点，26 个样本含 20 条差分）
   FAIL BD-5 `%3D%3D` 与 `==` 同值（前提：样本确有差异，否则失去判定力）
   FAIL BD-6 脏类型归零且不抛（None/bytes/int；旧实现只对 int 抛 AttributeError，对 None 与 bytes 静默返回空串——实测，非推断）
   FAIL BD-7 函数体内确有对 parse_wechat_url 的调用
   FAIL BD-8 委托源必须是 app.services.article_identity
   FAIL BD-9 kb 侧无第二份 URL 解析（parse_qs/urlparse/urllib 导入归零）
   FAIL BD-11 无残留参数字面量（不许半委托）
+  FAIL BD-12 函数体形状在白名单内（不许长出自己的逻辑）
 边界：本脚本只证明委托接线与解析口径；`test_kb_longlink_ingest.py` 的 pytest 实跑需 structlog+sqlalchemy（kb.py:22-25 模块级导入，本机皆无，实测收集期 ModuleNotFoundError），交 EVD-V2-02 §5 J-1/J-5。
 replay 临时文件已删除： True
 rc=1 （预期 1 = 有判据红；与「目标缺失」那档 INCONCLUSIVE=2 分得开，见 C 段首行）
 
 ########## B 改后绿（工作区真实 kb.py）
 $ python docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py
-目标：apps/api/app/services/kb.py 的 _biz_from_url（按 AST 取出后真实 exec）
+目标：apps/api/app/services/kb.py 的 _biz_from_url（按 AST 取顶层最后一个同名定义后真实 exec）
 
 PASS BD-1 长链解出号主 biz（改前红：旧实现返回空串）
 PASS BD-2 同 biz 不同 mid 的两篇都能解出同一号主
-PASS BD-3 与 parse_wechat_url(...).biz 恒等（口径单点，6 个样本）
+PASS BD-3 与 parse_wechat_url(...).biz 恒等（口径单点，26 个样本含 20 条差分）
 PASS BD-4 短链伪 biz= 向后兼容（旧实现能解，委托后不许退化）
 PASS BD-5 `%3D%3D` 与 `==` 同值（前提：样本确有差异，否则失去判定力）
 PASS BD-6 脏类型归零且不抛（None/bytes/int；旧实现只对 int 抛 AttributeError，对 None 与 bytes 静默返回空串——实测，非推断）
@@ -49,33 +52,47 @@ PASS BD-8 委托源必须是 app.services.article_identity
 PASS BD-9 kb 侧无第二份 URL 解析（parse_qs/urlparse/urllib 导入归零）
 PASS BD-10 无 except 兜底（不许把失败伪造成身份）
 PASS BD-11 无残留参数字面量（不许半委托）
+PASS BD-12 函数体形状在白名单内（不许长出自己的逻辑）
+PASS BD-13 顶层只有一个 _biz_from_url 定义（后者会遮蔽前者）
 
-合计 PASS=11 FAIL=0
+合计 PASS=13 FAIL=0
 边界：本脚本只证明委托接线与解析口径；`test_kb_longlink_ingest.py` 的 pytest 实跑需 structlog+sqlalchemy（kb.py:22-25 模块级导入，本机皆无，实测收集期 ModuleNotFoundError），交 EVD-V2-02 §5 J-1/J-5。
 rc=0 （预期 0）
 
 ########## C 三条反证通道 + 三档档位自证（_strip_target 只作用于内存副本，工作树未被改动）
 $ python docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py --self-test
 OK   档位自证：绿 rc=0 / 目标缺失 rc=2（INCONCLUSIVE） / 有判据红 rc=1 三档分得开
+OK   退出码自证：子进程真实退出码三档分得开（绿 0 / 目标缺失 2 / 有判据红 1）
 OK   基准：未变形的 kb.py 判据全绿
-OK   退回旧实现：只读 biz（D-01b 本体复活） → 致红 ['BD-1', 'BD-11', 'BD-2', 'BD-3', 'BD-5', 'BD-6', 'BD-7', 'BD-8', 'BD-9']
-OK   取错字段：返回 mid → 致红 ['BD-1', 'BD-2', 'BD-3', 'BD-4', 'BD-5']
-OK   篡改返回值：把 base64 尾巴削掉 → 致红 ['BD-1', 'BD-2', 'BD-3', 'BD-4', 'BD-5']
-OK   半委托：委托但空串时回退到本地再解析一次 → 致红 ['BD-11', 'BD-6', 'BD-9']
-OK   except 兜底伪造身份（失败静默变假数据） → 致红 ['BD-10']
+OK   退回旧实现：只读 biz（D-01b 本体复活） → 致红 ['BD-1', 'BD-11', 'BD-12', 'BD-2', 'BD-3', 'BD-5', 'BD-6', 'BD-7', 'BD-8', 'BD-9']
+OK   取错字段：返回 mid → 致红 ['BD-1', 'BD-12', 'BD-2', 'BD-3', 'BD-4', 'BD-5']
+OK   篡改返回值：把 base64 尾巴削掉 → 致红 ['BD-1', 'BD-12', 'BD-2', 'BD-3', 'BD-4', 'BD-5']
+OK   半委托：委托但空串时回退到本地再解析一次 → 致红 ['BD-11', 'BD-12', 'BD-6', 'BD-9']
+OK   except 兜底伪造身份（失败静默变假数据） → 致红 ['BD-10', 'BD-12']
+OK   别名被本地 def 遮蔽（导入是真的，调的是同名假函数） → 致红 ['BD-12', 'BD-3', 'BD-7']
+OK   委托名被重绑到手搓解析器（正面判据仍看得见那次导入与那次调用） → 致红 ['BD-12', 'BD-3', 'BD-7']
+OK   顶层同名重复定义·前置式（真委托仍在最后，只有 BD-13 抓得到） → 致红 ['BD-13']
+OK   顶层同名重复定义·追加式（报告 id 10 原样攻击：live 是假函数） → 致红 ['BD-1', 'BD-12', 'BD-13', 'BD-2', 'BD-3', 'BD-4', 'BD-5', 'BD-7', 'BD-8']
+OK   调用期抛异常（导入不存在的模块）：判据必须记下红而不是把通道崩掉 → 致红 ['BD-1', 'BD-12', 'BD-2', 'BD-3', 'BD-4', 'BD-5', 'BD-6']
 OK   BD-7 调用被删（只剩导入）：好样本判真 / 坏样本判假
 OK   BD-7 别名链造假（改名的导入没被调用，调的是本地假函数）：好样本判真 / 坏样本判假
 OK   BD-8 委托到别的模块：好样本判真 / 坏样本判假
 OK   BD-9 第二份解析回潮：好样本判真 / 坏样本判假
 OK   BD-10 except 兜底回潮：好样本判真 / 坏样本判假
 OK   BD-11 参数字面量回潮：好样本判真 / 坏样本判假
+OK   BD-7 别名被本地 def 遮蔽（看着像委托，调的是假函数）：好样本判真 / 坏样本判假
+OK   BD-12 函数体长出自己的逻辑（手搓解析器，无 parse_qs 字样）：好样本判真 / 坏样本判假
+OK   BD-13 顶层出现第二个同名定义（后者遮蔽前者）：好样本判真 / 坏样本判假
+OK   BD-7 正确导入未被使用、同名伪源导入把它遮蔽：好样本判真 / 坏样本判假
 OK   等价重构 关键字实参形式 → 判据全绿
 OK   等价重构 模块属性调用形式 → 判据全绿
 OK   等价重构 先取局部变量再返回 → 判据全绿
 OK   等价重构 改名导入后调用（import … as pw） → 判据全绿
 OK   等价重构 转绑局部变量后调用 → 判据全绿
+OK   等价重构 先把 .biz 取到局部变量再返回 → 判据全绿
+OK   等价重构 导入整模块并改名后调用 → 判据全绿
 
-SELF-TEST PASS：5 个函数体变异各自让指定判据变红 + 6 个判据样本对敏感 + 5 个等价写法不假红
+SELF-TEST PASS：10 个函数体变异各自让指定判据变红 + 10 个判据样本对敏感 + 7 个等价写法不假红
 rc=0 （预期 0）
 
 ########## D 真实 pytest 收集（证明本机只能走 A/B/C/F）
@@ -104,7 +121,7 @@ C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\site-packages
 =========================== short test summary info ===========================
 ERROR tests/test_kb_longlink_ingest.py
 !!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
-1 warning, 1 error in 0.80s
+1 warning, 1 error in 0.27s
 rc=2 （预期 2 = 收集期失败，不是用例失败；rc 取 pytest 退出码本身，不是管道尾状态。决定性行是 `app\services\kb.py:22: in <module> import structlog`）
 
 ########## E 卡面 S2.1.3 验收命令按字面跑（本机无 uv，用同解释器代跑）
@@ -117,7 +134,7 @@ C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\site-packages
     self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-5 passed, 9 deselected, 1 warning in 0.17s
+5 passed, 9 deselected, 1 warning in 0.05s
 rc=0 （预期 0）
 # 注意：该命令选中的是 S2.1.2 的解析层用例，不覆盖本步交付物（kb 委托）——卡面命令指向的文件与 S2.1.3 的交付不一致，已登记为任务书缺陷。
 
@@ -157,3 +174,40 @@ $ python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py apps/api/test
 
 合计违规 0 条。注：CI 的 ruff/mypy 为终判，本表只降提交风险。
 rc=0 （预期 0 = 无违规。本机无 ruff，CI 的 `ruff check app tests` 才是终判，见 §5 J-2）
+
+########## H 第五轮复审三条空过的闭合实测（攻击体直接 exec 并下裁决；工作树未动）
+$ python - <<'PY'
+import sys
+sys.path.insert(0, 'docs/06_validation/evidence/EVD-V2-02')
+import prove_biz_delegation as h
+src = h.KB.read_text(encoding='utf-8')
+h._quiet = True
+print("H-0 基准（未变形）rc =", h.run(src), "（判据", len(h.passed), "条全绿）")
+ANCHOR = "def _biz_from_url(url: str) -> str:"
+cases = {
+    "H-1 别名被本地 def 遮蔽（报告 id 3a2）": src.replace(
+        h.NEW_BODY, h._ALIAS_IMPORT + h._HANDROLLED.format(fname="pw") + "\n    return pw(url).biz\n"),
+    "H-2 委托名被重绑到手搓解析器（报告 id 3c）": src.replace(
+        h.NEW_BODY,
+        h._PLAIN_IMPORT + h._HANDROLLED.format(fname="_ext")
+        + "\n    parse_wechat_url = _ext\n\n    return parse_wechat_url(url).biz\n"),
+    "H-3 追加同名定义（报告 id 10 原样：live 是假函数）": src
+    + "\ndef _biz_from_url(url: str) -> str:\n    return ''\n",
+    "H-4 前置同名定义（真委托仍在末位，只剩 BD-13 抓得到）": src.replace(
+        ANCHOR, ANCHOR + "\n    return ''\n\n\n" + ANCHOR, 1),
+}
+for name, m in cases.items():
+    print(name, "| 解析 =", h._parses(m), "| 红判据 =", sorted(h.evaluate(m)), "| rc =", h.run(m))
+dup = src + "\ndef _biz_from_url(url: str) -> str:\n    return ''\n"
+defs = [(d.lineno, h.ast.unparse(d.body[-1])) for d in h._top_defs(dup)]
+print("H-5 顶层同名定义共", len(defs), "处：", defs,
+      "⇒ get_fn_node 取末位（Python 的模块作用域绑定），改前取的是首位")
+PY
+H-0 基准（未变形）rc = 0 （判据 13 条全绿）
+H-1 别名被本地 def 遮蔽（报告 id 3a2） | 解析 = True | 红判据 = ['BD-12', 'BD-3', 'BD-7'] | rc = 1
+H-2 委托名被重绑到手搓解析器（报告 id 3c） | 解析 = True | 红判据 = ['BD-12', 'BD-3', 'BD-7'] | rc = 1
+H-3 追加同名定义（报告 id 10 原样：live 是假函数） | 解析 = True | 红判据 = ['BD-1', 'BD-12', 'BD-13', 'BD-2', 'BD-3', 'BD-4', 'BD-5', 'BD-7', 'BD-8'] | rc = 1
+H-4 前置同名定义（真委托仍在末位，只剩 BD-13 抓得到） | 解析 = True | 红判据 = ['BD-13'] | rc = 1
+H-5 顶层同名定义共 2 处： [(587, 'return parse_wechat_url(url).biz'), (598, "return ''")] ⇒ get_fn_node 取末位（Python 的模块作用域绑定），改前取的是首位
+rc=0 （预期 0）
+# H-1/H-2/H-3 是**改前在本机实测过**的三条空过（报告 id 3a2 / 3c / 10，当时均 rc=0、判据全绿）；本轮之后分别红 BD-7+BD-12+BD-3、BD-7+BD-12+BD-3、BD-13 加行为面。H-4 是本轮补的第二向（重复定义放前面）：live 仍是真委托，正面判据全绿，只红 BD-13 ⇒ BD-13 是这一类的唯一防线，不是冗余。

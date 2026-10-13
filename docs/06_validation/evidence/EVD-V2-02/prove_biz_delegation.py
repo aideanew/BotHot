@@ -7,18 +7,24 @@
 **从磁盘上的 kb.py 里按 AST 取出 `_biz_from_url` 这一个函数节点，单独 compile + exec**。
 函数体里的依赖全是局部导入（`from app.services.article_identity import …`），
 所以不需要执行整个模块，也就绕开了 sqlalchemy。被执行的是文件里的当前代码，不是抄本：
-改了函数体，这里的结论就会变。
+改了函数体，这里的结论就会变。**取哪个函数节点按 Python 的模块作用域语义取最后一个顶层定义**——
+同名重复定义时后者才是真实绑定，取第一个会证明到一段已经死掉的代码（第五轮复审 id 10）。
 
-判据分三面：
-- 行为面 BD-1…BD-6：长链出号主、与解析侧恒等、伪 biz 向后兼容、百分号等价、脏类型不抛；
-- 结构面 BD-7…BD-9：函数体里必须真的出现对 `parse_wechat_url` 的调用、导入源必须是
-  `app.services.article_identity`、且不得再有第二份解析（`parse_qs`/`urlparse` 归零）；
+判据分四面：
+- 行为面 BD-1…BD-6：长链出号主、与解析侧在**差分语料**上恒等、伪 biz 向后兼容、百分号等价、脏类型不抛；
+- 结构面 BD-7…BD-9：函数体里必须真的出现对 `parse_wechat_url` 的调用（且该名字**没被本地重新绑定**）、
+  导入源必须是 `app.services.article_identity`、且不得再有第二份解析（`parse_qs`/`urlparse` 归零）；
 - 反面 BD-10：委托点不许用 `except` 兜底伪造返回值（把异常吞成非空串 = 数据黑洞+静默）；
-- 反面 BD-11：函数体里不许再出现 `biz`/`__biz`/`mid`/`sn` 字面量（防「委托了但本地又解一遍」的半委托）。
+- 反面 BD-11：函数体里不许再出现 `biz`/`__biz`/`mid`/`sn` 字面量（防「委托了但本地又解一遍」的半委托）；
+- 反面 BD-12/BD-13（第五轮复审 id 3/id 10 的处置）：函数体**形状**白名单（只允许 文档串 / 委托导入 /
+  委托绑定 / 返回委托结果的 `.biz`，此外任何嵌套定义、控制流、越界调用、越界属性一律红）+
+  顶层同名定义必须**只有一个**。
 
 三档裁决（rc 可分流，别让「没测到」冒充「测出红」）：
 `0` 全绿 / `1` 有判据红 / `2` INCONCLUSIVE——`_biz_from_url` 整个不在文件里时判据无从判定，
 这种状态若也打印 FAIL 清单，读者会把它当成普通的红基线（A–G 报告 B3/B4 的教训）。
+`--self-test` 里这条映射测**两层**：内存里 `run()` 的返回值，以及真实子进程的退出码（后者用
+临时目录副本 + `--kb=` 驱动，工作树不动）——第五轮复审 id 5 指出只测前者等于没测到 `sys.exit`。
 
 `--self-test` 三条反证通道（与 prove_article_identity.py 同一方法论）：
 ① `MUTANTS` 把函数体改成「看起来还在但已失效」的形态（含**退回旧实现**），逐条要求指定判据红；
@@ -32,7 +38,11 @@
 from __future__ import annotations
 
 import ast
+import os
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[4]
@@ -65,16 +75,24 @@ def say(text: str) -> None:
         print(text)
 
 
+def _top_defs(src: str) -> list[ast.FunctionDef]:
+    """只取**模块顶层**的同名定义：嵌在别的函数里的同名 def 不是 `kb._biz_from_url`，
+    `from app.services.kb import _biz_from_url` 拿到的是顶层那个，所以判定也只看顶层。"""
+    return [n for n in ast.parse(src).body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and n.name == "_biz_from_url"]
+
+
 def has_target(src: str) -> bool:
-    """目标函数在不在文件里——纯 AST 判断，不需要 kb.py 能 import。"""
-    return any(isinstance(n, ast.FunctionDef) and n.name == "_biz_from_url" for n in ast.walk(ast.parse(src)))
+    """目标函数在不在文件的顶层——纯 AST 判断，不需要 kb.py 能 import。"""
+    return bool(_top_defs(src))
 
 
 def get_fn_node(src: str) -> ast.FunctionDef:
-    for node in ast.walk(ast.parse(src)):
-        if isinstance(node, ast.FunctionDef) and node.name == "_biz_from_url":
-            return node
-    raise AssertionError("kb.py 里没有 _biz_from_url——本步的委托目标已不存在，必须显式复核")
+    defs = _top_defs(src)
+    if not defs:
+        raise AssertionError("kb.py 顶层没有 _biz_from_url——本步的委托目标已不存在（或被嵌进别的函数），"
+                             "必须显式复核")
+    return defs[-1]
 
 
 def load_biz(src: str):  # noqa: ANN201 - 返回被 exec 出来的函数对象
@@ -98,7 +116,9 @@ def _delegate_aliases(fn: ast.AST) -> set[str]:
     1. `from app.services.article_identity import parse_wechat_url as A`；
     2. `A = parse_wechat_url` / `A = <某模块>.parse_wechat_url`（右值必须落到委托目标上）；
     3. 传递绑定 `B = A`（迭代到不动点）。
-    导入源是否正确由 BD-8 单独判，这里不重复设口径。
+    导入源是否正确由 BD-8 单独判，这里不重复设口径；
+    名字**是否又被别的东西绑过一次**由 `delegate_names()`/`_shadowed()` 负责剔除，
+    两者合起来才是「调用点真的落到委托目标上」。
     """
     names: set[str] = set()
     for n in ast.walk(fn):
@@ -125,24 +145,65 @@ def _delegate_aliases(fn: ast.AST) -> set[str]:
     return names
 
 
+def _refs_delegate(val: ast.AST, watch: set[str]) -> bool:
+    """右值是否真的落到委托目标上：裸名、已知别名、或 `<模块>.parse_wechat_url`。"""
+    if isinstance(val, ast.Name):
+        return val.id == "parse_wechat_url" or val.id in watch
+    if isinstance(val, ast.Attribute):
+        return val.attr == "parse_wechat_url" or val.attr in watch
+    return False
+
+
+def _shadowed(fn: ast.AST, watch: set[str]) -> set[str]:
+    """别名在函数体内被**别的东西**重新绑定 ⇒ 调用点拿到的不是委托目标。
+
+    第五轮复审 id 3 实测：只收集「谁可能被绑定到委托目标」而不检查「谁又被绑了一次」，
+    `import parse_wechat_url as pw` + 本地 `def pw(u)` 的手搓解析器可以 11 条判据全绿。"""
+    bad: set[str] = set()
+    for n in ast.walk(fn):
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bad |= {n.name} & watch
+        elif isinstance(n, (ast.Import, ast.ImportFrom)):
+            for a in n.names:
+                dst = a.asname or a.name.split(".")[0]
+                legit = isinstance(n, ast.ImportFrom) and n.module == DELEGATE_SRC and a.name == "parse_wechat_url"
+                if dst in watch and not legit:
+                    bad.add(dst)
+        elif isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
+            dst = n.targets[0].id
+            if dst in watch and not _refs_delegate(n.value, watch):
+                bad.add(dst)
+    return bad
+
+
+def delegate_names(fn: ast.AST) -> tuple[set[str], bool]:
+    """返回（可用的委托别名集合, 裸名 `parse_wechat_url` 是否可信）。"""
+    names = _delegate_aliases(fn)
+    watch = names | {"parse_wechat_url"}
+    bad = _shadowed(fn, watch)
+    return names - bad, "parse_wechat_url" not in bad
+
+
 def j_calls_delegate(src: str) -> tuple[bool, object]:
-    """函数体内必须出现对委托目标的调用：裸名、`模块.函数`、改名导入、转绑局部变量都算。
+    """函数体内必须出现对委托目标的调用：裸名、`模块.函数`、改名导入、转绑局部变量都算，
+    但**被本地定义或本地赋值遮蔽过的名字不算**。
 
     收紧到「只认裸名」会把等价重构判成缺陷（1a–6 报告 3e 实测：`import … as pw` 与
     `p = parse_wechat_url` 两种写法行为完全正确却红 BD-7）；放开的同时由 PROBES 里
-    「别名链造假」的坏样本保证判据仍不可空过——调的名字必须是绑定自委托目标的。"""
+    「别名链造假 / 别名被本地 def 遮蔽」两条坏样本保证判据仍不可空过。"""
     fn = get_fn_node(src)
-    names = _delegate_aliases(fn)
+    names, bare = delegate_names(fn)
     calls = [
         n
         for n in ast.walk(fn)
         if isinstance(n, ast.Call)
         and (
-            (isinstance(n.func, ast.Name) and (n.func.id == "parse_wechat_url" or n.func.id in names))
-            or (isinstance(n.func, ast.Attribute) and (n.func.attr == "parse_wechat_url" or n.func.attr in names))
+            (isinstance(n.func, ast.Name) and ((bare and n.func.id == "parse_wechat_url") or n.func.id in names))
+            or (isinstance(n.func, ast.Attribute) and ((bare and n.func.attr == "parse_wechat_url")
+                                                       or n.func.attr in names))
         )
     ]
-    return bool(calls), f"调用点 {len(calls)} 处、别名 {sorted(names) or '无'}"
+    return bool(calls), f"调用点 {len(calls)} 处、可用别名 {sorted(names) or '无'}、裸名可信={bare}"
 
 
 def j_import_source(src: str) -> tuple[bool, object]:
@@ -205,7 +266,152 @@ def j_reads_both(src: str) -> tuple[bool, object]:
     return not literals, literals
 
 
+# ── 形状与唯一定义判据（第五轮复审 id 3 / id 10 的处置）──────────────────────
+
+_ALLOWED_IMPORT_PREFIXES = ("app.services", "app\\services")
+_ALLOWED_IMPORTS = {DELEGATE_SRC, "app.services"}
+_ALLOWED_ATTRS = {"biz", "parse_wechat_url"}
+_STMT_KINDS = (ast.ImportFrom, ast.Import, ast.Assign, ast.AnnAssign, ast.Return)
+_FORBIDDEN_NODES = (
+    ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.If, ast.For, ast.AsyncFor,
+    ast.While, ast.Try, ast.With, ast.AsyncWith, ast.Match, ast.ListComp, ast.SetComp,
+    ast.DictComp, ast.GeneratorExp, ast.Lambda, ast.Await, ast.Yield, ast.NamedExpr,
+    ast.AugAssign, ast.Global, ast.Nonlocal, ast.Assert, ast.Raise, ast.Delete,
+    ast.IfExp, ast.BoolOp,
+)
+
+
+def _docstring(node: ast.FunctionDef) -> ast.Expr | None:
+    first = node.body[0] if node.body else None
+    if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
+        return first
+    return None
+
+
+def _callee(call: ast.Call) -> str:
+    if isinstance(call.func, ast.Name):
+        return call.func.id
+    if isinstance(call.func, ast.Attribute):
+        return call.func.attr
+    return f"<{type(call.func).__name__}>"
+
+
+def _arg_is_param(call: ast.Call, fn: ast.FunctionDef) -> bool:
+    """委托调用的实参必须就是本函数的入参本身，不许加工（加工 = kb 侧又长了一份口径）。"""
+    params = {a.arg for a in fn.args.args}
+    if len(call.args) == 1 and not call.keywords:
+        return isinstance(call.args[0], ast.Name) and call.args[0].id in params
+    if not call.args and len(call.keywords) == 1:
+        kw = call.keywords[0]
+        return kw.arg in params and isinstance(kw.value, ast.Name) and kw.value.id in params
+    return False
+
+
+def _bind_value_ok(val: ast.AST, names: set[str], bare: bool) -> bool:
+    """绑定语句的右值只许是三种：委托本体/别名本身、对委托的调用、调用结果上的 `.biz`。"""
+    roots = names | ({"parse_wechat_url"} if bare else set())
+    return (
+        _refs_delegate(val, roots)
+        or (isinstance(val, ast.Call) and _callee(val) in roots)
+        or (isinstance(val, ast.Attribute) and val.attr == "biz" and isinstance(val.value, (ast.Call, ast.Name)))
+    )
+
+
+def j_body_shape(src: str) -> tuple[bool, object]:
+    """BD-12：函数体形状白名单——只允许「文档串 / 委托导入 / 委托绑定 / 返回委托结果的 `.biz`」。
+
+    为什么要有这条：BD-7~BD-11 全是**正面**证据（有导入、有调用、没有 `parse_qs` 字样），
+    第五轮复审实测三发全部空过——本地 `def pw` 遮蔽别名、`parse_wechat_url = 手搓解析器`、
+    以及用 `str.split("?")` 自己解析（既不含 `parse_qs`/`urlparse`，又把 `"biz"` 拆成
+    `"bi" + "z"` 绕过字面量清单）。负面证据只能靠形状：白名单之外多一个节点就红。"""
+    fn = get_fn_node(src)
+    names, bare = delegate_names(fn)
+    doc = _docstring(fn)
+    params = {a.arg for a in fn.args.args}
+    bad: list[str] = []
+
+    for st in fn.body:
+        if st is doc or isinstance(st, _STMT_KINDS):
+            continue
+        bad.append(f"语句 {type(st).__name__}@{st.lineno}")
+
+    for n in ast.walk(fn):
+        if n is fn:  # 被检函数自己不是「嵌套定义」
+            continue
+        if n is doc or n is (doc.value if doc else None):
+            continue
+        if isinstance(n, _FORBIDDEN_NODES):
+            bad.append(f"嵌套/控制流 {type(n).__name__}@{getattr(n, 'lineno', '?')}")
+            continue
+        if isinstance(n, ast.Constant) and isinstance(n.value, str):
+            bad.append(f"字符串字面量 {n.value[:12]!r}@{n.lineno}")
+            continue
+        if isinstance(n, (ast.Import, ast.ImportFrom)):
+            mods = [n.module or ""] if isinstance(n, ast.ImportFrom) else [a.name for a in n.names]
+            bad += [f"越界导入 {m}" for m in mods
+                    if m not in _ALLOWED_IMPORTS and not m.startswith(_ALLOWED_IMPORT_PREFIXES)]
+            continue
+        if isinstance(n, ast.Call):
+            ref_ok = (isinstance(n.func, ast.Name) and ((bare and n.func.id == "parse_wechat_url")
+                                                         or n.func.id in names)) or (
+                isinstance(n.func, ast.Attribute) and ((bare and n.func.attr == "parse_wechat_url")
+                                                        or n.func.attr in names)
+            )
+            if not ref_ok:
+                bad.append(f"非委托调用 {_callee(n)}@{n.lineno}")
+            elif not _arg_is_param(n, fn):
+                bad.append(f"委托调用的实参不是入参 {sorted(params)}@{n.lineno}")
+            continue
+        if isinstance(n, ast.Attribute) and n.attr not in _ALLOWED_ATTRS:
+            bad.append(f"越界属性 .{n.attr}@{n.lineno}")
+
+        if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
+            dst = n.targets[0].id
+            if dst in params:
+                bad.append(f"入参 {dst} 被重新赋值@{n.lineno}")
+            if not _bind_value_ok(n.value, names, bare):
+                bad.append(f"绑定右值不合法 {type(n.value).__name__}@{n.lineno}")
+    return not bad, sorted(set(bad))
+
+
+def j_single_definition(src: str) -> tuple[bool, object]:
+    """BD-13：顶层同名定义只能有一个。
+
+    Python 按模块作用域**后定义覆盖前定义**，多出一份 `_biz_from_url` 时，
+    真实被 import 的是最后那份，而按「找到一个就证明」的写法会去证明一段死代码
+    （第五轮复审 id 10 实测：追加 `def _biz_from_url(url): return ''` 后 11 条判据全绿）。"""
+    defs = _top_defs(src)
+    return len(defs) == 1, f"顶层 _biz_from_url 定义 {len(defs)} 处，行号 {[d.lineno for d in defs]}"
+
+
 # ── 行为面 ────────────────────────────────────────────────────────────────
+
+#: 差分语料：夹具之外再补发对抗形态，每条对应解析层的一条已定或待定口径
+#: （`article_identity.py:57-66` 的三条解码口径、`__biz` 优先、空值回落、重复参数取首个、
+#: 键名百分号解码、大小写、片段边界、host 无关、短链带 query）。只用于「两侧口径是否一致」，
+#: 不给解析层本身下对错结论。
+CORPUS: tuple[str, ...] = (
+    "https://mp.weixin.qq.com/s?biz=OTHER&__biz=MjM5MjgwNTQ1MQ==&mid=1",
+    "https://mp.weixin.qq.com/s?__biz=MjM5+MjgwNTQ1MQ==",
+    "https://mp.weixin.qq.com/s?__biz=MjM5%2BMjgwNTQ1MQ==",
+    "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ%3D%3D",
+    "https://mp.weixin.qq.com/s?%5F%5Fbiz=MjM5MjgwNTQ1MQ==",
+    "https://mp.weixin.qq.com/s?__biz=&biz=FALLBACK",
+    "https://mp.weixin.qq.com/s?__biz=AAA&__biz=BBB",
+    "https://mp.weixin.qq.com/s?__BIZ=AAA",
+    "https://mp.weixin.qq.com/s?__biz",
+    "https://mp.weixin.qq.com/s?__biz=AAA&",
+    "https://mp.weixin.qq.com/s?__biz=AAA;mid=1",
+    "https://mp.weixin.qq.com/s?__biz=AAA#x?__biz=BBB",
+    "https://mp.weixin.qq.com/s#__biz=AAA",
+    "https://example.com/x?__biz=AAA",
+    "https://MP.WEIXIN.QQ.COM/s?__biz=AAA",
+    "//mp.weixin.qq.com/s?__biz=AAA",
+    "https://mp.weixin.qq.com/s/AbCdEfGh123?__biz=AAA",
+    "https://mp.weixin.qq.com/s?__biz=AAA%26mid%3D2",
+    "",
+    "?__biz=AAA",
+)
 
 
 def behavior_probes(biz) -> list[tuple[str, bool, object]]:
@@ -221,20 +427,33 @@ def behavior_probes(biz) -> list[tuple[str, bool, object]]:
     )
 
     out = []
-    got_a = biz(LONG_A)
+
+    def _biz(u: object) -> object:
+        """变异体可能在**调用时**炸（比如导了个不存在的模块）。不兜住的话，
+        evaluate() 会带着 traceback 一起崩，反证通道自身就失效了——崩掉不等于判红。"""
+        try:
+            return biz(u)
+        except BaseException as exc:  # noqa: BLE001 - 判据要能把「抛异常」读成「不给空串」
+            return f"<raised {type(exc).__name__}>"
+
+    got_a = _biz(LONG_A)
     out.append(("BD-1 长链解出号主 biz（改前红：旧实现返回空串）", got_a == BIZ_A, f"_biz_from_url(LONG_A)={got_a!r}"))
-    got_b = biz(LONG_B)
+    got_b = _biz(LONG_B)
     out.append(("BD-2 同 biz 不同 mid 的两篇都能解出同一号主", got_b == BIZ_A, f"={got_b!r}"))
-    pairs = [LONG_A, LONG_A_TRACKING, LONG_B, OFFSITE, SHORT_1, SHORT_WITH_FAKE_BIZ_PARAM]
-    diff = [(u[:48], biz(u), parse_wechat_url(u).biz) for u in pairs if biz(u) != parse_wechat_url(u).biz]
-    out.append(("BD-3 与 parse_wechat_url(...).biz 恒等（口径单点，6 个样本）", not diff, diff))
-    short = biz(SHORT_WITH_FAKE_BIZ_PARAM)
+    # 差分语料 = 夹具样本 + 解析层每条解码口径各挑一发对抗形态。期望值不写死：
+    # 一律取 parse_wechat_url(u).biz，故本条判的是「kb 侧与解析侧是否同一个口径」，
+    # 不是「解析侧自己对不对」（后者由 S2.1.2 的 14 条用例负责）。
+    pairs = [LONG_A, LONG_A_TRACKING, LONG_B, OFFSITE, SHORT_1, SHORT_WITH_FAKE_BIZ_PARAM, *CORPUS]
+    diff = [(u[:48], _biz(u), parse_wechat_url(u).biz) for u in pairs if _biz(u) != parse_wechat_url(u).biz]
+    out.append((f"BD-3 与 parse_wechat_url(...).biz 恒等（口径单点，{len(pairs)} 个样本含 {len(CORPUS)} 条差分）",
+                not diff, diff[:6]))
+    short = _biz(SHORT_WITH_FAKE_BIZ_PARAM)
     out.append(("BD-4 短链伪 biz= 向后兼容（旧实现能解，委托后不许退化）", short == BIZ_A, f"={short!r}"))
     from urllib.parse import quote
 
     enc = LONG_A.replace(BIZ_A, quote(BIZ_A, safe=""))
     out.append(("BD-5 `%3D%3D` 与 `==` 同值（前提：样本确有差异，否则失去判定力）",
-                enc != LONG_A and biz(enc) == biz(LONG_A) == BIZ_A, f"enc→{biz(enc)!r} raw→{biz(LONG_A)!r}"))
+                enc != LONG_A and _biz(enc) == _biz(LONG_A) == BIZ_A, f"enc→{_biz(enc)!r} raw→{_biz(LONG_A)!r}"))
     raised = []
     nonempty = []
     for bad in (None, b"https://mp.weixin.qq.com/s?__biz=AAA", 42):
@@ -249,7 +468,7 @@ def behavior_probes(biz) -> list[tuple[str, bool, object]]:
     return out
 
 
-def run(src: str) -> int:
+def run(src: str, label: str = "") -> int:
     """对一份 kb.py 源码下裁决并打印。可重复调用（先清空全局账）。"""
     passed.clear()
     failed.clear()
@@ -260,7 +479,8 @@ def run(src: str) -> int:
         )
         say(f"合计 未判定 PASS=0 FAIL=0（INCONCLUSIVE，rc={RC_INCONCLUSIVE}）")
         return RC_INCONCLUSIVE
-    say(f"目标：{KB.relative_to(REPO).as_posix()} 的 _biz_from_url（按 AST 取出后真实 exec）\n")
+    say(f"目标：{label or KB.relative_to(REPO).as_posix()} 的 _biz_from_url"
+        "（按 AST 取顶层最后一个同名定义后真实 exec）\n")
     for label, ok, detail in behavior_probes(load_biz(src)):
         check(label, ok, detail)
     check("BD-7 函数体内确有对 parse_wechat_url 的调用", *j_calls_delegate(src))
@@ -268,6 +488,8 @@ def run(src: str) -> int:
     check("BD-9 kb 侧无第二份 URL 解析（parse_qs/urlparse/urllib 导入归零）", *j_no_second_parser(src))
     check("BD-10 无 except 兜底（不许把失败伪造成身份）", *j_no_swallow(src))
     check("BD-11 无残留参数字面量（不许半委托）", *j_reads_both(src))
+    check("BD-12 函数体形状在白名单内（不许长出自己的逻辑）", *j_body_shape(src))
+    check("BD-13 顶层只有一个 _biz_from_url 定义（后者会遮蔽前者）", *j_single_definition(src))
     say(f"\n合计 PASS={len(passed)} FAIL={len(failed)}")
     for lbl in failed:
         say(f"  FAIL {lbl}")
@@ -279,11 +501,21 @@ def run(src: str) -> int:
     return RC_FAIL if failed else RC_GREEN
 
 
+def _kb_override() -> Path | None:
+    """`--kb=<路径>`：让档位自证能在**临时副本**上跑真实子进程，不动工作树。"""
+    for arg in sys.argv:
+        if arg.startswith("--kb="):
+            return Path(arg.split("=", 1)[1])
+    return None
+
+
 def main() -> int:
-    if not KB.exists():
-        print(f"FAIL kb.py 不存在：{KB}")
+    path = _kb_override() or KB
+    if not path.exists():
+        print(f"FAIL kb.py 不存在：{path}")
         return RC_FAIL
-    return run(KB.read_text(encoding="utf-8"))
+    label = path.relative_to(REPO).as_posix() if path.is_relative_to(REPO) else str(path)
+    return run(path.read_text(encoding="utf-8"), label)
 
 
 # ── 反证①：函数体变异必须让指定判据红 ──────────────────────────────────────
@@ -300,6 +532,25 @@ NEW_BODY = (
     "    from app.services.article_identity import parse_wechat_url\n\n"
     "    return parse_wechat_url(url).biz\n"
 )
+
+#: 第五轮复审 id 3 用的攻击体：不含 `parse_qs`/`urlparse` 字样（绕过 BD-9 的名单），
+#: 也不含 `"biz"` 字面量（`"bi" + "z"` 绕过 BD-11 的清单），并且对夹具那 6 个样本全部给对
+#: 答案 ⇒ 在只有正面判据时 11 条全绿。留在这里当变异/样本两条通道的靶子。
+_HANDROLLED = (
+    "    def {fname}(u):\n"
+    "        class R:\n"
+    "            biz = ''\n"
+    "        r = R()\n"
+    '        if isinstance(u, str) and "?" in u:\n'
+    '            for part in u.split("?", 1)[1].split("&"):\n'
+    '                k, _, v = part.partition("=")\n'
+    '                if k.strip("_") == "bi" + "z":\n'
+    '                    r.biz = v.replace("%3D", "=")\n'
+    "                    break\n"
+    "        return r\n"
+)
+_ALIAS_IMPORT = "    from app.services.article_identity import parse_wechat_url as pw\n\n"
+_PLAIN_IMPORT = "    from app.services.article_identity import parse_wechat_url\n\n"
 
 MUTANTS: list[tuple[str, str, str, set[str]]] = [
     ("退回旧实现：只读 biz（D-01b 本体复活）", NEW_BODY, OLD_BODY,
@@ -320,6 +571,26 @@ MUTANTS: list[tuple[str, str, str, set[str]]] = [
      "    try:\n        return parse_wechat_url(url).biz\n"
      '    except Exception:\n        return "MjM5MjgwNTQ1MQ=="\n',
      {"BD-10"}),
+    # 以下三条来自第五轮复审 id 3 / id 10：改前实测**全部空过**（rc=0、11 条判据全绿）。
+    ("别名被本地 def 遮蔽（导入是真的，调的是同名假函数）", NEW_BODY,
+     _ALIAS_IMPORT + _HANDROLLED.format(fname="pw") + "\n    return pw(url).biz\n",
+     {"BD-7", "BD-12"}),
+    ("委托名被重绑到手搓解析器（正面判据仍看得见那次导入与那次调用）", NEW_BODY,
+     _PLAIN_IMPORT + _HANDROLLED.format(fname="_ext") + "\n    parse_wechat_url = _ext\n\n"
+     "    return parse_wechat_url(url).biz\n",
+     {"BD-7", "BD-12"}),
+    ("顶层同名重复定义·前置式（真委托仍在最后，只有 BD-13 抓得到）", "def _biz_from_url(url: str) -> str:",
+     "def _biz_from_url(url: str) -> str:\n    return ''\n\n\ndef _biz_from_url(url: str) -> str:",
+     {"BD-13"}),
+    ("顶层同名重复定义·追加式（报告 id 10 原样攻击：live 是假函数）", "    return parse_wechat_url(url).biz\n",
+     "    return parse_wechat_url(url).biz\n\n\ndef _biz_from_url(url: str) -> str:\n    return ''\n",
+     {"BD-13", "BD-1", "BD-3"}),
+    # 补强的是**反证通道自身**：加 `_biz()` 兜住调用期异常之前，这条变异体会让 evaluate()
+    # 带 traceback 一起崩——通道崩掉不等于判红，self-test 也就无从给出结论。
+    ("调用期抛异常（导入不存在的模块）：判据必须记下红而不是把通道崩掉", NEW_BODY,
+     "    from app.services.article_identity import parse_wechat_url\n\n"
+     "    from nonexistent_probe_module import probe_only\n\n    return parse_wechat_url(url).biz\n",
+     {"BD-1", "BD-3", "BD-12"}),
 ]
 
 # ── 反证②：结构判据的坏样本必须判假 ────────────────────────────────────────
@@ -345,6 +616,20 @@ PROBES: list[tuple[str, object, str, str]] = [
     ("BD-11 参数字面量回潮", j_reads_both,
      _WRAP + '    from app.services.article_identity import parse_wechat_url\n\n'
      '    return parse_wechat_url(url).biz or "biz"\n', NEW_BODY),
+    # 第五轮复审 id 3：这三发在改前都空过（判据说真），现在必须是判据抓到假。
+    ("BD-7 别名被本地 def 遮蔽（看着像委托，调的是假函数）", j_calls_delegate,
+     _WRAP + _ALIAS_IMPORT + _HANDROLLED.format(fname="pw") + "\n    return pw(url).biz\n", NEW_BODY),
+    ("BD-12 函数体长出自己的逻辑（手搓解析器，无 parse_qs 字样）", j_body_shape,
+     _WRAP + _PLAIN_IMPORT + _HANDROLLED.format(fname="_ext") + "\n    return _ext(url).biz\n", NEW_BODY),
+    ("BD-13 顶层出现第二个同名定义（后者遮蔽前者）", j_single_definition,
+     _WRAP + NEW_BODY + "\n\ndef _biz_from_url(url: str) -> str:\n    return ''\n", NEW_BODY),
+    # 报告 id 3-LEGIT：BD-8 是集合归属，一次未被使用的正确导入就能满足它。
+    # 这条坏样本钉的是「BD-7 负责绑定、BD-8 负责来源」的分工——BD-8 在这里仍判真，是预期的，
+    # 真正挡住它的是 BD-7 的遮蔽剔除（判据级实测，不 exec 所以不碰不存在的模块）。
+    ("BD-7 正确导入未被使用、同名伪源导入把它遮蔽", j_calls_delegate,
+     _WRAP + "    from app.services.article_identity import parse_wechat_url\n"
+     "    from app.services.kb_legacy import parse_wechat_url\n\n"
+     "    return parse_wechat_url(url).biz\n", NEW_BODY),
 ]
 
 # ── 反证③：等价写法必须不假红 ──────────────────────────────────────────────
@@ -365,6 +650,11 @@ EQUIVS: list[tuple[str, str, str]] = [
      "    return pw(url).biz"),
     ("转绑局部变量后调用", "    return parse_wechat_url(url).biz",
      "    _delegate = parse_wechat_url\n    return _delegate(url).biz"),
+    # BD-12 是白名单，风险全在假红：把「仍然委托、只是换个写法」的形态钉进通道里盯着。
+    ("先把 .biz 取到局部变量再返回", "    return parse_wechat_url(url).biz",
+     "    biz = parse_wechat_url(url).biz\n    return biz"),
+    ("导入整模块并改名后调用", _PLAIN_IMPORT + "    return parse_wechat_url(url).biz",
+     "    from app.services import article_identity as ai\n\n    return ai.parse_wechat_url(url).biz"),
 ]
 
 
@@ -419,6 +709,35 @@ def self_test() -> int:
     if rc == 0:
         print(f"OK   档位自证：绿 rc={RC_GREEN} / 目标缺失 rc={RC_INCONCLUSIVE}（INCONCLUSIVE）"
               f" / 有判据红 rc={RC_FAIL} 三档分得开")
+
+    # 退出码自证：三档必须真的映射到**进程退出码**，而不只是停在 run() 的返回值上
+    # （第五轮复审 id 5 的坦白：`sys.exit` 那一步没被跑到，等于没测）。
+    # 用临时目录里的 kb.py 副本 + `--kb=` 驱动，工作树一个字节都不动。
+    tmp = Path(tempfile.mkdtemp(prefix="bd_tiers_"))
+    offenders: list[str] = []
+    try:
+        for name, want, body in (
+            ("基准（未变形）", RC_GREEN, src),
+            ("删掉目标函数", RC_INCONCLUSIVE, _strip_target(src)),
+            ("退回旧实现", RC_FAIL, src.replace(NEW_BODY, OLD_BODY)),
+        ):
+            copy = tmp / "kb.py"
+            copy.write_text(body, encoding="utf-8")
+            got = subprocess.run(  # noqa: S603 - 只跑本文件自己
+                [sys.executable, str(Path(__file__).resolve()), f"--kb={copy}"],
+                capture_output=True, text=True, encoding="utf-8",
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"}, check=False,
+            ).returncode
+            if got != want:
+                offenders.append(f"{name} 应 rc={want}，子进程实得 rc={got}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    if offenders:
+        print("FAIL 退出码自证：" + "；".join(offenders))
+        rc = 1
+    else:
+        print(f"OK   退出码自证：子进程真实退出码三档分得开"
+              f"（绿 {RC_GREEN} / 目标缺失 {RC_INCONCLUSIVE} / 有判据红 {RC_FAIL}）")
 
     base = evaluate(src)
     if base:
@@ -504,6 +823,8 @@ def evaluate(src: str) -> set[str]:
         "BD-9": j_no_second_parser,
         "BD-10": j_no_swallow,
         "BD-11": j_reads_both,
+        "BD-12": j_body_shape,
+        "BD-13": j_single_definition,
     }
     for bid, judge in structural.items():
         try:
