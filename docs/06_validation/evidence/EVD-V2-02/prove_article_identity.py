@@ -675,14 +675,19 @@ def self_test() -> int:
         else:
             print(f"OK   等价重构 {label} → 判据全真、用例全绿")
 
+    # 本脚本只有这一档自证（档位/退出码两档在 prove_biz_delegation.py 侧），别读成三道闸门。
+    # `PI_NO_NEST` 防递归；子进程因此不打印本档自己的 OK 行（也含 ⇒），那一行由 K.4 裸跑覆盖。
+    # 额外要求子进程 stdout 里出现过 ⇒：靶字被抽掉时这一档不许假装绿（K.6 就是这一发）。
     if not os.environ.get("PI_NO_NEST"):
         r = subprocess.run(  # noqa: S603 - 只跑本文件自己
             [sys.executable, str(Path(__file__).resolve()), "--self-test"],
-            capture_output=True, text=True, encoding="utf-8",
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
             env={**os.environ, "PYTHONIOENCODING": "cp936", "PI_NO_NEST": "1"}, check=False,
         )
         crashed = "Traceback (most recent call last)" in (r.stderr or "")
-        if r.returncode != 0 or crashed:
+        # 靶字写成转义形式，否则 K.6 那条 `s/⇒/->/g` 会连判据一起改掉、检查自我失效
+        no_target = "\u21d2" not in (r.stdout or "")
+        if crashed or r.returncode != 0:
             # 崩在 print 里时子进程的 stdout/stderr 缓冲区会随解释器异常退出一起丢掉——
             # traceback 文本本身也含 `⇒`，写 stderr 时二次失败，所以这里必须留兜底
             lines = (r.stderr or "").strip().splitlines() or (r.stdout or "").strip().splitlines()
@@ -690,8 +695,13 @@ def self_test() -> int:
             print(f"FAIL 编码自证：--self-test 在 cp936 输出流下 rc={r.returncode}"
                   + ("，收场异常：" if crashed else "，末行：") + why)
             rc = 1
+        elif no_target:
+            print(f"FAIL 编码自证：子进程 rc={r.returncode} 且无 traceback，但它 stdout 里一个靶字"
+                  "（U+21D2）都没有——靶字被抽掉了，这一档没东西可判（假绿比红更糟）")
+            rc = 1
         else:
-            print("OK   编码自证：--self-test 全程在编不出 `⇒` 的 cp936 输出流下跑完，rc=0 无 traceback")
+            print("OK   编码自证：--self-test 全程在编不出 `⇒` 的 cp936 输出流下跑完，rc=0 无 traceback"
+                  "，且子进程 stdout 里确实打印过 ⇒（靶子在场）")
 
     print(
         f"\nSELF-TEST {'PASS' if rc == 0 else 'FAIL'}："

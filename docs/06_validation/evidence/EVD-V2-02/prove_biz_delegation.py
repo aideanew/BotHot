@@ -1281,7 +1281,7 @@ def self_test() -> int:
             copy.write_text(body, encoding="utf-8")
             r = subprocess.run(  # noqa: S603 - 只跑本文件自己
                 [sys.executable, str(Path(__file__).resolve()), f"--kb={copy}"],
-                capture_output=True, text=True, encoding="utf-8",
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
                 env={**os.environ, "PYTHONIOENCODING": enc}, check=False,
             )
             got = r.returncode
@@ -1304,23 +1304,34 @@ def self_test() -> int:
     # GBK/cp936 编不出它——不带 `PYTHONIOENCODING=utf-8` 的裸跑原先在 print 处
     # `UnicodeEncodeError` 崩掉（rc=1，既非绿也非红，正是本项目禁止的「没有裁决」第三种形态）。
     # 只有让被测对象是打印 ⇒ 的那一层，`_ensure_utf8_stdout()` 才是承重代码而不是装饰。
-    # `BD_NO_NEST` 防止这一档无限递归自调。
+    # `BD_NO_NEST` 防止这一档无限递归自调。代价要说清：子进程因此**不打印本档自己的 OK 行**
+    # （那行也含 ⇒），那一行改由 `out_s213.txt` K.1 的裸跑覆盖，两档合起来才全覆盖。
+    # 又因为「子进程全绿」可能是**假绿**（标签里一个 ⇒ 都没有时本档就成了装饰），所以这里额外
+    # 要求子进程 stdout 里确实打印过 ⇒——把靶字从标签里抽掉，本档立刻红（K.3 就是这一发）。
     if os.environ.get("BD_NO_NEST") != "1":
         r = subprocess.run(  # noqa: S603 - 只跑本文件自己
             [sys.executable, str(Path(__file__).resolve()), "--self-test"],
-            capture_output=True, text=True, encoding="utf-8",
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
             env={**os.environ, "PYTHONIOENCODING": "cp936", "BD_NO_NEST": "1"}, check=False,
         )
         crashed = "Traceback (most recent call last)" in (r.stderr or "")
-        if r.returncode != 0 or crashed:
+        # 靶字写成转义形式：K.3 的复现是把文件里所有 ⇒ 换成 `->`，若这里也写成字面 ⇒，那条 sed
+        # 会连判据一起改掉、检查就自我失效了（第一次试跑真的踩到这一点）。
+        no_target = "\u21d2" not in (r.stdout or "")
+        if crashed or r.returncode != 0:
             # 崩在 print 里时子进程的 stdout 缓冲区会随解释器异常退出一起丢掉，所以两级兜底
             lines = (r.stderr or "").strip().splitlines() or (r.stdout or "").strip().splitlines()
             why = lines[-1] if lines else "子进程输出随崩溃丢失（裸跑该命令可看到 UnicodeEncodeError）"
             print(f"FAIL 编码自证：--self-test 在 cp936 输出流下 rc={r.returncode}"
                   + ("，收场异常：" if crashed else "，末行：") + why)
             rc = 1
+        elif no_target:
+            print(f"FAIL 编码自证：子进程 rc={r.returncode} 且无 traceback，但它 stdout 里一个靶字"
+                  "（U+21D2）都没有——靶字被抽掉了，这一档没东西可判（假绿比红更糟）")
+            rc = 1
         else:
             print("OK   编码自证：--self-test 全程在编不出 `⇒` 的 cp936 输出流下跑完，rc=0 无 traceback"
+                  "，且子进程 stdout 里确实打印过 ⇒（靶子在场）"
                   "（改前此处是 UnicodeEncodeError，见 README §4.8 / 差异表 D-11）")
 
     base = evaluate(src)

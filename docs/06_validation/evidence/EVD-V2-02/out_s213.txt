@@ -1,14 +1,18 @@
 # STEP-02 S2.1.3 执行留档（kb._biz_from_url 委托解析层）
-# 时间 2026-10-13T10:22:05+08:00｜HEAD=de78125+工作区未提交改动（第七轮复审处置批 + 提交前自查的编码崩溃面，差异表 D-11）｜Python 3.11.9｜win32
+# 时间 2026-10-13T11:55:43+08:00｜HEAD=0161bcd｜含未提交改动 6 项｜Python 3.11.9｜win32
 # 本机依赖实测：structlog / sqlalchemy 皆无（kb.py:22-25 模块级导入）⇒ D 段只能证明「收集期即失败」，用例本身交 CI（J-5）
 # **判据条数：16 条——BD-1…BD-6 行为面、BD-7…BD-16 结构面。**
 #   本文件每一段的命令都由**在库件** `replay_s213.py` 逐字重跑生成（`python docs/06_validation/evidence/
-#   EVD-V2-02/replay_s213.py`），并由 L 段机检「每段都留得下一条 `$ ` 命令」。上一版留档做不到这点：驱动放在
-#   不入库的 `_workspace/` 里、按 `$ ` 前缀找命令又在输出时剥掉前缀，前缀一丢就**不跑而直接抄旧输出**且不报错
-#   ——这条账记在 README §4.9 S-2 与卡面差异表 D-11。
+#   EVD-V2-02/replay_s213.py`）。两道自检收尾：L 段机检「每段都留得下一条 `$ ` 命令」（只判把手在不在），
+#   M 段机检驱动自己的两条通道（取命令：把手丢了仍取到同一条、取不到就 raise；落盘：写入必须回读逐字相同，
+#   半成品不算成品——本轮重放就撞到过一次回填 `OSError [Errno 22]` 而驱动照过）。上一版留档这些都做不到：
+#   驱动放在不入库的 `_workspace/` 里、按 `$ ` 前缀找命令又在输出时剥掉前缀，前缀一丢就**不跑而直接抄旧输出**且不报错
+#   ——这条账记在 README §4.9 S-2 / §4.10 与卡面差异表 D-11/D-12。
 # 每段 `$` 行就是**逐字可重跑**的单行命令（heredoc 段用 `python - <<'PY' … PY`，在 git bash 下、仓库根跑）
 # 判据计数口径：BD-15 排在最前打印（它是行为面六条的前提），编号仍按追加顺序，不打乱既有 BD-1…BD-14 的锚
-# `PYTHONIOENCODING=utf-8` 现在只影响输出**好不好读**，不再是脚本**活不活得下来**的前提：见 K.1/K.3 两条裸跑
+# `PYTHONIOENCODING=utf-8` 现在只影响输出**好不好读**，不再是脚本**活不活得下来**的前提：见 K.1/K.4 两条裸跑
+# 凡 `in <redacted>s` 都是被**归一化**掉的 pytest 墙钟：它每次重跑必不同，留下原值就是留一份不可复现的读数
+#   （第八轮复审 id 1）。除这一处，段体里的读数全是命令的真实输出（标题与 `#` 注是我写的，不是读数）。
 
 ########## A 改前红重放（不动工作区 kb.py：把 NEW_BODY 换回 OLD_BODY 写成临时副本再 exec）
 $ python -c "import sys; sys.path.insert(0,'docs/06_validation/evidence/EVD-V2-02'); import prove_biz_delegation as P; src=P.KB.read_text(encoding='utf-8'); assert P.NEW_BODY in src; tmp=P.KB.with_name('_kb_prefix_replay.py'); tmp.write_text(src.replace(P.NEW_BODY,P.OLD_BODY),encoding='utf-8'); P.KB=tmp; rc=P.main(); tmp.unlink(); print('replay 临时文件已删除：', not tmp.exists()); sys.exit(rc)"
@@ -75,7 +79,7 @@ rc=0
 $ python docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py --self-test
 OK   档位自证：绿 rc=0 / 目标缺失 rc=2（INCONCLUSIVE） / 有判据红 rc=1 / 解析不了也按 2 档报，不把 traceback 冒充裁决（第七轮复审 N4/N5b 实测改前是崩溃）三档分得开
 OK   退出码自证：子进程真实退出码分得开，且无一把它崩成 traceback（绿 0×3 含 BOM / 目标缺失 2 / 有判据红 1 / 解析不了 2；除基准外全在 win32 默认的 cp936 输出流下跑）
-OK   编码自证：--self-test 全程在编不出 `⇒` 的 cp936 输出流下跑完，rc=0 无 traceback（改前此处是 UnicodeEncodeError，见 README §4.8 / 差异表 D-11）
+OK   编码自证：--self-test 全程在编不出 `⇒` 的 cp936 输出流下跑完，rc=0 无 traceback，且子进程 stdout 里确实打印过 ⇒（靶子在场）（改前此处是 UnicodeEncodeError，见 README §4.8 / 差异表 D-11）
 OK   基准：未变形的 kb.py 判据全绿
 OK   退回旧实现：只读 biz（D-01b 本体复活） → 致红 ['BD-1', 'BD-11', 'BD-12', 'BD-2', 'BD-3', 'BD-5', 'BD-6', 'BD-7', 'BD-8', 'BD-9']
 OK   取错字段：返回 mid → 致红 ['BD-1', 'BD-12', 'BD-2', 'BD-3', 'BD-4', 'BD-5']
@@ -168,7 +172,7 @@ C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\site-packages
 =========================== short test summary info ===========================
 ERROR tests/test_kb_longlink_ingest.py
 !!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
-1 warning, 1 error in 0.48s
+1 warning, 1 error in <redacted>s
 rc=2
 
 ########## E 卡面 S2.1.3 验收命令按字面跑（本机无 uv，用同解释器代跑）
@@ -181,7 +185,7 @@ C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\site-packages
     self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-5 passed, 9 deselected, 1 warning in 0.10s
+5 passed, 9 deselected, 1 warning in <redacted>s
 rc=0
 
 ########## F 用例第二条锚的判定力实测（第二轮复审 id 2 的处置依据；用 heredoc 以免内外引号互相打断）
@@ -327,10 +331,9 @@ rc=0
 # 上一版把这 92 行原样内嵌进本文件，代价是留档与在库驱动各一份、会漂移；现在命令就是驱动本身。
 # 临时件两个（探针 harness、kb 攻击副本）都由驱动自己删，J-11/J-12 是回读。
 $ python docs/06_validation/evidence/EVD-V2-02/j_attack_r7.py
-J-0 改前版 harness 的判据条数（工作树基准应为 16）：
-    改前：rc = 0 | INCONCLUSIVE = False | traceback = False | 红条数 = 0
-    改后：rc = 0 | INCONCLUSIVE = False | traceback = False | 红条数 = 0
-    ⇒ 判据条数直接看 C 段（改前 15 条 / 改后 16 条），这里只证「基准两版都绿」
+J-0 两版 harness 在真实 kb.py 上各自下过多少条裁决（实测，不是抄的）：
+    改前：rc = 0 | 判据条数 = 15 | 红条数 = 0 | INCONCLUSIVE = False | traceback = False
+    改后：rc = 0 | 判据条数 = 16 | 红条数 = 0 | INCONCLUSIVE = False | traceback = False
 J-1 属性形态重绑 sys.modules[__name__].目标名 = lambda
     改前 rc=0 红=（全绿=空过） traceback=False
     改后 rc=1 红=['BD-13', 'BD-16'] traceback=False｜应红未红=无
@@ -363,13 +366,15 @@ J-10 文件带 BOM 开头（CPython 自己接受，判据不许因此崩）
     改后 rc=0 红=（无裁决） traceback=False INCONCLUSIVE=False
 J-11 临时 harness 副本已删除： True
 J-12 临时 kb 副本目录已删除： True
+J-13 对照自洽性：通过（10 发攻击的改前/改后两侧都符合预期）
 rc=0
 
 ########## K.1 BD 裸跑（cp936 输出流，guard 在位）
 # 提交前自查发现的第三类崩溃面：`⇒` 在 win32 默认 cp936 上编不出来，`--self-test` 的标签打印会
 # UnicodeEncodeError——既不是绿也不是红，正是本项目禁止的「没有裁决」第三种形态。
-# 四条命令：K.1/K.3 证明现在裸跑不崩（rc=0、traceback 行数 0），K.2/K.4 把 `_ensure_utf8_stdout()`
-# 关掉复现改前，证明 harness 里新加的「编码自证」档是承重的而非装饰。
+# 六条命令，每台 harness 三条：裸跑证明现在不崩（rc=0、traceback 行数 0）；关 guard 复现改前，
+# 证明 `_ensure_utf8_stdout()` 承重；**抽靶**（把所有 ⇒ 换成 `->`）证明「编码自证」档不是装饰——
+# 靶字被抽掉后子进程照样全绿，若不查 ⇒ 是否真出现过，那一档就会假绿。
 $ PYTHONIOENCODING= python docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py --self-test > /tmp/k_BD.out 2> /tmp/k_BD.err; rc=$?; tb=$(grep -c Traceback /tmp/k_BD.err || true); echo "rc=$rc  stderr 里 traceback 行数=$tb"; tail -1 /tmp/k_BD.out
 rc=0  stderr 里 traceback 行数=0
 SELF-TEST PASS：24 个函数体变异各自让指定判据变红 + 26 个判据样本对敏感 + 11 个等价写法不假红
@@ -377,20 +382,39 @@ rc=0
 
 ########## K.2 BD 关 guard 复现改前
 $ sed 's/^_ensure_utf8_stdout()$/pass  # guard disabled/' docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py > docs/06_validation/evidence/EVD-V2-02/_tmp_ng.py && PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-02/_tmp_ng.py --self-test 2>&1 | grep 编码自证; rm -f docs/06_validation/evidence/EVD-V2-02/_tmp_ng.py; ls docs/06_validation/evidence/EVD-V2-02/_tmp_ng.py 2>&1 | tail -1
-FAIL 编码自证：--self-test 在 cp936 输出流下 rc=1，末行：子进程输出随崩溃丢失（裸跑该命令可看到 UnicodeEncodeError）
+FAIL 编码自证：--self-test 在 cp936 输出流下 rc=1，收场异常：UnicodeEncodeError: 'gbk' codec can't encode character '\u21d2' in position 22: illegal multibyte sequence
 ls: cannot access 'docs/06_validation/evidence/EVD-V2-02/_tmp_ng.py': No such file or directory
 rc=0
 
-########## K.3 PI 裸跑（cp936，guard 在位）
+########## K.3 BD 抽靶：⇒ 全换成 -> 后不许假绿
+$ sed 's/⇒/->/g' docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py > docs/06_validation/evidence/EVD-V2-02/_tmp_noarrow.py && PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-02/_tmp_noarrow.py --self-test 2>&1 | grep 编码自证; rm -f docs/06_validation/evidence/EVD-V2-02/_tmp_noarrow.py; ls docs/06_validation/evidence/EVD-V2-02/_tmp_noarrow.py 2>&1 | tail -1
+FAIL 编码自证：子进程 rc=0 且无 traceback，但它 stdout 里一个靶字（U+21D2）都没有——靶字被抽掉了，这一档没东西可判（假绿比红更糟）
+ls: cannot access 'docs/06_validation/evidence/EVD-V2-02/_tmp_noarrow.py': No such file or directory
+rc=0
+
+########## K.4 PI 裸跑（cp936，guard 在位）
 $ PYTHONIOENCODING= python docs/06_validation/evidence/EVD-V2-02/prove_article_identity.py --self-test > /tmp/k_PI.out 2> /tmp/k_PI.err; rc=$?; tb=$(grep -c Traceback /tmp/k_PI.err || true); echo "rc=$rc  stderr 里 traceback 行数=$tb"; tail -1 /tmp/k_PI.out
 rc=0  stderr 里 traceback 行数=0
 SELF-TEST PASS：12 个实现变异体各自让指定用例变红 + 17 个判据样本对敏感 + 4 个等价重构不假红
 rc=0
 
-########## K.4 PI 关 guard 复现改前
+########## K.5 PI 关 guard 复现改前
 $ sed 's/^_ensure_utf8_stdout()$/pass  # guard disabled/' docs/06_validation/evidence/EVD-V2-02/prove_article_identity.py > docs/06_validation/evidence/EVD-V2-02/_tmp_ng.py && PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-02/_tmp_ng.py --self-test 2>&1 | grep 编码自证; rm -f docs/06_validation/evidence/EVD-V2-02/_tmp_ng.py; ls docs/06_validation/evidence/EVD-V2-02/_tmp_ng.py 2>&1 | tail -1
-FAIL 编码自证：--self-test 在 cp936 输出流下 rc=1，末行：子进程输出随崩溃丢失（裸跑该命令可看到 UnicodeEncodeError）
+FAIL 编码自证：--self-test 在 cp936 输出流下 rc=1，收场异常：UnicodeEncodeError: 'gbk' codec can't encode character '\u21d2' in position 34: illegal multibyte sequence
 ls: cannot access 'docs/06_validation/evidence/EVD-V2-02/_tmp_ng.py': No such file or directory
+rc=0
+
+########## K.6 PI 抽靶：⇒ 全换成 -> 后不许假绿
+$ sed 's/⇒/->/g' docs/06_validation/evidence/EVD-V2-02/prove_article_identity.py > docs/06_validation/evidence/EVD-V2-02/_tmp_noarrow.py && PYTHONIOENCODING=utf-8 python docs/06_validation/evidence/EVD-V2-02/_tmp_noarrow.py --self-test 2>&1 | grep 编码自证; rm -f docs/06_validation/evidence/EVD-V2-02/_tmp_noarrow.py; ls docs/06_validation/evidence/EVD-V2-02/_tmp_noarrow.py 2>&1 | tail -1
+FAIL 编码自证：子进程 rc=0 且无 traceback，但它 stdout 里一个靶字（U+21D2）都没有——靶字被抽掉了，这一档没东西可判（假绿比红更糟）
+ls: cannot access 'docs/06_validation/evidence/EVD-V2-02/_tmp_noarrow.py': No such file or directory
+rc=0
+
+########## M 取命令与落盘通道自证：把手丢了仍取到同一条，取不到就 raise；写入要回读逐字相同
+# L 只数把手，M 判的是驱动自己的两条通道：第八轮复审 id 4 说「把某段命令换成 `$ 不是命令`，L 照样报无」——那条批评成立，所以补取命令这一档；本轮重放又撞到一次回填 `OSError [Errno 22]`（磁盘上留下 L 读数位还空着的半成品，而驱动照过），所以同一档里再判「写入必须回读逐字相同」。
+$ python docs/06_validation/evidence/EVD-V2-02/replay_s213.py --self-test
+OK   重放器自证：取命令按段落版式而非 `$ ` 把手，把手丢了照样取到同一条；整段无命令 / heredoc 配对断了 / 第一条非注释行是读数 ⇒ 三种情况一律 raise；写留档要回读逐字相同，半成品与截断都不算成功，写不进磁盘时要报原因而不是静默过
+SELF-TEST PASS：11 条反证全过（取命令 6 条：把手在/把手丢/配对截断/整段无命令/配对断了/读出读数；写入判据 3 条：逐字相同才算成 / 留着占位符的半成品不算 / 字数不一致不算；写入端到端 2 条：临时目录里真写成且磁盘上就是这一份 / 目标是目录写不进必须报原因）——取不到命令时驱动停下，落不进磁盘时驱动也停下，两种都不许抄旧输出
 rc=0
 
 ########## L 重放器自检：每段都必须留得下一条逐字可重跑的 `$ ` 命令
@@ -403,6 +427,6 @@ bad = [parts[i].split()[1] for i, p in enumerate(parts) if p.startswith('#######
 print('段数（含本段）：', len([p for p in parts if p.startswith('########## ')]))
 print('缺 `$ ` 命令的段：', bad or '无——本文件每一段都留得下重跑入口')
 PY
-段数（含本段）： 15
+段数（含本段）： 18
 缺 `$ ` 命令的段： 无——本文件每一段都留得下重跑入口
 rc=0
