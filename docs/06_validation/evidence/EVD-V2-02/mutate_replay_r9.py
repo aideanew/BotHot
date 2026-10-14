@@ -26,6 +26,16 @@
   整份 `out_s213.txt` 被变异版重写（N 段标题当场变成 M 段），而 `N-iso` 只 glob `_tmp_*`，那份
   `_v12_a2d.py` 在它眼里不存在。所以这里给归一化 / 段末裁决 / 落盘权三组新判据各配了变异，并把探测器的
   形状口径从 `_tmp_*` 改成「以 `_` 开头的文件」（`__pycache__` 是目录，不算残留——见 `residues`）。
+- 第十三轮：S2.1.4/S2.1.5 进包，驱动多了 `af_ids()`/`af_headline()`/`o_ledger()` 与 O 段三条命令。
+  「头部现算」那组从前只担保 BD 一台，第二台的条数如果只加读数不加反证，就是第十轮 10-1 那条纪律
+  第五次欠账 ⇒ 新增 `锚定台现算` 一组（15 发 RED + 1 发 GREEN）。这一组的由来很难写轻：本轮驱动
+  **真的**以 `ValueError: invalid literal for int() with base 10: 'P0'` 崩过一次（AF 的 id 是
+  三段形状 `AF-<面字母><号数>`，从前那支 `int(s.split("-")[1])` 只适用于 BD 的两段形状），
+  崩栈没有裁决 ⇒ 现在 `af_ids()` 不抛、形状不符由判据变红，且这一发形状本身有靶（形状档）。
+  同批再加 `真库指针` 一组：本轮把 P-4 连库用例从 `test_kb_longlink_ingest.py` 搬到卡面点名的
+  `test_kb_multisource_anchor.py`，而「真库那条走 某文件::某用例」这句话从前只写在 harness 的
+  print 与 O 段注释里——搬一次就烂掉、没人核对磁盘上确有其事。现在名字集中在驱动的
+  `REAL_DB_TARGETS`，G 段落盘前逐条按 AST 核对（grep 会放过「文件在、函数已改名」这种形状）。
 
 三条老纪律不变：
 1. **锚点失效即失败**：变异锚 `old` 若在 `replay_s213.py` 里找不到，这一发直接 FAIL 而不是跳过——
@@ -144,6 +154,117 @@ SHOTS: list[tuple[str, str, str, str, str]] = [
     ("结构面回写成行为面 ⇒「与行为面不相交」没人判（头部现算/结构面非空、与行为面不相交）",
      "return sorted(beh, key=key), sorted(strct, key=key)",
      "return sorted(beh, key=key), sorted(beh, key=key)", "RED", "头部现算"),
+    # ↓ 锚定台现算（第十三轮：S2.1.4/S2.1.5 的 O 段与 `af_headline()`/`o_ledger()` 进驱动，
+    #   判据面从一台变两台。上一轮「头部现算」只担保 BD，本轮若只加读数不加反证，
+    #   就是第十轮 10-1 那条纪律在第二台上第五次欠账。这一组也是本轮那发
+    #   `ValueError: invalid literal for int() with base 10: 'P0'` 的靶子来源。）
+    ("AF 清单按字符串排序 ⇒ AF-S10 排到 AF-S2 前（面内连续与形状档一起塌）",
+     "    return {k: [i for _, i in sorted(set(v))] for k, v in groups.items()}",
+     "    return {k: [i for _, i in sorted(set(v), key=lambda t: str(t[1]))] for k, v in groups.items()}",
+     "RED", "锚定台现算"),
+    ("登记表少登记一个面 ⇒「四个面没齐」这道门形同虚设",
+     'AF_GROUP_NAME = {"P": "前提面", "B": "锚定行为面", "A": "片段行为面", "S": "结构面"}',
+     'AF_GROUP_NAME = {"B": "锚定行为面", "A": "片段行为面", "S": "结构面"}',
+     "RED", "锚定台现算"),
+    ("af_ids 认死在库那一份 ⇒ 删一行、换形状都不跟着变",
+     '    src = (path or EV / "prove_anchor_fallback.py").read_text(encoding="utf-8-sig")',
+     '    src = (EV / "prove_anchor_fallback.py").read_text(encoding="utf-8-sig")',
+     "RED", "锚定台现算"),
+    ("头部那句把「面的个数」当判据条数 ⇒ 18 条与 4 个面混为一谈",
+     'f"# **AF 判据条数：{sum(len(v) for v in groups.values())} 条——{parts}"',
+     'f"# **AF 判据条数：{len(groups)} 条——{parts}"',
+     "RED", "锚定台现算"),
+    ("af_headline 忽略 path ⇒ 删了判据它照样报原条数（「不是写死的数」这句没被证）",
+     "    groups = af_ids(path)",
+     "    groups = af_ids()",
+     "RED", "锚定台现算"),
+    ("o_ledger 永远沉默 ⇒ O 段三条读数可以各说各话",
+     "def o_ledger(af: dict[str, list[str]], o1: str, o2: str, o3: str) -> list[str]:",
+     "def o_ledger(af: dict[str, list[str]], o1: str, o2: str, o3: str) -> list[str]:\n"
+     "    return []  # 变异：对账永远沉默",
+     "RED", "锚定台现算"),
+    ("o_ledger 见人就报 ⇒「自洽时不给缺陷」那一档绿不可证",
+     "    defects: list[str] = []\n    flat = [i for k in sorted(af) for i in af[k]]",
+     '    defects: list[str] = ["注入：这道核对见人就报"]\n    flat = [i for k in sorted(af) for i in af[k]]',
+     "RED", "锚定台现算"),
+    ("O.1 只判 FAIL、不比 PASS 与登记条数",
+     "        if f_ or p != n_:",
+     "        if f_:",
+     "RED", "锚定台现算"),
+    ("登记条数与表条数不再对账 ⇒ 头部那句的分母可以是虚的",
+     "        if n_ != total:",
+     "        if False:",
+     "RED", "锚定台现算"),
+    ("O.3 退回只比条数 ⇒ 清单少一条换一条照样绿（那种读数才最像绿的）",
+     "    if total and sorted(set(listed)) != sorted(set(flat)):",
+     "    if total and len(listed) != total:",
+     "RED", "锚定台现算"),
+    ("重复行不再单独判 ⇒ 同一 id 数两行没人管",
+     "    if total and len(listed) != len(set(listed)):",
+     "    if False:",
+     "RED", "锚定台现算"),
+    ("「没有分母」那句改成别的措辞 ⇒ 探针点不到它的名（缺陷还在，但名字不可假这条没了）",
+     'defects.append(f"O 段没有分母：',
+     'defects.append(f"O 段空了：',
+     "RED", "锚定台现算"),
+    ("对账结果被丢掉 ⇒ o_section 不再把三条读数交给 o_ledger",
+     "    return chunks, o_ledger(af_ids(), chunks[0], chunks[1], chunks[2])",
+     "    return chunks, []",
+     "RED", "锚定台现算"),
+    ("锚定台没进 EV_PY ⇒ 它既不过 G 段门禁，也不算被检清单",
+     '         "prove_anchor_fallback.py", "prove_article_identity.py", "prove_biz_delegation.py",',
+     '         "prove_article_identity.py", "prove_biz_delegation.py",',
+     "RED", "锚定台现算"),
+    ("等价：AF 清单显式按 (号数, id) 排（与默认元组排序同一结果）",
+     "    return {k: [i for _, i in sorted(set(v))] for k, v in groups.items()}",
+     "    return {k: [i for _, i in sorted(set(v), key=lambda t: (t[0], t[1]))] for k, v in groups.items()}",
+     "GREEN", ""),
+    # ↓ 真库指针（第十三轮：P-4 用例按卡面换了文件，「那条走 某文件::某用例」从前只是注释）
+    ("用例存在性检查被关掉 ⇒ 改名没人报",
+     "        if fn not in names:",
+     "        if False:",
+     "RED", "真库指针"),
+    ("存在性改用 grep 文本而不是 AST ⇒ 类里的方法、注释里的名字都算「确有其事」",
+     "        if fn not in names:",
+     '        if fn not in path.read_text(encoding="utf-8"):',
+     "RED", "真库指针"),
+    ("指针核对永远绿（函数一进门就返回空缺陷）⇒ 文件不存在也不报",
+     "    bad: list[str] = []\n    for rel, fn in targets:",
+     "    return []  # 变异：核对永远绿\n    bad: list[str] = []\n    for rel, fn in targets:",
+     "RED", "真库指针"),
+    ("指针核对见人就报 ⇒「文件在、用例在 ⇒ 静默」那一档绿不可证",
+     "    bad: list[str] = []\n    for rel, fn in targets:",
+     '    bad: list[str] = ["注入：这道核对见人就报"]\n    for rel, fn in targets:',
+     "RED", "真库指针"),
+    ("g_section 不再核对指针表 ⇒ G 段这条门禁只是注释",
+     "    defects += db_pointer_defects(REAL_DB_TARGETS)",
+     "    pass  # 变异：丢掉那次核对",
+     "RED", "真库指针"),
+    ("登记表清空 ⇒ 「真表非空」与「两份新文件都在表里」必须一起出声（空表 = 注销门禁）",
+     'REAL_DB_TARGETS = (\n'
+     '    ("apps/api/tests/test_kb_multisource_anchor.py", "test_multi_source_no_crash"),\n'
+     '    ("apps/api/tests/test_kb_multisource_anchor.py", "test_biz_anchor_wins_when_both_anchors_exist"),\n'
+     '    ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_short_returns_none_and_zero_query"),\n'
+     '    ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_boundary_is_exactly_min_len"),\n'
+     '    ("apps/api/tests/test_kb_longlink_ingest.py", "test_long_link_yields_non_empty_biz"),\n'
+     ")",
+     "REAL_DB_TARGETS = ()",
+     "RED", "真库指针"),
+    ("登记表漏掉 S2.1.5 那份新用例文件 ⇒ 「本步两份新文件都在表里」失去对象",
+     '    ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_short_returns_none_and_zero_query"),\n'
+     '    ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_boundary_is_exactly_min_len"),\n',
+     "",
+     "RED", "真库指针"),
+    ("指针表里的文件被从 G 段门禁名单里摘掉 ⇒ 交代去哪儿跑的文件自己不过静态自检",
+     '                "apps/api/tests/test_kb_multisource_anchor.py", '
+     '"apps/api/tests/test_asset_fragment_guard.py",',
+     '                "apps/api/tests/test_asset_fragment_guard.py",',
+     "RED", "真库指针"),
+    ("等价：指针表换成 frozenset 式的写法（逐条核对的结果不变）",
+     '    ("apps/api/tests/test_kb_longlink_ingest.py", "test_long_link_yields_non_empty_biz"),\n)',
+     '    ("apps/api/tests/test_kb_longlink_ingest.py", "test_long_link_yields_non_empty_biz"),\n)\n'
+     "REAL_DB_TARGETS = tuple(REAL_DB_TARGETS)",
+     "GREEN", ""),
     # ↓ 归一化（第十二轮复审 B3：头部那句「三类读数都处理了」从前是模板字面量）
     ("墙钟阈值放宽一位 ⇒ 正样本（带小数）不再被改写",
      '("墙钟", r"\\bin \\d+\\.\\d+s\\b", "in <redacted>s", "in 12.34s", "in 5s"),',

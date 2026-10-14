@@ -13,11 +13,12 @@ L 那条机检判的是**把手在不在**，不是**命令跑不跑得起**（�
 （本文件 `--self-test`）判：剥掉 `$ ` 前缀仍能取到同一条命令，且**没有命令的段落必须 raise**，
 返回空值就是当年「静默抄旧输出」的形状。
 
-A–I 从文件里取命令重放；J 由 `j_attack_r7.py` 现跑；K 是编码自证的现跑；M 是本驱动器 `--self-test`
-的现跑；L 现跑并回填。
-它写什么必须写清（第八轮复审 id 4）：**它会重写本包内被跟踪的 `out_s213.txt`**，K.2/K.5 与 K.3/K.6
-那四条 `sed` 命令还会在本包目录里各落一个用完即删的临时副本（`_tmp_ng.py`、`_tmp_noarrow.py`；
-同一段里的回读就是它们的删除证明）。
+A–I 从文件里取命令重放（登记表 `ARCHIVED`）；J 由 `j_attack_r7.py` 现跑；K 是编码自证的现跑
+（每台 harness 三条，台数在 `K_HARNESSES`）；M 是本驱动器 `--self-test` 的现跑；N 是反证电池；
+O 是 S2.1.4/S2.1.5 那台锚定/兜底证明台的现跑；L 现跑并回填——除 A–I 外的段都由 `CODE` 这张表登记。
+它写什么必须写清（第八轮复审 id 4）：**它会重写本包内被跟踪的 `out_s213.txt`**，K 段里「关 guard」与
+「抽靶」那两类 `sed` 命令还会对每台 harness 在本包目录里各落一个用完即删的临时副本
+（`_tmp_ng.py`、`_tmp_noarrow.py`；同一段里的回读就是它们的删除证明，跑完仍在就是缺陷）。
 它**不写任何被测文件**：A 段的 kb 临时副本写在 kb.py 同目录并当场 unlink，J 段的探针 harness 跑完即删。
 
 写留档这一步本身要回读，而且**按字节**回读（本轮实测撞过一次 `OSError [Errno 22]`：整份重放跑完、
@@ -33,6 +34,7 @@ A–I 从文件里取命令重放；J 由 `j_attack_r7.py` 现跑；K 是编码�
 
 from __future__ import annotations
 
+import ast
 import datetime
 import inspect
 import os
@@ -163,6 +165,55 @@ def bd_headline() -> str:
         return f"# **判据条数：FAIL——从 harness 里数到行为面 {beh!r} / 结构面 {strct!r}，头部无从生成**"
     return (f"# **判据条数：{len(beh) + len(strct)} 条——行为面 {beh[0]}…{beh[-1]} {len(beh)} 条、"
             f"结构面 {strct[0]}…{strct[-1]} {len(strct)} 条（本行由 `bd_ids()` 现算，非手抄）**")
+
+
+#: 第二台 harness（S2.1.4/S2.1.5）的判据登记形状：`CHECKS` 里每条都是 `("AF-Xn", 标签, 判据函数)`。
+#: 与 BD 那两条正则不同——AF 台把判据集中在一张元组表里登记，所以头部按表数，不按调用点数。
+#: 号数分三段捕获（前缀 / 面字母 / 数字）：`AF-P0` 的数字在第三个分组里，早期版本按 BD 的
+#: 两段形状 `int(s.split("-")[1])` 取号 ⇒ 本轮实测驱动在 `o_section()` 里抛
+#: `ValueError: invalid literal for int() with base 10: 'P0'` 收场（崩栈不是裁决，见 M 段 锚定台现算）。
+AF_LABEL = re.compile(r'^\s+\("(AF)-([A-Z])(\d+)"')
+AF_GROUP_NAME = {"P": "前提面", "B": "锚定行为面", "A": "片段行为面", "S": "结构面"}
+
+
+def af_ids(path: pathlib.Path | None = None) -> dict[str, list[str]]:
+    """从 `prove_anchor_fallback.py` 的 `CHECKS` 登记表里现数 AF 判据，按面分组、组内按号数排序。"""
+    src = (path or EV / "prove_anchor_fallback.py").read_text(encoding="utf-8-sig")
+    groups: dict[str, list[tuple[int, str]]] = {}
+    for ln in src.splitlines():
+        m = AF_LABEL.match(ln)
+        if m:
+            groups.setdefault(m.group(2), []).append((int(m.group(3)), f"AF-{m.group(2)}{m.group(3)}"))
+    return {k: [i for _, i in sorted(set(v))] for k, v in groups.items()}
+
+
+def _af_num(af_id: str, letter: str) -> int | None:
+    """取 `AF-<面字母><号数>` 的号数；形状不符返回 None。
+
+    这里**不抛**是有意的：本轮实测过一发 `int("P0")` 的 `ValueError`，驱动以 traceback 收场、
+    一个裁决都读不到——正是项目纪律禁的那第三种形态。None 让判据自己变红。
+    """
+    tail = af_id[len(f"AF-{letter}"):] if af_id.startswith(f"AF-{letter}") else ""
+    return int(tail) if tail.isdigit() else None
+
+
+def af_headline(path: pathlib.Path | None = None) -> str:
+    """头部那句 AF 判据条数：全部由 `af_ids()` 现算，四个面没齐就写下 FAIL 而不是写句漂亮话。
+
+    这一行存在的理由和 BD 那一行一样（第十轮复审 10-1 的第四次复发）：模板字面量里的号数不会
+    跟着判据表变。范围也要说清——`bd_headline()` 那句只担保 `prove_biz_delegation.py`，
+    它数不到这里；S2.1.4/S2.1.5 的判据面由本行负责，两行合起来才是这一份留档的全部。
+    `path` 是给 M 段留的把手：反证电池要把「删掉一行判据」这件事真的做一次，
+    而删的那一份只能躺在系统临时目录里（在本包里落副本 = 上一轮那起「变异版重写仓库留档」的事故）。
+    """
+    groups = af_ids(path)
+    if not groups or set(groups) != set(AF_GROUP_NAME):
+        return (f"# **AF 判据条数：FAIL——从 `prove_anchor_fallback.py` 的 `CHECKS` 只数到 "
+                f"{ {k: len(v) for k, v in groups.items()} }，四个面没齐，头部无从生成**")
+    parts = "、".join(f"{AF_GROUP_NAME[k]} {v[0]}…{v[-1]} {len(v)} 条" for k, v in sorted(groups.items()))
+    return (f"# **AF 判据条数：{sum(len(v) for v in groups.values())} 条——{parts}"
+            f"（本行由 `af_ids()` 现算，非手抄；上一行那句「判据条数」只担保 BD 一台，"
+            f"两台合起来才是 S2.1.3 + S2.1.4/S2.1.5 的判据面）**")
 
 
 def write_ok(intent: str, raw: bytes) -> str:
@@ -347,26 +398,33 @@ def run_cmd(cmd: str, title: str, notes: str = "") -> str:
 
 
 K_TITLE = "########## K.1 BD 裸跑（cp936 输出流，guard 在位）"
+#: 编码面的被测清单：每台 harness 三条命令（裸跑 / 关 guard / 抽靶），K 段的条数由这张表现算。
+#: 第十二轮之后新增 `prove_anchor_fallback.py`（S2.1.4/S2.1.5）也带 `_ensure_utf8_stdout()`，
+#: 所以它进的是同一档，不是另起一段——三台一起跑，读者才能看到「编码面」是一层而不是一次。
+K_HARNESSES = (("BD", "prove_biz_delegation.py"), ("PI", "prove_article_identity.py"),
+               ("AF", "prove_anchor_fallback.py"))
 K_NOTES = (
-    "# 提交前自查发现的第三类崩溃面：`⇒` 在 win32 默认 cp936 上编不出来，`--self-test` 的标签打印会\n"
-    "# UnicodeEncodeError——既不是绿也不是红，正是本项目禁止的「没有裁决」第三种形态。\n"
-    "# 六条命令，每台 harness 三条：裸跑证明现在不崩（rc=0、traceback 行数 0）；关 guard 复现改前，\n"
-    "# 证明 `_ensure_utf8_stdout()` 承重；**抽靶**（把所有 ⇒ 换成 `->`）证明「编码自证」档不是装饰——\n"
-    "# 靶字被抽掉后子进程照样全绿，若不查 ⇒ 是否真出现过，那一档就会假绿。\n"
+    f"# 提交前自查发现的第三类崩溃面：`⇒` 在 win32 默认 cp936 上编不出来，`--self-test` 的标签打印会\n"
+    f"# UnicodeEncodeError——既不是绿也不是红，正是本项目禁止的「没有裁决」第三种形态。\n"
+    f"# {len(K_HARNESSES) * 3} 条命令 = 每台 harness 三条：裸跑证明现在不崩（rc=0、traceback 行数 0）；"
+    f"关 guard 复现改前，"
+    f"\n# 证明 `_ensure_utf8_stdout()` 承重；**抽靶**（把所有 ⇒ 换成 `->`）证明「编码自证」档不是装饰——\n"
+    f"# 靶字被抽掉后子进程照样全绿，若不查 ⇒ 是否真出现过，那一档就会假绿。\n"
+    f"# 三台的清单在 `K_HARNESSES`，条数不由本注释里的数字担保（新入库一台就自动多三条）。\n"
 )
 # 关 guard 与抽靶两份临时件都必须由同一条命令删掉，末尾的 `ls` 是删除回读
 TMPNA = (EV / "_tmp_noarrow.py").relative_to(ROOT).as_posix()
 
 
 def k_sections() -> tuple[list[str], list[str]]:
-    """K 段六条（每台 harness 三条：裸跑 / 关 guard / 抽靶）。返回 (段文本, 缺陷清单)。
+    """K 段 = `len(K_HARNESSES) × 3` 条（每台 harness 三条：裸跑 / 关 guard / 抽靶）。返回 (段文本, 缺陷清单)。
 
     临时副本没删干净是**缺陷**不是异常：上一版这里是裸 `assert`（第十轮复审 10-8），
     `python -O` 下整条被剥掉，驱动会一边留着 `_tmp_*` 一边打印「回读逐字节相同」。
     """
     chunks, defects, n = [], [], 0
     kinds = ("裸跑（cp936，guard 在位）", "关 guard 复现改前", "抽靶：⇒ 全换成 -> 后不许假绿")
-    for name, script in (("BD", EV / "prove_biz_delegation.py"), ("PI", EV / "prove_article_identity.py")):
+    for name, script in ((k, EV / v) for k, v in K_HARNESSES):
         rel = RELPATH(script)
         # `grep -c` 命中 0 行时自己返回 1，会把「没崩」误报成失败，所以显式吃掉它的退出码
         cmds = [
@@ -392,8 +450,57 @@ def k_sections() -> tuple[list[str], list[str]]:
 
 
 G24 = ROOT / "docs/06_validation/evidence/EVD-V2-00/g24_static_check.py"
-G_TITLE = "########## G 仓库静态自检（E/F/I/W/UP/B 机检子集；被检清单由在库登记表 `EV_PY` 给出）"
-G_TEST_FILES = ("apps/api/tests/test_kb_longlink_ingest.py", "apps/api/tests/test_article_identity.py")
+#: 本机证不了的那一半**交给谁**（文件 + 顶层用例名）。这张表是一条判据的输入，不是文档：
+#: 本轮把 P-4 用例按卡面从 `test_kb_longlink_ingest.py` 搬到 `test_kb_multisource_anchor.py`，
+#: 而「真库那条走 `某文件::某用例`」这句话从前只写在 harness 的 print 与 O 段的注释里——
+#: 搬一次就烂掉，而没有任何一条判据会说「指针指空了」（G-23 禁的正是这种只会说好话的声明）。
+#: 现在文件名与用例名集中登记，落盘前逐条核对磁盘上确有其事；表与仓库各改一头，G 段就红。
+REAL_DB_TARGETS = (
+    ("apps/api/tests/test_kb_multisource_anchor.py", "test_multi_source_no_crash"),
+    ("apps/api/tests/test_kb_multisource_anchor.py", "test_biz_anchor_wins_when_both_anchors_exist"),
+    ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_short_returns_none_and_zero_query"),
+    ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_boundary_is_exactly_min_len"),
+    ("apps/api/tests/test_kb_longlink_ingest.py", "test_long_link_yields_non_empty_biz"),
+)
+#: 本步新出来的两份用例文件：指针表少了任何一份，就说明这张表本身被清空了（清空 = 注销判据）。
+STEP_NEW_TEST_FILES = ("apps/api/tests/test_kb_multisource_anchor.py",
+                       "apps/api/tests/test_asset_fragment_guard.py")
+
+
+def db_pointer_defects(targets: tuple[tuple[str, str], ...],
+                       root: pathlib.Path = ROOT) -> list[str]:
+    """逐条核对「交给真库的那些用例」在 `root` 下确有其事：文件在、顶层 `def` 在。
+
+    走 AST 而不是 grep：用例名出现在注释里不算数（那正是这句话最容易烂成的样子——
+    文件还在、函数已经改名）。参数化用例的顶层 `def` 名不变，所以 `@pytest.mark.parametrize`
+    那种写法不需要在这里特判。
+
+    `root` 是给 M 段留的把手：反证电池把本包拷进系统临时目录跑，那份副本的 `ROOT` 上面
+    **没有** `apps/`（本轮实测：基线因此报「5 处文件不存在」，整批电池判 INCONCLUSIVE——
+    自己的判据把自己的电池弄成没裁决，这是最糟的一种红）。所以 M 段只对着一棵临时造假的小树判
+    语义，真正那张 `REAL_DB_TARGETS` 由 `g_section()` 在仓库根上核对、不符就不交付。
+    """
+    bad: list[str] = []
+    for rel, fn in targets:
+        path = root / rel
+        if not path.is_file():
+            bad.append(f"真库指针指向的文件不存在：{rel}::{fn}")
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+        names = {n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        if fn not in names:
+            bad.append(f"{rel} 里没有顶层用例 {fn}（实有 {sorted(names)[:4]}…）——"
+                       f"那句话就又是一句过期的交代")
+    return bad
+
+G_TITLE = ("########## G 仓库静态自检（E/F/I/W/UP/B 机检子集；被检清单 = 在库登记表 `EV_PY` + 本步仓库件 "
+           "`G_TEST_FILES`，两份都由代码现拼，不在正文里抄号数）")
+#: 本步在**仓库侧**触碰的 Python：S2.1.1–S2.1.5 的用件（用例 + 两份生产件）一起进 G 段门禁。
+#: 名字仍叫 `G_TEST_FILES`：README §4.11 id 34 与卡面 D-14 那两处历史说明按这个名字记的账，
+#: 改名会让那些句子指向一个不存在的东西——口径写在话里，不写在标识符里。
+G_TEST_FILES = ("apps/api/tests/test_kb_longlink_ingest.py", "apps/api/tests/test_article_identity.py",
+                "apps/api/tests/test_kb_multisource_anchor.py", "apps/api/tests/test_asset_fragment_guard.py",
+                "apps/api/app/services/kb.py", "apps/api/app/repositories/asset.py")
 
 #: 本包**登记在册**的证明脚本：G 段的被检清单取自这张表，不再 `EV.glob("*.py")` 现算。
 #: 第十一轮复审 NIT② 之后我把它改成了 glob，代价反过来落在自己身上（第十二轮实测）：复核智能体
@@ -402,7 +509,8 @@ G_TEST_FILES = ("apps/api/tests/test_kb_longlink_ingest.py", "apps/api/tests/tes
 #: 现在清单是登记的，包内出现**未登记**的 `.py` 判缺陷、登记了却不在包里也判缺陷（当场点名，
 #: 既不静默扩清单，也不静默少检）。新入库一份证明脚本 = 同时进这张表，改一处就够。
 EV_PY = ("block_article_identity_plugin.py", "j_attack_r7.py", "mutate_replay_r9.py",
-         "prove_article_identity.py", "prove_biz_delegation.py", "replay_s213.py")
+         "prove_anchor_fallback.py", "prove_article_identity.py", "prove_biz_delegation.py",
+         "replay_s213.py")
 
 
 def g_section() -> tuple[str, list[str]]:
@@ -439,7 +547,92 @@ def g_section() -> tuple[str, list[str]]:
     if blocks != len(listed_names):
         defects.append(f"G 段命令列出 {len(listed_names)} 份文件，表里只有 {blocks} 份——"
                        f"清单与被检结果脱节（登记的那几份与跑出来的那几份不是同一批）")
+    defects += db_pointer_defects(REAL_DB_TARGETS)
+    covered = {f for f, _ in REAL_DB_TARGETS}
+    for must in STEP_NEW_TEST_FILES:
+        if must not in covered:
+            defects.append(f"真库指针表没登记 {must}——本步新写的连库用例没人交代去哪跑；"
+                           f"把这张表清空也能「一条都不缺」，所以这里按文件级点名")
     return text, defects
+
+
+#: S2.1.4/S2.1.5 那台证明面（`prove_anchor_fallback.py`）的三个入口，各成一段：
+#: O.1 基线（磁盘上的 kb.py + asset.py 现在绿不绿）、O.2 反证电池（改坏必须红 / 等价不许假红 /
+#: 三档退出码 + 编码面）、O.3 判据清单（这一台的分母，与头部 `af_ids()` 那句对账）。
+O_HARNESS = "prove_anchor_fallback.py"
+O_TITLES = (
+    "########## O.1 S2.1.4/S2.1.5 证明面基线：磁盘上的 kb.py + asset.py（AST 取活绑定 exec + 记账假会话）",
+    "########## O.2 锚定台反证电池：改坏必须红 / 等价不许假红 / 三档退出码与编码面都分得开",
+    "########## O.3 锚定台判据清单：`--list-checks` 自报的分母，与头部那句 AF 条数两条通道对账",
+)
+O_NOTES = (
+    "# 这一段为什么在本包里：S2.1.4 的缺陷形状是**崩栈**（`scalar_one_or_none()` 撞见多行时抛"
+    "`MultipleResultsFound`，有依赖环境实测读数 `docs/任务规划V0.3.0/evidence/probes_4afaedd.txt:19`），"
+    "而本机没有 sqlalchemy 与 structlog（`kb.py:22-25` 模块级导入）⇒ pytest 那条用例在本机连收集都过不去。\n"
+    "# 所以这里的取证方式是「AST 从磁盘源码里取出那两个函数的**活绑定**、单独 compile+exec，"
+    "配一台如实实现 `limit(1)` 截断与多行抛错的记账假会话」：它证明的是**生产代码向 DB 要了什么**，"
+    "不证明 SQL 引擎侧的真实执行——后者仍交 `test_kb_multisource_anchor.py`（P-4 转正 + 锚定顺序）与"
+    "`test_asset_fragment_guard.py`（需依赖）⇒ README §5 J-1/J-5，"
+    "两份的文件名与用例名都登记在 `REAL_DB_TARGETS`，由 G 段逐条核对磁盘上确有其事。\n"
+    "# S2.1.5 的判据不是「不崩」而是「不猜」：`%s%` 那类短片段 `.limit(1)` 也不崩，却会把**另一篇**"
+    "资产当命中返回（缓存复用错文章、版本比对错 hash），所以这里同时数 SQL 条数（应为 0）与 WARNING 次数。\n"
+)
+
+
+def o_ledger(af: dict[str, list[str]], o1: str, o2: str, o3: str) -> list[str]:
+    """把 O 段三条读数与 `af_ids()` 的登记表对账，返回缺陷清单（空 = 三条读数彼此自洽）。
+
+    做成**纯函数**是有意的：这一段跑一次要起三台子进程（基线 + 反证电池 + 清单），
+    M 段若想把「这里核的三件事」自己反证一遍，就得等电池跑完 ⇒ 一次自证变成几十秒，
+    而纯字符串进、缺陷出之后，M 段可以当场喂进「对齐的一份」与五种「故意对不上」的读数。
+    ① O.1 那句「合计 PASS=p FAIL=f｜判据登记 n 条」里 `f` 必须为 0 且 `p == n`（自报计数自己得对齐）；
+    ② `n` 必须等于登记表条数；③ O.3 的清单**逐条 id** 必须与登记表同一批（不只比条数——
+      少一条又多一条时条数是相等的，那种读数才最像绿的）。
+    O.2 的「SELF-TEST PASS」字样一起判：电池红了就不能交出绿留档。
+    """
+    defects: list[str] = []
+    flat = [i for k in sorted(af) for i in af[k]]
+    total = len(flat)
+    if not total:
+        defects.append(f"O 段没有分母：`af_ids()` 从 {O_HARNESS} 的 `CHECKS` 里一条判据都没数到——"
+                       f"登记表形状变了（不是 `(\"AF-Xn\", 标签, 判据)` 一行一条），三处对账全部无从判定")
+    m = re.search(r"合计 PASS=(\d+) FAIL=(\d+)｜判据登记 (\d+) 条", o1)
+    if not m:
+        defects.append("O.1 里读不到「合计 PASS=… FAIL=…｜判据登记 … 条」这句计数——判据面无从对账")
+    else:
+        p, f_, n_ = (int(x) for x in m.groups())
+        if f_ or p != n_:
+            defects.append(f"O.1 计数不对齐：PASS={p} FAIL={f_} 登记={n_}——应为 FAIL=0 且 PASS 等于登记条数")
+        if n_ != total:
+            defects.append(f"O.1 自报登记 {n_} 条，头部 `af_ids()` 从 `CHECKS` 数到 {total} 条——"
+                           f"两条通道不是同一批判据")
+    if "SELF-TEST PASS" not in o2:
+        defects.append("O.2 的反证电池没打印「SELF-TEST PASS」——改坏必须红这条通道没过，不能交出绿留档")
+    listed = [ln.split("｜")[0] for ln in o3.splitlines() if ln.startswith("AF-")]
+    if total and sorted(set(listed)) != sorted(set(flat)):
+        defects.append(
+            f"O.3 清单与登记表不是同一批（清单 {len(listed)} 行 / 登记 {total} 条）——"
+            f"只在清单：{sorted(set(listed) - set(flat))}；只在登记：{sorted(set(flat) - set(listed))}。"
+            f"分母对不上时「覆盖 n/n 条」那句读数没有意义")
+    if total and len(listed) != len(set(listed)):
+        defects.append(f"O.3 清单里有重复 id（{len(listed)} 行、去重后 {len(set(listed))} 条）"
+                       f"——同一批判据被数了两次，覆盖率的分母就是假的")
+    return defects
+
+
+def o_section() -> tuple[list[str], list[str]]:
+    """O 段三条命令 + 一次 `o_ledger()` 对账。返回 (段文本, 缺陷清单)。
+
+    与 G 段同一条教训（第十一轮复审 NIT①）：段文本塞进留档不等于它的读数被判过——
+    核对逻辑在 `o_ledger()` 里，M 段那组「锚定台现算」判据负责反证它真的会红。
+    """
+    rel = RELPATH(EV / O_HARNESS)
+    chunks = [
+        run_cmd(f"python {rel}", O_TITLES[0], O_NOTES),
+        run_cmd(f"python {rel} --self-test", O_TITLES[1]),
+        run_cmd(f"python {rel} --list-checks", O_TITLES[2]),
+    ]
+    return chunks, o_ledger(af_ids(), chunks[0], chunks[1], chunks[2])
 
 
 #: 段落来源登记表（第十轮复审 10-8 逼出来的显式数据结构）。
@@ -448,7 +641,7 @@ def g_section() -> tuple[str, list[str]]:
 #: 而且它是裸 assert——`python -O` 下整条被剥掉，实测驱动照样写出一份缺了 H 段的留档并打印
 #: 「回读逐字节相同」。现在期望段名取自这张表，缺一段、多一段都下得了裁决而不是 traceback。
 ARCHIVED = ("A", "B", "C", "D", "E", "F", "H", "I")
-CODE = ("G", "J", "K", "M", "N", "L")
+CODE = ("G", "J", "K", "M", "N", "O", "L")
 
 
 L_HEAD = "########## L 重放器自检：每段都必须留得下一条逐字可重跑的 `$ ` 命令\n"
@@ -701,6 +894,129 @@ def self_test(listing: bool = False) -> int:
     finally:
         shutil.rmtree(tmpd, ignore_errors=True)
 
+    # 第二台 harness（S2.1.4/S2.1.5）的同一组反证。上一轮「头部现算」那组只管到了 BD 一台，
+    # 本轮新增 O 段与 `af_headline()`/`o_ledger()`：如果只加读数、不加反证，就等于把第十轮 10-1
+    # 那条纪律在第二台上重新欠一遍（第五次复发）。这一组还顺带堵了本轮**真的踩过**的那发
+    # `ValueError: invalid literal for int() with base 10: 'P0'`——崩栈不是裁决，所以它现在有靶子。
+    g8 = "锚定台现算"
+    af_map = af_ids()
+    flat_af = [i for k in sorted(af_map) for i in af_map[k]]
+    total_af = len(flat_af)
+    bad_faces: list[str] = []
+    for letter, ids in sorted(af_map.items()):
+        nums = [_af_num(i, letter) for i in ids]
+        if not ids or any(n is None for n in nums):
+            bad_faces.append(f"{letter} 面 id 形状不是 AF-{letter}<数字>：{ids!r}")
+        elif nums != list(range(nums[0], nums[0] + len(nums))):
+            bad_faces.append(f"{letter} 面号数不连续：{ids!r}")
+    check(g8, "四个面齐、面内号数从首号起连续（头部那两个区间才是人话）",
+          "" if set(af_map) == set(AF_GROUP_NAME) and not bad_faces
+          else f"面集合 {sorted(af_map)!r}，问题：{bad_faces or '面集合没齐'}")
+    head_af_now = af_headline()
+    check(g8, f"头部那句 AF 条数就是现算的 {total_af} 条，且不带 FAIL 字样",
+          "" if "FAIL" not in head_af_now and f"AF 判据条数：{total_af} 条" in head_af_now
+          else f"实得 {head_af_now!r}")
+    tmpa = pathlib.Path(tempfile.mkdtemp(prefix="af_ledger_"))
+    try:
+        src_lines = (EV / O_HARNESS).read_text(encoding="utf-8-sig").splitlines(keepends=True)
+        picks = [(i, m.group(2), f"AF-{m.group(2)}{m.group(3)}")
+                 for i, ln in enumerate(src_lines) if (m := AF_LABEL.match(ln))]
+        target = next(((i, k, s) for i, k, s in reversed(picks) if len(af_map.get(k, [])) > 1), None)
+        if target is None:
+            check(g8, "找得到可删的判据行（面内至少两条，删了才看得出清单跟着变）",
+                  f"登记表里没有一个面有多条判据：{ {k: len(v) for k, v in af_map.items()} }")
+        else:
+            idx, face, gone = target
+            harness = tmpa / "harness.py"
+            harness.write_text("".join(src_lines[:idx] + src_lines[idx + 1:]), encoding="utf-8")
+            af2 = af_ids(harness)
+            flat2 = [i for k in sorted(af2) for i in af2[k]]
+            check(g8, f"删掉 {gone} 那一行 ⇒ 清单正好少它一条",
+                  "" if flat2 == [i for i in flat_af if i != gone] else f"删了 {gone} 仍得 {flat2!r}")
+            head2 = af_headline(harness)
+            check(g8, f"同一发删行 ⇒ 头部那句跟着变成 {total_af - 1} 条（不是写死的数）",
+                  "" if f"AF 判据条数：{total_af - 1} 条" in head2 else f"实得 {head2!r}")
+        shape = tmpa / "shape.py"
+        shape.write_text('CHECKS = (\n    ("AF-S10", x)\n    ("AF-S2", x)\n    ("AF-P0", x)\n)\n',
+                         encoding="utf-8")
+        got_shape = af_ids(shape)
+        check(g8, "形状档：AF-P0 不被当成数字、AF-S2 排在 AF-S10 前（本轮那发 ValueError 的原样）",
+              "" if got_shape == {"S": ["AF-S2", "AF-S10"], "P": ["AF-P0"]} else f"实得 {got_shape!r}")
+
+        o1_ok = f"合计 PASS={total_af} FAIL=0｜判据登记 {total_af} 条"
+        o3_ok = "\n".join(f"{i}｜标签" for i in flat_af)
+        ok_probe = o_ledger(af_map, o1_ok, "… SELF-TEST PASS …", o3_ok)
+        check(g8, "对账：三条读数彼此自洽时不给缺陷（这道核对不是只会红）",
+              "" if not ok_probe else f"实报 {len(ok_probe)} 处：{ok_probe[0]}")
+        for label, o1_txt, want in (
+                ("有判据红", f"合计 PASS={total_af} FAIL=1｜判据登记 {total_af} 条", "O.1 计数不对齐"),
+                ("PASS 少于登记", f"合计 PASS={total_af - 1} FAIL=0｜判据登记 {total_af} 条", "O.1 计数不对齐"),
+                ("登记数虚报", f"合计 PASS={total_af} FAIL=0｜判据登记 {total_af + 1} 条", "两条通道不是同一批判据"),
+                ("整句计数丢了", "合计……这句压根没有", "判据面无从对账")):
+            got = o_ledger(af_map, o1_txt, "… SELF-TEST PASS …", o3_ok)
+            check(g8, f"对账探针：O.1 换成「{label}」必须点名「{want}」",
+                  "" if any(want in d for d in got) else "沉默——这一档就是不可假的判据")
+        got = o_ledger(af_map, o1_ok, "SELF-TEST FAIL：某发变异没红", o3_ok)
+        check(g8, "对账探针：O.2 电池没绿时必须点名",
+              "" if any("O.2" in d for d in got) else "沉默")
+        swapped = flat_af[:-1] + ["AF-Z9"]
+        got = o_ledger(af_map, o1_ok, "… SELF-TEST PASS …", "\n".join(f"{i}｜标签" for i in swapped))
+        check(g8, "对账探针：O.3 少一条又多一条（条数相等）必须两端都点名",
+              "" if any(flat_af[-1] in d and "AF-Z9" in d for d in got) else f"实得 {got!r}")
+        got = o_ledger(af_map, o1_ok, "… SELF-TEST PASS …", "\n".join(f"{i}｜标签" for i in [flat_af[0], *flat_af]))
+        check(g8, "对账探针：O.3 同一 id 列两行必须报重复（只比集合就等于没比）",
+              "" if any("重复" in d for d in got) else f"实得 {got!r}")
+        got = o_ledger({}, "合计 PASS=0 FAIL=0｜判据登记 0 条", "… SELF-TEST PASS …", "")
+        check(g8, "对账探针：登记表空了要说「没有分母」（不许沉默交出绿留档）",
+              "" if any("没有分母" in d for d in got) else f"实得 {got!r}")
+    finally:
+        shutil.rmtree(tmpa, ignore_errors=True)
+    check(g8, "o_section 真的把三条读数交给 o_ledger（对账写在注释里等于没对）",
+          "" if "o_ledger(af_ids(), chunks[0], chunks[1], chunks[2])" in inspect.getsource(o_section)
+          else "o_section 源码里没有那次调用——O 段的对账就又是一句叙述")
+    check(g8, f"锚定台 {O_HARNESS} 在 EV_PY 登记表里（不在册就既不进 G 段门禁、也不算被检清单）",
+          "" if O_HARNESS in EV_PY else f"实登记 {EV_PY!r}")
+
+    # 真库指针（本轮自己撞出来的那一类）：P-4 用例按卡面换了文件，而「那条走 某文件::某用例」
+    # 这句话从前只活在注释与 print 里——没人核对磁盘上确有其事。现在表在 `REAL_DB_TARGETS`，
+    # G 段落盘前在**仓库根**上逐条核对，M 段只判这道核对的**语义**。
+    # 为什么 M 段不直接判那张真表（本轮实测踩过）：电池把本包拷进临时目录跑，副本的 `ROOT`
+    # 上面没有 `apps/` ⇒ 五条指针全报「文件不存在」，基线不绿、整批 INCONCLUSIVE——
+    # 判据把自己的电池弄成「没有裁决」，是最糟的一种红。所以这里造一棵临时小树当世界。
+    g9 = "真库指针"
+    staged = pathlib.Path(tempfile.mkdtemp(prefix="ptr_selftest_"))
+    try:
+        (staged / "apps" / "tests").mkdir(parents=True)
+        (staged / "apps" / "tests" / "t_one.py").write_text(
+            "import pytest\n\n\ndef test_alpha():\n    pass\n\n\n"
+            "@pytest.mark.parametrize('x', [1])\nasync def test_beta(x):\n    assert x\n\n\n"
+            "class Helper:\n    def test_gamma(self):\n        pass\n", encoding="utf-8")
+        check(g9, "指针核对：文件在、顶层用例在 ⇒ 静默（这道核对不是只会红）",
+              "" if not db_pointer_defects((("apps/tests/t_one.py", "test_alpha"),
+                                            ("apps/tests/t_one.py", "test_beta")), staged)
+              else f"实报 {db_pointer_defects((('apps/tests/t_one.py', 'test_alpha'),), staged)!r}")
+        got = db_pointer_defects((("apps/tests/t_one.py", "test_alpfa"),), staged)
+        check(g9, "探针：用例名漂移必须点名（改名而没人动那句话就会红）",
+              "" if any("没有顶层用例" in d for d in got) else "沉默——这一档不可假")
+        got = db_pointer_defects((("apps/tests/t_none.py", "test_alpha"),), staged)
+        check(g9, "探针：文件不存在必须点名",
+              "" if any("不存在" in d for d in got) else "沉默")
+        got = db_pointer_defects((("apps/tests/t_one.py", "test_gamma"),), staged)
+        check(g9, "探针：名字确实写在文件里、但只是**类里的方法**也必须点名（grep 会放过它，AST 不会）",
+              "" if any("没有顶层用例" in d for d in got) else f"实得 {got!r}")
+    finally:
+        shutil.rmtree(staged, ignore_errors=True)
+    covered = {f for f, _ in REAL_DB_TARGETS}
+    check(g9, f"真表非空（登记 {len(REAL_DB_TARGETS)} 条）——清空这张表就注销了整条门禁",
+          "" if len(REAL_DB_TARGETS) >= 3 else f"实登记 {REAL_DB_TARGETS!r}")
+    check(g9, "本步两份新用例文件都在表里（按文件级点名，空表与缺文件都出声）",
+          "" if set(STEP_NEW_TEST_FILES) <= covered else f"实覆盖 {sorted(covered)!r}")
+    check(g9, "指针表里的文件同时进 G 段门禁（交代去哪儿跑的文件，自己先得过静态自检）",
+          "" if covered <= set(G_TEST_FILES) else f"漏进门禁：{sorted(covered - set(G_TEST_FILES))!r}")
+    check(g9, "g_section 真的在仓库根上调 db_pointer_defects（对账写在注释里等于没对）",
+          "" if "db_pointer_defects(REAL_DB_TARGETS)" in inspect.getsource(g_section)
+          else "g_section 源码里没有那次调用——这张表就只是又一份文档")
+
     # 读数归一化（第十二轮复审 B3）。上一版头部那句「段体里有三类读数……都在 `run_cmd()` 里统一处理」
     # 是模板字面量：实测在库留档里墙钟 2 处、③ 的标注 1 处、② **一处都没有**——那句声明只能靠留档
     # 恰好撞出那个形状才谈得上被证，撞不出来就永远假不了（G-23 禁的就是这种永不失败的断言）。
@@ -802,9 +1118,11 @@ def self_test(listing: bool = False) -> int:
           "写留档按**字节**回读逐位相同，CRLF / BOM / 半成品 / 截断四种各有专属原因（半成品排在"
           "字节层两类之后，因为生产写入点的意图本来就带占位符），"
           f"重试要真的试满 {ATTEMPTS} 次、每次之间真的等 {PAUSE} 秒（注入通道与默认值各判一次），"
-          "写不进磁盘时报原因而不是静默过；头部那句判据条数由 `bd_ids()` 从 harness 现数；"
+          "写不进磁盘时报原因而不是静默过；头部那句判据条数由 `bd_ids()` 从 harness 现数，"
+          "第二台（S2.1.4/S2.1.5）的头部与 O 段对账同样由 `af_ids()`/`o_ledger()` 现数并各配反证；"
           "读数归一化每一条都有正/反两档靶子且计数与正文两条通道对账；"
-          "每段末行 `rc=` 与 `EXPECTED_RC` 相符；本包里的变异副本没有落盘权")
+          "每段末行 `rc=` 与 `EXPECTED_RC` 相符；本包里的变异副本没有落盘权；"
+          "「交真库跑」那句话点到的文件与用例逐条在磁盘上核对过")
     print(f"SELF-TEST PASS：{len(ran)} 条反证全过（{tally}）"
           f"——取不到命令时驱动停下，落不进磁盘时驱动也停下，两种都不许抄旧输出")
     return 0
@@ -908,6 +1226,10 @@ def main() -> int:
                 "少一条就 rc≠0；③ 编码三发全绿时原先一声不出（等于注销），绿档不可证 ⇒ 现在三发各自把实得"
                 "读数打出来（裸跑 rc、关 guard rc、抽靶后 rc），锚点不命中也逐发报而不只在批级兜。\n")
     ts = datetime.datetime.now().astimezone().isoformat(timespec="seconds")[:25]
+    # O 段：S2.1.4/S2.1.5 的证明面 + 它自己的反证电池 + 它的判据清单（三条命令，读数在 `o_section()`
+    # 里逐条核对，不是把文本塞进留档就算跑过——与 G 段同一条教训）。排在 N 之后只因为 M/N 已经把
+    # 「驱动自己」与「M 段判据的电池」跑完；O 这一段管的是**仓库侧那两个函数**，与前两台并列。
+    o_chunks, o_defects = o_section()
     hh = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
                         capture_output=True, text=True, env=ENV, cwd=ROOT).stdout.strip()
     # HEAD 之外到底还带不带未提交改动，是让 `git status` 说的，不是我抄的（第八轮复审 id 7：
@@ -935,22 +1257,27 @@ def main() -> int:
         state = "工作树干净（全局 `git status --porcelain` 为空）"
     pyv, plat = sys.version.split()[0], sys.platform
     head_bd = bd_headline()  # 第十轮复审 10-1：这一句从前是模板字面量，加一条判据它不会跟着变
+    head_af = af_headline()  # 同上，管的是第二台 harness（S2.1.4/S2.1.5）：O 段与头部这句都从 `CHECKS` 现数
     head_retry = f"重试要真的试满 {ATTEMPTS} 次且每次之间真的等 {PAUSE} 秒（注入通道与默认值各判一次）"
     head_causes = "CRLF / BOM / 半成品 / 截断四种各有专属原因（按这个顺序判）"
     # 段末 `rc=` 与归一化命中都在**全部段跑完之后**才判（M/N 也在其中）：上一版的顺序是头部先写、
     # 段落后跑，于是头部那句「三类读数都处理了」描述的是上一版留档而不是这一趟（第十二轮复审 B3）。
-    sections_text = "\n".join(rendered) + "\n" + j + "\n" + "\n".join(k_chunks) + "\n" + m + "\n" + n
+    sections_text = ("\n".join(rendered) + "\n" + j + "\n" + "\n".join(k_chunks) + "\n" + m + "\n" + n
+                     + "\n" + "\n".join(o_chunks))
     head_norm, norm_bad = norm_ledger(NORM_HITS, sections_text)
     hits_at_header = dict(NORM_HITS)
-    late = rc_gate(sections_text) + norm_bad
+    late = rc_gate(sections_text) + norm_bad + o_defects
     if late:
         for d in late:
             print(f"FAIL 交付：{d}")
         return 1
-    header = f"""# STEP-02 S2.1.3 执行留档（kb._biz_from_url 委托解析层）
+    header = f"""# STEP-02 执行留档（S2.1.3 委托解析层 + S2.1.4 锚定兜底删除 + S2.1.5 片段长度守卫）
 # 时间 {ts}｜HEAD={hh}｜{state}｜Python {pyv}｜{plat}
 # 本机依赖实测：structlog / sqlalchemy 皆无（kb.py:22-25 模块级导入）⇒ D 段只能证明「收集期即失败」，用例本身交 CI（J-5）
+# 范围要说清（第十三轮自查）：这一份留档从 S2.1.3 一路记到 S2.1.5，A–N 段仍是 S2.1.3 那一轮的账，
+#   S2.1.4/S2.1.5 的读数在 **O 段**（证明面基线 / 它自己的反证电池 / 判据清单）与 G 段的被检清单里。
 {head_bd}
+{head_af}
 #   本文件每一段的命令都由**在库件** `replay_s213.py` 逐字重跑生成（`python docs/06_validation/evidence/
 #   EVD-V2-02/replay_s213.py`）。两道自检收尾：L 段机检「每段都留得下一条 `$ ` 命令」（只判把手在不在），
 #   M 段机检驱动自己的两条通道（取命令：把手丢了仍取到同一条、取不到就 raise；落盘：写入必须按**字节**回读
@@ -987,7 +1314,7 @@ def main() -> int:
     # 本包里那份变异副本跑完就把在库 `out_s213.txt` 的 N 段标题重写成了 M 段，收尾判据只能拒收、
     # 不能 undo）。L 段此刻还在占位符上，所以这一趟只核 A–N，L 留给落盘后那一遍。
     pre_letters = sorted({x.group(1) for x in re.finditer(r"(?m)^########## ([A-Z]+)", sections_text)})
-    pre_want = sorted({*ARCHIVED, "G", "J", "K", "M", "N"})
+    pre_want = sorted({*ARCHIVED, *CODE} - {"L"})
     if pre_letters != pre_want:
         print(f"FAIL 交付：还没落盘，段集合就已经与登记表不符——期望 {pre_want}，实得 {pre_letters}；"
               f"这一趟拒绝写盘（写下去就是一份缺段的留档，而磁盘上的旧那份已经被覆盖）")

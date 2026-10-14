@@ -8,11 +8,18 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import structlog
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.entities import ContentAsset, KnowledgeDocument
+
+logger = structlog.get_logger(__name__)
+
+# S2.1.5：LIKE 兜底的最小片段长度。`%s%` 这类单字符片段几乎命中所有 https URL
+# （长链的 article_key 就是 URL 末段 `s`，见 kb._article_key），既错又慢。
+MIN_FRAGMENT_LEN = 8
 
 
 class AssetRepository:
@@ -37,8 +44,20 @@ class AssetRepository:
         """BE-02 D-2/D-3 兼容存量：源下 URL 含指定片段的资产（biz 锚源 + article_key 资产失配兜底）。
 
         仅用于缓存命中/版本管理的前置查找，不改变幂等键语义（external_id 仍为主锚）。
+
+        S2.1.5：片段短于 `MIN_FRAGMENT_LEN` 一律不查——长链的 article_key 是 URL 末段 `s`
+        （见 `kb._article_key`），`%s%` 在 https URL 里近乎全表命中。此处的 `.limit(1)`
+        只保证不崩，返回的却是「碰巧排在最前的另一篇」：缓存命中会复用错资产，版本管理
+        会比对错 hash。短到无法区分身份的片段必须显式放弃兜底并留痕，而不是静默猜一行。
         """
-        if not fragment:
+        if len(fragment) < MIN_FRAGMENT_LEN:
+            if fragment:
+                logger.warning(
+                    "asset_url_fragment_too_short",
+                    source_id=source_id,
+                    fragment=fragment,
+                    min_len=MIN_FRAGMENT_LEN,
+                )
             return None
         return await self._session.scalar(
             select(ContentAsset)

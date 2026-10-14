@@ -334,33 +334,33 @@ class KnowledgeBaseService:
         raise last_exc  # type: ignore[misc]
 
     async def _find_source_by_anchor(self, article_key: str, url: str) -> Source | None:
-        """先 biz 参数锚、后 article_key 锚查既有 source；未命中再按「源 URL 含该 article_key」兜底。
+        """先 biz 参数锚、后 article_key 锚查既有 source；两个锚都不命中就返回 None。
 
         BE-02 D-2/D-3 修复：无 biz 参数短链首抓后 source.external_id=article_key（见
-        _ensure_source 同口径），二次入库以 article_key 锚必然命中；对历史遗留
-        （source.external_id=页面 biz 且 URL 含 article_key）做 URL 兜底，兼容存量数据。
+        _ensure_source 同口径），二次入库以 article_key 锚必然命中。
+
+        S2.1.4（P-4 转正）：旧版此处还有一条 `Source.url.like(f"%{article_key}%")` 兜底，
+        而长链的 article_key 是 URL 末段 `s`（见 `_article_key`）——几乎所有 https URL 都含
+        字母 s，LIKE 于是命中多行，`scalar_one_or_none()` 抛 `MultipleResultsFound`
+        （有依赖环境实测读数：`docs/任务规划V0.3.0/evidence/probes_4afaedd.txt:19`）。
+        它原本为「历史 biz 锚遗留行」兜底，但 S2.1.3 委托解析层后长链也能解出 `__biz`，
+        那条遗留路径由 biz 参数锚本身覆盖，兜底不再有必要。
+        两条锚查询一律 `.limit(1)`：同一 external_id 若因存量脏数据有多行，取一行而不是崩。
         """
         for anchor in (a for a in (_biz_from_url(url), article_key) if a):
             row = (
                 await self._session.execute(
-                    select(Source).where(
+                    select(Source)
+                    .where(
                         Source.type == "wechat_oa",
                         Source.external_id == anchor,
                     )
+                    .limit(1)
                 )
             ).scalar_one_or_none()
             if row is not None:
                 return row
-        # 兜底：源 URL 含当前 article_key（历史 biz 锚 source 行，其 url 列带原文链接）
-        row = (
-            await self._session.execute(
-                select(Source).where(
-                    Source.type == "wechat_oa",
-                    Source.url.like(f"%{article_key}%"),
-                )
-            )
-        ).scalar_one_or_none()
-        return row
+        return None
 
     async def _lookup_short_link(self, short_key: str) -> str:
         """D-04/L-01：短链 key → 长链 article_key（映射未落则空串，走真实抓取路径）。"""

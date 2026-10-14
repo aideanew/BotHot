@@ -968,7 +968,13 @@ _PLAIN_IMPORT = "    from app.services.article_identity import parse_wechat_url\
 #: 第七轮复审的调用点变异锚：`kb.py:343` 那一行（实测本文件里唯一），与宿主方法尾部锚。
 #: 刻意用**行内**形态而不是正则找函数：锚失配必须由 `src.count(old) != 1` 报出来。
 _CALLER_LINE = "        for anchor in (a for a in (_biz_from_url(url), article_key) if a):"
-_HOST_TAIL = "        ).scalar_one_or_none()\n        return row\n"
+#: 宿主（`_find_source_by_anchor`）的**当前**尾部锚。S2.1.4 把末尾那句 `Source.url.like(...)`
+#: 兜底删掉之后，旧锚 `).scalar_one_or_none()\n return row` 在磁盘上出现 0 次 ⇒ 两发以它为锚的
+#: 变异（宿主同名重复定义 / 正当 setattr 不连坐）一起失配，本轮实测 BD 台 `--self-test` rc=1。
+#: 锚失效必须由电池说出来而不是被跳过，所以这里不换 grep、只把锚跟着磁盘走。
+_HOST_TAIL = ("            if row is not None:\n"
+              "                return row\n"
+              "        return None\n")
 
 MUTANTS: list[tuple[str, str, str, set[str]]] = [
     ("退回旧实现：只读 biz（D-01b 本体复活）", NEW_BODY, OLD_BODY,

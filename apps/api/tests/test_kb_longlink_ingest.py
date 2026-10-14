@@ -1,5 +1,11 @@
 """STEP-02 / S2.1.3：`kb._biz_from_url` 委托解析层（长链号主身份不再为空串）。
 
+本文件只管 S2.1.3（biz 委托）：口径见下面第 1–5 条与 `prove_biz_delegation.py`。
+它的**下游** S2.1.4（删 `Source.url.like('%s%')` 兜底）在 `test_kb_multisource_anchor.py`，
+本机侧证明在 `prove_anchor_fallback.py`——后者同时是一道静态门：它从磁盘上的 kb.py 里取出
+`_find_source_by_anchor` 的当前函数体，要求函数体内不再出现 `.like(`，且两条锚查询都带
+`.limit(1)`。「删掉了兜底」这种否定式声明不能只靠人眼读 diff。
+
 为什么这个文件在本机跑不起来、却仍然有价值：`kb.py:22-25` 在模块级 import `structlog`
 与 `sqlalchemy`，本机两者皆无（实测 `PYTHONPATH=. python -m pytest
 tests/test_kb_longlink_ingest.py -q --noconftest` → 收集期 `ModuleNotFoundError: No module
@@ -13,6 +19,8 @@ named 'structlog'`，rc=2）⇒ 下面的用例只能在有依赖的环境里真
 （形状见 `tests/fixtures/wechat_urls.py:45`）⇒ 长链入库时 biz 恒为空串，
 `_find_source_by_anchor`（`kb.py:343`）的锚点只剩 article_key，而长链的 article_key
 又是 URL 末段 `s`（`kb.py:554-557`）⇒ 同账号所有长链坍缩到同一个锚。
+本文件证的是这条链的**上游那一环**（锚不该是空串）；坍缩之后那句 `like('%s%')` 兜底
+由 S2.1.4 处理，不在这里。
 
 验收口径（卡面 S2.1.3「补测试」+ 本步补充，全部为本机实测行为）：
 1. `_biz_from_url(LONG_A)` 非空且等于 `BIZ_A`；

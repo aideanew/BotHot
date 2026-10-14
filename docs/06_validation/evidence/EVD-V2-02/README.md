@@ -1,4 +1,4 @@
-# EVD-V2-02 — STEP-02 S2.1.1/S2.1.2/S2.1.3 文章身份解析与委托（本机执行账）
+# EVD-V2-02 — STEP-02 S2.1.1…S2.1.5 文章身份解析、委托与锚定去 LIKE（本机执行账）
 
 起始基线：`main@b69123f`（STEP-00R 第三轮采纳项入库后）；S2.1.1/S2.1.2 的交付提交是
 `78e3378`（其父为 `1470b77`，即 STEP-00R 第四轮处置）；S2.1.3 的交付提交是 `c10b229`
@@ -25,7 +25,8 @@
 | S2.1.1 先红用例（`test_article_identity.py`，14 条） | ✅ 真实执行 + 改前红可重放 | §2 两条通道 + §3 `block_article_identity_plugin.py` |
 | S2.1.2 实现（`article_identity.py`：`WechatUrlParts` + `parse_wechat_url`） | ✅ 真实加载、语句覆盖 27/27=100% | §2 |
 | S2.1.3 `kb._biz_from_url` 委托 | ✅ 改前红可重放 + 改后 BD 判据全绿 + 三条反证通道（变异 / 样本对 / 等价写法，三个数由 `prove_biz_delegation.py` 末行现算打印，本行不抄）+ 档位/退出码/编码三层自证（仅 BD 侧三层，PI 侧只有编码那一层） | §2 通道 C（`prove_biz_delegation.py`）、`out_s213.txt` A–N（第九轮起含 M 落盘自证与 N 变异电池；**段数与行数不抄在本行**——现读 `grep -c '^########## ' out_s213.txt` 与驱动末行「写出 …（N 行、M 段）」，——第十一轮复审 id 36 报回过同一类「现为」抄件，本行这一处是第十二轮自查（§4.13 id 47 同批）补上的） |
-| S2.1.4 删 LIKE 兜底 / S2.1.5 片段长度守卫 | ⏳ 未做 | — |
+| S2.1.4 `_find_source_by_anchor` 删 LIKE 兜底 + 锚查询 `.limit(1)` | ✅ 本机由 O 段那台证明面承担（AF-B1…B5 行为面 + AF-S1/S2/S6 结构面：AST 取磁盘 kb.py 的**当前函数体**真实 exec，配一台如实实现 `limit(1)` 截断与多行抛错的记账假会话）；连库那条交 §5 J-6 | §4.14、`out_s213.txt` O 段 |
+| S2.1.5 `get_by_url_fragment` 片段长度守卫（阈值取卡面的 8） | ✅ 同上（AF-A1…A5：短片段**零条 SQL**、返回 None、恰一条 WARNING 且事件名点名、边界卡在 8/7）；连库那条交 §5 J-7 | §4.14、`out_s213.txt` O 段 |
 | S2.2 规范键 | ⛔ 阻塞于 ADR-0011 / D-V2-01（人拍板） | — |
 
 ## 2. 三条真实执行通道（都能在别人机器上一条命令复现）
@@ -562,6 +563,27 @@ B 组回报 **3 CONFIRMED + 2 MINOR**，两条 MINOR 逐条本机复现成立、
 一律以 `--self-test` 末行、`--list-checks`、电池 `N-覆` 与 `N-总` 四处打印为准，本节不复制号数；
 留档由在册驱动整份重放后入库，重放命令就是留档 L 段那条 `$ ` 命令。
 
+## 4.14 第十三轮：S2.1.4/S2.1.5 落库——一次**驱动自己崩掉**、一次**指针指空**、两处锚随代码漂
+
+锚点：本轮对象是第十二轮处置入库后的状态（`git log --oneline -3`）。这一轮**动了生产代码**
+（`kb.py` 的 `_find_source_by_anchor`、`asset.py` 的 `get_by_url_fragment` 与模块级阈值），
+与 §4.4…§4.13 那几轮「只改证明层」不同，所以 §6 那句「`asset.py` 零改动」同时作废。
+本轮没有派复核件（复核对象还没入库，派早了就是复核一个还没交付的形状），
+下表五条全部是**我自己跑出来的现场**——其中 id 50 与 id 52 都是缺陷被判据抓住的那一类。
+
+| id | 现象 | 复现 | 落点 |
+|---|---|---|---|
+| 50 | **驱动以 traceback 收场**：AF 那台把判据集中在 `CHECKS` 表里登记，id 是**三段**形状 `AF-<面字母><号数>`，而 `af_ids()` 借用了 BD 台按两段取号的 `int(s.split("-")[1])` ⇒ 整份重放在 `o_section()` 里抛 `ValueError: invalid literal for int() with base 10: 'P0'`，末行既不是 OK 也不是 FAIL，一个裁决都没交出。本项目禁的正是这第三种形态，而这一次**犯的是取证工具自己**，不是被测件 | 本轮实测：`python docs/06_validation/evidence/EVD-V2-02/replay_s213.py` 的 stdout 末段是 traceback（修好后同一条命令就是留档 O.1/O.2/O.3 三段的原样读数） | 取号改由 `_af_num()`：形状不符返回 `None` 而**不抛**，红由判据下而不是由解释器下。M 段新增「锚定台现算」的形状档——`AF-P0` 不许被当数字、`AF-S2` 必须排在 `AF-S10` 前（按字符串排就反序，正是这发变形），N 段配「AF 清单按字符串排序」那发变异把它打红 |
+| 51 | 「头部现算」这条纪律从前只担保 BD 一台：本轮新增 O 段与 `af_headline()` 之后，**删掉一条 AF 判据，头部那句与 O 段对账都不会跟着变**——同一类缺陷第五次欠账，只是换了台机器 | 把 `prove_anchor_fallback.py` 的 `CHECKS` 里任意一行删掉 ⇒ 改前头部照旧、`--list-checks` 的分母跟着掉而没人比对 | M 段发满这一组（面齐/区间连续、头部条数、**真删一行** ⇒ 清单与头部同步变小、形状档、`o_ledger()` 的八档探针：有判据红 / PASS 少于登记 / 登记数虚报 / 整句计数丢了 / O.2 电池没绿 / O.3 少一条又多一条（条数相等，那种读数最像绿的）/ 同一 id 列两行 / 登记表空了要说「没有分母」，再加 `inspect.getsource(o_section)` 锚核对「登记了却不调用」与锚定台在 `EV_PY` 在册）；N 段配 15 发 RED + 1 发 GREEN（等价：显式按 `(号数, id)` 排） |
+| 52 | 「交真库跑」那句话点到的文件与用例**根本不存在**：卡面 S2.1.4.1 点名 `test_kb_multisource_anchor.py`，我最初把 P-4 用例写进了 `test_kb_longlink_ingest.py`。按卡面搬过去之后，harness 的 print、O 段注释、README §5 **三处指针同时陈旧**，而当时没有任何一条判据核对磁盘上确有其事——这类否定式/指针式声明正是本包一路在补的形状 | `git show` 本轮中间态：搬迁后 `grep -rn "test_kb_longlink_ingest.py::test_multi_source_no_crash"` 仍命中两处（一处 print、一处注释），文件里已经没有那个函数 | 名字集中登记为 `REAL_DB_TARGETS`（文件 + 顶层用例名），`db_pointer_defects()` 按 **AST** 核对——不是 grep：注释里的名字、`class` 里的同名方法都算不得「确有其事」，本轮为这两种形状各配一发探针与变异。G 段在**仓库根**上核对，不符就不交付；M 段只判这道核对的**语义**（静默档 + 漂移/缺文件/类方法三档探针 + 真表非空 + 表内文件同时进 G 段门禁 + `g_section` 真的调用）。为什么 M 段不直接判真表（本轮实测踩过、也是这条的落点的一部分）：反证电池把本包拷进系统临时目录跑，副本的 `ROOT` 上面没有 `apps/` ⇒ 五条指针全报「文件不存在」，基线不绿、整批 **INCONCLUSIVE**——判据把自己的电池弄成「没有裁决」是最糟的一种红，所以判据带 `root` 把手，M 段对着一棵临时造假的小树判 |
+| 53 | 两处 harness 的**宿主尾部锚**随生产代码一起漂了：S2.1.4 删掉兜底之后，旧锚 `).scalar_one_or_none()\n        return row` 在磁盘上出现 0 次 ⇒ BD 台 `--self-test` 有两发直接失配报红，J 台 J-8 报的是「应红未红」——**那两种红的含义相反**（一个是判据不够严，一个是攻击压根没打出去），却共用同一句文案 | `python docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py --self-test`（修前：两行 `FAIL 变异锚失配（出现 0 次）`）；`python …/j_attack_r7.py`（修前：`FAIL 攻击对照：J-8 … 应红未红 ['BD-14']`） | 锚跟着磁盘走（`_HOST_TAIL`、`TAIL` 两处）。J 台补**锚失配预检**：`CALL`/`TAIL` 在 `kb.py` 里出现次数 ≠ 1 就点名并退出，且每一发构造后的源码若与基准**一字不差**就报「replace 没命中锚，这一发压根没打出去」——锚漂了必须由电池自己说，跳过等于把这条反证悄悄注销（电池的老纪律①，这一轮轮到 J 台补上） |
+| 54 | 卡面 S2.1.4.3「已有 biz 源时优先命中 biz 源」从前只在假会话侧证过（AF-B1），连库侧没有对应的常驻用例——本机证不了不等于卡面可以少一条 | 读 §4 S2.1.4.3 与本包 §5 J-6 的差集 | 连库侧补 `test_biz_anchor_wins_when_both_anchors_exist`：种两条源（`external_id` 分别等于 biz 与 `_article_key(LONG_A)`），断言返回的是 biz 那条——判的是**顺序**而不是「有没有结果」（SQL 不保证行的顺序，所以顺序必须写进判据）；开头 `assert key == "s"` 把前提钉住，哪天 `_article_key` 换口径，这一行先出声，免得那句话悄悄变成在测另一件事。J-6 交有依赖环境实跑 |
+
+本轮改了 `kb.py` 与 `asset.py`（前几轮那句「`git diff c10b229 -- kb.py` 为空」的读法见 §6 更新）；
+两份新连库用例本机不可跑 ⇒ §5 J-6/J-7。M 段/N 段/AF 台判据条数一律以
+`replay_s213.py --list-checks`、`prove_anchor_fallback.py --list-checks`、电池 `N-覆`/`N-总`
+与驱动末行为准，**本节不复制号数**；留档由在册驱动整份重放后入库，重放命令就是留档 L 段那条 `$ ` 命令。
+
 ## 5. 交人工 / 有依赖环境的项目
 
 | # | 项 | 为什么本机不能做 | 命令 |
@@ -571,17 +593,27 @@ B 组回报 **3 CONFIRMED + 2 MINOR**，两条 MINOR 逐条本机复现成立、
 | J-3 | `idx=%20`、参数名大小写、`/S/` 大写路径三条口径 | 需微信真实抓取样本，本机不抓取（不启服务） | 对现有 `Source.url` 样本跑 `parse_wechat_url` 分布，交 STEP-06/07 |
 | J-4 | 全量连库回归（S2.3） | 需隔离 PG16@5547 | 见 STEP-00R §4 H-2 的 `test-env.sh env` 链 |
 | J-5 | `tests/test_kb_longlink_ingest.py` 的 pytest 实跑（S2.1.3 的用例面） | `kb.py:22-25` 模块级 import structlog+sqlalchemy，本机收集期即失败（实测 `out_s213.txt` D 段）；本机侧只由通道 C 承担 | `cd apps/api && uv run pytest tests/test_kb_longlink_ingest.py tests/test_article_identity.py -q -k biz` |
+| J-6 | `tests/test_kb_multisource_anchor.py` 的 pytest **连库**实跑（S2.1.4：P-4 转正 + 锚定顺序） | 同一原因（收集期即失败）+ 需要隔离 PG；本机侧由 O 段那台假会话承担，它只证「生产代码向 DB 要了什么」，不证 SQL 引擎侧真跑 | `eval "$(bash scripts/test-env.sh env)" && cd apps/api && uv run pytest tests/test_kb_multisource_anchor.py -q` |
+| J-7 | `tests/test_asset_fragment_guard.py` 的 pytest 实跑（S2.1.5 的用例面） | `asset.py` 模块级 import structlog+sqlalchemy，本机收集期即失败；假会话版判据在 O 段（AF-A1…A5） | `cd apps/api && uv run pytest tests -q -k url_fragment` |
 
 ## 6. 范围与偏离声明
 
-- 本包交付 **S2.1.1 + S2.1.2 + S2.1.3**；S2.1.4/S2.1.5 未做（`asset.py` 零改动，
-  复审 G 段独立确认）。S2.1.3 对 `kb.py` 的改动**只有一个 hunk**：
-  `git diff 78e3378 -- apps/api/app/services/kb.py` → `3 insertions(+), 5 deletions(-)`，
-  且都在 `_biz_from_url` 函数体内（`kb.py:587-591`）；`_find_source_by_anchor`（`kb.py:343`）
-  的调用点、`_article_key`、LIKE 兜底一律未动，分属 S2.1.4/S2.1.5。
-  两点读数口径要注意：①「一个 hunk」是**默认上下文**下的 `git diff`，加 `-U0` 会因
-  docstring/导入块与 return 行之间的空行而拆成 2 个 hunk；②`grep -c '^-'` 数出来是 6，
-  因为把 `--- a/…` 文件头也算进去了——以 numstat 的 `3/5` 为准。
+- 本包交付 **S2.1.1 + S2.1.2 + S2.1.3 + S2.1.4 + S2.1.5**（第十三轮起）。改动面与读数都现读，
+  本节不抄号数：
+  `git diff --stat 78e3378 -- apps/api/app/services/kb.py apps/api/app/repositories/asset.py`
+  给出生产侧两份文件的两段账（S2.1.3 那一 hunk 只碰 `_biz_from_url`，S2.1.4 那一 hunk 只碰
+  `_find_source_by_anchor`，S2.1.5 在 `asset.py` 的 `get_by_url_fragment` 与模块级阈值常量）；
+  `_article_key`（`kb.py:554`）与规范键 **未动**，那属 S2.2（阻塞于 ADR-0011 / D-V2-01）。
+  从前这里写过「S2.1.4/S2.1.5 未做（`asset.py` 零改动，复审 G 段独立确认）」——那句话在第十三轮
+  之前是真的，现在由上面那条命令取代；两点读数口径的老教训仍然成立：①「一个 hunk」只在
+  **默认上下文**下成立，`-U0` 会因 docstring/导入块与 return 行之间的空行拆成 2 个 hunk；
+  ②`grep -c '^-'` 会多算 `--- a/…` 文件头那一行，以 numstat 为准。
+- S2.1.4 的「P-4 转正」用例落在 **`test_kb_multisource_anchor.py`**（卡面 S2.1.4.1 点名的文件名），
+  不是 `test_kb_longlink_ingest.py`。这处搬迁把两份文档的指针带歪了，已就地更正并**变成判据**：
+  `replay_s213.py` 的 `REAL_DB_TARGETS` 登记「文件 + 顶层用例名」，G 段在仓库根上按 AST 逐条核对
+  确有其事（详见 §4.14 id 52）。遗留一处：**V0.4.0 的 STEP-02 卡面**（`steps/STEP-02-…:113`、`:122`）
+  仍写 `test_kb_longlink_ingest.py::test_multi_source_no_crash` 与那条验收命令——那份是上一版计划的
+  历史账，按 V0.5.0 README 的取代关系读，本包不回头改它；要在有依赖的环境里跑，命令以本 README §5 J-6 为准。
 - **四轮处置批（§4.4/§4.5 的第二轮、§4.6 的第五轮、§4.7 的第六轮、§4.8 的第七轮）都没有再动
   `kb.py`**，§4.9 的**提交前自查批**同样没动（它是证明层与运行层的改动）：
   `git diff c10b229 -- apps/api/app/services/kb.py` 为空（本轮复跑确认）。
@@ -618,6 +650,18 @@ B 组回报 **3 CONFIRMED + 2 MINOR**，两条 MINOR 逐条本机复现成立、
   `kb.py`」的声明随之作废，改由上一条的 diff 命令界定范围）；`kb.py` 其余部分与 `asset.py` 未动。
 - 通道 C 的 exec 只覆盖 `_biz_from_url` 一个函数节点：**它不能证明 kb 的入库链路正确**
   （那需要 J-5 与 J-4），只能证明「这个函数当前确实委托了解析层、且解析口径单点」。
+- 第十三轮那台（`prove_anchor_fallback.py`，O 段）的边界同一条，而且要说得比「它证了什么」更狠：
+  它证的是**生产代码向 DB 要了什么**（假会话如实实现 `limit(1)` 截断与多行抛错），
+  **不证** SQL 引擎侧真实执行、不证 commit、也不证存量库里到底有几行会撞上同一个锚——那三件事
+  分别交 J-6/J-7 与 J-4。
+- **一处刻意的不对称**（读者会问，先写在这里）：S2.1.5 拒绝「用 `.limit(1)` 猜一行」（短片段直接放弃
+  兜底），而 S2.1.4 的两条锚查询却**正是**用 `.limit(1)` 收尾。区别在锚的**身份含量**：
+  `.limit(1)` 在这里处理的是「同一 external_id 因脏数据有多行」（同身份，取哪条都对，AF-B4 判的就是
+  摘掉它要抛 `MultipleResultsFound`）；而 `%s%` 匹配到的是**不同身份**的若干行（取哪条都错）。
+  这个区分成立的前提是 biz 锚先命中——S2.1.3 之后长链都能解出 `__biz`，退化锚 `s` 只在
+  「URL 里确实没有 `__biz`」时才轮到它。前提一旦被拆（比如有人把锚元组顺序换了、或解析层又退化），
+  本包能出声的是 AF-B1/AF-S7（锚序与委托接线），而**「库里到底有多少行 external_id='s'」本机无从知道**：
+  那是 J-4 的存量面，也是 STEP-07 存量审计该量的东西。
 - 覆盖率是**语句覆盖**（`sys.settrace`），不是分支覆盖——复审 Q-16 另用自写弧采集核对了唯一
   那条 If 的两条弧，但那不是本脚本的门禁项，别把它读成「分支覆盖 100%」。
 - 三条反证通道各自的方向：变异体证明「改坏会红」，样本对证明「判据能假」，等价重构证明

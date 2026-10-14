@@ -41,7 +41,13 @@ if not OLD.startswith("#!/usr/bin/env python"):
 KB = (ROOT / "apps/api/app/services/kb.py").read_text(encoding="utf-8")
 
 CALL = "        for anchor in (a for a in (_biz_from_url(url), article_key) if a):"
-TAIL = "        ).scalar_one_or_none()\n        return row\n"
+#: 宿主方法（`kb._find_source_by_anchor`）的当前尾部锚——S2.1.4 删掉 `Source.url.like(...)` 兜底后，
+#: 旧锚 `).scalar_one_or_none()\n return row` 在磁盘上已经出现 0 次，J-8 那一发因此「应红未红」
+#: （本轮实测：`FAIL 攻击对照：J-8 … 应红未红 ['BD-14']`）。锚失配由下面的 count 校验出声，
+#: 所以这里跟着磁盘改锚，而不是把那一发跳过。
+TAIL = ("            if row is not None:\n"
+        "                return row\n"
+        "        return None\n")
 SECOND = ("\n\ndef _r7_local_biz(url: str) -> str:\n"
           "    from urllib.parse import parse_qs, urlparse\n\n"
           "    return (parse_qs(urlparse(url).query).get('__biz') or [''])[0]\n")
@@ -82,6 +88,24 @@ CRASHES = {
 }
 tmp = pathlib.Path(tempfile.mkdtemp(prefix="j_r7_"))
 probe = EV / "_harness_prefix_r7.py"
+
+#: 锚失配预检（本轮实测踩到的）：S2.1.4 删掉 `Source.url.like(...)` 兜底之后，`TAIL` 这个锚
+#: 在磁盘上出现 0 次，于是 J-8 那发的 `KB.replace(TAIL, …)` **静默返回原文**——读数写成
+#: 「应红未红 ['BD-14']」，看起来像判据漏抓了一次攻击，实际是攻击压根没打出去。
+#: 那两种红的含义相反（一个是判据不够严，一个是取证工具坏了），所以必须先分开报，且不允许跳过。
+for _lbl, _old in (("J-5/J-6/J-7 的调用行锚", CALL), ("J-8 的宿主尾部锚", TAIL)):
+    _n = KB.count(_old)
+    if _n != 1:
+        print(f"FAIL 攻击锚失配：{_lbl} 在 kb.py 里出现 {_n} 次（应为 1）——"
+              f"锚漂了就没有「这一发攻击」可言，跳过等于把这条反证悄悄注销")
+        raise SystemExit(1)
+for _lbl, _src in [*ATTACKS.items(), *CRASHES.items()]:
+    if isinstance(_src, tuple):
+        _src = _src[0]
+    if _src == KB:
+        print(f"FAIL 攻击构造失效：{_lbl} 生成的源码与基准一字不差——replace 没命中锚，"
+              f"这一发压根没打出去（不是判据没抓住）")
+        raise SystemExit(1)
 
 
 def run_with(harness_text, kb_text, tag):

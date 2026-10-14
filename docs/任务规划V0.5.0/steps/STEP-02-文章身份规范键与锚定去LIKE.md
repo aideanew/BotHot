@@ -7,7 +7,7 @@
 | 规模 | 中（约 1.5 人日） |
 | 依赖 | S2.1.x：STEP-00C；S2.2 起：STEP-01（ADR-0011） |
 | 裁决 | D-V2-01、D-13 |
-| 剩余原子任务 | 9（👤 0） |
+| 剩余原子任务 | 6（👤 0）——S2.1.4/S2.1.5 已于第十三轮交付，见下表 ✅ 与 EVD-V2-02 §4.14 |
 | 所有权（写） | W：apps/api/app/services/article_identity.py、kb.py、batch_ingest.py、repositories/asset.py；apps/api/tests/test_article_identity.py、test_kb_longlink_ingest.py、test_kb_multisource_anchor.py（新）及复刻旧键的 3 个测试文件 |
 | 基线 | main@65f508b |
 
@@ -30,13 +30,27 @@
 
 标记：🔴 先红（写失败测试）｜🛠 实现｜✅ 验证/读数｜📄 文档｜🗄 数据/迁移｜👤 人工/裁决
 
-### S2.1 共同部分（不依赖 D-V2-01，立即可做）
-- **S2.1.4** 🔴🛠 `_find_source_by_anchor` 删除 LIKE 兜底；锚查询加 `.limit(1)` 且 biz 源优先
-  - S2.1.4.1 把 P-4 探针转常驻用例 test_kb_multisource_anchor.py（改前红：MultipleResultsFound）
-  - S2.1.4.2 删 kb.py:354-361
-  - S2.1.4.3 转绿；另加“已有 biz 源时优先命中 biz 源”用例
-- **S2.1.5** 🔴🛠 `get_by_url_fragment` 守卫：片段长度 <8 或等于 `s` 时直接返回 None
-  - S2.1.5.1 单测：片段 `s` ⇒ None；正常 token ⇒ 命中
+### S2.1 共同部分（不依赖 D-V2-01，立即可做）——第十三轮已交付
+- **S2.1.4** ✅🛠 `_find_source_by_anchor` 删除 LIKE 兜底；锚查询加 `.limit(1)` 且 biz 源优先
+  - S2.1.4.1 ✅ P-4 探针转常驻用例 `apps/api/tests/test_kb_multisource_anchor.py::test_multi_source_no_crash`
+    （改前红的实测读数引 `docs/任务规划V0.3.0/evidence/probes_4afaedd.txt:19`；本机不可跑 ⇒ EVD-V2-02 §5 J-6）
+  - S2.1.4.2 ✅ 删兜底那一段；旧 `kb.py:354-361` 的行号随上下文移动，现读用
+    `git diff --stat 78e3378 -- apps/api/app/services/kb.py` 与 `grep -n '\.like(' apps/api/app/services/kb.py`
+    （后者必须为空；本机由结构面 AF-S1/S6 机检，不靠人眼读 diff）
+  - S2.1.4.3 ✅ 本机侧 AF-B1…B5 全绿；连库侧另加 `test_biz_anchor_wins_when_both_anchors_exist`
+    （判**顺序**：两条锚源同时存在时返回 biz 那条）
+- **S2.1.5** ✅🛠 `get_by_url_fragment` 守卫：片段长度 <8（`MIN_FRAGMENT_LEN`）时直接返回 None 并记 WARNING
+  - S2.1.5.1 ✅ 单测 `apps/api/tests/test_asset_fragment_guard.py`：`s` ⇒ None 且**零条 SQL**、
+    正常 token ⇒ 命中、边界卡在 8/7、放行路径仍是 `source_id eq + url like + limit(1)`
+    （本机不可跑 ⇒ §5 J-7；本机侧等价证明 AF-A1…A5）
+  - 卡面那句「或等于 `s` 时」按长度阈值实现：`s` 是长度 1，已被 `<8` 覆盖，不再单列特判
+    （单列会让守卫在下一个单字符键形上再次失效——登记为口径说明，不是打折）
+  - **代价要说清**：`kb.py:245/:284` 两处调用点传的正是 `article_key`，长链场景它是 `s` ⇒
+    这条兜底从此在该场景**恒定放弃**，存量「biz 锚源 + article_key 资产」的缓存命中会退化为
+    一次真实重抓、版本比对少一次陈旧参照。选择的是正确性优先于命中率（宁可重抓也不能命中错文章）；
+    S2.2 规范键落地后这条兜底应由真正的键替代，届时本条代价自然消失。
+- 处置批本身的账在 `docs/06_validation/evidence/EVD-V2-02/README.md` §4.14（五条：驱动崩栈、
+  头部现算第二次欠账、指针指空、两处锚随代码漂、卡面 S2.1.4.3 的连库侧补条）。
 
 ### S2.2 规范键（依赖 ADR-0011）
 - **S2.2.1** 🔴 test_article_identity.py 增 `canonical_article_key` 用例：长链同篇不同追踪参数同键、同号不同 mid 异键、短链 `s:`、非微信 host `h:`、任何输入 ≠ `s`
