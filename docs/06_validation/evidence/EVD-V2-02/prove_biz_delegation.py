@@ -1020,7 +1020,7 @@ MUTANTS: list[tuple[str, str, str, set[str]]] = [
      NEW_BODY + "\n" + TARGET_NAME + " = lambda url: ''\n", {"BD-13"}),
     ("顶层 if 里再 def 一份（模块作用域没有块级作用域，def 绑的是模块属性）", NEW_BODY,
      NEW_BODY + "\nif True:\n    def " + TARGET_NAME + "(url: str) -> str:\n        return ''\n", {"BD-13"}),
-    ("globals() 动态重绑（AST 的绑定扫描看不见这次写入）", NEW_BODY,
+    ("globals() 动态重绑（AST 的绑定扫描看不见这类写入）", NEW_BODY,
      NEW_BODY + f"\nglobals()['{TARGET_NAME}'] = lambda url: ''\n", {"BD-13"}),
     ("del 掉目标名（活绑定直接消失，判据面却什么都没看见）", NEW_BODY,
      NEW_BODY + f"\ndel {TARGET_NAME}\n", {"BD-13"}),

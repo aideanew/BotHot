@@ -324,16 +324,22 @@ def _name_of_arg(node: ast.AST, strs: dict[str, str]) -> str | None:
 
 
 def _attr_rebinds(src: str, name: str) -> list[int]:
-    """换掉活绑定的形状：`X.<name> = …`/`del X.<name>`、`setattr`/`delattr`（含别名与常量名实参）、
-    `type(X).__setattr__(…)`、下标赋值。
+    """换掉活绑定的形状：属性赋值/删除、`setattr`/`delattr`（含别名与常量名实参）、`type(X).__setattr__`、
+    下标赋值，**外加两类第十五轮 E 组报回的**：类体内/模块级对目标名的裸赋值，以及目标名以
+    **字符串字面量**出现在任何调用实参或字典键里。
 
-    第十三轮 A 组实测：只有第一类会被抓到——`setattr(AssetRepository, "get_by_url_fragment", _legacy)`
-    把方法换掉了而这条判据绿（`getattr` 反例 `AssetRepository.get_by_url_fragment = _legacy2` 才红）。
-    BD 那台早就把这一族配齐（`j_attack_r7.py` 的 J-1…J-4），AF 台只配了一发，是覆盖不对称。
-    第十四轮 C 组 C-14-03 又推进两发：`type.__setattr__` 与「别名 + 常量名」的 setattr 照样绿——
-    这一族的规矩是**认语义不认字形**：谁调的不重要，重要的是那个名字被换掉了。
-    名字查不到时还能由模块级 `__getattr__`（PEP 562）凭空造一份——那在 BD 台是 J-3，
-    本台的 exec 面不经过模块属性查找，所以不在这里判，边界写在 README §7。
+    第十四轮 A 组实测：只有属性赋值那一类会被抓到；补上 `setattr`/下标之后，C-14-03 又报回
+    `type.__setattr__` 与「别名 + 常量名」。第十五轮 E 组再报六发：类体里一句 `get_by_url_fragment = lambda …`
+    （同一个命名空间里的裸名赋值，属性赋值的前缀写法根本看不见它）、`for _f in (setattr,): _f(…)`、
+    `d = {"f": setattr}; d["f"](…)`、`builtins.__dict__["setattr"](…)`、`functools.partial(setattr, …)`、
+    `AssetRepository = type("AssetRepository", (), {…})`——**六发在旧口径下两半全绿**。
+
+    为什么「字符串字面量」这一判在这里是安全的：两个目标名在磁盘上的 `kb.py`/`asset.py` 里
+    **一处字符串形态都没有**（现读 `grep -n '"_find_source_by_anchor"\|"get_by_url_fragment"'
+    apps/api/app/services/kb.py apps/api/app/repositories/asset.py` 为空），所以「生产文件里把目标名
+    写成字符串」这件事本身就是要绕名字解析——getattr/setattr/partial/type()/dict 注入五种形态全都要它。
+    这台机器的 exec 面只 exec 目标 def 的文本，**从不经过活绑定**，所以行为面永远看不见重绑；
+    这一族真正的兜底是 import 之后的连库用例（J-6）与 CI，不是 AF-B6——上一版 §4.16 C3 写反了，已改。
     """
     tree = ast.parse(src)
     funcs, strs = _alias_map(tree)
@@ -351,6 +357,9 @@ def _attr_rebinds(src: str, name: str) -> list[int]:
                 hits.append(getattr(n, "lineno", 0))
             # `vars(AssetRepository)["get_by_url_fragment"] = …` / `d["…"] = …`：下标形态同样换绑定
             if any(isinstance(s, ast.Subscript) and _str_of(s.slice) == name for s in ast.walk(t)):
+                hits.append(getattr(n, "lineno", 0))
+            # 裸名赋值：类体里的 `get_by_url_fragment = lambda …` 与模块级同名赋值换的都是活绑定
+            if any(isinstance(s, ast.Name) and s.id == name for s in ast.walk(t)):
                 hits.append(getattr(n, "lineno", 0))
         if not isinstance(n, ast.Call):
             continue
@@ -371,6 +380,17 @@ def _attr_rebinds(src: str, name: str) -> list[int]:
                 if len(n.args) > idx and _name_of_arg(n.args[idx], strs) == name:
                     hits.append(n.lineno)
                     break
+        # 任何调用只要把目标名**当字符串实参**递进去（getattr/partial/methodcaller/dict 注入都这形状）
+        for a in ast.walk(n):
+            if isinstance(a, ast.Constant) and a.value == name:
+                hits.append(n.lineno)
+                break
+    # 字典键形态：`type("X", (), {"get_by_url_fragment": …})` 里那个键不是调用实参
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Dict):
+            for k in n.keys:
+                if isinstance(k, ast.Constant) and k.value == name:
+                    hits.append(getattr(n, "lineno", 0))
     return sorted(set(hits))
 
 
@@ -382,8 +402,31 @@ def _str_of(node: ast.AST) -> str | None:
 
 
 def _calls_any_like(fn: ast.AST) -> list[ast.AST]:
-    return [n for n in ast.walk(fn)
-            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "like"]
+    """构造 like 条件的调用点，**三种拼法都算**。
+
+    ① 字面 `recv.like(...)`（Attribute 位上就是 like）；
+    ② `getattr(源, "like")(...)` 与 `operator.attrgetter("like")`——属性名不出现在 Attribute 位上，
+       只出现在字符串实参里（第十四轮 C 组 C-14-01 的第一发就是这个形状）；
+    ③ `operator.methodcaller("like", ...)`（第十四轮补的那发，第十五轮 E 组又把它挪到**另一个函数**里：
+       行为面 exec 的只有那两个目标函数，看不见别处的兜底，所以这一族必须由**全文扫**的 AF-S6 兜住）。
+    """
+    hits: list[ast.AST] = []
+    for n in ast.walk(fn):
+        if not isinstance(n, ast.Call):
+            continue
+        f = n.func
+        if isinstance(f, ast.Attribute) and f.attr == "like":
+            hits.append(n)
+            continue
+        callee = f.id if isinstance(f, ast.Name) else (f.attr if isinstance(f, ast.Attribute) else "")
+        if callee in {"getattr", "attrgetter"} and len(n.args) >= 2:
+            pick = n.args[1] if callee == "getattr" else n.args[0]
+            if _str_of(pick) == "like":
+                hits.append(n)
+                continue
+        if callee == "methodcaller" and n.args and _str_of(n.args[0]) == "like":
+            hits.append(n)
+    return hits
 
 
 def _select_calls(fn: ast.AST) -> list[ast.Call]:
@@ -545,21 +588,32 @@ def af_b4(kb: str, asset: str) -> tuple[bool, object]:
 
 
 def af_b6(kb: str, asset: str) -> tuple[bool, object]:
-    """生产量级的短链键（18 字符）也不许下发任何 URL 列的 like 条件——按**条件**判，不按源码里的写法判。
+    """生产量级的短链键（18/19/25/41 字符四档）都不下发**任何列**的 like 条件——按条件判，不按字形判。
 
-    第十四轮 C 组 C-14-01 报的就是这一格：AF-B2 用的键是 `"s"`，而那一发攻击把兜底写成
-    `if len(article_key) > 8: … getattr(getattr(Source, "url"), "like")(…)`——
-    短键不发、长键才发，于是「兜底有没有复活」取决于探针喂了多长的键；而 `operator.methodcaller("like", …)`
-    那一发连 AST 里的 `.like(` 字面形状都不留（AF-S1/S6 抓不到）。
-    「URL LIKE 复活」在 SQL 层是一个**条件**，所以这里读的是假会话收到的条件集：任何拼法造出来的都算。
+    第十四轮 C 组 C-14-01 开了这一格，第十五轮 E 组又报出它自己的三格，这一版把三格都堵上：
+    ① **长度维**：攻击写成 `if len(article_key) > 19:` 时，只喂 18 字符的探针什么都看不到——
+       所以键长不再取单点，按短链 article_key 的真实分布取 18/19/25/41 四档（41 是带 `&` 截断前的全长）；
+    ② **列维**：把 like 打到 `Source.external_id` 上，旧写法用 `_url_conds`（只挑 `col=="url"`）读不到；
+       本判据要的是「兜底那种模糊匹配」，它在 SQL 层是**任意列上的一个 like 条件**，所以读 `_like_conds`；
+    ③ **位置维**：兜底挪进 kb.py 里另一个函数——行为面 exec 的只有那两个目标，看不见它；那一格由
+       AF-S1/S6 的全文扫（连同 `getattr`/`methodcaller` 两种非字形拼法）负责，见 `_calls_any_like`。
     """
-    key = "RwMKZ3pT7qLdXe1bQs"
-    url = f"https://mp.weixin.qq.com/s/{key}"
-    rows = [_row("MzNotThisOne", url)]
-    got, log, exc = _call_anchor(kb, asset, key, url, rows)
-    likes = [c for c in _url_conds(log) if c.op == "like"]
-    return (got is None and not exc and not likes), (
-        f"结果 {got!r}、异常 {exc!r}、URL 上的 like 条件 {likes}（键长 {len(key)} 字符，短链 article_key 的真实量级）")
+    bad: list[str] = []
+    seen: dict[int, tuple[object, str, int]] = {}
+    for width in (18, 19, 25, 41):
+        key = "RwMKZ3" + "".join(str((i * 7 + 1) % 10) for i in range(width - 6))
+        url = f"https://mp.weixin.qq.com/s/{key}"
+        rows = [_row("MzNotThisOne", url)]
+        got, log, exc = _call_anchor(kb, asset, key, url, rows)
+        likes = [c for c in _like_conds(log)]
+        seen[len(key)] = (got, exc, len(likes))
+        if got is not None:
+            bad.append(f"键长 {len(key)}：返回了不该命中的 source {got!r}")
+        if exc:
+            bad.append(f"键长 {len(key)}：抛了 {exc!r}")
+        if likes:
+            bad.append(f"键长 {len(key)}：下发了 {len(likes)} 条 like 条件 {likes}")
+    return not bad, bad or [f"四档键长（{sorted(seen)}）都返回 None、0 条 like 条件"]
 
 
 def af_b5(kb: str, asset: str) -> tuple[bool, object]:
@@ -613,8 +667,17 @@ def af_a3(kb: str, asset: str) -> tuple[bool, object]:
     `1234567` 是第十四轮 C 组 C-14-02 补的第四发：只测字母样本时，
     `if not fragment or fragment.isalpha(): return None` 那种「嵌一层条件的返回」在行为面上看不出来，
     而短数字片段（缓存键、纯数字 mid）正是被它放过去的那一类。
+    `ab-1234`（7 字符，混合类，必须挡）与 `ab-12345` / `p0-st_01`（各 8 字符，混合类，必须放）
+    是第十五轮 E 组补的第五到第七发。这里留一处**我自己先红**的现场：那一发的本意是
+    「8 字符的混合类必须放行」，样本最初写成 `ab-1234`——它只有 7 个字符，守卫正确地挡住了它，
+    于是基线自己先红。修的是**样本长度**那一侧（补 `ab-12345`），不是把期望从 1 改成 0；
+    `ab-1234` 留下来当 7 字符的挡侧。
+    补这两发是因为：守卫里再开一条早退分支时，它挑的是**样本集合里没有的字符类**
+    （既不是纯字母也不是纯数字，而是带 `-`/`_` 的混合类），前四发样本全照旧——
+    这两发钉的是「合法片段必须仍走那一条查询并返回行」，多一条早退分支就会被 AF-A4/A5 的形状判据抓住。
     """
-    want = {"abcdefg": 0, "abcdefgh": 1, "热点热": 0, "1234567": 0}
+    want = {"abcdefg": 0, "abcdefgh": 1, "热点热": 0, "1234567": 0,
+            "ab-12345": 1, "p0-st_01": 1, "ab-1234": 0}
     seen: dict[str, tuple[int, str]] = {}
     for frag, _ in want.items():
         _g, log, _r, exc = _call_frag(kb, asset, frag, [_arow(f"https://x/{frag}")])
@@ -626,19 +689,21 @@ def af_a3(kb: str, asset: str) -> tuple[bool, object]:
 def af_a4(kb: str, asset: str) -> tuple[bool, object]:
     """放行的片段仍按 (source_id eq + url like + limit 1) 下发并返回匹配行：守卫不等于关掉兜底。
 
-    取两个长度各测一遍：`aaaa1111` 卡在阈值下沿（阈值漂到 12 时它会被误挡），
-    18 字符那发是真实 article_key 的量级（比较方向被写成 `>` 时它会被误挡）。
+    取三个长度/三类字符各测一遍：`aaaa1111` 卡在阈值下沿（阈值漂到 12 时它会被误挡），
+    18 字符那发是真实 article_key 的量级（比较方向被写成 `>` 时它会被误挡），
+    `ab-12345` 是**带连字符的混合类**——第十五轮 E 组报的就是「守卫里再开一条早退分支」这一族：
+    那条分支专挑样本集合里没有的字符类动手，只测字母/数字样本时它读不出来。
     只测一个长度就会漏掉一类漂移——第十二轮复审前本判据只测 8，`>` 变异体全绿。
     """
     seen = {}
-    for frag in ("aaaa1111", "aaaa1111bbbb2222cc"):
+    for frag in ("aaaa1111", "aaaa1111bbbb2222cc", "ab-12345"):
         rows = [_arow(f"https://mp.weixin.qq.com/s?sn={frag}")]
         got, log, _rec, exc = _call_frag(kb, asset, frag, rows)
         if not log:
             seen[frag] = "一条 SQL 都没下发"
             continue
         _key, conds, limit = log[0]
-        seen[frag] = (got is not None and not exc and limit == 1
+        seen[frag] = (got is not None and not exc and limit == 1 and len(log) == 1
                       and any(c.op == "eq" and c.col == "source_id" for c in conds)
                       and any(c.op == "like" and c.col == "url" for c in conds))
     return all(v is True for v in seen.values()), f"片段→放行形状 {seen}"
@@ -833,6 +898,16 @@ def af_s3(kb: str, asset: str) -> tuple[bool, object]:
                   and n.value.value is None]
         bad.append(f"分支体里没有**直接**的 `return None`（嵌在下一层条件的第 {nested} 行不算："
                    f"那一层的条件不成立时，短片段照样往下发 LIKE）")
+    # 第十五轮 E 组：守卫分支里再开一条「自己发查询再返回」的早退分支时，上面三件（比较、告警、返回）
+    # 全都还在，而那条分支专挑样本集合之外的字符类动手（`ab-12345` 这种混合类）——所以这一条判据
+    # 顺带要求守卫体内**不出现任何查询构造**：守卫的职责是「放弃模糊匹配」，它不该同时是第二条兜底。
+    querying = [n.lineno for n in ast.walk(node)
+                if isinstance(n, ast.Call)
+                and ((isinstance(n.func, ast.Name) and n.func.id in {"select", "text"})
+                     or (isinstance(n.func, ast.Attribute)
+                         and n.func.attr in {"select", "execute", "scalar", "scalars", "like"}))]
+    if querying:
+        bad.append(f"守卫分支体内出现了查询调用 @{querying}——守卫只该放弃兜底，不该自己再发一条查询")
     return not bad, bad
 
 
@@ -1168,6 +1243,53 @@ MUTANTS: list[tuple[str, str, str, str, set[str]]] = [
      '    _r14_name = "get_by_url_fragment"\n'
      "    setattr(AssetRepository, _r14_name, lambda self, sid, frag: None)\n\n"
      + AS_NEXT_DEF, {"AF-S5"}),
+    # ↓ 第十五轮 E 组报回的六格。前三格是 AF-B6 自己的三个维度（长度、列、位置），后三格是
+    #   「守卫里再开一条查询」与「类体/模块级裸名重绑」这一族——每一发都写清了**期望红在哪条**，
+    #   红在别处不算这一发成立（覆盖表按判据记账，见文件末尾的 provider 门禁）。
+    ("长度维：兜底只在键长 >19 时复活，旧 AF-B6 只喂 18 字符 ⇒ 19 条判据全绿（E-15-01 ①）", "kb",
+     KB_LOOP,
+     KB_LOOP + "\n            if len(article_key) > 19:\n"
+     "                _r15 = select(Source).where(\n"
+     '                    Source.url.like(f"%{article_key}%")).limit(1)\n'
+     "                return (await self._session.execute(_r15)).scalar_one_or_none()",
+     {"AF-B6"}),
+    ("列维：like 打到 external_id 上，旧 AF-B6 用 `_url_conds`（只看 url 列）读不到（E-15-01 ②）", "kb",
+     KB_LOOP,
+     KB_LOOP + "\n            import operator as _r15op\n"
+     "            _r15 = select(Source).where(\n"
+     '                _r15op.methodcaller("like", f"%{article_key}%")(Source.external_id)).limit(1)\n'
+     "            _r15row = (await self._session.execute(_r15)).scalar_one_or_none()\n"
+     "            if _r15row is not None:\n                return _r15row",
+     {"AF-B6", "AF-S1", "AF-S6"}),
+    ("位置维：兜底挪到 kb.py 里**另一个函数**、且用 methodcaller 拼法——行为面 exec 不到它，"
+     "旧 AF-S6 又只认 `.like(` 字形 ⇒ 两半全绿（E-15-01 ③）", "kb",
+     "def _article_key(url: str) -> str:",
+     "def _r15_legacy_fallback(key: str):\n"
+     "    import operator as _op\n"
+     "    return select(Source).where(_op.methodcaller(\"like\", f\"%{key}%\")(Source.url))\n\n\n"
+     "def _article_key(url: str) -> str:",
+     {"AF-S6"}),
+    ("守卫体内再开一条早退查询（只挑混合类片段动手）：比较、告警、直接 return 三件都在，"
+     "旧 AF-S3 看不见（E-15-02）。红该记在 S3（守卫体内有查询）与 A3（`ab-1234` 是 7 字符的混合类，"
+     "正确行为是挡住；A4 的两个合法长度不受这条分支影响，所以期望集合里不写它——上一版写了，"
+     "是「凭想象写期望读数」的现场，被自己的自证打回来了）", "asset", AS_GUARD,
+     "        if len(fragment) < MIN_FRAGMENT_LEN:\n"
+     "            if fragment:\n"
+     '                logger.warning("asset_url_fragment_too_short", source_id=source_id,\n'
+     "                               fragment=fragment, min_len=MIN_FRAGMENT_LEN)\n"
+     "            if fragment and not fragment.isalnum():\n"
+     "                return await self._session.scalar(\n"
+     "                    select(ContentAsset).where(ContentAsset.url.like(f\"%{fragment}%\")))\n"
+     "            return None\n",
+     {"AF-S3", "AF-A3"}),
+    ("类体内裸名重绑（`get_by_url_fragment = lambda …`，没有任何属性前缀）：旧扫描只看 Attribute/Subscript/"
+     "setattr 三种字形（E-15-03 第一发）", "asset", AS_NEXT_DEF,
+     "    get_by_url_fragment = lambda self, sid, frag: None\n\n" + AS_NEXT_DEF, {"AF-S5"}),
+    ("整块换类（`AssetRepository = type(\"AssetRepository\", (), {\"方法名\": …})`）：目标名只以**字典键**"
+     "的字符串形态出现（E-15-03 第六发）", "asset", "class AssetRepository:",
+     "AssetRepository = type(\"AssetRepository\", (), "
+     "{\"get_by_url_fragment\": lambda self, sid, frag: None})\n\n\n"
+     "class AssetRepository:", {"AF-S5"}),
 ]
 
 #: select 链的原文（`.where` 在前、`.limit` 在后）与其等价换序版：AF-S2 数的是处数，不是顺序。

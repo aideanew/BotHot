@@ -100,7 +100,8 @@ async def test_url_fragment_empty_returns_none_without_warning(recorder: _Record
 
 @pytest.mark.parametrize(
     ("fragment", "queries"),
-    [("abcdefg", 0), ("abcdefgh", 1), ("p0-cache-001", 1), ("热点热", 0), ("1234567", 0)],
+    [("abcdefg", 0), ("abcdefgh", 1), ("p0-cache-001", 1), ("热点热", 0), ("1234567", 0),
+     ("ab-1234", 0), ("ab-12345", 1), ("p0-st_01", 1)],
 )
 async def test_url_fragment_boundary_is_exactly_min_len(
     fragment: str, queries: int, recorder: _Recorder
