@@ -699,10 +699,10 @@ def main() -> int:
 
     # ── NR-7：夹具不得波及 DSN 广播值 ───────────────────────────────────────────
     with sandbox():
-        os.environ[VAR] = "postgresql+psycopg://x:y@127.0.0.1:5547/z"
+        os.environ[VAR] = "postgresql+psycopg://x@127.0.0.1:5547/z"
         exec_fixture(src, seed)(FakeMonkeyPatch())  # ty: ignore[operator]
         dsn_kept = os.environ.get(VAR)
-    check("NR-7 清理代理不影响 AIDEANBOT_TEST_PG_DSN", dsn_kept == "postgresql+psycopg://x:y@127.0.0.1:5547/z", f"夹具后={dsn_kept!r}")
+    check("NR-7 清理代理不影响 AIDEANBOT_TEST_PG_DSN", dsn_kept == "postgresql+psycopg://x@127.0.0.1:5547/z", f"夹具后={dsn_kept!r}")
 
     # ── NR-8/NR-9：同形端口假设清零 + 地址常量单点 ──────────────────────────────
     tree_texts = tests_tree_texts()
@@ -1211,12 +1211,12 @@ def evaluate(conftest_src: str) -> list[str]:
         red.append("NR-13-b")
     # NR-7：夹具只许动代理变量，不许波及 DSN 广播值
     with sandbox():
-        os.environ[VAR] = "postgresql+psycopg://x:y@127.0.0.1:5547/z"
+        os.environ[VAR] = "postgresql+psycopg://x@127.0.0.1:5547/z"
         try:
             exec_fixture(conftest_src, seed)(FakeMonkeyPatch())  # ty: ignore[operator]
         except Exception:  # noqa: BLE001 - 崩了由 NR-4/NR-5 报，这里只判「DSN 是否还在」
             pass
-        if os.environ.get(VAR) != "postgresql+psycopg://x:y@127.0.0.1:5547/z":
+        if os.environ.get(VAR) != "postgresql+psycopg://x@127.0.0.1:5547/z":
             red.append("NR-7")
     # NR-16：运行期往常量表追加哨兵，夹具必须跟着删（否则说明它抄了一份而不是读常量）
     with sandbox():
