@@ -1,0 +1,167 @@
+.....ss........................F.....s....s............................. [  6%]
+..........................ss...ssssss.....sssssssssss.sssss............. [ 13%]
+......ss.ss.....................sssssssssssssssssssssssss............... [ 20%]
+..............................................................ssssssss.. [ 27%]
+..................ssssssssssssss...........ssssssssss.......sss.sssss... [ 33%]
+..sssssssssssssssssssssssssssssss..................ssssssssss........... [ 40%]
+.....sssssssssssssssssssssssss....sss.........sssssssssssssssssssss..... [ 47%]
+............sss....................sssssssss..sssssssssssssssssssssss.ss [ 54%]
+ssssss..ssssssssssssss.ssss.ssssssss.ssssssssssss.ssssssssssssssssssssss [ 61%]
+ssssssssssss................sssssssssssss..s.sssssss.......sssssssssssss [ 67%]
+sssssssss.ssssss....................................sssssss.ss.........s [ 74%]
+sss.............................................ssssssssssssssssssssss.. [ 81%]
+...............................................................ss....... [ 88%]
+.......sss.....ssss...........................s...sss.............ssssss [ 94%]
+ss....ss.....s.sss....sssssss........................s                   [100%]
+=================================== FAILURES ===================================
+________________ test_url_fragment_query_is_source_scoped_like _________________
+
+recorder = <test_asset_fragment_guard._Recorder object at 0xffff90bef6b0>
+
+    async def test_url_fragment_query_is_source_scoped_like(recorder: _Recorder) -> None:
+        """机器门③：放行的片段仍按 (source_id 等值 + url LIKE `%片段%` + LIMIT 1) 下发。
+
+        守卫不是把兜底整个关掉的理由——存量兼容路径（biz 锚源 + article_key 资产）还得走通，
+        只是不再拿单字符去撞全表。
+
+        断言写的是**形状与参数值**而不是「串里有 LIKE 这个词」：从前那版只判
+        `"LIKE" in sql and "LIMIT" in sql`，于是 `.limit(5)`、或把 `source_id` 谓词整条删掉都判不动
+        （A 组 MI-7：那句话比用例能证的强）。现在三个条件各有一句：跨源不得命中、只取一行、模式含通配。
+        """
+        sess = _RecordingSession()
+        await AssetRepository(sess).get_by_url_fragment("src-1", "aaaa1111")  # type: ignore[arg-type]
+        assert len(sess.calls) == 1, f"应恰好下发一条，实得 {len(sess.calls)} 条"
+        sql = sess.calls[0]
+        flat = " ".join(sql.split())
+>       assert "source_id = 'src-1'" in flat, f"没有按源过滤（跨源命中就是拿别人的资产当缓存）：{sql!r}"
+E       AssertionError: 没有按源过滤（跨源命中就是拿别人的资产当缓存）：'SELECT content_assets.id, content_assets.source_id, content_assets.external_id, content_assets.url, content_assets.title, content_assets.author, content_assets.published_at, content_assets.content_type, content_assets.content_hash, content_assets.raw_uri, content_assets.content_markdown, content_assets.version, content_assets.quality_score, content_assets.status, content_assets.hit_count, content_assets.category, content_assets.created_at, content_assets.updated_at \nFROM content_assets \nWHERE content_assets.source_id = :source_id_1 AND content_assets.url LIKE :url_1\n LIMIT :param_1'
+E       assert "source_id = 'src-1'" in 'SELECT content_assets.id, content_assets.source_id, content_assets.external_id, content_assets.url, content_assets.ti...at FROM content_assets WHERE content_assets.source_id = :source_id_1 AND content_assets.url LIKE :url_1 LIMIT :param_1'
+
+tests/test_asset_fragment_guard.py:143: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.15-final-0 _______________
+
+Name                                          Stmts   Miss  Cover
+-----------------------------------------------------------------
+app/__init__.py                                   0      0   100%
+app/api/__init__.py                               0      0   100%
+app/api/deps.py                                  69     22    68%
+app/api/v1/__init__.py                            0      0   100%
+app/api/v1/admin.py                             169     83    51%
+app/api/v1/auth.py                               76      0   100%
+app/api/v1/bots.py                              293    216    26%
+app/api/v1/chat.py                              243     51    79%
+app/api/v1/engines.py                            67     19    72%
+app/api/v1/extract.py                            33      3    91%
+app/api/v1/hot.py                               100     70    30%
+app/api/v1/onboarding.py                          9      2    78%
+app/api/v1/resolve.py                            22      3    86%
+app/api/v1/spaces.py                            128     24    81%
+app/api/v1/subscriptions.py                     106     52    51%
+app/api/v1/system.py                            186     39    79%
+app/core/__init__.py                              0      0   100%
+app/core/alerting.py                            102     15    85%
+app/core/cache.py                                55     20    64%
+app/core/config.py                              117      0   100%
+app/core/engine_keyring.py                       79      4    95%
+app/core/errors.py                               86      0   100%
+app/core/logging.py                              63      7    89%
+app/core/metrics.py                              76     10    87%
+app/core/middleware.py                           47      2    96%
+app/core/request_context.py                      13      1    92%
+app/core/response.py                             11      0   100%
+app/core/schema_guard.py                         22      5    77%
+app/core/secret_crypto.py                        63     11    83%
+app/core/security.py                            249     20    92%
+app/db.py                                        33      0   100%
+app/main.py                                     138     17    88%
+app/models/__init__.py                            4      0   100%
+app/models/base.py                               11      0   100%
+app/models/bothot_entities.py                   103      0   100%
+app/models/entities.py                          139      0   100%
+app/providers/__init__.py                         0      0   100%
+app/providers/aidean/__init__.py                  2      0   100%
+app/providers/aidean/client.py                   96     22    77%
+app/providers/article_sources/__init__.py        31     17    45%
+app/providers/article_sources/base.py            30      0   100%
+app/providers/article_sources/dajiala.py        116     91    22%
+app/providers/article_sources/justoneapi.py     156    131    16%
+app/providers/article_sources/rss.py            145     31    79%
+app/providers/article_sources/tikhub.py         124    100    19%
+app/providers/article_sources/wellbyte.py       164    136    17%
+app/providers/discovery/__init__.py               0      0   100%
+app/providers/discovery/registry.py             101     32    68%
+app/providers/embedding.py                       58      4    93%
+app/providers/engine_port.py                    132     25    81%
+app/providers/langbot/__init__.py                 0      0   100%
+app/providers/langbot/client.py                 135     36    73%
+app/providers/push/__init__.py                   17      0   100%
+app/providers/push/base.py                       26      0   100%
+app/providers/push/dingtalk.py                   45      9    80%
+app/providers/push/feishu.py                     41      8    80%
+app/providers/push/web.py                        25      2    92%
+app/providers/push/webhook.py                    21      4    81%
+app/providers/push/wechat_clawbot.py             28     15    46%
+app/providers/push/wechat_work.py                30     19    37%
+app/providers/raw_store.py                       39      1    97%
+app/providers/redfox/__init__.py                  2      0   100%
+app/providers/redfox/client.py                   69      3    96%
+app/providers/reranker.py                        80      8    90%
+app/providers/source_resolver.py                154     16    90%
+app/repositories/__init__.py                      0      0   100%
+app/repositories/asset.py                       132     95    28%
+app/repositories/job.py                         154    121    21%
+app/repositories/space.py                       109     75    31%
+app/repositories/subscription.py                 14      5    64%
+app/repositories/user.py                         63     25    60%
+app/services/__init__.py                          0      0   100%
+app/services/article_detail_fallback.py          53     53     0%
+app/services/article_identity.py                 28      0   100%
+app/services/auth/__init__.py                     5      0   100%
+app/services/auth/logout_token.py               129     20    84%
+app/services/auth/service.py                    134     15    89%
+app/services/auth/session_store.py               94     15    84%
+app/services/auth/state_store.py                 27      3    89%
+app/services/batch_ingest.py                     71     50    30%
+app/services/categorizer.py                      19      0   100%
+app/services/cron_expr.py                        45      5    89%
+app/services/engine_keys.py                      74     51    31%
+app/services/extractor.py                       166      8    95%
+app/services/feed_service.py                    100     45    55%
+app/services/hot_cluster.py                     149     50    66%
+app/services/hot_scorer.py                       78      7    91%
+app/services/intent.py                           21      0   100%
+app/services/job_worker.py                      250    201    20%
+app/services/jobs.py                             80     58    28%
+app/services/kb.py                              316    242    23%
+app/services/llm_summary.py                      32     16    50%
+app/services/manifest.py                        163    111    32%
+app/services/normalizer.py                       29      1    97%
+app/services/process_heartbeat.py                83     48    42%
+app/services/public_library.py                   68     42    38%
+app/services/push.py                             58     19    67%
+app/services/push_events.py                      48     34    29%
+app/services/push_scheduler.py                  168     98    42%
+app/services/push_template.py                    27      1    96%
+app/services/quality.py                          63      0   100%
+app/services/resolver.py                         24      0   100%
+app/services/roles.py                            29     10    66%
+app/services/scheduler.py                       261    204    22%
+app/services/spaces.py                          309    146    53%
+app/services/state_machine.py                    15      0   100%
+app/services/subscription.py                    324    264    19%
+-----------------------------------------------------------------
+TOTAL                                          8791   3544    60%
+=========================== short test summary info ============================
+1 failed, 640 passed, 421 skipped, 2 warnings in 37.32s
+rc=1

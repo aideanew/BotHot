@@ -1,0 +1,43 @@
+# CI run 38540427297 backend job 115773517368（HEAD 61358c3）关键行
+ coverage>=7.10.6 (from coverage[toml]>=7.10.6->pytest-cov)
+ched coverage-7.16.2-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (8.2 kB)
+ed coverage-7.16.2-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (258 kB)
+ collected packages: websockets, uvloop, typing_extensions, structlog, six, ruff, redis, pyyaml, python-multipart, python-dotenv, pygments, pycparser, psycopg-binary, prometheus-client, pluggy, pathspec, packaging, mypy_extensions, MarkupSafe, librt, iniconfig, idna, httptools, h11, greenlet, coverage, click, certifi, ast-serialize, annotated-types, annotated-doc, uvicorn, typing-inspection, sqlalchemy, python-dateutil, pytest, pydantic-core, psycopg-pool, psycopg, opentelemetry-api, mypy, Mako, httpcore, cffi, anyio, watchfiles, starlette, pytest-cov, pytest-asyncio, pydantic, httpx, cryptography, croniter, alembic, pydantic-settings, fastapi, bothot-backend
+ly installed Mako-1.4.3 MarkupSafe-3.0.4 alembic-1.20.0 annotated-doc-0.0.5 annotated-types-0.8.0 anyio-4.15.1 ast-serialize-0.13.0 bothot-backend-0.1.0 certifi-2026.7.22 cffi-2.1.1 click-8.5.0 coverage-7.16.2 croniter-6.2.4 cryptography-50.0.2 fastapi-0.143.0 greenlet-3.5.6 h11-0.16.0 httpcore-1.0.9 httptools-0.9.0 httpx-0.28.1 idna-3.20 iniconfig-2.3.1 librt-0.16.0 mypy-2.3.1 mypy_extensions-1.1.0 opentelemetry-api-1.45.1 packaging-26.3 pathspec-1.1.1 pluggy-1.6.0 prometheus-client-0.26.0 psycopg-3.3.6 psycopg-binary-3.3.6 psycopg-pool-3.3.3 pycparser-3.11 pydantic-2.14.1 pydantic-core-2.50.1 pydantic-settings-2.15.0 pygments-2.21.0 pytest-9.1.1 pytest-asyncio-1.4.0 pytest-cov-7.1.0 python-dateutil-2.9.0.post0 python-dotenv-1.2.4 python-multipart-0.0.32 pyyaml-6.0.3 redis-8.1.0 ruff-0.12.12 six-1.17.0 sqlalchemy-2.1.4 starlette-1.8.0 structlog-26.1.0 typing-inspection-0.4.4 typing_extensions-4.16.0 uvicorn-0.54.0 uvloop-0.23.0 watchfiles-1.3.0 websockets-17.2
+ passed!
+______ test_url_fragment_query_is_source_scoped_like _________________
+def test_url_fragment_query_is_source_scoped_like(recorder: _Recorder) -> None:
+sertionError: 没有按源过滤（跨源命中就是拿别人的资产当缓存）：'SELECT content_assets.id, content_assets.source_id, content_assets.external_id, content_assets.url, content_assets.title, content_assets.author, content_assets.published_at, content_assets.content_type, content_assets.content_hash, content_assets.raw_uri, content_assets.content_markdown, content_assets.version, content_assets.quality_score, content_assets.status, content_assets.hit_count, content_assets.category, content_assets.created_at, content_assets.updated_at \nFROM content_assets \nWHERE content_assets.source_id = :source_id_1 AND content_assets.url LIKE :url_1\n LIMIT :param_1'
+_asset_fragment_guard.py:143: AssertionError
+====================== tests coverage ================================
+_____ coverage: platform linux, python 3.12.15-final-0 _______________
+                                     8791   1816    79%
+est coverage of 75% reached. Total coverage: 79.34%
+1055 passed, 6 skipped, 1 warning in 67.65s (0:01:07)
+
+# Security run 38540427286 汇总关键行
+eric-api-key | docs/06_validation/evidence/EVD-V2-02/prove_anchor_fallback.py:556 | commit=96e8f31d | 命中已打码：key = <redacted>
+nection-string-embedded-password | docs/任务规划V0.7.0/06-入库与双端一致.md:46 | commit=f70d52fb | 命中已打码：REDACTED
+nection-string-embedded-password | docs/06_validation/evidence/EVD-V2-00R/out_evidence_check.txt:137 | commit=de78125b | 命中已打码：REDACTED
+nection-string-embedded-password | docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:921 | commit=1470b77b | 命中已打码：REDACTED
+nection-string-embedded-password | docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:926 | commit=1470b77b | 命中已打码：REDACTED
+nection-string-embedded-password | docs/06_validation/evidence/EVD-V2-00R/out_evidence_check.txt:135 | commit=1af68fc7 | 命中已打码：REDACTED
+nection-string-embedded-password | docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:206 | commit=1af68fc7 | 命中已打码：REDACTED
+nection-string-embedded-password | docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:209 | commit=1af68fc7 | 命中已打码：REDACTED
+ name in pip-audit pnpm-audit trivy gitleaks; do
+o "阻断 ${hard} 项 / 告警 ${soft} 项（详细清单见上方各步骤输出与 security-reports artifact）"
+ echo "⚠️ SECURITY_GATE_ENFORCE=0：本次仅告警不阻断（过渡模式，仅用于首次采集基线）"
+cho "❌ 安全门禁未通过：存在 ${hard} 个 🔴 阻断项——修完再合并"
+o "✅ 安全门禁通过：无 🔴 阻断项"
+E: /home/runner/setup-pnpm/node_modules/.bin
+t    OK
+it   OK
+     BLOCK
+ / 告警 3 项（详细清单见上方各步骤输出与 security-reports artifact）
+门禁未通过：存在 1 个 🔴 阻断项——修完再合并
+ps/api/pip-audit.json
+
+
+
+E: /home/runner/setup-pnpm/node_modules/.bin
+]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4, actions/setup-python@v5, actions/upload-artifact@v4, pnpm/action-setup@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

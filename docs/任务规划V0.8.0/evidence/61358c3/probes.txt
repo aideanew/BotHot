@@ -1,0 +1,16 @@
+=== longlink_collision
+=== multisource_crash
+=== reenqueue_loop
+            ^^^^^^^^^^^^
+  File "/workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/psycopg/connection_async.py", line 138, in connect
+    raise last_ex.with_traceback(None)
+sqlalchemy.exc.OperationalError: (psycopg.OperationalError) connection failed: connection to server at "127.0.0.1", port 5547 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+=== row_mapping
+dajiala -> None
+justoneapi -> None
+redfox -> {'external_id': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'url': 'https://mp.weixin.qq.com/s/x', 'title': 't', 'publish_time': datetime.datetime(2026, 9, 27, 7, 42, tzinfo=zoneinfo.ZoneInfo(key='Asia/Shanghai')), 'content_hash': '053404e840147e71dd16cfa52834cd1ce30b4d2709486b870b55449f58606326', 'status': 'DISCOVERED'}
+rss item {'title': 'A', 'url': 'https://ex.com/a', 'link': 'https://ex.com/a', 'pubDate': 'Mon, 12 Oct 2026 07:00:00 +0000', 'publishTime': 'Mon, 12 Oct 2026 07:00:00 +0000', 'guid': 'https://ex.com/a', 'id': 'https://ex.com/a', 'description': '', 'digest': ''}
+rss -> {'external_id': 'https://ex.com/a', 'url': 'https://ex.com/a', 'title': 'A', 'publish_time': None, 'content_hash': '64c8bbc346e2615025e8bdace76872b48d2b0784aa8256d0ed126dbd04d12646', 'status': 'DISCOVERED'}
+atom -> {'external_id': 'tag:b', 'url': 'https://ex.com/b', 'title': 'B', 'publish_time': datetime.datetime(2026, 10, 12, 7, 0, tzinfo=datetime.timezone.utc), 'content_hash': 'c6f6f67cc58cd3da8953d4e0a9e6852d91ba51aa6f1d6dd4d8811d486f8a4dce', 'status': 'DISCOVERED'}

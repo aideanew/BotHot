@@ -1,0 +1,2 @@
+9:19AM WRN leaks found: 8
+ls: cannot access '.gitleaksignore': No such file or directory

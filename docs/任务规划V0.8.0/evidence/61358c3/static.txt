@@ -1,0 +1,108 @@
+## HEAD
+61358c352cc4c32bc0197c631acb2147050c6bcf
+61358c3 test(step-00c): S0C.2.1 工作树占位 DSN 去口令——四处 x:y@ 全改 x@，复跑 PASS=24 FAIL=0
+2b8001a docs(Makefile): evidence-check 里 G-24 那一步的口径注释跟着单位更正——E501 现在与 ruff 同按列宽，只在 pragma 那一侧更严
+b2d0b66 test(step-r0,step-16): 短链二次入库缓存修复 + 告警默认姿态落地（含冷却，防 60s 刷屏）
+80d882b docs(任务规划V0.5.0): 06 执行记录补 1a7e37e 与 41b789d 各一行——验收列只给可重跑命令，号数一律现读
+41b789d test(step-00c,step-02): 第十六轮自查与处置——本机 E501 的单位错了，四条卡面把转抄读数写成"本地"
+1a7e37e test(step-02): S2.1.4/S2.1.5 第十五轮复审处置——E 组补「判据自己的射程」，F 组把不可证的完成态降级
+da4095a docs(任务规划V0.5.0): 06 执行记录补 e6f7de5 一行——STEP-00C ruff 回绿，验收列只给可重跑命令
+e6f7de5 test(step-00c): S0C.1/S0C.4 ruff 回绿——三条 I001 按实测形状落地，本机那张近似表才是造假红的地方
+de9866b docs(任务规划V0.5.0): 06 执行记录补 96e8f31 一行——第十四轮复审处置，验收列只给可重跑命令
+96e8f31 test(step-02): S2.1.4/S2.1.5 第十四轮复审处置——C 组补「语义不是字形」那一族，D 组把自指措辞变成读数
+d709987 docs(任务规划V0.7.0): 自查更正合计与过度声称，补 stranded ADR 归位步、六契约收编与 IDOR 用例、术语表
+f70d52f docs(任务规划V0.7.0): 基线回 13acacc 重锚 + 补齐 9 条无 STEP 的需求，六契约冻结
+## app diff since 13acacc
+ apps/api/app/api/v1/system.py |  6 +++
+ apps/api/app/core/alerting.py | 95 ++++++++++++++++++++++++++++++++++++-------
+ apps/api/app/services/kb.py   | 59 +++++++++++++++++++++------
+ 3 files changed, 132 insertions(+), 28 deletions(-)
+## NotImplementedError
+16
+apps/api/app/api/v1/engines.py:1
+apps/api/app/providers/engine_port.py:16
+## admin endpoint web consumers
+admin/push=0
+admin/ops/liveness=0
+admin/discovery/channels=0
+admin/engines/keys=0
+backchannel-logout=0
+admin/alerts=0
+## pagination shells
+offset=1
+page=2
+## alembic heads
+ab1004w4a_push_retry_and_fk_indexes.py
+ab1005w5a_notifications.py
+ab1005w5b_extra_config_encrypt.py
+## decision-log
+adr-0001-rag-engine-selection.md
+adr-0002-message-topology-and-llm-billing.md
+adr-0003-session-and-space-resolution.md
+adr-0004-pluggable-engine-architecture.md
+adr-0005-push-provider-adapter-pattern.md
+adr-0006-monorepo-apps-structure.md
+adr-0007-job-queue-postgres-skip-locked.md
+adr-index.md
+## gitleaksignore
+ls: cannot access '.gitleaksignore': No such file or directory
+## workflows
+ci.yml
+security.yml
+29:    # 的默认 DSN 指向 localhost:5433，:98-99 在 PG 不可达 3 秒内 skip 全部连库用例。
+30:    # 于是 CI 里 62 个 db_session 用例无一执行，「测试通过」是静默 skip 的假象。
+31:    # 补 service 后连库用例真实运行；再由下方 skip 门禁锁死回归。
+70:      # mypy 56 files 全绿，CI 却零机检）；PG 连库用例在 CI 无 PG 时按既有口径自动 skip
+74:      # 此前迁移只在宿主按部署手册手工跑过，CI 从无 schema，这是连库用例必然 skip 的另一半前提。
+106:      # W5：skip 门禁。解析 junitxml 的 skipped 用例，两条判据：
+107:      #   1) 「PG 不可达」类 skip 一律判失败——直接锁死本 job 要防的那类静默回归；
+108:      #   2) skip 总数 > 基线阈值 SKIP_BASELINE 判失败。
+109:      # 基线口径：CI 无 Redis / LangBot / 外部 API Key，故有少量**合法** skip。
+111:      #   `796 passed, 4 skipped`——4 条为 test_chat_sse 的真实冒烟 2 条 +
+## alerting defaults
+## evidence py lines
+  9519 total
+## web pages
+apps/web/app/admin/page.tsx
+apps/web/app/auth/aidean/callback/page.tsx
+apps/web/app/bots/page.tsx
+apps/web/app/chat/page.tsx
+apps/web/app/engines/page.tsx
+apps/web/app/hot/daily/page.tsx
+apps/web/app/hot/page.tsx
+apps/web/app/jobs/page.tsx
+apps/web/app/onboarding/page.tsx
+apps/web/app/page.tsx
+apps/web/app/public/page.tsx
+apps/web/app/spaces/[id]/page.tsx
+apps/web/app/spaces/page.tsx
+apps/web/app/subscriptions/page.tsx
+## api routers
+apps/api/app/api/__init__.py
+apps/api/app/api/deps.py
+
+apps/api/app/api/:
+__init__.py
+__pycache__
+deps.py
+v1
+
+apps/api/app/api/__pycache__:
+__init__.cpython-312.pyc
+deps.cpython-312.pyc
+
+apps/api/app/api/v1:
+__init__.py
+__pycache__
+admin.py
+auth.py
+bots.py
+chat.py
+engines.py
+extract.py
+hot.py
+onboarding.py
+resolve.py
+spaces.py
+subscriptions.py
+system.py

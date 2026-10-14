@@ -1,0 +1,3 @@
+# ruff ruff 0.12.12
+All checks passed!
+rc=0
