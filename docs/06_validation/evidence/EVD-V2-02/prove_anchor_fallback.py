@@ -15,10 +15,14 @@
 ① `where` 的条件按列如实匹配（`eq` 比值、`like` 按子串，`%` 是通配）；
 ② `limit(n)` 截断在**返回之前**发生（所以「摘掉 limit 会不会拿到多行」是可判的）；
 ③ `scalar_one_or_none()` 在多行时抛 `MultipleResultsFound`——这正是 P-4 当年崩的那一类。
-边界要说清：这里证的是「生产代码向 DB 要了什么、拿到结果怎么处理」，**不是** SQL 引擎怎么执行
-（真库那条走 `test_kb_multisource_anchor.py` 与 `test_asset_fragment_guard.py`，
-文件名与用例名登记在 `replay_s213.py` 的 `REAL_DB_TARGETS` 里、由 G 段逐条核对确有其事；
-见 EVD-V2-02 README §5 J-1/J-5）。
+边界要说清：这里证的是「生产代码向 DB 要了什么、拿到结果怎么处理」，**不是** SQL 引擎怎么执行。
+交出去的那两半口径不同，别混读（A 组 MI-6：从前这里把两份用例都写成「真库那条」，而
+`test_asset_fragment_guard.py` 用的是记账假会话，压根不连库）——
+① `test_kb_multisource_anchor.py` 的两条**连库**（`db_session`，真 PG 上跑 SELECT 与 commit）；
+② `test_asset_fragment_guard.py` 的四条**只需依赖不需库**（判据是「有没有把 SQL 发出去」）。
+两半的本机障碍都是模块级 `import structlog`/`sqlalchemy` 导致收集期就失败（README §5 J-6/J-7），
+但「本机跑不了」不等于「跑了就证同一件事」。文件名与用例名登记在 `replay_s213.py` 的
+`REAL_DB_TARGETS`，由 G 段逐条核对确有其事。
 
 判据分三面（`--list-checks` 打全清单，条数一律现算不手抄）：
 - 前提 AF-P0：两个目标都能被单独 exec（exec 不了就没有裁决，只有 traceback）；
@@ -280,7 +284,14 @@ def _module_const(src: str, name: str) -> tuple[object, int, str | None]:
 
 
 def _attr_rebinds(src: str, name: str) -> list[int]:
-    """`X.<name> = …` / `del X.<name>` 这类属性形态重绑（def 还在，活绑定已换）。"""
+    """换掉活绑定的三种形状：`X.<name> = …`/`del X.<name>`、`setattr`/`delattr`、下标赋值。
+
+    第十三轮 A 组实测：只有第一类会被抓到——`setattr(AssetRepository, "get_by_url_fragment", _legacy)`
+    把方法换掉了而这条判据绿（`getattr` 反例 `AssetRepository.get_by_url_fragment = _legacy2` 才红）。
+    BD 那台早就把这一族配齐（`j_attack_r7.py` 的 J-1…J-4），AF 台只配了一发，是覆盖不对称。
+    名字查不到时还能由模块级 `__getattr__`（PEP 562）凭空造一份——那在 BD 台是 J-3，
+    本台的 exec 面不经过模块属性查找，所以不在这里判，边界写在 README §7。
+    """
     hits = []
     for n in ast.walk(ast.parse(src)):
         tg: list[ast.expr] = []
@@ -293,18 +304,22 @@ def _attr_rebinds(src: str, name: str) -> list[int]:
         for t in tg:
             if any(isinstance(s, ast.Attribute) and s.attr == name for s in ast.walk(t)):
                 hits.append(getattr(n, "lineno", 0))
-    return hits
+            # `vars(AssetRepository)["get_by_url_fragment"] = …` / `d["…"] = …`：下标形态同样换绑定
+            if any(isinstance(s, ast.Subscript) and _str_of(s.slice) == name for s in ast.walk(t)):
+                hits.append(getattr(n, "lineno", 0))
+        # `setattr(obj, "name", v)` / `delattr(obj, "name")`
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                and n.func.id in {"setattr", "delattr"}
+                and len(n.args) >= 2 and _str_of(n.args[1]) == name):
+            hits.append(n.lineno)
+    return sorted(set(hits))
 
 
-def _call_like(fn: ast.AST, model_attr: str, col: str) -> list[ast.AST]:
-    """函数/文件里对 `<model_attr>.<col>.like(...)` 的调用点。"""
-    out = []
-    for n in ast.walk(fn):
-        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "like"
-                and isinstance(n.func.value, ast.Attribute) and n.func.value.attr == col
-                and isinstance(n.func.value.value, ast.Name) and n.func.value.value.id == model_attr):
-            out.append(n)
-    return out
+def _str_of(node: ast.AST) -> str | None:
+    """节点若是字符串常量就取值，否则 None（`ast.Index` 包装在 3.11 里已被去掉）。"""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
 
 
 def _calls_any_like(fn: ast.AST) -> list[ast.AST]:
@@ -480,10 +495,30 @@ def af_b5(kb: str, asset: str) -> tuple[bool, object]:
 
 
 def af_a1(kb: str, asset: str) -> tuple[bool, object]:
+    """短片段：返回 None、零条 SQL、**恰一条** WARNING，且告警载荷齐三个键。
+
+    第十三轮 A 组实测：把 `source_id=…/fragment=…/min_len=…` 三个 kw 全删掉，本条曾照样绿——
+    那时无声放弃与留痕放弃长得一样，S2.1.5「显式放弃兜底并留痕」这句话的「痕」是空的。
+    现在 `min_len` 的值还须等于磁盘上的阈值常量（阈值漂了告警也在撒谎）。
+    """
     got, log, rec, exc = _call_frag(kb, asset, "s", [_arow("https://mp.weixin.qq.com/s/other0")])
-    ok = (got is None and not exc and log == [] and [w[0] for w in rec.warnings]
-          == ["asset_url_fragment_too_short"])
-    return bool(ok), f"结果 {got!r}、异常 {exc!r}、SQL {len(log)} 条、告警 {rec.warnings!r}"
+    const, _n, cerr = _module_const(asset, "MIN_FRAGMENT_LEN")
+    events = [w[0] for w in rec.warnings]
+    kws = rec.warnings[0][1] if rec.warnings else {}
+    bad = []
+    if got is not None:
+        bad.append(f"返回了资产 {got!r}")
+    if exc:
+        bad.append(f"抛了 {exc!r}")
+    if log:
+        bad.append(f"下发了 {len(log)} 条 SQL")
+    if events != ["asset_url_fragment_too_short"]:
+        bad.append(f"告警事件名 {events!r}（应为恰一条 asset_url_fragment_too_short）")
+    if kws.get("source_id") != "src-1" or kws.get("fragment") != "s":
+        bad.append(f"告警载荷缺 source_id/fragment：{kws!r}")
+    if kws.get("min_len") != const:
+        bad.append(f"告警里的 min_len={kws.get('min_len')!r} 与磁盘阈值 {const!r} 不符")
+    return not bad, bad or [f"None、0 条 SQL、告警 {events}＋载荷 {sorted(kws)!r}"]
 
 
 def af_a2(kb: str, asset: str) -> tuple[bool, object]:
@@ -494,13 +529,17 @@ def af_a2(kb: str, asset: str) -> tuple[bool, object]:
 
 
 def af_a3(kb: str, asset: str) -> tuple[bool, object]:
-    """阈值边界卡在 8：7 个字符挡、8 个字符放。数字漂移（改成 1 或 12）这条当场红。"""
+    """阈值边界卡在 8 个**字符**：7 挡、8 放，且非 ASCII 那侧同口径（`热点热` 是 3 字符 = 9 字节，必须挡）。
+
+    数字漂移（改成 1 或 12）当场红；把守卫换成按字节数（`len(fragment.encode("utf-8"))`）也会红——
+    这一发是第十三轮 A 组报回的：三个样本全是 ASCII 时，字符数与字节数谁也分不开（MI-2）。
+    """
     seen = {}
-    for frag in ("abcdefg", "abcdefgh"):
+    for frag in ("abcdefg", "abcdefgh", "热点热"):
         _g, log, _r, exc = _call_frag(kb, asset, frag, [_arow(f"https://x/{frag}")])
         seen[len(frag)] = (len(log), exc)
-    ok = seen.get(7) == (0, "") and seen.get(8) == (1, "")
-    return ok, f"长度→(SQL 条数, 异常) {seen}"
+    ok = (seen.get(7) == (0, "") and seen.get(8) == (1, "") and seen.get(3) == (0, ""))
+    return ok, f"字符数→(SQL 条数, 异常) {seen}（`热点热` 是 3 字符 / 9 字节，按字节数就会放行）"
 
 
 def af_a4(kb: str, asset: str) -> tuple[bool, object]:
@@ -538,16 +577,62 @@ def af_s1(kb: str, _asset: str) -> tuple[bool, object]:
     return not _calls_any_like(fn[-1]), f"体内 like 调用 {len(_calls_any_like(fn[-1]))} 处"
 
 
+def _select_chains(fn: ast.AST) -> list[tuple[list[ast.Call], int]]:
+    """每条 `select(...)` 的**方法链**（自下而上爬），返回 (链上的调用节点序列, 起始行号)。
+
+    只数处数判不了「limit 挂在哪条链上」——第十三轮 A 组的绕过是
+    `q = select(Source).where(...)`（无 limit）+ 另起一句 `_diag = q.limit(1)`：
+    体内 select 与 limit 的个数仍然相等，AF-S2 那版「数处数」就绿了，而真正被执行的链没带 limit。
+    """
+    parent: dict[ast.AST, ast.AST] = {}
+    for node in ast.walk(fn):
+        for child in ast.iter_child_nodes(node):
+            parent[child] = node
+    out: list[tuple[list[ast.Call], int]] = []
+    for n in ast.walk(fn):
+        if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "select"):
+            continue
+        chain: list[ast.Call] = []
+        cur: ast.AST = n
+        while True:
+            up = parent.get(cur)
+            # `select(X).where(...)` 的树形是 Call ← Attribute ← Call：中间那个 Attribute 必须先爬过去，
+            # 否则第一跳就断，链永远读成空（本轮实测错过这一跳，AF-S2 在**未变异**的 kb.py 上报红）。
+            if isinstance(up, ast.Attribute) and up.value is cur:
+                cur = up
+                continue
+            if isinstance(up, ast.Call) and up.func is cur:
+                chain.append(up)
+                cur = up
+                continue
+            break
+        out.append((chain, n.lineno))
+    return out
+
+
+def _literal_one(call: ast.Call) -> bool:
+    return len(call.args) == 1 and isinstance(call.args[0], ast.Constant) and call.args[0].value == 1
+
+
 def af_s2(kb: str, _asset: str) -> tuple[bool, object]:
+    """**每条被执行的选择链**都带字面 `.limit(1)`——不是「体内 limit 的个数刚好等于 select 的个数」。
+
+    判据说的是链，所以分母取自 `_select_chains`（沿 `select(…).where(…).limit(1)` 这类链式调用爬），
+    旁路上另挂一个 `.limit(1)` 不顶数。`.where` 与 `.limit` 换序仍算等价（两种顺序都在同一条链上）。
+    """
     fn = _fn_nodes(kb, KB_TARGET)
     if not fn:
         return False, f"kb.py 里没有 {KB_TARGET}"
-    body = fn[-1]
-    n_select = len(_select_calls(body))
-    limits = _limit_calls(body)
-    ones = [n for n in limits if len(n.args) == 1 and isinstance(n.args[0], ast.Constant) and n.args[0].value == 1]
-    return n_select > 0 and len(limits) == n_select and len(ones) == n_select, (
-        f"体内 select {n_select} 处、limit 调用 {len(limits)} 处（其中字面 1 的 {len(ones)} 处）")
+    chains = _select_chains(fn[-1])
+    bad = []
+    for chain, line in chains:
+        limits = [c for c in chain if isinstance(c.func, ast.Attribute) and c.func.attr == "limit"]
+        if not limits:
+            bad.append(f"@{line}: 链上方法 {[c.func.attr for c in chain if isinstance(c.func, ast.Attribute)]}"
+                       "——没有 limit")
+        elif not all(_literal_one(c) for c in limits):
+            bad.append(f"@{line}: 链上有 limit 但不是字面 1：{[ast.unparse(c) for c in limits]}")
+    return bool(chains) and not bad, bad or [f"{len(chains)} 条选择链都带字面 .limit(1)"]
 
 
 def _guard_if(asset: str) -> tuple[ast.AST | None, str]:
@@ -561,16 +646,28 @@ def _guard_if(asset: str) -> tuple[ast.AST | None, str]:
 
 
 def _compare_ok(test: ast.AST, const_val: object) -> tuple[bool, str]:
-    """守卫条件必须是「len(fragment) 与阈值的 `<` 比较」（两侧换边的 `>` 写法同样接受）。"""
+    """守卫条件必须是「`len(fragment)` 与阈值的单一比较」（两侧换边的 `>` 写法同样接受）。
+
+    第十三轮 A 组实测的漂移：`if len(fragment.encode("utf-8")) < MIN_FRAGMENT_LEN:` 在旧判据下全绿
+    ——旧写法只问「哪一侧以 `len(` 开头」，不问 `len()` 数的是**什么**。按字节数长度是行为差
+    （3 个汉字 = 9 字节会被放行，而卡面口径是「片段长度 <8」的字符数），所以这里钉死实参照回形参本体，
+    并让 AF-A3 带一发多字节样本（`热点热`：3 字符必须挡）。
+    """
     if not isinstance(test, ast.Compare) or len(test.ops) != 1:
         return False, f"守卫条件不是单一比较：{ast.unparse(test)}"
     op = type(test.ops[0]).__name__
     left, right = test.left, test.comparators[0]
-    lenish = next((e for e in (left, right) if ast.unparse(e).startswith("len(")), None)
+
+    def _is_len_of_fragment(e: ast.AST) -> bool:
+        return (isinstance(e, ast.Call) and isinstance(e.func, ast.Name) and e.func.id == "len"
+                and len(e.args) == 1 and isinstance(e.args[0], ast.Name) and e.args[0].id == "fragment")
+
+    lenish = next((e for e in (left, right) if _is_len_of_fragment(e)), None)
     thresh = next((e for e in (left, right)
                    if ast.unparse(e) == "MIN_FRAGMENT_LEN" or _const_of(e) == const_val), None)
     if lenish is None or thresh is None:
-        return False, f"两侧不是「len(...) 与阈值」：{ast.unparse(test)}"
+        return False, (f"两侧不是「len(fragment) 与阈值」：{ast.unparse(test)}"
+                       "（`len()` 的实参必须是形参 `fragment` 本体，数别的都不是卡面那条长度）")
     same_side = (lenish is left)
     want = "Lt" if same_side else "Gt"
     if op != want:
@@ -633,24 +730,74 @@ def af_s5(kb: str, asset: str) -> tuple[bool, object]:
 
 
 def af_s6(kb: str, _asset: str) -> tuple[bool, object]:
-    """整份 kb.py 的 AST 里不许再有 `Source.url.like(...)`——只在锚定方法里删干净不算数。
+    """整份 kb.py 的 AST 里**一个 `.like(` 调用都不许有**——不只认 `Source.url.like(...)` 那一种写法。
 
-    留档里 kb.py 的注释仍然提到这条兜底（那是历史说明，不是代码），所以本条走 AST 而不是 grep 文本。
+    第十三轮 A 组实测的绕过：`col = Source.url` 之后 `col.like(f"%{key}%")`，以及
+    `getattr(Source, "url").like(...)`——两发都把兜底复活了而按字面形状匹配的这条判据全绿
+    （当时 18 条判据 `PASS=18 FAIL=0`）。兜底被删掉这件事的射程是「这条 SQL 写法」而不是
+    「这一串字符」，所以判据跟着换成「任何接收者上的 `.like(` 调用」；别名与 `getattr` 两种形状
+    各配一发变异。
+    留档里 kb.py 的注释仍会提到这条兜底（历史说明，不是代码），走 AST 而不是 grep 文本正因为如此。
     """
-    hits = _call_like(ast.parse(kb), "Source", "url")
+    hits = _calls_any_like(ast.parse(kb))
     return not hits, [f"@{n.lineno}: {ast.unparse(n)}" for n in hits]
 
 
+def _assigned_values(fn: ast.AST) -> dict[str, list[ast.expr]]:
+    """局部赋值表：名字 → 它被赋过的那些值表达式（沿「先存进变量再用」那一跳走时要查）。"""
+    out: dict[str, list[ast.expr]] = {}
+    for n in ast.walk(fn):
+        if isinstance(n, ast.Assign):
+            for t in n.targets:
+                if isinstance(t, ast.Name):
+                    out.setdefault(t.id, []).append(n.value)
+    return out
+
+
+def _reaches(expr: ast.expr, want: str, binds: dict[str, list[ast.expr]],
+             seen: frozenset[str]) -> bool:
+    """`expr` 的可达式里是否出现 `want(...)` 调用：直接写在内层算，绕道局部变量也算（走到不动点）。"""
+    if any(isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id == want
+           for c in ast.walk(expr)):
+        return True
+    for n in ast.walk(expr):
+        if isinstance(n, ast.Name) and n.id not in seen and n.id in binds:
+            if any(_reaches(v, want, binds, seen | {n.id}) for v in binds[n.id]):
+                return True
+    return False
+
+
 def af_s7(kb: str, _asset: str) -> tuple[bool, object]:
-    """改这段时不许顺手把 S2.1.3 的接线拆掉：体内既调 `_biz_from_url`，也比 `Source.external_id`。"""
+    """锚必须**真的来自**委托结果——不是「体内既有 `_biz_from_url` 调用、又有 external_id 比较」那种共现。
+
+    第十三轮 A 组的覆盖读数里，AF-S7 是唯一只有 1 发 provider 的判据，因为它是共现判据：
+    四件事可以同时成立却互不相关（第六轮复审在 BD 台上报过同一类，当时改成数据流才堵住）。
+    现在顺着流走——找到把值比给 `Source.external_id` 的那条循环，要求它迭代表的可达式里含委托调用；
+    `_b = _biz_from_url(url)` 存进局部变量再进锚元组那种等价写法仍然算数（EQUIVS 里就有那一发）。
+    """
     fns = _fn_nodes(kb, KB_TARGET)
     if not fns:
         return False, f"kb.py 里没有 {KB_TARGET}"
     body = fns[-1]
-    calls = [n for n in ast.walk(body)
-             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "_biz_from_url"]
-    cmps = [n for n in ast.walk(body) if isinstance(n, ast.Compare) and "external_id" in ast.unparse(n)]
-    return bool(calls) and bool(cmps), f"_biz_from_url 调用 {len(calls)} 处、external_id 比较 {len(cmps)} 处"
+    loops = {n.target.id: n.iter for n in ast.walk(body)
+             if isinstance(n, (ast.For, ast.AsyncFor)) and isinstance(n.target, ast.Name)}
+    binds = _assigned_values(body)
+    bad: list[str] = []
+    n_cmp = 0
+    for n in ast.walk(body):
+        if not (isinstance(n, ast.Compare)
+                and any(isinstance(x, ast.Attribute) and x.attr == "external_id" for x in ast.walk(n))):
+            continue
+        n_cmp += 1
+        names = [x.id for x in ast.walk(n) if isinstance(x, ast.Name) and x.id in loops]
+        if not names:
+            bad.append(f"@{n.lineno}: 与 `external_id` 比的不是任何循环锚变量：{ast.unparse(n)}")
+        for name in names:
+            if not _reaches(loops[name], "_biz_from_url", binds, frozenset()):
+                bad.append(f"@{n.lineno}: `{name}` 的锚来源里没有委托调用：{ast.unparse(loops[name])}")
+    if n_cmp == 0:
+        return False, "体内没有任何与 `Source.external_id` 的比较（锚查询被换掉了）"
+    return not bad, bad or [f"{n_cmp} 处 external_id 比较所用的锚，其来源都可达 `_biz_from_url`"]
 
 
 CHECKS: tuple[tuple[str, str, object], ...] = (
@@ -675,15 +822,25 @@ CHECKS: tuple[tuple[str, str, object], ...] = (
 )
 
 
+def _judged(judge: object, kb: str, asset: str) -> tuple[bool, object]:
+    """跑一条判据，**崩了也下裁决**：`evaluate()` 一直有这层 try，`run()`（基线路径）从前没有。
+
+    第十三轮 A 组实测（MI-8）：把 `MIN_FRAGMENT_LEN` 再赋一次这类变异喂进基线路径时，AF-B1 在
+    空账本上取 `log[0]` 抛 `IndexError` ⇒ 整脚本 rc=1、stderr 是 traceback、stdout 连「合计」行都没有，
+    三档退出码的自证里又没有「exec 不了」这一档——那正是本项目禁的「崩栈冒充裁决」。
+    现在两条路径共用这一层：崩按红记，并把异常形状原样写进读数里。
+    """
+    try:
+        ok, detail = judge(kb, asset)  # type: ignore[operator]
+        return bool(ok), detail
+    except BaseException as exc:  # noqa: BLE001 - 判据自己崩了也是裁决的一种，但必须出声
+        return False, f"判据抛出 {type(exc).__name__}: {exc}"
+
+
 def evaluate(kb: str, asset: str) -> set[str]:
     red: set[str] = set()
     for cid, _label, judge in CHECKS:
-        try:
-            ok = judge(kb, asset)[0]
-        except BaseException as exc:  # noqa: BLE001 - 判据自己崩了也按红记，但注明是异常
-            ok = False
-            if not (_quiet or _terse):
-                print(f"     （{cid} 判据抛出 {type(exc).__name__}: {exc}）")
+        ok = _judged(judge, kb, asset)[0]
         if not ok:
             red.add(cid)
     return red
@@ -709,16 +866,17 @@ def run(kb: str, asset: str, label: str = "") -> int:
          f"（AST 取 {KB_TARGET} / {AS_TARGET} 的活绑定那份 def，真实 exec + 记账假会话后再下裁决）\n")
     note(f"夹具样本来自 {TESTS.relative_to(REPO).as_posix()}/fixtures/wechat_urls.py，本脚本不抄第二份 URL\n")
     for cid, label_txt, judge in CHECKS:
-        ok, detail = judge(kb, asset)
+        ok, detail = _judged(judge, kb, asset)
         check(f"{cid} {label_txt}", ok, detail)
     say(f"\n合计 PASS={len(passed)} FAIL={len(failed)}｜判据登记 {len(CHECKS)} 条")
     for lbl in failed:
         say(f"  FAIL {lbl}")
     note(
-        "边界：本脚本用记账假会话证明「生产代码向 DB 要了什么」；SQL 引擎侧的真实执行与 commit 交"
-        "`test_kb_multisource_anchor.py::test_multi_source_no_crash` 与 `test_asset_fragment_guard.py`"
-        "（需 structlog+sqlalchemy，本机皆无；两份的文件名/用例名登记在 `replay_s213.py` 的 "
-        "`REAL_DB_TARGETS`，由 G 段逐条核对磁盘上确有其事）⇒ README §5 J-1/J-5。"
+        "边界：本脚本用记账假会话证明「生产代码向 DB 要了什么」；SQL 引擎侧的真实执行与 commit 只交"
+        "`test_kb_multisource_anchor.py` 那两条**连库**用例（J-6），"
+        "`test_asset_fragment_guard.py` 的四条走的是记账假会话、不连库，它补的是**用例面**而非引擎面（J-7）"
+        "——两份都需要 structlog+sqlalchemy 才能收集，但别把两份读成同一件事。"
+        "文件名/用例名登记在 `replay_s213.py` 的 `REAL_DB_TARGETS`，由 G 段逐条按 AST 核对 ⇒ README §5。"
     )
     return RC_FAIL if failed else RC_GREEN
 
@@ -798,6 +956,55 @@ MUTANTS: list[tuple[str, str, str, str, set[str]]] = [
      "        return None\n\n" + AS_NEXT_DEF, {"AF-S5", "AF-A4"}),
     ("模块级把 MIN_FRAGMENT_LEN 再赋一次（阈值被后面的赋值覆盖）", "asset",
      "MIN_FRAGMENT_LEN = 8", "MIN_FRAGMENT_LEN = 8\nMIN_FRAGMENT_LEN = 3\n", {"AF-S4"}),
+    # ↓ 第十三轮 A 组报回的四种绕过 + 两类可漂移的形状。每一发都要求**新的**判据变红：
+    #   旧版 AF-S6 只认 `Source.url.like(...)` 字面形状、AF-S5 只认属性赋值、AF-S2 只数处数、
+    #   AF-S3 只问「哪一侧以 len( 开头」、AF-A1 只比事件名——这五发在旧版上全部是绿的。
+    ("别名复活兜底：`col = Source.url` 后 `col.like(...)`（模块级新函数，不碰锚定方法）", "kb",
+     "def _article_key(url: str) -> str:",
+     "def _r13_legacy_fallback(key: str):\n"
+     "    col = Source.url\n"
+     '    return select(Source).where(col.like(f"%{key}%"))\n\n\n'
+     "def _article_key(url: str) -> str:",
+     {"AF-S6"}),
+    ("getattr 形态的兜底：`getattr(Source, \"url\").like(...)` 写在锚定方法体内", "kb",
+     KB_LOOP,
+     KB_LOOP + '\n            _r13 = getattr(Source, "url").like(f"%{article_key}%")',
+     {"AF-S1", "AF-S6"}),
+    ("setattr 换掉活绑定（def 还在、名字也没动，被 exec 的却是新实现）", "asset",
+     AS_NEXT_DEF,
+     '    setattr(AssetRepository, "get_by_url_fragment", lambda self, sid, frag: None)\n\n'
+     + AS_NEXT_DEF,
+     {"AF-S5"}),
+    ("下标形态换绑定（`registry[\"方法名\"] = …`，属性赋值那套扫描看不见）", "asset",
+     AS_NEXT_DEF,
+     "    _r13_registry: dict = {}\n"
+     '    _r13_registry["get_by_url_fragment"] = None\n\n'
+     + AS_NEXT_DEF,
+     {"AF-S5"}),
+    ("limit 挂到旁路上、被执行的链没带（select 与 limit 的**处数**仍然相等）", "kb",
+     KB_TAIL,
+     "                )\n            ).scalar_one_or_none()\n"
+     "            if row is not None:\n                return row\n"
+     '        _r13 = select(Source).where(Source.type == "wechat_oa").limit(1)\n'
+     "        return None\n",
+     {"AF-S2"}),
+    ("守卫按**字节**数长度（3 个汉字 9 字节被放行，卡面说的是长度 <8 个字符）", "asset",
+     AS_GUARD,
+     AS_GUARD.replace("if len(fragment) < MIN_FRAGMENT_LEN:",
+                      'if len(fragment.encode("utf-8")) < MIN_FRAGMENT_LEN:'),
+     {"AF-S3", "AF-A3"}),
+    ("告警只留事件名、载荷全删（无声放弃与留痕放弃长得一样）", "asset",
+     AS_GUARD,
+     "        if len(fragment) < MIN_FRAGMENT_LEN:\n"
+     "            if fragment:\n"
+     '                logger.warning("asset_url_fragment_too_short")\n'
+     "            return None\n",
+     {"AF-A1"}),
+    ("委托调用还在、结果却被丢弃（共现判据抓不到，AF-S7 改数据流之后才有第二发 provider）", "kb",
+     KB_LOOP,
+     "        _biz_from_url(url)\n"
+     "        for anchor in (a for a in (article_key,) if a):",
+     {"AF-S7"}),
 ]
 
 #: select 链的原文（`.where` 在前、`.limit` 在后）与其等价换序版：AF-S2 数的是处数，不是顺序。
@@ -927,6 +1134,12 @@ def self_test() -> int:
         ("退回旧实现（LIKE 兜底复活）", run(m0[0], m0[1]), RC_FAIL),
         ("kb 解析不了", run(kb + "\ndef _probe_broken(:\n    pass\n", asset), RC_INCONCLUSIVE),
         ("asset 解析不了", run(kb, asset + "\nclass _X(:\n    pass\n"), RC_INCONCLUSIVE),
+        # 第十三轮 A 组 MI-8：这一发让 `_world()` 建不起来（阈值常量被重复绑定 ⇒ exec 前置校验抛），
+        # 从前行为面判据照旧去取空账本的 `log[0]` ⇒ IndexError、stdout 连「合计」行都没有。
+        # 现在它必须落在「有判据红」这一档，并且照常打印合计行——崩栈不是裁决，档位自证原来缺这一档。
+        ("阈值常量被重复绑定（exec 用的世界建不起来）",
+         run(kb, asset.replace("MIN_FRAGMENT_LEN = 8\n", "MIN_FRAGMENT_LEN = 8\nMIN_FRAGMENT_LEN = 3\n", 1)),
+         RC_FAIL),
     ]
     _quiet = False
     tier_offenders = [f"{name} 应 rc={want}，实得 rc={got}"
@@ -950,6 +1163,10 @@ def self_test() -> int:
             ("删掉片段方法", kb, _strip_fn(asset, AS_TARGET), RC_INCONCLUSIVE),
             ("退回旧实现", m0[0], m0[1], RC_FAIL),
             ("kb 解析不了", kb + "\ndef _probe_broken(:\n    pass\n", asset, RC_INCONCLUSIVE),
+            # MI-8 的第二层：同一发世界建不起来的情况走真实进程退出码，并且不许留 traceback。
+            ("阈值重复绑定（世界建不起来）", kb,
+             asset.replace("MIN_FRAGMENT_LEN = 8\n",
+                           "MIN_FRAGMENT_LEN = 8\nMIN_FRAGMENT_LEN = 3\n", 1), RC_FAIL),
         ]
         for name, kb_body, asset_body, want in cases:
             ck, ca = tmp / "kb.py", tmp / "asset.py"
@@ -1041,16 +1258,24 @@ def self_test() -> int:
         rc = 1
     else:
         print(f"OK   覆盖：{len(CHECKS)} 条判据 each 至少被一发变异实测打红（变异 {len(observed)}/{len(MUTANTS)} 发跑成）")
-    # 这条覆盖判据自己也要能假：逐发抽掉它，看覆盖是否立刻出现缺口——一发都抽不得的电池才是真电池。
+    # 这条覆盖判据自己也要能假。阈值在这一批**反过来定**（第十三轮处置批自查，理由必须留在这里）：
+    # 前一版要求「≥2 发变异抽不得」，而本轮补进 8 发同族变异之后 26 发**全都抽得**——因为 18 条判据
+    # 每条都有了 ≥2 发 provider。旧阈值把冗余当成缺陷：电池越结实它越要报 FAIL，方向是反的。
+    # 现在门禁判「每条判据至少有两发独立变异能把它打红」（provider<2 即红，0 发也在这条里），
+    # 「有多少发抽不得」降级为读数——0 才说明没有单点依赖。这条改动是可假的两端：
+    # 少配一发 provider，`low` 立刻点名那一判据（上一版则会出现「加发变异反而变红」的荒谬读数）。
+    providers = {cid: sum(1 for red in observed if cid in red) for cid, _l, _j in CHECKS}
+    low = sorted(f"{cid}({n} 发)" for cid, n in providers.items() if n < 2)
     essential = [i for i in range(len(observed)) if coverage(observed[:i] + observed[i + 1:])]
-    if len(essential) < 2:
-        print(f"FAIL 覆盖自证：{len(observed)} 发实测变异里只有 {len(essential)} 发不可省略（下标 {essential}）——"
-              f"任意抽掉一发都仍全覆盖，说明「覆盖」靠的是别处，这条通道不可假")
+    if low:
+        print(f"FAIL 覆盖自证：{len(low)} 条判据的 provider 不足两发：{low}——"
+              f"「每条判据都配了变异」这句话在这些条上还是形容词")
         rc = 1
     else:
-        k = essential[0]
-        print(f"OK   覆盖自证：{len(essential)}/{len(observed)} 发变异不可省略；抽掉第 {k} 发"
-              f"（{MUTANTS[k][0]}）即露出缺口 {coverage(observed[:k] + observed[k + 1:])}")
+        print(f"OK   覆盖自证：{len(CHECKS)} 条判据每条都有 ≥2 发变异实测打红"
+              f"（最少 {min(providers.values())} 发、最多 {max(providers.values())} 发；"
+              f"变异 {len(observed)}/{len(MUTANTS)} 发跑成；「抽掉一发就露缺口」的抽不得发 {len(essential)} 发"
+              f"——0 才是这条链的满分，它从这一批起不再是门禁）")
 
     print(f"\nSELF-TEST {'PASS' if rc == 0 else 'FAIL'}：判据 {len(CHECKS)} 条 + 变异 {len(MUTANTS)} 发"
           f" + 等价 {len(EQUIVS)} 个 + 档位 {len(tiers)} 档（内存）/{len(cases)} 档（子进程）"

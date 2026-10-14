@@ -112,14 +112,24 @@ cd apps/api && uv run pytest tests/test_article_identity.py -q -k biz
 
 **交付**：`kb._find_source_by_anchor`：删除 `Source.url.like('%{key}%')` 兜底；查询全部 `.limit(1)`；P-4 转正为 `test_kb_longlink_ingest.py::test_multi_source_no_crash`
 
+> **勘误（第十三轮，`078dc30`）**：那一发常驻用例最终落在**本卡 S2.1.4.1 原本点名的文件**
+> `apps/api/tests/test_kb_multisource_anchor.py::test_multi_source_no_crash`（同文件另有
+> `test_biz_anchor_wins_when_both_anchors_exist`，即本卡 S2.1.4.3 那条「biz 源优先」）。
+> 上面这句「`test_kb_longlink_ingest.py::…`」按字面跑现在得到 `ERROR: not found`，
+> 不再是可执行指针；文件名与用例名以 `EVD-V2-02/README.md` §5 J-6 与
+> `replay_s213.py` 的 `REAL_DB_TARGETS` 为准（后者由 G 段按 AST 逐条核对确有其事）。
+
 **执行步骤**：
 1. [ ] 复制探针为常驻用例（改前红：MultipleResultsFound）
 2. [ ] 删 LIKE、加 limit
-3. [ ] 转绿
+3. [ ] 转绿；另加「已有 biz 源时优先命中 biz 源」用例（第十三轮交付为
+   `test_kb_multisource_anchor.py::test_biz_anchor_wins_when_both_anchors_exist`，判的是**锚序**）
 
 **验收命令**：
 ```bash
-eval "$(bash scripts/test-env.sh env)" && cd apps/api && uv run pytest tests/test_kb_longlink_ingest.py::test_multi_source_no_crash -q
+# 第十三轮勘误：本条从前的 `tests/test_kb_longlink_ingest.py::test_multi_source_no_crash`
+# 已随用例搬迁失效（按字面跑是 `ERROR: not found`），现以下面这条为准。
+eval "$(bash scripts/test-env.sh env)" && cd apps/api && uv run pytest tests/test_kb_multisource_anchor.py -q
 ```
 
 #### S2.1.5 🛠

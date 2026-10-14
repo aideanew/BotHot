@@ -7,7 +7,7 @@
 | 规模 | 中（约 1.5 人日） |
 | 依赖 | S2.1.x：STEP-00C；S2.2 起：STEP-01（ADR-0011） |
 | 裁决 | D-V2-01、D-13 |
-| 剩余原子任务 | 6（👤 0）——S2.1.4/S2.1.5 已于第十三轮交付，见下表 ✅ 与 EVD-V2-02 §4.14 |
+| 剩余原子任务 | 现算：`grep -cE "^- \*\*S" <本文件>` 减去 `grep -c "✅"` 的同段条数（S2.1.4/S2.1.5 已于第十三轮交付，见 §4 的 ✅ 与 EVD-V2-02 §4.14/§4.15；我上一版在这里抄的「6」是错的，B 组 R13B-21 抓到） |
 | 所有权（写） | W：apps/api/app/services/article_identity.py、kb.py、batch_ingest.py、repositories/asset.py；apps/api/tests/test_article_identity.py、test_kb_longlink_ingest.py、test_kb_multisource_anchor.py（新）及复刻旧键的 3 个测试文件 |
 | 基线 | main@65f508b |
 
@@ -35,8 +35,14 @@
   - S2.1.4.1 ✅ P-4 探针转常驻用例 `apps/api/tests/test_kb_multisource_anchor.py::test_multi_source_no_crash`
     （改前红的实测读数引 `docs/任务规划V0.3.0/evidence/probes_4afaedd.txt:19`；本机不可跑 ⇒ EVD-V2-02 §5 J-6）
   - S2.1.4.2 ✅ 删兜底那一段；旧 `kb.py:354-361` 的行号随上下文移动，现读用
-    `git diff --stat 78e3378 -- apps/api/app/services/kb.py` 与 `grep -n '\.like(' apps/api/app/services/kb.py`
-    （后者必须为空；本机由结构面 AF-S1/S6 机检，不靠人眼读 diff）
+    `git diff --stat 78e3378 -- apps/api/app/services/kb.py`（行数）与
+    `git diff 78e3378 -- apps/api/app/services/kb.py | grep -c '^@@'`（hunk 数）——**hunk 级断言不能挂在
+    `--stat` 上**，它只给每文件行数（B 组 R13B-10）。
+    否定式声明「函数体内不再有 `.like(`」由 **AST** 判（AF-S1 判锚定方法体、AF-S6 判整份 kb.py
+    里任何接收者的 `.like(` 调用），本机跑在 O 段。**字面 grep 判不动这件事**：
+    `grep -n "\.like(" apps/api/app/services/kb.py` 实得 1 处命中（`kb.py:342`，正是本轮为交代
+    「为什么删掉这条兜底」而写进 docstring 的那一行）——B 组 R13B-11 抓的就是我上一版在这里写的
+    「必须为空」，那句话按字面跑当场是红的。
   - S2.1.4.3 ✅ 本机侧 AF-B1…B5 全绿；连库侧另加 `test_biz_anchor_wins_when_both_anchors_exist`
     （判**顺序**：两条锚源同时存在时返回 biz 那条）
 - **S2.1.5** ✅🛠 `get_by_url_fragment` 守卫：片段长度 <8（`MIN_FRAGMENT_LEN`）时直接返回 None 并记 WARNING

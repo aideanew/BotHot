@@ -268,6 +268,15 @@ def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     files = [Path(a) for a in args] if args else [ROOT / f for f in DEFAULT_FILES]
     total = 0
+    # 仓库外的绝对路径从前会让 `path.relative_to(ROOT)` 在 main 里抛 ValueError（A 组 NI-3 实测
+    # rc=1 + traceback）。那不是裁决而是崩溃，本项目的三档退出码里它有专属的一档：2 = INCONCLUSIVE。
+    offside = [p for p in files if p.is_absolute() and ROOT not in p.parents and p != ROOT]
+    if offside:
+        for p in offside:
+            print(f"INCONCLUSIVE {p} 不在仓库根 {ROOT} 下——本自检只量仓库内的文件，"
+                  f"把它读成「0 违规」就是假绿，读成 FAIL 又是假红")
+        print(f"合计 未判定（INCONCLUSIVE，rc=2）：{len(offside)} 个仓库外路径")
+        return 2
     for path in files:
         if not path.is_absolute():
             path = ROOT / path

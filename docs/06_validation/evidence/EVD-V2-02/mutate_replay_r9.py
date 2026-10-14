@@ -240,20 +240,58 @@ SHOTS: list[tuple[str, str, str, str, str]] = [
      "    defects += db_pointer_defects(REAL_DB_TARGETS)",
      "    pass  # 变异：丢掉那次核对",
      "RED", "真库指针"),
-    ("登记表清空 ⇒ 「真表非空」与「两份新文件都在表里」必须一起出声（空表 = 注销门禁）",
+    ("登记表清空 ⇒ 「真表非空」「两份新文件都在表里」「用例级点名」必须一起出声（空表 = 注销门禁）",
      'REAL_DB_TARGETS = (\n'
      '    ("apps/api/tests/test_kb_multisource_anchor.py", "test_multi_source_no_crash"),\n'
      '    ("apps/api/tests/test_kb_multisource_anchor.py", "test_biz_anchor_wins_when_both_anchors_exist"),\n'
      '    ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_short_returns_none_and_zero_query"),\n'
+     '    ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_empty_returns_none_without_warning"),\n'
      '    ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_boundary_is_exactly_min_len"),\n'
+     '    ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_query_is_source_scoped_like"),\n'
      '    ("apps/api/tests/test_kb_longlink_ingest.py", "test_long_link_yields_non_empty_biz"),\n'
      ")",
      "REAL_DB_TARGETS = ()",
      "RED", "真库指针"),
     ("登记表漏掉 S2.1.5 那份新用例文件 ⇒ 「本步两份新文件都在表里」失去对象",
      '    ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_short_returns_none_and_zero_query"),\n'
-     '    ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_boundary_is_exactly_min_len"),\n',
+     '    ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_empty_returns_none_without_warning"),\n'
+     '    ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_boundary_is_exactly_min_len"),\n'
+     '    ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_query_is_source_scoped_like"),\n',
      "",
+     "RED", "真库指针"),
+    ("用例级判据永远静默 ⇒ 少登记一条 `test_*` 没人报（A 组 NI-2 的那一格）",
+     "def db_pointer_missing(targets: tuple[tuple[str, str], ...],",
+     "def db_pointer_missing(targets: tuple[tuple[str, str], ...],\n"
+     "                       root: pathlib.Path = ROOT,\n"
+     "                       must_files: tuple[str, ...] = STEP_NEW_TEST_FILES) -> list[str]:\n"
+     "    return []  # 变异：用例级核对永远绿\n"
+     "def _unused_missing(targets: tuple[tuple[str, str], ...],",
+     "RED", "真库指针"),
+    ("用例级判据见人就报 ⇒ 「两条都登记时给静默」那档绿不可证",
+     "    bad: list[str] = []\n    listed = {f\"{f}::{fn}\" for f, fn in targets}",
+     "    bad: list[str] = [\"注入：见人就报\"]\n    listed = {f\"{f}::{fn}\" for f, fn in targets}",
+     "RED", "真库指针"),
+    ("核对根目录被换成 `ROOT / \"docs\"` ⇒ 按 AST 取实参那条必须出声（grep 版抓不到，MI-4 的漏检档）",
+     "    defects += db_pointer_defects(REAL_DB_TARGETS)",
+     '    defects += db_pointer_defects(REAL_DB_TARGETS, ROOT / "docs")',
+     "RED", "真库指针"),
+    ("改成 `targets=REAL_DB_TARGETS` 的关键字写法 ⇒ AST 版不许把它判红（MI-4 的假红档）",
+     "    defects += db_pointer_defects(REAL_DB_TARGETS)",
+     "    defects += db_pointer_defects(targets=REAL_DB_TARGETS)",
+     "GREEN", ""),
+    ("g_section 不再调用用例级核对",
+     "    defects += db_pointer_missing(REAL_DB_TARGETS)",
+     "    pass  # 变异：用例级核对没接进来",
+     "RED", "真库指针"),
+    ("g_section 返回空缺陷表 ⇒ 它自己算出来的一切都进不了交付判据",
+     "    return text, defects\n",
+     "    return text, []\n",
+     "RED", "真库指针"),
+    ("孤儿编译件核对见人就报 ⇒「正常编译件不该被咬」那半口径失去对照"
+     "（注：改 `if True` 那种写法在本电池里测不出——`stage()` 拷副本时 ignore 了 `__pycache__`，"
+     "那份世界里根本没有 `.pyc`，判据照样绿；所以这一发直接把结果写成非空，逼出绿档那一判）",
+     "    out = []\n    for pyc in sorted((ev / \"__pycache__\").glob(\"*.pyc\")):",
+     "    out = [\"注入：见谁都咬\"]\n    for pyc in sorted((ev / \"__pycache__\").glob(\"*.pyc\")):",
      "RED", "真库指针"),
     ("指针表里的文件被从 G 段门禁名单里摘掉 ⇒ 交代去哪儿跑的文件自己不过静态自检",
      '                "apps/api/tests/test_kb_multisource_anchor.py", '
@@ -265,6 +303,33 @@ SHOTS: list[tuple[str, str, str, str, str]] = [
      '    ("apps/api/tests/test_kb_longlink_ingest.py", "test_long_link_yields_non_empty_biz"),\n)\n'
      "REAL_DB_TARGETS = tuple(REAL_DB_TARGETS)",
      "GREEN", ""),
+    # ↓ 交付门（第十三轮 A 组 MA-3：G/K/O 的缺陷最后由 main 那两道 `if` 拒收，而「门在不在」
+    #   从前没有任何判据——把合并语句改成 `pass`、把死门写成 `if False and defects:`，
+    #   M 段与电池全部照样绿。下面每一发都只对上一组判据里的某一条有效，逐条点名。）
+    ("拒收门改成永假条件 ⇒ 「直接把名字当条件」那条必须认出来（`if False and defects:` 不是门）",
+     "    if defects:\n        # 崩栈不是裁决",
+     "    if False and defects:  # 变异：死门\n        # 崩栈不是裁决",
+     "RED", "交付门"),
+    ("收尾门同样改成永假条件",
+     "    if late:\n        for d in late:",
+     "    if False and late:  # 变异：死门\n        for d in late:",
+     "RED", "交付门"),
+    ("K 段缺陷不再并入 defects ⇒ 临时件没删干净也能交付",
+     "    defects += k_defects",
+     "    pass  # 变异：K 段的缺陷被丢掉",
+     "RED", "交付门"),
+    ("G 段缺陷不再并入 defects ⇒ 静态门禁报了红也照发",
+     "            defects += g_defects",
+     "            pass  # 变异：G 段的缺陷被丢掉",
+     "RED", "交付门"),
+    ("O 段对账缺陷不再进 late ⇒ o_ledger 白写",
+     "    late = rc_gate(sections_text) + norm_bad + o_defects",
+     "    late = rc_gate(sections_text) + norm_bad",
+     "RED", "交付门"),
+    ("把落盘挪到拒收门之前 ⇒ 「门必须排在第一次写盘之前」那条按行号认出来",
+     "    k_chunks, k_defects = k_sections()",
+     '    write_out("")  # 变异：先落盘再判\n    k_chunks, k_defects = k_sections()',
+     "RED", "交付门"),
     # ↓ 归一化（第十二轮复审 B3：头部那句「三类读数都处理了」从前是模板字面量）
     ("墙钟阈值放宽一位 ⇒ 正样本（带小数）不再被改写",
      '("墙钟", r"\\bin \\d+\\.\\d+s\\b", "in <redacted>s", "in 12.34s", "in 5s"),',

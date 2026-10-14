@@ -71,7 +71,12 @@ def recorder(monkeypatch: pytest.MonkeyPatch) -> _Recorder:
 
 
 async def test_url_fragment_short_returns_none_and_zero_query(recorder: _Recorder) -> None:
-    """机器门①：`"s"`（长链 article_key 的真实退化形）不发 SQL、返回 None、留 WARNING。"""
+    """机器门①：`"s"`（长链 article_key 的真实退化形）不发 SQL、返回 None、留一条**说清参数的** WARNING。
+
+    告警载荷也判（A 组 MI-3）：只比事件名时，把 `source_id=…/fragment=…/min_len=…` 三个 kw 全删掉
+    这一条照样绿——「显式放弃兜底并留痕」里的「痕」就只剩下一个词，拿到它不知道是谁的哪个片段、
+    被哪条阈值挡的。
+    """
     sess = _RecordingSession()
     got = await AssetRepository(sess).get_by_url_fragment("src-1", "s")  # type: ignore[arg-type]
     assert got is None, f"短片段仍返回了资产：{got!r}"
@@ -79,6 +84,10 @@ async def test_url_fragment_short_returns_none_and_zero_query(recorder: _Recorde
     assert [w[0] for w in recorder.warnings] == ["asset_url_fragment_too_short"], (
         f"WARNING 缺失或事件名漂移：{recorder.warnings!r}"
     )
+    event, kw = recorder.warnings[0]
+    assert kw.get("source_id") == "src-1", f"告警没带 source_id：{event} {kw!r}"
+    assert kw.get("fragment") == "s", f"告警没带被挡的片段：{event} {kw!r}"
+    assert kw.get("min_len") == MIN_FRAGMENT_LEN, f"告警里的阈值与常量不符：{event} {kw!r}"
 
 
 async def test_url_fragment_empty_returns_none_without_warning(recorder: _Recorder) -> None:
@@ -89,14 +98,17 @@ async def test_url_fragment_empty_returns_none_without_warning(recorder: _Record
     assert recorder.warnings == [], f"空串被当成短片段告警：{recorder.warnings!r}"
 
 
-@pytest.mark.parametrize(("fragment", "queries"), [("abcdefg", 0), ("abcdefgh", 1), ("p0-cache-001", 1)])
+@pytest.mark.parametrize(("fragment", "queries"),
+                         [("abcdefg", 0), ("abcdefgh", 1), ("p0-cache-001", 1), ("热点热", 0)])
 async def test_url_fragment_boundary_is_exactly_min_len(
     fragment: str, queries: int, recorder: _Recorder
 ) -> None:
-    """机器门②：阈值边界卡在 MIN_FRAGMENT_LEN=8（7 挡、8 放），合法片段必须仍查得到。
+    """机器门②：阈值边界卡在 MIN_FRAGMENT_LEN=8 个**字符**（7 挡、8 放），合法片段必须仍查得到。
 
     这条同时反证两件事：阈值被悄悄改成 1（守卫形同虚设）⇒ 7 那一行红；
     阈值被悄悄改成 12（把存量兼容路径也挡了）⇒ 8 那一行红。
+    `热点热` 那一行钉的是**计数单位**（A 组 MI-2）：3 个字符 = 9 个 UTF-8 字节，
+    守卫若被改成按字节数长度就会把它放行——三个样本全是 ASCII 时字符数与字节数谁也分不开。
     """
     assert MIN_FRAGMENT_LEN == 8, f"卡面阈值是 8，代码里是 {MIN_FRAGMENT_LEN}"
     sess = _RecordingSession()
@@ -106,13 +118,20 @@ async def test_url_fragment_boundary_is_exactly_min_len(
 
 
 async def test_url_fragment_query_is_source_scoped_like(recorder: _Recorder) -> None:
-    """机器门③：放行的片段仍按 (source_id, url LIKE %片段%) + limit(1) 下发。
+    """机器门③：放行的片段仍按 (source_id 等值 + url LIKE `%片段%` + LIMIT 1) 下发。
 
     守卫不是把兜底整个关掉的理由——存量兼容路径（biz 锚源 + article_key 资产）还得走通，
     只是不再拿单字符去撞全表。
+
+    断言写的是**形状与参数值**而不是「串里有 LIKE 这个词」：从前那版只判
+    `"LIKE" in sql and "LIMIT" in sql`，于是 `.limit(5)`、或把 `source_id` 谓词整条删掉都判不动
+    （A 组 MI-7：那句话比用例能证的强）。现在三个条件各有一句：跨源不得命中、只取一行、模式含通配。
     """
     sess = _RecordingSession()
     await AssetRepository(sess).get_by_url_fragment("src-1", "aaaa1111")  # type: ignore[arg-type]
-    assert len(sess.calls) == 1
-    sql = sess.calls[0].upper()
-    assert "LIKE" in sql and "LIMIT" in sql, f"兜底语句形态漂移：{sess.calls[0]!r}"
+    assert len(sess.calls) == 1, f"应恰好下发一条，实得 {len(sess.calls)} 条"
+    sql = sess.calls[0]
+    flat = " ".join(sql.split())
+    assert "source_id = 'src-1'" in flat, f"没有按源过滤（跨源命中就是拿别人的资产当缓存）：{sql!r}"
+    assert "LIMIT 1" in flat.upper(), f"兜底语句不再是单行：{sql!r}"
+    assert "%aaaa1111%" in sql, f"LIKE 模式丢了通配或丢了片段本身：{sql!r}"
