@@ -1685,7 +1685,8 @@ def self_test(listing: bool = False) -> int:
     h2: dict[str, int] = {}
     marked = apply_norm("某段读数", 2, h2)
     check(g5, "rc=2 才补 ③ 那句标注（末行与计数都要跟上）",
-          "" if marked.endswith(INCON_MARK) and h2.get(INCON) == 1 else f"补注={marked.endswith(INCON_MARK)}、计数 {h2!r}")
+          "" if marked.endswith(INCON_MARK) and h2.get(INCON) == 1
+          else f"补注={marked.endswith(INCON_MARK)}、计数 {h2!r}")
     for rc in (0, 1):
         h3: dict[str, int] = {}
         plain = apply_norm("某段读数", rc, h3)
@@ -1793,7 +1794,8 @@ def main() -> int:
         return 1
     sections = [(t, b) for t, b in split_sections(OUT.read_text(encoding="utf-8"))
                 if re.match(r"^########## [A-I] ", t)]
-    want = sorted([*ARCHIVED, "G"])  # G 在旧留档里也是归档段，只是自 `65f508b`（第十轮处置批）起命令改由 `g_section()` 现生成
+    # G 在旧留档里也是归档段，只是自 `65f508b`（第十轮处置批）起命令改由 `g_section()` 现生成
+    want = sorted([*ARCHIVED, "G"])
     found = sorted(t.split()[1] for t, _ in sections)
     if found != want:
         print(f"FAIL 交付：留档的 A–I 段与登记表不符——期望 {want}，实得 {found}；"
@@ -1815,7 +1817,8 @@ def main() -> int:
         rendered.append(run_cmd(cmd, title))
 
     j = run_cmd(f"python {RELPATH(EV / 'j_attack_r7.py')}",
-                "########## J 第七轮复审的闭合实测：四发「def 还在但活绑定已换」+ 四发「调用点在但结果不进锚」+ 两发崩栈面",
+                "########## J 第七轮复审的闭合实测：四发「def 还在但活绑定已换」"
+                "+ 四发「调用点在但结果不进锚」+ 两发崩栈面",
                 "# 驱动是**入库件** `j_attack_r7.py`（改前版 harness 由 `git show de78125:…` 取，改后即本包这一版）。\n"
                 "# 上一版把整份攻击脚本原样内嵌进本文件，代价是留档与在库驱动各一份、会漂移；现在命令就是驱动本身\n"
                 "# （原先那句「这 92 行」是个没量过的历史数——第十轮复审 10-1，已删；行数要看得 `wc -l` 现量）。\n"
@@ -1930,7 +1933,8 @@ def main() -> int:
         return 1
     header = f"""# STEP-02 执行留档（S2.1.3 委托解析层 + S2.1.4 锚定兜底删除 + S2.1.5 片段长度守卫）
 # 时间 {ts}｜HEAD={hh}｜{state}｜Python {pyv}｜{plat}
-# 本机依赖实测：structlog / sqlalchemy 皆无（kb.py:22-25 模块级导入）⇒ D 段只能证明「收集期即失败」，用例本身交 CI（J-5）
+# 本机依赖实测：structlog / sqlalchemy 皆无（kb.py:22-25 模块级导入）
+#   ⇒ D 段只能证明「收集期即失败」，用例本身交 CI（J-5）
 # 范围要说清（第十三轮自查）：这一份留档从 S2.1.3 一路记到 S2.1.5，A–N 段仍是 S2.1.3 那一轮的账，
 #   S2.1.4/S2.1.5 的读数在 **O 段**（证明面基线 / 它自己的反证电池 / 判据清单）与 G 段的被检清单里。
 {head_bd}

@@ -183,37 +183,59 @@ PYTHONIOENCODING= python docs/06_validation/evidence/EVD-V2-02/prove_biz_delegat
 留档重放器 `replay_s213.py` 判的是**磁盘上的代码**，而本机的工作树是多个会话共用的。
 第十五轮那趟实测到两档读数（同一份 AF 台）：脏工作树上
 `FAIL 基准（未变异）就有红判据：['AF-B6', 'AF-S7']`，`da4095a` 的干净视图上同一台 `SELF-TEST PASS`——
-差别不在我这一批，而在别人**尚未提交**的在飞改动（见 §4.17 那三条环境事实）。
+差别不在我这一批，而在别人**尚未提交**的在飞改动（见 §4.17 那三条环境事实）。顺带说清留档头部那句「范围内未提交 N 项」在干净视图里的含义：**它读的是叠进那棵树的本批文件**，不是主工作树的真实脏度——所以头部那个 N 与 §2b 第 2 步的清单必须逐行对得上，对不上就是叠错了。
 所以重放按下面这条走，别人在飞的件不会被读成我的缺陷，我自己的件一件都不会漏：
 
 ```bash
-# 1) 取一份干净树（不动本工作树、不动别人的改动）；BASE 用本批要落库的那个提交
-git worktree add --detach /tmp/r15clean da4095a
-# 2) 只把**本批改动的文件**叠上去。这里绝不能用 `git diff --name-only` 当清单：
-#    共享工作树里那份清单会把别人的在飞件一起叠进来，等于把污染搬进"干净"视图。
-#    本批是五份，逐个点名（少一份就是本批没交付，多一份就是搬了别人的）：
+# 0) 全程从仓库根出发。§2/§3 的读者常被留在包目录里，而 cp 的相对源路径与 git 的
+#    pathspec 都按**当前目录**解析——在子目录里跑这些命令会拿到 `cannot stat` 与空结果。
+cd /d/Code/AideanBotHot
+# 1) 取一份干净树（不动主工作树、不动别人的改动）。BASE = 本批的**父提交**；
+#    目录名带批次号，免得与并行会话的临时 worktree 撞车（现读：`git worktree list`）。
+git worktree add --detach /tmp/r16main 1a7e37e^
+# 2) 只把**本批改动的文件**叠上去。清单现取自己那批：`git show --name-only BASE..HEAD`
+#    或按提交说明点名的那几份；这里**绝不能**用 `git diff --name-only`——共享工作树里
+#    那份清单会把别人的在飞件一起叠进来，等于把污染搬进"干净"视图。
+#    第十五轮那批是五份，形状如下（换成本批的清单即可）：
 for f in docs/06_validation/evidence/EVD-V2-02/replay_s213.py \
          docs/06_validation/evidence/EVD-V2-02/prove_anchor_fallback.py \
          docs/06_validation/evidence/EVD-V2-02/prove_biz_delegation.py \
          docs/06_validation/evidence/EVD-V2-02/mutate_replay_r9.py \
-         apps/api/tests/test_asset_fragment_guard.py; do cp "$f" /tmp/r15clean/"$f"; done
-#    叠完先对账：`cd /tmp/r15clean && git status --short` 必须恰好是那五行
-# 3) 在干净树里跑三道门 + 整份重放
-cd /tmp/r15clean/docs/06_validation/evidence/EVD-V2-02
+         apps/api/tests/test_asset_fragment_guard.py; do cp "$f" /tmp/r16main/"$f"; done
+#    叠完先对账：`git -C /tmp/r16main status --short` 必须恰好是这几行，一行不多一行不少
+# 3) 在干净树里跑门 + 整份重放（三道门各自末行给条数/发数，本节不抄）
+cd /tmp/r16main/docs/06_validation/evidence/EVD-V2-02
 PYTHONIOENCODING=utf-8 python prove_anchor_fallback.py --self-test
 PYTHONIOENCODING=utf-8 python replay_s213.py --self-test
 PYTHONIOENCODING=utf-8 python replay_s213.py            # 写干净树里那份 out_s213.txt
-# 4) 按字节拷回本包，并用两个哈希证明拷的是同一份
+# 4) 交付者本人按字节拷回本包。哈希要比的是**产物 vs 仓库里既有那份留档**，
+#    不是同一次 cp 的两端（那种比法恒成立，等于没比）：
+sha256sum out_s213.txt /d/Code/AideanBotHot/docs/06_validation/evidence/EVD-V2-02/out_s213.txt
+#   ↑ 拷回**之前**跑这一条：两个号数应当不同（不同才说明产物是新的）；
+#     若相同，说明这一批根本没改变留档，那要问的是为什么没改变。
 cp out_s213.txt /d/Code/AideanBotHot/docs/06_validation/evidence/EVD-V2-02/
 sha256sum out_s213.txt /d/Code/AideanBotHot/docs/06_validation/evidence/EVD-V2-02/out_s213.txt
-git worktree remove /tmp/r15clean          # 收尾；移除前确认没有别的会话在那棵树里
+#   ↑ 拷回**之后**再跑一次同一条：这时两数才该相同，且这一对与上一对不同
+git -C /d/Code/AideanBotHot worktree remove --force /tmp/r16main
+#    为什么必须 `--force`：那棵树里带着叠进去的改动与重放生成的留档，不加就
+#    `fatal: contains modified or untracked files`（rc=128）而收尾跑不通。
+#    安全前提：移除前 `git -C /tmp/r16main status --short` 逐行确认没有**别人**的件，
+#    且产物已经按上面那对哈希取回主树——这一步删的只是自己造的那份视图。
 ```
 
-两点不假装：① 留档里的**绝对路径**是环境噪声（D 段那行 pytest 的 `ImportError while importing test module
+四点不假装：① 留档里的**绝对路径**是环境噪声（D 段那行 pytest 的 `ImportError while importing test module
 '…\apps\api\tests\…'` 在干净树里指向临时目录，在仓库里指向仓库根），本包从来不声称 `out_s213.txt`
 跨机器逐字节可复现，声称的是**每一段的 `$ ` 命令能重跑并给出同一个裁决**；
-归一化只管墙钟与内存地址那类每跑必变的数。② 干净视图只解决「别人的在飞件不算我的读数」，
-它**不**替别人的代码改动背书——那一半要靠对账，见 §7。
+归一化只管墙钟与内存地址那类每跑必变的数。
+② **字节数还随换行口径变**，所以 `N-iso` 那行的字节数只在同一口径下可比。本机 `core.autocrlf=true`：
+`git worktree add` 检出的那份是 CRLF，比 blob 多出正好「行数」个字节（每行一个 `CR`）——
+第十六轮复核实测同一份留档 116680 B（blob，也是驱动 `write_bytes` 落盘的那种 LF）↔ 117547 B（检出 CRLF），
+差 867 = 该份的行数（现读：`git cat-file -s $(git rev-parse HEAD:docs/06_validation/evidence/EVD-V2-02/out_s213.txt)`
+与 `wc -c < docs/06_validation/evidence/EVD-V2-02/out_s213.txt` 并读，再看 `grep -c "" …`）。
+要跨口径比，比**行**而不是比字节。
+③ 干净视图只解决「别人的在飞件不算我的读数」，它**不**替别人的代码改动背书——那一半要靠对账，见 §7。
+④ 第十五轮那两档 AF 读数是**同一份 AF 台在两个磁盘状态**上的读数，但「变异 38 发」那一档只在
+叠了本批件之后成立；纯 `da4095a` 那份是 32 发。别把 38 当成 BASE 的属性。
 
 ## 3. 「改前红」现在是可重放的，不再只是推断
 
@@ -700,7 +722,7 @@ B 组 14 条 CONFIRMED 见其报告 R13B-01/02/03/04/05/08/09/13/14/16/18/19/20/
 | D7 | D-14-07 | B1 的复现命令 `git log -S` 现已给 2 条命中（表里写「唯一命中 dcb1ffb」）；而且短路径写法在子目录下**静默给空结果**（pathspec 相对 CWD） | 仓库根全路径跑那条命令 ⇒ `a576bc2` + `dcb1ffb` | 改成「引入＝`dcb1ffb`（第八轮处置批）、删除＝`a576bc2`（第十三轮处置批）」，并把「仓库根执行 + 写全路径，否则空结果是命令没给读数而不是没有」写进那一格（与 §4.11 头部那条同族的教训，第二次记） |
 | D8 | D-14-08 | A13 那句「两份新文件各有四条顶层用例」与磁盘不符（一份 2 条、一份 4 条；当时表里 5 条） | `git show 078dc30:apps/api/tests/test_kb_multisource_anchor.py \| grep -cE "^async def test_"` = 2；同法另一份 = 4 | 措辞改成「其中一份四条只登记两条」，落点的「补全到四条」换成现读命令与本批的实际口径（用例级判据要求**每条被收集的**都登记） |
 | D9 | D-14-09 | `a576bc2` 的提交说明没覆盖它实际改的 5 份文档中的 2 份（`04-剩余可执行大体系.md`、`06-执行记录.md`） | `git show --name-only a576bc2` 的文件表 vs 说明正文 | 记成流程账：**本批的提交说明逐条点名它动的每一份文件**（这条也在 §4.13 id 49 那条「派单方式记律」旁边，属于「我自己复踩」那一类） |
-| D10 | D-14-10/11/12（CONFIRMED） | 复核件自己确认：留档 25 段末行 rc 与 `EXPECTED_RC` 全部相符、归一化两条通道读数一致（且 §7 那条命令里的 `-n` 是**承重的**而不是装饰）、L 段命令原样重跑逐字相同、V0.4.0 勘误是注记而非改写、包内编译件都有在册源文件、`EV_PY` 与盘上双向相符、远端与本地 HEAD 一致、刻意未跟踪的那几件未动。**这一格上一版抄了三个可打印的数**（「25 段」「7 份 `.pyc`」「三件未跟踪」），第十五轮 F 组按 D6 同一条纪律把它换成命令 | 现读五条：`grep -c '^########## ' out_s213.txt`｜`find docs/06_validation/evidence/EVD-V2-02 -name '*.pyc' \| wc -l`（与 M 段那条孤儿核对同口径）｜`git status --porcelain --untracked-files=all -- docs/任务规划V0.4.0/evidence docs/任务规划V0.5.0/evidence`（未跟踪件按目录列，数量随别人的在飞件变，所以这里只给命令不给数）｜`git ls-remote origin main` vs `git rev-parse HEAD`｜归一化对账看留档末行 `N-覆`/`N-总` 与 M 段「账」那组 | 无需落点；把「`grep -n` 前缀是承重而不是装饰」这一条抄进 §7，免得下一轮有人把它去掉 |
+| D10 | D-14-10/11/12（CONFIRMED） | 复核件自己确认：留档各段末行 rc 与 `EXPECTED_RC` 全部相符（段数不抄在这里，现读 `grep -c '^########## ' out_s213.txt`）、归一化两条通道读数一致（且 §7 那条命令里的 `-n` 是**承重的**而不是装饰）、L 段命令原样重跑逐字相同、V0.4.0 勘误是注记而非改写、包内编译件都有在册源文件、`EV_PY` 与盘上双向相符、远端与本地 HEAD 一致、刻意未跟踪的那几件未动。**这一格上一版抄了三个可打印的数**（「25 段」「7 份 `.pyc`」「三件未跟踪」），第十五轮 F 组按 D6 同一条纪律把它换成命令 | 现读五条：`grep -c '^########## ' out_s213.txt`｜`find docs/06_validation/evidence/EVD-V2-02 -name '*.pyc' \| wc -l`（与 M 段那条孤儿核对同口径）｜`git status --porcelain --untracked-files=all -- docs/任务规划V0.4.0/evidence docs/任务规划V0.5.0/evidence`（未跟踪件按目录列，数量随别人的在飞件变，所以这里只给命令不给数）｜`git ls-remote origin main` vs `git rev-parse HEAD`｜归一化对账看留档末行 `N-覆`/`N-总` 与 M 段「账」那组 | 无需落点；把「`grep -n` 前缀是承重而不是装饰」这一条抄进 §7，免得下一轮有人把它去掉 |
 | D11 | D-14-11 NIT | V0.4.0 卡面的**执行步骤 3** 被就地扩写成「转绿；另加…用例」——把后加的交付项写回历史计划卡的勾选项，与同一批在别处用的「只注记不改写」口径不一致 | `git show a576bc2 -- …V0.4.0/steps/STEP-02…md` 的 `+` 行 | 步骤 3 恢复成原文「转绿」，那条后加用例只留在上面已有的勘误 blockquote 里（它本来就写了） |
 
 C 组那四发 MAJOR 全是同一族：**上一轮的靶补上了，同一族的下一个形状仍然判不动**（字形 vs 语义、
@@ -708,7 +730,8 @@ C 组那四发 MAJOR 全是同一族：**上一轮的靶补上了，同一族的
 并且每一发都配了「等价不许假红」那一端——只配红端的判据，下一批一定会被同一类假红打回来。
 
 `kb.py`/`asset.py` 的**语义这一批没再动**（动的只有 `apps/api/tests/test_asset_fragment_guard.py` 的参数化，
-加的是 `1234567` 那一行样本；生产代码零改动，现读：`git diff --stat <本批提交>^ -- apps/api/app` 为空）。
+加的是 `1234567` 那一行样本；生产代码零改动，现读：`git show --stat <本批提交> -- apps/api/app` 为空——
+**不要用 `git diff <提交> -- <路径>`**：它比的是**工作树**，共享工作树里那读的是别人的在飞件（第十六轮 C4b）。）
 本机可跑的门：AF 台 `--self-test`、驱动 `--self-test`、电池 `mutate_replay_r9.py`、整份重放，
 条数与发数一律看各自末行打印，本节不抄。
 
@@ -728,7 +751,7 @@ C 组那四发 MAJOR 全是同一族：**上一轮的靶补上了，同一族的
 | E-15-05 | 自指扫描**只扫驱动一册**，而兄弟台的判据名会被逐字印进留档——「驱动干净」这句话的射程当时只到它自己；登记表也只有三种代词写法。**这一条还带出一个新的形状**：把扫描面缩成 `[here]` 时，只判「有没有措辞」的那条照样绿（兄弟台此刻是干净的），实测 `rc=0` | 电池那一发跑出 GREEN ⇒ 反证不成立，改成对账扫描面本身 | 扫描面 = 驱动 + `EV_PY` 全部在册件，**另立一条判据核扫描面自己**：应扫集合从在册登记表现取（不是从 `face` 现取——拿 `face` 对账 `face`，缩面时两边一起变小而永远绿），与实扫集合比对，读不到的册子单独点名；登记表扩到七个词。电池四发：缩面（红）、应扫集合掏空（红）、实扫不记录（红）、只留三个词（红） |
 | E-15-06 | `_collect_cases` 两处口径不齐：嵌套 `Test*` 类的前缀不累加（读出来是 `TestInner::test_c`，既不是能跑的 node id 也不是「不收集」）、`try` 的 handler/else/finally 与 `with` 体不遍历（pytest 真收集那些位置里的用例） | 临时小树：嵌套类那条两边读数都错；`try` 体里那条既登不进表也没人要求登记 | 前缀**累加**成 `外层::内层::用例`、四类语句体都遍历；M 段补「嵌套 Test 类要登记成 `外层::内层::用例`」探针与绿档（不以 Test 开头的类不许被要求登记——口径过头那一发也在电池里）；电池两发回归（去掉累加、`ast.Try and False`） |
 | E-15-07 | `g_section` 的被检清单退回只 glob 一层时，子目录里那册未登记的 `.py` 与它的 `.pyc` 互相打掩护（第十四轮已把实现改成 `rglob`，缺的是**判据**那一发） | 报告里那棵小树：只 glob 一层的写法两条都静默 | 电池补一发 `EV.glob("*.py")` 回归（必须红），与第十四轮那发「孤儿编译件两类位置」配对 |
-| F-A | **卡面把不可证的完成态标成已完成**：STEP-02 卡 S2.1.4/S2.1.5 那一格写着 ✅，而它的三个分句（全量 0 failed、ruff/mypy/CI 双绿、P-3/P-4 连库复跑）没有一条能在本机证——前两分句要 venv 与 CI，第三条要连库 | 现读：`grep -n "S2.1.4" docs/任务规划V0.5.0/steps/STEP-02-….md` 对照 §5 J-2/J-4/J-6 | 卡面降级为 🔴⏳ 并就地写勘误（「把不可证的完成态标成已完成，比不标更糟：它会让 §4 的『现算剩余』命令跟着少算一格」），大纲 §4.2 同格同步 |
+| F-A | **卡面把不可证的完成态标成已完成**：STEP-02 卡的 **S2.3.2**（「P-3/P-4 复跑达修复后期望；全量双环境 0 failed；ruff/mypy/CI 双绿」）写着 ✅，而这三个分句没有一条能在本机证——前两分句要 venv 与 CI，第三条要连库。**上一版这一格把落点写成「S2.1.4/S2.1.5 那一格」，那是错的**：S2.1.4/S2.1.5 是本步真交付的两条，被降级的是 S2.3.2；第十六轮 C5 抓到，而我给的那条复现命令 `grep -n "S2.1.4"` 根本指向不到落点——**一条指错的复现命令比没有复现命令更糟**，它会让下一个人在对的地方读出「没问题」 | 现读三条：`grep -n "S2.3.2" docs/任务规划V0.5.0/steps/STEP-02-文章身份规范键与锚定去LIKE.md`（该行现为 `🔴⏳`，下一行是勘误）、`grep -n "S2.3.2" docs/任务规划V0.5.0/04-剩余可执行大纲体系.md`（同口径）、不可证性本身：`ruff --version`/`mypy --version`/`gitleaks --version` ⇒ `command not found`（见 §4.18），连库面见 §5 J-4/J-6/J-7 | 卡面与大纲同批降级为 🔴⏳ 并就地写勘误（「把不可证的完成态标成已完成，比不标更糟：它会让 §4 的『现算剩余』命令跟着少算一格」） |
 | F-B | 大纲与各卡里的 ✅ **既被当类型又被当交付**：STEP-02 卡「带 ✅」＝已交付，STEP-00C 卡图例里「✅」＝验证类任务，同一条 `grep` 套到两张卡上给出的是两回事 | 两卡各跑一次那条计数命令，读数互不相容 | 在 §4 头部与两张卡的「剩余原子任务」行各自写明本卡口径，并注明统一它属 STEP-12 文档对账；不假装一条命令通吃 |
 | F-C | 大纲 §4.2 的「剩余」列合计与叶子行的 ✅ 数**不互洽**：那一列是各卡写卡时点的抄件，没有随交付递减；上一版还把「剩余 109、已完成 11」写死在行文里，而它自己文件里的勾选现读已是 17 | `awk -F'\|' '$5 ~ /^ *[0-9]+ *$/{a+=$5;p+=$6} END{print a,p}' <本文件>` 与两条 `grep -c` 并读 | 写死的数换成三条现算命令，并把这处不互洽**写在头部而不是藏起来**（合计与逐格之和不符这件事由那三条命令当场给出） |
 | F-D | 提交说明里的号数与当日读数不符：`96e8f31` 的正文写「97 发」，当日本机电池末行是另一数 | `git log -1 --format=%B 96e8f31` vs 电池 `N-总` 那行 | **登记不改**：提交说明是不可变的历史账，只能在文档侧交代「发数只认电池末行 `N-总`，提交说明里的号数是当时点」。这一条与 §4.16 D6 是同族（抄来的数与现读的数本来就该不同） |
@@ -758,8 +781,23 @@ C 组那四发 MAJOR 全是同一族：**上一轮的靶补上了，同一族的
    的前提是「这一份工作树当时只做这一步」。
 
 `kb.py`/`asset.py` 的语义本批**未动**（动的是证明层与连库用例的参数化）：现读
-`git diff --stat <本批提交>^ -- apps/api/app` 为空。本机可跑的门：AF 台 `--self-test`、
+`git show --stat <本批提交> -- apps/api/app` 为空（`git diff <提交> -- <路径>` 在这里会给假读数，见 §7 那条）。本机可跑的门：AF 台 `--self-test`、
 BD 台 `--self-test`、驱动 `--self-test`、电池 `mutate_replay_r9.py`、整份重放——条数与发数一律看各自末行打印。
+
+## 4.18 提交前自查（未等复审）——本机那张静态表的 E501 **单位**错了
+
+第十六轮两份复核还在跑，这一格是本机自查先抓到的，性质与 §4.9 同族（不等别人来打）。
+对象是 G 段门禁依赖的 `EVD-V2-00/g24_static_check.py`，它是本包「合计违规 0 条」这句话的唯一来源。
+
+| 项 | 现象 | 复现（仓库根，现读） | 落点 |
+|---|---|---|---|
+| 单位 | 本表 E501 按 `len(line)`（**字符数**）判，而 ruff 的 120 是**列宽**：East Asian Width 为 `W`/`F` 的字符占 2 列。于是 CJK 撑爆的行在本表里一律假绿——本仓的注释与判据名大量是中文，这不是边角 | `python -c "import pathlib,unicodedata;l=pathlib.Path('apps/api/tests/test_env_isolation.py').read_text(encoding='utf-8').splitlines()[67];print(len(l), sum(2 if unicodedata.east_asian_width(c) in 'WF' else 1 for c in l))"` ⇒ 折行前 `112 134`；`evidence/65f508b/ruff_65f508b.txt` 那一行报的正是 `134 > 120`（两个数只有后者与 ruff 可比） | 新增 `_width()` 按列宽计，报错文案同时给两个数（`E501 行宽 134 > 120（112 个字符）`）；docstring 把「两处方向性差异」写全：pragma 那一侧本表**更严**，单位这一侧本表**曾更宽**（已修），两个「0 违规」不是同一个数 |
+| 假绿的量 | 换单位后：CI 射程 `apps/api` 内新抓到 2 行、本证据包内新抓到 7 行 | `python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py <那九份文件>` 折行前逐条点名 | 九行同批折行（`test_asset_fragment_guard.py:122`、`test_env_isolation.py:68`、`replay_s213.py` 四处、`prove_anchor_fallback.py`/`prove_article_identity.py`/`prove_biz_delegation.py` 各一处）；折完同一条命令报「合计违规 0 条」 |
+| 自证两端 | 旧的 E501 反样本 `("E501", "x = 1  # " + "长" * 110 + "\n", False)`（119 个字符 / **229 列**）在新单位下**必须报**，却被登记成「绿档不许咬」——按字符数写的那对样本本身就带着同一个单位错误。实测（把改好的表拷到临时目录、直接调它的 `check()`）：`sample_old_green.py:1 E501 行宽 229 > 120（119 个字符）` | `cd /tmp/g24old && python -c "…importlib 载入 g.py…; print(m.check(f))"`（形状见左列；不落进任何在册包，`_selftest_*.py` 会写在自己那层） | 样本换成五发两单位：130 个长（两单位都该报）、60 个长（69 字符 / 129 列，**只有按列宽才报**，就是这一格从前假绿的形状）、55 个长（64 字符 / 119 列，两单位都静默）、ASCII 116/117（钉 120/121 的边界）。条数看末行「N/N 项判据两端都对」的 N，本行不抄 |
+| 连带 | 这一处与本包的关系不是凑数：G 段的绿裁决、STEP-00C 卡上那句「现读该行 112 列 ≤120」、以及「`e6f7de5` 之前就已满足」那条推断，全部建立在同一张表上。**判据的读数是绿色的，不等于判据读的是同一件事** | 见 §4.17 F 组那一族的同一形状：本批改的是「字形 vs 语义」，这一格是「字符 vs 列宽」——同一族的第二个实例 | STEP-00C 卡 S0C.1.2 从 ✅ 降级并写明真相、S0C.1.3/S0C.2.3/S0C.3.1/S0C.5.1 四条**来源标错**（把有依赖环境采集的入库件写成本地读数）一并更正；大纲同五行同步 |
+
+留档 `out_s213.txt` 因这九处折行与本表改动而**整份重打**（干净视图，配方见 §2b）：G 段那一条 `$ ` 命令不变，
+被检清单也不变，变的是头部 `HEAD=` 与未提交计数那一行、以及驱动源码自身被 G 段读过的事实。
 
 ## 5. 交人工 / 有依赖环境的项目
 
@@ -778,9 +816,12 @@ BD 台 `--self-test`、驱动 `--self-test`、电池 `mutate_replay_r9.py`、整
 
 - 本包交付 **S2.1.1 + S2.1.2 + S2.1.3 + S2.1.4 + S2.1.5**（第十三轮起）。改动面与读数都现读，
   本节不抄号数：
-  `git diff --stat 78e3378 -- apps/api/app/services/kb.py apps/api/app/repositories/asset.py`
-  给出生产侧两份文件的两段账（S2.1.3 那一 hunk 只碰 `_biz_from_url`，S2.1.4 那一 hunk 只碰
-  `_find_source_by_anchor`，S2.1.5 在 `asset.py` 的 `get_by_url_fragment` 与模块级阈值常量）；
+  `git diff --stat 78e3378 078dc30 -- apps/api/app/services/kb.py apps/api/app/repositories/asset.py`
+  给出生产侧两份文件的两段账（**两端都要写**：单端形式 `git diff <提交> -- <路径>` 比的是**工作树**，
+  第十六轮复核实测它在有别人在飞件的树上给 `75 ++ / 25 --`，而双端形式给 `37 ++ / 20 --`——
+  差的那一节正是别人未提交的第三条锚，见 §4.17 环境事实 1）。S2.1.3 那一 hunk 只碰 `_biz_from_url`，
+  S2.1.4 那一 hunk 只碰 `_find_source_by_anchor`，S2.1.5 在 `asset.py` 的 `get_by_url_fragment`
+  与模块级阈值常量；
   `_article_key`（`kb.py:554`）与规范键 **未动**，那属 S2.2（阻塞于 ADR-0011 / D-V2-01）。
   从前这里写过「S2.1.4/S2.1.5 未做（`asset.py` 零改动，复审 G 段独立确认）」——那句话在第十三轮
   之前是真的，现在由上面那条命令取代；两点读数口径的老教训仍然成立：①「一个 hunk」只在
@@ -801,9 +842,12 @@ BD 台 `--self-test`、驱动 `--self-test`、电池 `mutate_replay_r9.py`、整
 - **四轮处置批（§4.4/§4.5 的第二轮、§4.6 的第五轮、§4.7 的第六轮、§4.8 的第七轮）都没有再动
   `kb.py`**，§4.9 的**提交前自查批**同样没动（它是证明层与运行层的改动）——那句
   `git diff c10b229 -- apps/api/app/services/kb.py` 为空是**那几批当时**的读数（第十四轮 D 组 D-14-01
-  抓到本节把它写成了现在时，还带一句「本轮复跑确认」：现在的现读是 `28 +-`，非空）。
-  现在按字面跑要读这两条：`git diff --stat c10b229 -- apps/api/app/services/kb.py`（S2.1.4 改了它）与
-  `git diff --stat c10b229 -- apps/api/app/repositories/asset.py`（S2.1.5 新增守卫），
+  抓到本节把它写成了现在时，还带一句「本轮复跑确认」——那条命令按单端写法比的是工作树，
+  第十四轮当时读到非空，而**它读到的数会随别人的在飞件变**（第十六轮 C4b 同一处给 `75 ++`），
+  要复现那句历史读数请跑双端形式并锚到当时的两端：`git diff --stat c10b229 078dc30 -- apps/api/app/services/kb.py`。
+  现在要说这两件事，读这两条（同样两端都写）：
+  `git diff --stat c10b229 078dc30 -- apps/api/app/services/kb.py`（S2.1.4 改了它）与
+  `git diff --stat c10b229 078dc30 -- apps/api/app/repositories/asset.py`（S2.1.5 新增守卫），
   取代关系写在 §4.14 开头那一句里，不在这里重复抄数。
   改动面只有 `prove_biz_delegation.py`/`prove_article_identity.py`（判据、档位、通道自守、编码自守）、
   `test_kb_longlink_ingest.py`
@@ -814,9 +858,9 @@ BD 台 `--self-test`、驱动 `--self-test`、电池 `mutate_replay_r9.py`、整
   H 段是第五轮三条空过的闭合实测，
   I 段是第六轮 D1/D2/D4/D5 的，J 段是第七轮 N1…N5 的两版 harness 对照，K 段是 §4.9/§4.10 的编码崩溃面
   （K.1/K.4 裸跑、K.2/K.5 注掉 guard、K.3/K.6 抽掉靶字），M 段机检「取命令」这条通道本身，
-  L 段机检每段有没有把手。之所以不「只在末尾追加一段」：判据从 15 条变 16 条之后，
+  L 段机检每段有没有把手。之所以不「只在末尾追加一段」：判据从 15 条变 16 条之后（那对数也是 `0161bcd` 时点，现读 BD 台末行或 `--list-checks`），
   A/B/C/F/H/I 的读数本身会变——实测例是 I-2 由 `['BD-13']` 变 `['BD-13', 'BD-16']`、
-  A 段由 `PASS=5 FAIL=10` 变 `PASS=6 FAIL=10`，留旧读数就是留一份和当前代码不符的证据；
+  A 段由 `PASS=5 FAIL=10` 变 `PASS=6 FAIL=10`——**这两对是第七轮那批当时的读数**（锚 `0161bcd`/`d80eeaf`），现读走留档 A 段那行的 `合计 PASS=… FAIL=…`；
   而这条纪律上一轮**实际是漏的**（驱动按 `$ ` 前缀找命令、又在输出时剥掉前缀），见 §4.9 S-2）。
   harness 新增的 `--kb=<路径>` 只服务于 self-test 的子进程退出码自证，
   **默认路径仍是 `apps/api/app/services/kb.py`**，验收命令不变；第六轮起
@@ -891,6 +935,7 @@ BD 台 `--self-test`、驱动 `--self-test`、电池 `mutate_replay_r9.py`、整
   `git ls-files --others` 里新的 `test_*.py` 也算进本步新增，共享工作树里别人未跟踪的用例文件会被点名。
   判据**没有为此改动**（改了它就再也抓不到「我自己新写第三份却不登记」）：处置是 §2b 那条干净视图，
   在只含本批文件的那棵树上跑。读到的红要先问一句「这是谁的在飞件」。
+- **取证命令一律写双端**：`git diff <提交> -- <路径>` 拿那个提交与**工作树**比，共享工作树里它读的是别人的在飞件，单机独占时也随时间漂移。本包这类声明（改动面、hunk 数、「生产代码零改动」）现在只写成 `git diff A B -- <路径>` 或 `git show --stat <提交> -- <路径>`。实测对照（第十六轮 C4b）：`git diff --stat 78e3378 078dc30 -- kb.py asset.py` 给 `37 ++ / 20 --`，同一份路径集合用单端写法在今天给 `75 ++ / 25 --`。写下来的数只有配上「哪两端」才叫读数。
 - **`registry_drift` 的基线 `STEP_TEST_BASE` 是写死的**（现为 V0.5.0 建卡时的 `65f508b`）：本步收口、
   下一步另起基线时**必须前移它**，否则「登记表里那份已经不是本步新增」那一判会长期红。
   那不是判据坏了，是它在提醒这张表陈旧——照着 §4.11 id 34 那条口径办：改判据的同时改口径说明。

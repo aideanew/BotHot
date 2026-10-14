@@ -1188,7 +1188,8 @@ EQUIVS: list[tuple[str, str, str]] = [
      "        biz_anchor = _biz_from_url(url)\n"
      "        for anchor in (a for a in (biz_anchor, article_key) if a):"),
     # 第七轮：数据流判据与封闭世界判据都是**收紧**，收紧的代价必须由等价通道来量。
-    ("委托结果经两跳别名才进锚（换写法不该红）", "        for anchor in (a for a in (_biz_from_url(url), article_key) if a):",
+    ("委托结果经两跳别名才进锚（换写法不该红）",
+     "        for anchor in (a for a in (_biz_from_url(url), article_key) if a):",
      "        biz_anchor = _biz_from_url(url)\n"
      "        first = biz_anchor\n"
      "        for anchor in (a for a in (first, article_key) if a):"),

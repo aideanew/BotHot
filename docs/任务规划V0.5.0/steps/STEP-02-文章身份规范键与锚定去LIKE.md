@@ -34,9 +34,11 @@
 - **S2.1.4** ✅🛠 `_find_source_by_anchor` 删除 LIKE 兜底；锚查询加 `.limit(1)` 且 biz 源优先
   - S2.1.4.1 ✅ P-4 探针转常驻用例 `apps/api/tests/test_kb_multisource_anchor.py::test_multi_source_no_crash`
     （改前红的实测读数引 `docs/任务规划V0.3.0/evidence/probes_4afaedd.txt:19`；本机不可跑 ⇒ EVD-V2-02 §5 J-6）
-  - S2.1.4.2 ✅ 删兜底那一段；旧 `kb.py:354-361` 的行号随上下文移动，现读用
-    `git diff --stat 78e3378 -- apps/api/app/services/kb.py`（行数）与
-    `git diff 78e3378 -- apps/api/app/services/kb.py | grep -c '^@@'`（hunk 数）——**hunk 级断言不能挂在
+  - S2.1.4.2 ✅ 删兜底那一段；旧 `kb.py:354-361` 的行号随上下文移动，现读用**两端都写**的
+    `git diff --stat 78e3378 078dc30 -- apps/api/app/services/kb.py`（行数）与
+    `git diff 78e3378 078dc30 -- apps/api/app/services/kb.py | grep -c '^@@'`（hunk 数）——
+    **单端写法 `git diff <提交> -- <路径>` 比的是工作树**，共享工作树里它把别人的在飞件也算进改动面
+    （现读对照：双端 2 个 hunk / 单端 4 个，第十六轮 C4b）；**hunk 级断言不能挂在
     `--stat` 上**，它只给每文件行数（B 组 R13B-10）。
     否定式声明「函数体内不再有 `.like(`」由 **AST** 判（AF-S1 判锚定方法体、AF-S6 判整份 kb.py
     里任何接收者的 `.like(` 调用），本机跑在 O 段。**字面 grep 判不动这件事**：

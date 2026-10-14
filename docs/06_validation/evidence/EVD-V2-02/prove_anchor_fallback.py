@@ -1623,7 +1623,8 @@ def self_test() -> int:
         print(f"FAIL 覆盖：{len(gaps)} 条判据没有任何一发变异能把它打红：{gaps}")
         rc = 1
     else:
-        print(f"OK   覆盖：{len(CHECKS)} 条判据 each 至少被一发变异实测打红（变异 {len(observed)}/{len(MUTANTS)} 发跑成）")
+        print(f"OK   覆盖：{len(CHECKS)} 条判据 each 至少被一发变异实测打红"
+              f"（变异 {len(observed)}/{len(MUTANTS)} 发跑成）")
     # 这条覆盖判据自己也要能假。阈值在这一批**反过来定**（第十三轮处置批自查，理由必须留在这里）：
     # 前一版要求「≥2 发变异抽不得」，而第十三轮补进 8 发同族变异之后 26 发**全都抽得**——因为 18 条判据
     # 每条都有了 ≥2 发 provider。旧阈值把冗余当成缺陷：电池越结实它越要报 FAIL，方向是反的。

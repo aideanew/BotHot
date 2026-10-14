@@ -538,7 +538,8 @@ _JUDGES: list[tuple[str, object, str, str]] = [
     ("PI-2 零 IO（session.execute）", j_zero_io, "async def f(s, u):\n    return await s.execute(u)\n", "impl"),
     # 复审 Q-19 实测：`__import__("os").popen("ver")` 既没有 `import os` 也没有 `os.` 前缀，
     # PI-1/PI-2 原形全绿，起子进程的实现仍被称「零 IO 纯函数」⇒ 补动态求值族。
-    ("PI-2 零 IO（__import__ 动态逃逸）", j_zero_io, "def f(u):\n    return __import__('os').popen(u).read()\n", "impl"),
+    ("PI-2 零 IO（__import__ 动态逃逸）", j_zero_io,
+     "def f(u):\n    return __import__('os').popen(u).read()\n", "impl"),
     ("PI-2 零 IO（eval 动态逃逸）", j_zero_io, "def f(u):\n    return eval(u)\n", "impl"),
     ("PI-3 纯函数（global 写）", j_no_mutation, "def f(u):\n    global C\n    C = 1\n    return u\n", "impl"),
     ("PI-3 纯函数（属性写）", j_no_mutation, "def f(o):\n    o.mid = '1'\n    return o\n", "impl"),

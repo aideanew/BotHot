@@ -324,6 +324,26 @@ S0.2.1 只覆盖 `test_w3_push_scheduler.py`。**建议**：新增 S0.2.3 收口
   影响面复核：三档输入下都不会连生产库（空串同样被拒），故属**正确性/可观测性**加固，
   非凭据泄漏类缺陷——记录时不夸大意涵。
 
+### 6.7 `g24_static_check.py` 的 E501 单位与 ruff 不同（第十六轮自查，已修）
+本卡 §5 那句「合计违规 0 条」与 EVD-V2-02 留档 G 段的绿裁决都出自这张表，所以它的口径错误是**门禁的**
+错误，不是一个普通的样式问题。
+- **现象**：E501 从前按 `len(line)` 判，而 ruff 的 120 是**列宽**（East Asian Width `W`/`F` 占 2 列）。
+  本仓注释与判据名大量是中文，于是这类行在本表里一律假绿。
+- **锚点（两个数只有后者与 ruff 可比）**：`apps/api/tests/test_env_isolation.py:68` 折行前是
+  **112 个字符 / 134 列**，而 `evidence/65f508b/ruff_65f508b.txt` 报的正是
+  `E501 Line too long (134 > 120)`。现读：
+  `python -c "import pathlib,unicodedata;l=pathlib.Path('apps/api/tests/test_env_isolation.py').read_text(encoding='utf-8').splitlines()[67];print(len(l), sum(2 if unicodedata.east_asian_width(c) in 'WF' else 1 for c in l))"`
+- **改前它自己还把这个错误编进了自证**：旧 E501 反样本 `"长"*110`（119 字符 / 229 列）被登记为
+  「绿档不许咬」，按列宽判必须报——直接调本表的 `check()` 读回
+  `sample_old_green.py:1 E501 行宽 229 > 120（119 个字符）`。这条与本卡 §6.2 是同族：
+  **反样本写错单位时，自证会通过而不证明任何东西**。
+- **落点**：新增 `_width()` 按列宽判，报错文案同时给两个数；docstring 把两处**方向相反**的差异写全
+  （①pragma 那一侧本表更严；②单位那一侧本表曾更宽，已修——两个「0 违规」从来不是同一个数）；
+  自证样本换成五发两单位（130/60 个长该报、55 个长与 ASCII 116 该静默、ASCII 117 该报）。
+- **连带面**：换单位后 CI 射程 `apps/api` 内抓到 2 行、EVD-V2-02 包内抓到 7 行，九行同批折行
+  （清单与复现见 `EVD-V2-02/README.md` §4.18）。STEP-00C 卡上那句「现读该行 112 列 ≤120」
+  因此被更正——那句当时是**用错了单位的读数**，不是「已经改好了」的证据。
+
 ---
 
 ## 7. 复现命令（逐条可复制，均不启服务、不装依赖、不连库）

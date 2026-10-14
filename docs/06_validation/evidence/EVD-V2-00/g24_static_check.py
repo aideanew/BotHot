@@ -7,13 +7,19 @@ from-import 的**成员序**、同一段被空行拆开；段表按 `sys.stdlib_
 ruff_65f508b.txt` 那四条红与实测通过的补丁）
 | UP006 UP007 UP017 | B006
 不覆盖：mypy 类型判定、ruff 其余规则——CI 才是终判，本脚本只是提交前的降险。
-本表与 ruff 已知的一处**方向性差异**（本表更严，不更宽）：ruff 的 E501 有 pragma 例外——
-代码部分本身不超限、只是行尾那句 `# type: ignore[...]` / `# noqa: ARG002` 把整行推过 120 列时，
-ruff 放行。实测四处正是这一形状（`test_kb_orphan_purge.py:91` 总 122 / 代码段 92，
-`test_metadata_filter.py:174` 总 126 / 代码段 96，`:233` 总 122 / 代码段 92，
-`test_manifest_sync.py:481` 总 123 / 代码段 109），而 `evidence/65f508b/ruff_65f508b.txt` 里
-ruff 对这四处一条都没报。本表按总长一律报，所以「本表 0 违规」比「CI ruff 0 违规」更强，
-反过来不成立——读的时候别把两者当同一个数。
+本表与 ruff 的**两处**方向性差异，方向相反，读的时候别把两个数当同一个：
+① 本表更严——ruff 的 E501 有 pragma 例外：代码部分本身不超限、只是行尾那句
+   `# type: ignore[...]` / `# noqa: ARG002` 把整行推过 120 列时 ruff 放行。实测四处正是这一形状
+   （`test_kb_orphan_purge.py:91` 总 122 / 代码段 92，`test_metadata_filter.py:174` 总 126 / 代码段 96，
+   `:233` 总 122 / 代码段 92，`test_manifest_sync.py:481` 总 123 / 代码段 109），而
+   `evidence/65f508b/ruff_65f508b.txt` 里 ruff 对这四处一条都没报。本表按总宽一律报，
+   所以「本表 0 违规」比「CI ruff 0 违规」更强，反过来不成立。
+② 本表曾经**更宽**（这是个已修的缺陷，写在这里免得退化）：ruff 的 120 是**列宽**而不是字符数，
+   East Asian Width 为 W/F 的字符占 2 列。按字符数计的那一版对 CJK 撑爆的行一律假绿——
+   锚点：`apps/api/tests/test_env_isolation.py:68` 112 个字符，ruff 报 `134 > 120`，
+   按 `east_asian_width` 计宽恰为 134。改按列宽之后 CI 射程（`apps/api`）内新增抓到 2 行、
+   本证据包内新增抓到 8 行，那十行都在这一批里折了行；自证也配了「只有按宽度才报」的正样本
+   （见 `samples` 里 E501 那五发）。
 
 用法：python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py [文件...]
 无参数时检查 STEP-00 触碰的全部 Python。退出码 0=无违规。
@@ -26,6 +32,7 @@ import py_compile
 import re
 import sys
 import tempfile
+import unicodedata
 from pathlib import Path
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -70,6 +77,19 @@ def _is_first_party(top: str) -> bool:
     if top in FUTURE_OR_FIRST:
         return True
     return (BACKEND / f"{top}.py").is_file() or (BACKEND / top / "__init__.py").is_file()
+
+
+#: 全角/宽字符按 2 列计——这是 ruff E501 的口径，不是我的偏好。锚点是实测对上的那一条：
+#: `apps/api/tests/test_env_isolation.py:68` 有 112 个**字符**，`evidence/65f508b/ruff_65f508b.txt`
+#: 却报 `E501 Line too long (134 > 120)`，而按 `east_asian_width in "WF"` 计宽正好 134。
+#: 本表此前按字符数计，于是这类「CJK 撑爆」的行一律假绿（本仓注释与判据名大量是中文，
+#: 这不是边角：CI 射程 `apps/api` 内实测有 2 条、本证据包内有 8 条那样读）。
+_WIDE = frozenset("WF")
+
+
+def _width(line: str) -> int:
+    """ruff 口径的行宽：宽字符（East Asian Width = W/F）占 2 列，其余占 1 列。"""
+    return sum(2 if unicodedata.east_asian_width(ch) in _WIDE else 1 for ch in line)
 
 
 def _section(mod: str, level: int = 0) -> int:
@@ -121,8 +141,10 @@ def check(path: Path) -> list[str]:
     if not raw.endswith("\n"):
         viol.append(f"{path.name}: W292 文件末尾缺换行")
     for i, line in enumerate(lines, 1):
-        if len(line.rstrip("\r")) > LINE_LENGTH:
-            viol.append(f"{path.name}:{i} E501 行长 {len(line)} > {LINE_LENGTH}")
+        bare = line.rstrip("\r")
+        w = _width(bare)
+        if w > LINE_LENGTH:
+            viol.append(f"{path.name}:{i} E501 行宽 {w} > {LINE_LENGTH}（{len(bare)} 个字符）")
         if line != line.rstrip():
             viol.append(f"{path.name}:{i} W291 行尾空格")
         if line.strip() == "" and line != "":
@@ -351,7 +373,14 @@ def self_test() -> int:
         # 绿档：这一份的形状就是 ruff 0.12.12 在 65f508b 实测 0 错的那一份（补丁
         # `evidence/65f508b/STEP-00C_simulated_65f508b.patch`），本表不许在任何一条 I001 上咬它。
         ("I001", verified_green, False),
-        ("E501", "x = 1  # " + "长" * 110 + "\n", False),
+        # ↓ E501 三对：字符数与**列宽**两个单位各钉一侧。第二发（67 个字符 / 127 列）是本表按
+        #   字符数计时的假绿形状，锚点是真实的：`test_env_isolation.py:68` 112 字符 / 134 列，
+        #   ruff 在 `65f508b` 报的就是 134。116/117 那一对钉的是纯 ASCII 的边界（不许差一列误判）。
+        ("E501", "x = 1  # " + "长" * 130 + "\n", True),
+        ("E501", "x = 1  # " + "长" * 60 + "\n", True),
+        ("E501", "x = 1  # " + "长" * 55 + "\n", False),
+        ("E501", "x = " + "a" * 116 + "\n", False),
+        ("E501", "x = " + "a" * 117 + "\n", True),
     ]
     bad = 0
     caught_n = green_n = 0

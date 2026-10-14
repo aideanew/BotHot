@@ -119,7 +119,9 @@ async def test_url_fragment_boundary_is_exactly_min_len(
     assert MIN_FRAGMENT_LEN == 8, f"卡面阈值是 8，代码里是 {MIN_FRAGMENT_LEN}"
     sess = _RecordingSession()
     got = await AssetRepository(sess).get_by_url_fragment("src-1", fragment)  # type: ignore[arg-type]
-    assert len(sess.calls) == queries, f"{fragment!r}（{len(fragment)} 字符）下发了 {len(sess.calls)} 条，期望 {queries}"
+    assert len(sess.calls) == queries, (
+        f"{fragment!r}（{len(fragment)} 字符）下发了 {len(sess.calls)} 条，期望 {queries}"
+    )
     assert (got is None) is (queries == 0), f"{fragment!r} → {got!r}，与下发条数不自洽"
 
 
