@@ -21,7 +21,7 @@ O 是 S2.1.4/S2.1.5 那台锚定/兜底证明台的现跑；L 现跑并回填—
 （`_tmp_ng.py`、`_tmp_noarrow.py`；同一段里的回读就是它们的删除证明，跑完仍在就是缺陷）。
 它**不写任何被测文件**：A 段的 kb 临时副本写在 kb.py 同目录并当场 unlink，J 段的探针 harness 跑完即删。
 
-写留档这一步本身要回读，而且**按字节**回读（本轮实测撞过一次 `OSError [Errno 22]`：整份重放跑完、
+写留档这一步本身要回读，而且**按字节**回读（第八轮当时实测撞过一次 `OSError [Errno 22]`：整份重放跑完、
 最后一次回填炸掉，磁盘上留下带 `PLACEHOLDER_L_OUT` 的半成品，而驱动自己一声不吭地过）。见 `write_out` /
 `write_ok` 与 M 段。第九轮复审 id 1 补的一课：回读如果走 `read_text`，磁盘上落成 CRLF 的文件解码后与意图
 **逐字相同**，那道「逐字相同」的门会放行一份字节完全不同的留档——所以比对放在 `read_bytes` 层。
@@ -170,7 +170,7 @@ def bd_headline() -> str:
 #: 第二台 harness（S2.1.4/S2.1.5）的判据登记形状：`CHECKS` 里每条都是 `("AF-Xn", 标签, 判据函数)`。
 #: 与 BD 那两条正则不同——AF 台把判据集中在一张元组表里登记，所以头部按表数，不按调用点数。
 #: 号数分三段捕获（前缀 / 面字母 / 数字）：`AF-P0` 的数字在第三个分组里，早期版本按 BD 的
-#: 两段形状 `int(s.split("-")[1])` 取号 ⇒ 本轮实测驱动在 `o_section()` 里抛
+#: 两段形状 `int(s.split("-")[1])` 取号 ⇒ 第十三轮（`078dc30`）实测驱动在 `o_section()` 里抛
 #: `ValueError: invalid literal for int() with base 10: 'P0'` 收场（崩栈不是裁决，见 M 段 锚定台现算）。
 AF_LABEL = re.compile(r'^\s+\("(AF)-([A-Z])(\d+)"')
 AF_GROUP_NAME = {"P": "前提面", "B": "锚定行为面", "A": "片段行为面", "S": "结构面"}
@@ -190,7 +190,7 @@ def af_ids(path: pathlib.Path | None = None) -> dict[str, list[str]]:
 def _af_num(af_id: str, letter: str) -> int | None:
     """取 `AF-<面字母><号数>` 的号数；形状不符返回 None。
 
-    这里**不抛**是有意的：本轮实测过一发 `int("P0")` 的 `ValueError`，驱动以 traceback 收场、
+    这里**不抛**是有意的：第十三轮实测过一发 `int("P0")` 的 `ValueError`，驱动以 traceback 收场、
     一个裁决都读不到——正是项目纪律禁的那第三种形态。None 让判据自己变红。
     """
     tail = af_id[len(f"AF-{letter}"):] if af_id.startswith(f"AF-{letter}") else ""
@@ -231,7 +231,7 @@ def write_ok(intent: str, raw: bytes) -> str:
       `.gitattributes` 只钉了 `*.sh eol=lf`，第十轮复审 10-11 在临时仓库实测：纯 CRLF 化之后
       `git diff --stat` 反而是**空**的。所以这一类只能靠字节层看见，靠 diff 或文本回读都会漏；
     - BOM = 编码被改写；
-    - 留着 `PLACEHOLDER_L_OUT` **而意图里没有** = **半成品冒充成品**（回填那一步失败时的形状，本轮
+    - 留着 `PLACEHOLDER_L_OUT` **而意图里没有** = **半成品冒充成品**（回填那一步失败时的形状，第八轮
       真撞到过一次）；两个条件缺一不可——写入 #1 的意图本来就带占位符，只查盘上有没有就会误点它；
     - 其余 = 落下去的是另一个版本（截断、被并发写坏）。
 
@@ -274,7 +274,7 @@ def write_out(text: str, *, write=_disk_write, read=_disk_read, sleep=time.sleep
 
     成功返回空串，失败返回原因——**不 raise**：本项目「崩栈不是裁决」。
 
-    这不是防御性口味：本轮整份重放跑完后，最后一次回填以 `OSError [Errno 22] Invalid argument`
+    这不是防御性口味：第八轮那一趟整份重放跑完后，最后一次回填以 `OSError [Errno 22] Invalid argument`
     失败，驱动一声不吭地过，而磁盘上留下的是**带占位符的半成品**。「写出 431 行」这句话如果只由驱动
     自己声明，就和它要取代的那句「每一段都重放过」一样不可证——所以写完必须把内容读回来对一遍。
     第九轮复审 id 2 另外纠了一句话：原先把 `Errno 22` 解释成「win32 上文件被瞬时占用」，那是**猜的**，
@@ -451,7 +451,7 @@ def k_sections() -> tuple[list[str], list[str]]:
 
 G24 = ROOT / "docs/06_validation/evidence/EVD-V2-00/g24_static_check.py"
 #: 本机证不了的那一半**交给谁**（文件 + 顶层用例名）。这张表是一条判据的输入，不是文档：
-#: 本轮把 P-4 用例按卡面从 `test_kb_longlink_ingest.py` 搬到 `test_kb_multisource_anchor.py`，
+#: 第十三轮把 P-4 用例按卡面从 `test_kb_longlink_ingest.py` 搬到 `test_kb_multisource_anchor.py`，
 #: 而「真库那条走 `某文件::某用例`」这句话从前只写在 harness 的 print 与 O 段的注释里——
 #: 搬一次就烂掉，而没有任何一条判据会说「指针指空了」（G-23 禁的正是这种只会说好话的声明）。
 #: 现在文件名与用例名集中登记，落盘前逐条核对磁盘上确有其事；表与仓库各改一头，G 段就红。
@@ -464,22 +464,67 @@ REAL_DB_TARGETS = (
     ("apps/api/tests/test_asset_fragment_guard.py", "test_url_fragment_query_is_source_scoped_like"),
     ("apps/api/tests/test_kb_longlink_ingest.py", "test_long_link_yields_non_empty_biz"),
 )
-#: 本步新出来的两份用例文件：**它们每一条顶层 `test_*` 都必须在上面的表里**（A 组 NI-2：
+#: 本步新出来的用例文件：**它们每一条会被 pytest 收集的用例都必须在上面的表里**（A 组 NI-2：
 #: 从前只按文件级判，一份文件四条用例登记两条也算「确有其事」）。判据是 `db_pointer_missing`。
+#: 这份名单本身不许手抄维持（第十四轮 C 组 C-14-08）：`registry_drift()` 拿 git 的本步新增集合对账，
+#: 「本步又新写了第三份用例文件却谁都不登记」那条路从此要出声。基线取 V0.5.0 建卡时的 `65f508b`。
+STEP_TEST_BASE = "65f508b"
 STEP_NEW_TEST_FILES = ("apps/api/tests/test_kb_multisource_anchor.py",
                        "apps/api/tests/test_asset_fragment_guard.py")
 
 
+def _parse_or_none(path: pathlib.Path, rel: str, bad: list[str]) -> ast.Module | None:
+    """把用例文件解析成 AST；解析不了就**点名成缺陷**而不是让 traceback 冒充裁决。
+
+    第十四轮 C 组 C-14-10：这两个指针函数当时直接 `ast.parse`，一份 `def test_ok(:` 或一份
+    非 UTF-8（带 `# -*- coding: gbk -*-`，CPython 认它）的用例文件都会让整趟 `main()` 以
+    traceback 收场——既不是红档也不是 INCONCLUSIVE 档，正是本包一路在堵的那种形态。
+    """
+    try:
+        return ast.parse(path.read_text(encoding="utf-8-sig"))
+    except (SyntaxError, UnicodeDecodeError, ValueError) as exc:
+        bad.append(f"{rel} 读不出用例清单：{type(exc).__name__}: {exc}——指针核对在这一条上没跑成，"
+                   f"不许当成「没有缺陷」")
+        return None
+
+
+def _collect_cases(tree: ast.Module) -> list[str]:
+    """pytest 真会收集的用例名：顶层 `test*` 函数，以及 `Test*` 类里的 `test*` 方法。
+
+    类里那种登记成 `类::用例`——因为那句交代得写成 `file::类::用例` 才真的跑得动；
+    **不以 `Test` 开头的类不算**（pytest 默认 `python_classes = Test*`，把没人收集的函数要求成
+    登记项，等于让判据咬合法形状）。第十四轮 C 组 C-14-08：上一版这两张指针判据对同一个形状
+    给出相反答案——`db_pointer_defects` 把类方法判成指空，`db_pointer_missing` 却只看 `tree.body`
+    那一层、压根不要求登记它。口径统一成「pytest 收得到就必须登记，登记名要能被跑动」。
+    """
+    out: list[str] = []
+
+    def visit(body: list[ast.stmt], prefix: str) -> None:
+        for node in body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if node.name.startswith("test"):
+                    out.append(f"{prefix}{node.name}")
+            elif isinstance(node, ast.ClassDef):
+                if node.name.startswith("Test"):
+                    visit(node.body, f"{node.name}::")
+            elif isinstance(node, (ast.If, ast.Try)):
+                visit(node.body, prefix)
+
+    visit(tree.body, "")
+    return out
+
+
 def db_pointer_defects(targets: tuple[tuple[str, str], ...],
                        root: pathlib.Path = ROOT) -> list[str]:
-    """逐条核对「交给真库的那些用例」在 `root` 下确有其事：文件在、顶层 `def` 在。
+    """逐条核对「交给真库的那些用例」在 `root` 下确有其事：文件在、那句指针点到的 `def` 在。
 
     走 AST 而不是 grep：用例名出现在注释里不算数（那正是这句话最容易烂成的样子——
     文件还在、函数已经改名）。参数化用例的顶层 `def` 名不变，所以 `@pytest.mark.parametrize`
-    那种写法不需要在这里特判。
+    那种写法不需要在这里特判。登记名带 `::` 的按类方法解析（`类::用例`），因为那句交代
+    要写成 `file::类::用例` 才真的能跑。
 
     `root` 是给 M 段留的把手：反证电池把本包拷进系统临时目录跑，那份副本的 `ROOT` 上面
-    **没有** `apps/`（本轮实测：基线因此报「5 处文件不存在」，整批电池判 INCONCLUSIVE——
+    **没有** `apps/`（第十三轮实测：基线因此报「5 处文件不存在」，整批电池判 INCONCLUSIVE——
     自己的判据把自己的电池弄成没裁决，这是最糟的一种红）。所以 M 段只对着一棵临时造假的小树判
     语义，真正那张 `REAL_DB_TARGETS` 由 `g_section()` 在仓库根上核对、不符就不交付。
     """
@@ -489,10 +534,12 @@ def db_pointer_defects(targets: tuple[tuple[str, str], ...],
         if not path.is_file():
             bad.append(f"真库指针指向的文件不存在：{rel}::{fn}")
             continue
-        tree = ast.parse(path.read_text(encoding="utf-8-sig"))
-        names = {n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        tree = _parse_or_none(path, rel, bad)
+        if tree is None:
+            continue
+        names = _collect_cases(tree)
         if fn not in names:
-            bad.append(f"{rel} 里没有顶层用例 {fn}（实有 {sorted(names)[:4]}…）——"
+            bad.append(f"{rel} 里没有 pytest 会收集的用例 {fn}（实有 {sorted(names)[:4]}…）——"
                        f"那句话就又是一句过期的交代")
     return bad
 
@@ -552,6 +599,12 @@ def g_section() -> tuple[str, list[str]]:
                        f"清单与被检结果脱节（登记的那几份与跑出来的那几份不是同一批）")
     defects += db_pointer_defects(REAL_DB_TARGETS)
     defects += db_pointer_missing(REAL_DB_TARGETS)
+    fresh = new_test_files_from_git()
+    if fresh is None:
+        defects.append("本步新增用例文件的清单没跑成（git 取不到读数）——`registry_drift` 这一判据**没跑**，"
+                       "不是通过了；按「没测到」记成缺陷而不是静默放行")
+    else:
+        defects += registry_drift(STEP_NEW_TEST_FILES, fresh)
     covered = {f for f, _ in REAL_DB_TARGETS}
     for must in STEP_NEW_TEST_FILES:
         if must not in covered:
@@ -593,36 +646,6 @@ O_NOTES = (
 def _fn_tree(fn: object) -> ast.FunctionDef:
     """把某个函数自己的源码解析成 AST（`inspect.getsource` 的行号从 1 起，相对顺序仍真实）。"""
     return ast.parse(inspect.getsource(fn)).body[0]  # type: ignore[union-attr]
-
-
-def _stmt_names_test(tree: ast.AST, want: str) -> list[int]:
-    """`if <want>:` 这种**直接把那个名字当条件**的 If 行号（第十三轮 A 组 MA-3：
-    `if False and defects:` 也算「有门」，但它永远不会红——所以这里不收 BoolOp）。"""
-    out = []
-    for n in ast.walk(tree):
-        if isinstance(n, ast.If) and isinstance(n.test, ast.Name) and n.test.id == want:
-            out.append(n.lineno)
-    return out
-
-
-def _aug_targets(tree: ast.AST, target: str) -> list[str]:
-    """`<target> += X` 里 X 用到的名字（交付门的“缺陷有没有被接进去”就判这个）。"""
-    out: list[str] = []
-    for n in ast.walk(tree):
-        if isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Name) and n.target.id == target:
-            out.extend(m.id for m in ast.walk(n.value) if isinstance(m, ast.Name))
-    return out
-
-
-def _assign_names(tree: ast.AST, target: str) -> list[str]:
-    """`<target> = X` 右端用到的名字。"""
-    out: list[str] = []
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Assign):
-            for t in n.targets:
-                if isinstance(t, ast.Name) and t.id == target:
-                    out.extend(m.id for m in ast.walk(n.value) if isinstance(m, ast.Name))
-    return out
 
 
 def _first_call_line(tree: ast.AST, callee: str) -> int:
@@ -674,18 +697,172 @@ def _calls_brief(tree: ast.AST, callee: str) -> list[list[str]]:
 
 
 def orphan_pycs(ev: pathlib.Path = EV) -> list[str]:
-    """本包 `__pycache__` 里那些**源文件已经不存在**的 `.pyc`（R13B-17 的形状）。
+    """本包上下那些**源文件已经不存在**的 `.pyc`（R13B-17 的形状），递归找，不止 `__pycache__` 一层。
 
     只判孤儿：正常跑出来的新编译件不该被咬（第十二轮那条口径——见什么的都有探测器不等于有判据）。
     为什么这算缺陷：`EV.glob("*.py")` 看不见 `.pyc`、`stray_copy()` 只管「谁有权落盘」，
     于是「包里躺过一发变异副本」这件事在两份判据之间是隐形的，而 M 段那句
     「本包里的变异副本没有落盘权」读起来像已经清干净了。
+    第十四轮 C 组 C-14-09：上一版只 `glob("__pycache__/*.pyc")`，子目录里的
+    `sub/__pycache__/x.cpython-311.pyc` 与直接落在包根的 `x.cpython-311.pyc` 两种位置全都隐形——
+    见不到的那两类恰好也是复核临时件最常落的形状，所以改成 `rglob` 并按编译件自己的位置找源文件。
     """
     out = []
-    for pyc in sorted((ev / "__pycache__").glob("*.pyc")):
+    for pyc in sorted(ev.rglob("*.pyc")):
         stem = pyc.name.split(".")[0]
-        if not (ev / f"{stem}.py").exists():
-            out.append(f"__pycache__/{pyc.name}")
+        home = pyc.parent.parent if pyc.parent.name == "__pycache__" else pyc.parent
+        if not (home / f"{stem}.py").exists():
+            out.append(f"{pyc.relative_to(ev).as_posix()}")
+    return out
+
+
+#: 自指措辞登记表（第十四轮 D 组 D-14-02）。留档每轮由驱动**整份重打**，所以「写它的那一轮」
+#: 绝不能用代词说：那等于让第八轮那次 `OSError [Errno 22]` 在下一轮的纸上重新自称刚发生。
+#: 登记表用拼接而不是字面量——它要扫的对象**包括驱动自己的源码**，写成字面量就永久命中定义那一行。
+SELF_REF_MARKS = ("本" + "轮", "本" + "次", "本" + "趟")
+
+
+def self_ref_defects(text: str, where: str = "文本") -> list[str]:
+    """点名「用代词说事」的行（行号 + 原句片段）；空表 = 没有那种措辞。
+
+    判的是**措辞**而不是内容：指名轮次（`第八轮`、`65f508b`）的旧事一律放行——那种句子每一轮重印
+    都仍然为真，而代词那句每一轮重印都换了一个所指。留档与驱动源码走同一份登记表，
+    所以「注释里把第八轮的事故说成刚刚发生」和「头部模板字面量每轮自称正在发生」是同一个缺陷的两侧。
+    """
+    out = []
+    for i, line in enumerate(text.splitlines(), 1):
+        hit = [m for m in SELF_REF_MARKS if m in line]
+        if hit:
+            out.append(f"{where}第 {i} 行用自指措辞 {'/'.join(hit)} 说话：{line.strip()[:56]!r}"
+                       f"——事故与读数要指名轮次或提交，代词每轮重印都会把旧事说成新事")
+    return out
+
+
+def _cond_uses(node: ast.AST, want: str) -> bool:
+    """这个条件表达式是不是「无条件地」读了 `want`（裸名字、双重取反、`len(want)` 与 0 比）。"""
+    if isinstance(node, ast.Name):
+        return node.id == want
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return _cond_uses(node.operand, want)
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "len":
+        return any(_cond_uses(a, want) for a in node.args)
+    if isinstance(node, ast.Compare):
+        sides = [node.left, *node.comparators]
+        return any(_cond_uses(s, want) for s in sides) and any(
+            isinstance(c, ast.Constant) and c.value == 0 for c in node.comparators)
+    if isinstance(node, ast.BoolOp):
+        return any(_cond_uses(v, want) for v in node.values)
+    return False
+
+
+def _cond_is_dead(node: ast.AST) -> bool:
+    """条件里出现常量假（`if False and defects:`）——那种门永不成立，与把门拆了等价。"""
+    if isinstance(node, ast.Constant) and not node.value:
+        return True
+    if isinstance(node, ast.BoolOp):
+        return any(_cond_is_dead(v) for v in node.values)
+    return False
+
+
+def _gate_lines(tree: ast.AST, want: str) -> tuple[list[int], list[int]]:
+    """返回 (以 `want` 为拒收条件的 If 行号, 恒假条件的 If 行号)。
+
+    第十四轮 C 组 C-14-07：`if defects:` 换成 `if len(defects) > 0:` 行为一字不差，旧判据却报**假红**
+    （它只认 `ast.Name` 那一种形状）；而 C-14-04 那一发 `if False and defects:` 旧判据只是「找不到门」，
+    这句话本身没说清「门被拆了」与「门是死的」是两件事。现在两种分开点名。
+    """
+    live, dead = [], []
+    for n in ast.walk(tree):
+        if not isinstance(n, ast.If):
+            continue
+        if _cond_is_dead(n.test):
+            dead.append(n.lineno)
+        elif _cond_uses(n.test, want):
+            live.append(n.lineno)
+    return live, dead
+
+
+def _merge_targets(tree: ast.AST, target: str) -> tuple[list[str], list[str]]:
+    """返回 (被无条件并入 `target` 的名字, 可疑形状说明)。
+
+    接受 `target += X`、`target = target + X`、`target = list(target) + list(X)`（C-14-07 的等价形状）；
+    **不接受**带 `if` 过滤的推导式：C-14-04 实测 `defects += [d for d in g_defects if False]` 让
+    M 段 89 条全绿、`main()` 照样落盘——名字在场而值永远是空表，正是「形状保留、语义掏空」。
+    """
+    names: list[str] = []
+    odd: list[str] = []
+
+    def harvest(node: ast.AST) -> None:
+        if isinstance(node, ast.Name):
+            names.append(node.id)
+        elif isinstance(node, (ast.ListComp, ast.GeneratorExp, ast.SetComp, ast.DictComp)):
+            for gen in node.generators:
+                if gen.ifs:
+                    odd.append(f"第 {getattr(node, 'lineno', 0)} 行用带 if 的推导式并入（名字在场、值可恒空）")
+                harvest(gen.iter)
+            for part in ([node.elt] if isinstance(node, (ast.ListComp, ast.GeneratorExp, ast.SetComp))
+                         else [node.key, node.value]):
+                harvest(part)
+        elif isinstance(node, (ast.BinOp, ast.BoolOp)):
+            for child in (node.values if isinstance(node, ast.BoolOp) else [node.left, node.right]):
+                harvest(child)
+        elif isinstance(node, (ast.List, ast.Tuple)):
+            for e in node.elts:
+                harvest(e)
+        elif isinstance(node, ast.Call):
+            for a in node.args:
+                harvest(a)
+            if isinstance(node.func, ast.Attribute):
+                harvest(node.func.value)
+
+    for n in ast.walk(tree):
+        if isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Name) and n.target.id == target:
+            harvest(n.value)
+        elif isinstance(n, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == target for t in n.targets):
+            harvest(n.value)
+    return names, odd
+
+
+def _sink_line(tree: ast.AST) -> int:
+    """函数体内第一次「往磁盘写」的行号：`write_out` / `_disk_write` / `X.write_text(...)` / `open(..., "w")`。
+
+    第十四轮 C 组 C-14-05：旧判据只认被调用者字面叫 `write_out` 的那一次，于是门之前插一句
+    `OUT.write_text("坏留档")` 完全合法——磁盘先被改坏、门之后才出声，正是第十二轮那条
+    「拒收不能 undo」换了个落盘口的复现。所以比的是 **sink** 而不是某个函数名。
+    """
+    lines = []
+    for n in ast.walk(tree):
+        if not isinstance(n, ast.Call):
+            continue
+        f = n.func
+        if isinstance(f, ast.Name) and f.id in ("write_out", "_disk_write"):
+            lines.append(n.lineno)
+        elif isinstance(f, ast.Attribute) and f.attr in ("write_text", "write_bytes", "open"):
+            lines.append(n.lineno)
+        elif isinstance(f, ast.Name) and f.id == "open":
+            mode = ast.unparse(n.args[1]) if len(n.args) > 1 else next(
+                (ast.unparse(k.value) for k in n.keywords if k.arg == "mode"), "")
+            if "w" in mode or "a" in mode:
+                lines.append(n.lineno)
+    return min(lines) if lines else 0
+
+
+def _escape_lines(tree: ast.AST) -> list[int]:
+    """函数体内的 `sys.exit(...)` / `os._exit(...)` / `exit(...)` 行号（C-14-04 h6）。
+
+    两道拒收门排在落盘之前只保证「走到门时不落盘」；门之前先 `sys.exit(0)` 的话整趟根本走不到门，
+    既不落盘也不拒收，磁盘上留着上一版留档冒充这一轮的交付。
+    """
+    out = []
+    for n in ast.walk(tree):
+        if not isinstance(n, ast.Call):
+            continue
+        f = n.func
+        if isinstance(f, ast.Attribute) and f.attr in ("exit", "_exit"):
+            out.append(n.lineno)
+        elif isinstance(f, ast.Name) and f.id in ("exit", "quit"):
+            out.append(n.lineno)
     return out
 
 
@@ -702,10 +879,13 @@ def _return_tuple_names(tree: ast.AST) -> list[str]:
 
 def db_pointer_missing(targets: tuple[tuple[str, str], ...], root: pathlib.Path = ROOT,
                        must_files: tuple[str, ...] = STEP_NEW_TEST_FILES) -> list[str]:
-    """本步新用例文件里**每一条顶层 `test_*`** 都得在指针表里登记（第十三轮 A 组 NI-2）。
+    """本步新用例文件里**每一条 pytest 会收集的用例**都得在指针表里登记（第十三轮 A 组 NI-2）。
 
     从前只按文件级判：两份新文件各有四条用例、表里只登记了两条，那句话照样绿——
     「确有其事」判到文件就停了，等于把「本机证不了的那一半交给谁」说了一半。
+    第十四轮 C 组 C-14-08 又把范围推进一步：`class Test*:` 里的方法与 `if True:` 里定义的函数
+    都会被 pytest 收集，所以它们也得登记，登记名写成 `类::用例`（与 `db_pointer_defects` 同一口径，
+    两张判据不许对同一个形状给出相反答案）。
     """
     bad: list[str] = []
     listed = {f"{f}::{fn}" for f, fn in targets}
@@ -714,12 +894,54 @@ def db_pointer_missing(targets: tuple[tuple[str, str], ...], root: pathlib.Path 
         if not path.is_file():
             bad.append(f"新用例文件不在磁盘上：{rel}")
             continue
-        tree = ast.parse(path.read_text(encoding="utf-8-sig"))
-        for node in tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
-                if f"{rel}::{node.name}" not in listed:
-                    bad.append(f"{rel}::{node.name} 没登记进指针表（本机证不了它的运行，也没人交代去哪跑）")
+        tree = _parse_or_none(path, rel, bad)
+        if tree is None:
+            continue
+        for case in _collect_cases(tree):
+            if f"{rel}::{case}" not in listed:
+                bad.append(f"{rel}::{case} 没登记进指针表（本机证不了它的运行，也没人交代去哪跑）")
     return bad
+
+
+def registry_drift(registered: tuple[str, ...], present: tuple[str, ...]) -> list[str]:
+    """把「登记在 `STEP_NEW_TEST_FILES` 里的新用例文件」与「git 说本步新增的那几份」对齐（双向）。
+
+    第十四轮 C 组 C-14-08 的另一半：`STEP_NEW_TEST_FILES` 是手抄的两行文件名，于是「本步又新写了
+    第三份连库用例」这件事在这两张判据里**根本不存在**——不登记就不判，正好绕开整条门禁。
+    现在集合由 `g_section()` 从 git 现取（`--diff-filter=A` 自本步基线 `STEP_TEST_BASE` 起，
+    再加未跟踪的 `test_*.py`），两边差集都点名。
+    """
+    reg, got = set(registered), set(present)
+    bad: list[str] = []
+    for extra in sorted(reg - got):
+        bad.append(f"{extra} 登记成「本步新用例文件」，git 却说它不是本步新增的——"
+                   f"这张表陈旧了，按文件级点名的那条判据也就跟着陈旧")
+    for miss in sorted(got - reg):
+        bad.append(f"本步新增了 {miss} 却没登记进 `STEP_NEW_TEST_FILES`——"
+                   f"不在表里的用例文件，用例级点名与文件级点名都判不到它")
+    return bad
+
+
+def new_test_files_from_git(root: pathlib.Path = ROOT,
+                            base: str = STEP_TEST_BASE) -> tuple[str, ...] | None:
+    """本步在 `apps/api/tests` 下**新出现**的用例文件：git 里新增的 + 工作区未跟踪的。
+
+    git 拿不到读数时返回 `None`（不是空元组）——空集在这里会被读成「本步没有新文件」，
+    而那正好是这条核对最不该给出的答案；`g_section()` 收到 `None` 就把「没跑成」记成缺陷。
+    """
+    out: list[str] = []
+    for argv in (["git", "diff", "--name-only", "--diff-filter=A", base, "HEAD", "--", "apps/api/tests"],
+                 ["git", "ls-files", "--others", "--exclude-standard", "--", "apps/api/tests"]):
+        try:
+            r = subprocess.run(argv, capture_output=True, text=True, env=ENV, cwd=root)
+        except OSError as exc:
+            print(f"INCONCLUSIVE git 取不到新用例文件清单：{type(exc).__name__}: {exc}")
+            return None
+        if r.returncode:
+            return None
+        out += [ln.strip() for ln in (r.stdout or "").splitlines()
+                if ln.strip().endswith(".py") and pathlib.PurePosixPath(ln).name.startswith("test")]
+    return tuple(sorted(set(out)))
 
 
 def o_ledger(af: dict[str, list[str]], o1: str, o2: str, o3: str) -> list[str]:
@@ -755,7 +977,7 @@ def o_ledger(af: dict[str, list[str]], o1: str, o2: str, o3: str) -> list[str]:
                            f"两条通道不是同一批判据")
     # O.2 判**末行**而不是「字样出现过」（同一发 MI-5：红档里回引一次旧绿字样就能骗过子串匹配）。
     # 末行要先剔掉驱动自己加的两类尾巴：段末那条 `rc=N`，以及 rc=2 时补的 INCONCLUSIVE 标注——
-    # 否则「末行」永远是 `rc=0`，这条判据会在每一次正常交付上假红（本轮自查撞上的，M 段有对照档）。
+    # 否则「末行」永远是 `rc=0`，这条判据会在每一次正常交付上假红（第十三轮处置批自查撞上的，M 段有对照档）。
     content = [ln for ln in o2.rstrip().splitlines()
                if ln.strip() and not ln.startswith("rc=") and not ln.startswith(INCON_MARK)]
     last_o2 = content[-1] if content else ""
@@ -819,7 +1041,7 @@ def self_test(listing: bool = False) -> int:
     第八轮复审 id 4 指出 L 段机检只看 `$ ` 把手在不在，把命令换成 `$ 不是命令` 它照样报「无」。
     所以取命令这件事另开反证：把手丢了仍能取到同一条命令、heredoc 要接配对、配对断了要 raise、
     整段无命令要 raise、取出来的是读数形状也要 raise（旧驱动正是栽在这一步，抄旧输出且不报错）。
-    写入回读是本轮自己撞出来的第二条：整份重放跑完、最后一次回填抛 `OSError [Errno 22]`，磁盘上
+    写入回读是第八轮自己撞出来的第二条：整份重放跑完、最后一次回填抛 `OSError [Errno 22]`，磁盘上
     留下 L 读数位还空着的半成品——如果「写出 N 行」只是驱动自己的一句 print，半成品就能冒充成品。
 
     条数**不写死**：每跑一条判据都经 `check()` 记一笔账，末尾打印 `len(ran)` 与分组小计。
@@ -1051,8 +1273,8 @@ def self_test(listing: bool = False) -> int:
         shutil.rmtree(tmpd, ignore_errors=True)
 
     # 第二台 harness（S2.1.4/S2.1.5）的同一组反证。上一轮「头部现算」那组只管到了 BD 一台，
-    # 本轮新增 O 段与 `af_headline()`/`o_ledger()`：如果只加读数、不加反证，就等于把第十轮 10-1
-    # 那条纪律在第二台上重新欠一遍（第五次复发）。这一组还顺带堵了本轮**真的踩过**的那发
+    # 第十三轮新增 O 段与 `af_headline()`/`o_ledger()`：如果只加读数、不加反证，就等于把第十轮 10-1
+    # 那条纪律在第二台上重新欠一遍（第五次复发）。这一组还顺带堵了第十三轮**真的踩过**的那发
     # `ValueError: invalid literal for int() with base 10: 'P0'`——崩栈不是裁决，所以它现在有靶子。
     g8 = "锚定台现算"
     af_map = af_ids()
@@ -1096,7 +1318,7 @@ def self_test(listing: bool = False) -> int:
         shape.write_text('CHECKS = (\n    ("AF-S10", x)\n    ("AF-S2", x)\n    ("AF-P0", x)\n)\n',
                          encoding="utf-8")
         got_shape = af_ids(shape)
-        check(g8, "形状档：AF-P0 不被当成数字、AF-S2 排在 AF-S10 前（本轮那发 ValueError 的原样）",
+        check(g8, "形状档：AF-P0 不被当成数字、AF-S2 排在 AF-S10 前（第十三轮那发 ValueError 的原样）",
               "" if got_shape == {"S": ["AF-S2", "AF-S10"], "P": ["AF-P0"]} else f"实得 {got_shape!r}")
 
         o1_ok = f"合计 PASS={total_af} FAIL=0｜判据登记 {total_af} 条"
@@ -1123,7 +1345,7 @@ def self_test(listing: bool = False) -> int:
                        "SELF-TEST FAIL：2 处\n（上一档曾报 SELF-TEST PASS）\nrc=0\n", o3_ok)
         check(g8, "对账探针：红档里回引旧绿字样不许算绿（MI-5 第二档，从前子串匹配会读绿）",
               "" if any("O.2" in d for d in got) else f"实得 {got!r}")
-        # 本轮自查补的一档（改「判末行」时差点把自己锁死）：段体末尾那条 `rc=0` 与 rc=2 时补的
+        # 第十三轮处置批自查补的一档（改「判末行」时差点把自己锁死）：段体末尾那条 `rc=0` 与 rc=2 时补的
         # INCONCLUSIVE 标注都是**驱动自己加的尾巴**，不是 harness 的裁决行。剔不干净的话，
         # 「O.2 末行须是 SELF-TEST PASS」会在每一次正常交付上假红——所以这里把带尾巴的形状喂进去。
         tail_ok = o_ledger(af_map, o1_ok, "…\nSELF-TEST PASS：若干条\nrc=0\n", o3_ok)
@@ -1152,10 +1374,10 @@ def self_test(listing: bool = False) -> int:
     check(g8, f"锚定台 {O_HARNESS} 在 EV_PY 登记表里（不在册就既不进 G 段门禁、也不算被检清单）",
           "" if O_HARNESS in EV_PY else f"实登记 {EV_PY!r}")
 
-    # 真库指针（本轮自己撞出来的那一类）：P-4 用例按卡面换了文件，而「那条走 某文件::某用例」
+    # 真库指针（第十三轮自己撞出来的那一类）：P-4 用例按卡面换了文件，而「那条走 某文件::某用例」
     # 这句话从前只活在注释与 print 里——没人核对磁盘上确有其事。现在表在 `REAL_DB_TARGETS`，
     # G 段落盘前在**仓库根**上逐条核对，M 段只判这道核对的**语义**。
-    # 为什么 M 段不直接判那张真表（本轮实测踩过）：电池把本包拷进临时目录跑，副本的 `ROOT`
+    # 为什么 M 段不直接判那张真表（第十三轮实测踩过）：电池把本包拷进临时目录跑，副本的 `ROOT`
     # 上面没有 `apps/` ⇒ 五条指针全报「文件不存在」，基线不绿、整批 INCONCLUSIVE——
     # 判据把自己的电池弄成「没有裁决」，是最糟的一种红。所以这里造一棵临时小树当世界。
     g9 = "真库指针"
@@ -1165,35 +1387,54 @@ def self_test(listing: bool = False) -> int:
         (staged / "apps" / "tests" / "t_one.py").write_text(
             "import pytest\n\n\ndef test_alpha():\n    pass\n\n\n"
             "@pytest.mark.parametrize('x', [1])\nasync def test_beta(x):\n    assert x\n\n\n"
-            "class Helper:\n    def test_gamma(self):\n        pass\n", encoding="utf-8")
-        check(g9, "指针核对：文件在、顶层用例在 ⇒ 静默（这道核对不是只会红）",
-              "" if not db_pointer_defects((("apps/tests/t_one.py", "test_alpha"),
-                                            ("apps/tests/t_one.py", "test_beta")), staged)
-              else f"实报 {db_pointer_defects((('apps/tests/t_one.py', 'test_alpha'),), staged)!r}")
+            "class TestHelper:\n    def test_gamma(self):\n        pass\n\n\n"
+            "class Helper:\n    def test_not_collected(self):\n        pass\n\n\n"
+            "if True:\n    def test_delta():\n        pass\n", encoding="utf-8")
+        four = ("apps/tests/t_one.py", "test_alpha")
+        full = (("apps/tests/t_one.py", "test_alpha"), ("apps/tests/t_one.py", "test_beta"),
+                ("apps/tests/t_one.py", "TestHelper::test_gamma"), ("apps/tests/t_one.py", "test_delta"))
+        check(g9, "指针核对：文件在、用例在 ⇒ 静默（这道核对不是只会红）",
+              "" if not db_pointer_defects(full, staged)
+              else f"实报 {db_pointer_defects(full, staged)!r}")
         got = db_pointer_defects((("apps/tests/t_one.py", "test_alpfa"),), staged)
         check(g9, "探针：用例名漂移必须点名（改名而没人动那句话就会红）",
-              "" if any("没有顶层用例" in d for d in got) else "沉默——这一档不可假")
+              "" if any("pytest 会收集的用例" in d for d in got) else "沉默——这一档不可假")
         got = db_pointer_defects((("apps/tests/t_none.py", "test_alpha"),), staged)
         check(g9, "探针：文件不存在必须点名",
               "" if any("不存在" in d for d in got) else "沉默")
+        # 第十四轮 C 组 C-14-08：两张判据从前对**同一个形状**给出相反答案——`db_pointer_defects`
+        # 把「类里的方法」判成指空，`db_pointer_missing` 却根本不要求登记它（只看 `tree.body` 那一层）。
+        # pytest 实际会收集类方法，所以统一口径：登记名允许 `类::用例`，只写裸用例名仍然指空。
         got = db_pointer_defects((("apps/tests/t_one.py", "test_gamma"),), staged)
-        check(g9, "探针：名字确实写在文件里、但只是**类里的方法**也必须点名（grep 会放过它，AST 不会）",
-              "" if any("没有顶层用例" in d for d in got) else f"实得 {got!r}")
-        # 用例级完整性（A 组 NI-2）：小树里有 `test_alpha`/`test_beta` 两条顶层用例，登记表只写一条
-        # ⇒ 必须点名缺的那条；两条都写上 ⇒ 必须静默。这一对是同一道核对的红绿两端，缺一端就是形容词。
-        one_only = db_pointer_missing((("apps/tests/t_one.py", "test_alpha"),), staged,
-                                      must_files=("apps/tests/t_one.py",))
-        check(g9, "用例级点名：登记表漏掉文件里的某条 `test_*` 必须逐条出声（NI-2，从前只按文件判）",
-              "" if len(one_only) == 1 and "test_beta" in one_only[0] else f"实得 {one_only!r}")
-        both = db_pointer_missing((("apps/tests/t_one.py", "test_alpha"),
-                                   ("apps/tests/t_one.py", "test_beta")), staged,
-                                  must_files=("apps/tests/t_one.py",))
-        check(g9, "用例级判据的绿档：两条都登记时必须静默",
-              "" if not both else f"实报 {both!r}")
-        ghost = db_pointer_missing((("apps/tests/t_none.py", "test_alpha"),), staged,
-                                   must_files=("apps/tests/t_none.py",))
+        check(g9, "探针：类里的方法只写裸用例名仍算指针指空（那句 `file::test_gamma` 跑不动）",
+              "" if any("pytest 会收集的用例" in d for d in got) else f"实得 {got!r}")
+        check(g9, "探针：同一份类方法按 `类::用例` 登记时核对得到（不许一律判红）",
+              "" if not db_pointer_defects((("apps/tests/t_one.py", "TestHelper::test_gamma"),), staged)
+              else "登记成 `TestHelper::test_gamma` 仍然红——那这张表就没法登记类里的用例了")
+        # 用例级完整性（A 组 NI-2 + C-14-08 的类内 / `if` 内形状）
+        one_only = db_pointer_missing((four,), staged, must_files=("apps/tests/t_one.py",))
+        check(g9, "用例级点名：登记表漏掉文件里的某条用例必须逐条出声（NI-2，从前只按文件判）",
+              "" if len(one_only) == 3 and {"test_beta", "TestHelper::test_gamma", "test_delta"}
+              == {d.split("::", 1)[1].split(" ")[0] for d in one_only} else f"实得 {one_only!r}")
+        check(g9, "用例级判据的绿档：四条都登记时必须静默（不以 Test 开头的类里那条不许被要求登记）",
+              "" if not db_pointer_missing(full, staged, must_files=("apps/tests/t_one.py",))
+              else f"实报 {db_pointer_missing(full, staged, must_files=('apps/tests/t_one.py',))!r}")
+        ghost = db_pointer_missing((four,), staged, must_files=("apps/tests/t_none.py",))
         check(g9, "用例级判据：文件本身不在也要出声（不许把它读成「没有用例」而静默通过）",
               "" if any("不在磁盘上" in d for d in ghost) else f"实得 {ghost!r}")
+        # 解析不了的那一档（第十四轮 C 组 C-14-10）：崩栈不是裁决，而这两张核对当时直接 `ast.parse`，
+        # 一份语法坏掉或用 GBK 存的用例文件会让整趟 `main()` 以 traceback 收场。
+        (staged / "apps" / "tests" / "t_broken.py").write_text("def test_ok(:\n    pass\n", encoding="utf-8")
+        broken = db_pointer_missing((four,), staged, must_files=("apps/tests/t_broken.py",))
+        broken2 = db_pointer_defects((("apps/tests/t_broken.py", "test_ok"),), staged)
+        check(g9, "探针：用例文件语法坏了要点名成缺陷，而不是让 SyntaxError 冒充裁决",
+              "" if any("SyntaxError" in d for d in broken) and any("SyntaxError" in d for d in broken2)
+              else f"实得 missing={broken!r} defects={broken2!r}")
+        (staged / "apps" / "tests" / "t_gbk.py").write_bytes(
+            "# -*- coding: gbk -*-\ndef test_中文():\n    pass\n".encode("gbk"))
+        gbk = db_pointer_missing((four,), staged, must_files=("apps/tests/t_gbk.py",))
+        check(g9, "探针：非 UTF-8 的用例文件（CPython 认 coding 注释）同样点名而不是抛 UnicodeDecodeError",
+              "" if any("UnicodeDecodeError" in d for d in gbk) else f"实得 {gbk!r}")
     finally:
         shutil.rmtree(staged, ignore_errors=True)
     covered = {f for f, _ in REAL_DB_TARGETS}
@@ -1205,12 +1446,51 @@ def self_test(listing: bool = False) -> int:
           "" if covered <= set(G_TEST_FILES) else f"漏进门禁：{sorted(covered - set(G_TEST_FILES))!r}")
     check(g9, "本包没有「源文件已不存在」的孤儿编译件（R13B-17：那是一发变异留下的影子）",
           "" if not orphan_pycs() else f"实得 {orphan_pycs()!r}")
+    # 孤儿探测的**射程**（第十四轮 C 组 C-14-09）：上一版只 glob 包根那一层 `__pycache__`，
+    # 子目录里的与直接落在包根的 `.pyc` 两类位置全都隐形——而复核临时件恰恰爱落在这两处。
+    pack = pathlib.Path(tempfile.mkdtemp(prefix="pyc_selftest_"))
+    try:
+        (pack / "sub" / "__pycache__").mkdir(parents=True)
+        (pack / "__pycache__").mkdir(parents=True)
+        for rel in ("__pycache__/gone.cpython-311.pyc",
+                    "sub/__pycache__/deep_gone.cpython-311-pytest-9.1.1.pyc",
+                    "root_stray.cpython-311.pyc", "keep.py", "__pycache__/keep.cpython-311.pyc"):
+            f = pack / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_bytes(b"x")
+        found = set(orphan_pycs(pack))
+        check(g9, "孤儿编译件：子目录与包根那两类位置都要点名（只 glob 一层就是见不到的不算判据）",
+              "" if found == {"__pycache__/gone.cpython-311.pyc",
+                              "sub/__pycache__/deep_gone.cpython-311-pytest-9.1.1.pyc",
+                              "root_stray.cpython-311.pyc"} else f"实得 {sorted(found)!r}")
+        check(g9, "绿档：源文件在册的编译件不许被咬（见什么的探测器等于没判）",
+              "" if not any("keep" in x for x in found) else f"误咬 {sorted(found)!r}")
+    finally:
+        shutil.rmtree(pack, ignore_errors=True)
+    # 名单本身不许手抄维持（第十四轮 C 组 C-14-08 的另一半）：`STEP_NEW_TEST_FILES` 不在表里，
+    # 用例级与文件级两条判据就都判不到它——「本步又新写第三份连库用例」这件事等于没发生。
+    check(g9, "登记表与 git 现取集合相符时静默（这条核对不是只会红）",
+          "" if not registry_drift(("a.py", "b.py"), ("a.py", "b.py"))
+          else f"实报 {registry_drift(('a.py', 'b.py'), ('a.py', 'b.py'))!r}")
+    check(g9, "探针：本步新增了用例文件却没登记 ⇒ 必须点名（不登记就绕开整条门禁）",
+          "" if any("b.py" in d for d in registry_drift(("a.py",), ("a.py", "b.py")))
+          else "沉默——那张手抄名单还是可以陈旧着")
+    check(g9, "探针：登记表里那份已经不是本步新增 ⇒ 也点名（陈旧名单让文件级那条一起陈旧）",
+          "" if any("old.py" in d for d in registry_drift(("a.py", "old.py"), ("a.py",)))
+          else "沉默")
     gtree = _fn_tree(g_section)
     check(g9, "g_section 真的在仓库根上调 db_pointer_defects（按 AST 取实参，不再 grep 正文）",
           "" if _call_args_ok(gtree, "db_pointer_defects", "REAL_DB_TARGETS")
           else f"实得调用 { _calls_brief(gtree, 'db_pointer_defects')}")
     check(g9, "g_section 真的调 db_pointer_missing（用例级那条也得接进交付判据）",
           "" if _first_call_line(gtree, "db_pointer_missing") else "g_section 里没有那次调用")
+    check(g9, "g_section 真的拿 git 现取的新增清单去喂 registry_drift（探测器写了不调用就是形容词）",
+          "" if _first_call_line(gtree, "registry_drift") and _first_call_line(gtree, "new_test_files_from_git")
+          else f"registry_drift 在第 {_first_call_line(gtree, 'registry_drift')} 行、"
+               f"git 取清单在第 {_first_call_line(gtree, 'new_test_files_from_git')} 行")
+    check(g9, "git 取不到清单时按「没跑成」记缺陷，而不是交空集让那条核对静默放行",
+          "" if any("None" in ast.unparse(n.test) for n in ast.walk(gtree) if isinstance(n, ast.If))
+          else "g_section 里没有「fresh 是 None 就出声」那一叉")
     check(g9, "g_section 末尾返回的是它自己的缺陷清单，不是空表（`return text, []` 就是把门禁注销）",
           "" if _return_tuple_names(gtree) == ["text", "defects"]
           else f"实得 return {_return_tuple_names(gtree)!r}")
@@ -1222,22 +1502,54 @@ def self_test(listing: bool = False) -> int:
     # 所以这一组判的是 main 的**形状与顺序**（AST，不收 BoolOp 那种永远不成立的死门）。
     g10 = "交付门"
     mtree = _fn_tree(main)
-    check(g10, "main 里 `if defects:` 是直接把名字当条件（`if False and defects:` 那种死门不收）",
-          "" if _stmt_names_test(mtree, "defects") else "找不到 `if defects:` 这种形状的拒收门")
-    check(g10, "main 里 `if late:` 同形状存在",
-          "" if _stmt_names_test(mtree, "late") else "找不到 `if late:`")
-    merged = _aug_targets(mtree, "defects")
-    check(g10, "G 段与 K 段的缺陷都被 `defects +=` 接进去（少接一个名字，那一段的红就只写在正文里）",
-          "" if {"g_defects", "k_defects"} <= set(merged) else f"实接 {sorted(set(merged))!r}")
-    late_names = _assign_names(mtree, "late")
+    d_live, d_dead = _gate_lines(mtree, "defects")
+    l_live, l_dead = _gate_lines(mtree, "late")
+    check(g10, "main 里以 `defects` 为条件的拒收门在位（`if defects:` 与 `if len(defects) > 0:` 同权，"
+               "行为一字不差的改写不许多报一条红）",
+          "" if d_live else "找不到以 defects 为条件的拒收门")
+    check(g10, "main 里以 `late` 为条件的拒收门同形状在位",
+          "" if l_live else "找不到以 late 为条件的拒收门")
+    check(g10, "拒收条件里不许出现恒假的与项（`if False and defects:` 留着门的形状却永远不成立）",
+          "" if not d_dead + l_dead else f"恒假条件在第 {sorted(d_dead + l_dead)} 行")
+    merged, merged_odd = _merge_targets(mtree, "defects")
+    check(g10, "G 段与 K 段的缺陷都被**无条件**并进 defects（带 if 的推导式不收：名字在场而值可恒空）",
+          "" if {"g_defects", "k_defects"} <= set(merged) and not merged_odd
+          else f"实接 {sorted(set(merged))!r}｜可疑形状 {merged_odd}")
+    late_merged, late_odd = _merge_targets(mtree, "late")
     check(g10, "O 段的对账缺陷接进 `late`（不接就等于 o_ledger 白写）",
-          "" if "o_defects" in late_names else f"late 右端实得 {sorted(set(late_names))!r}")
-    first_write = _first_call_line(mtree, "write_out")
-    check(g10, "两道拒收门都排在第一次落盘之前（先写后判 = 磁盘上已经是坏的那一份）",
-          "" if first_write and all(x < first_write for x in _stmt_names_test(mtree, "defects")
-                                    + _stmt_names_test(mtree, "late"))
-          else f"落盘在第 {first_write} 行，门在 {_stmt_names_test(mtree, 'defects')} 与 "
-               f"{_stmt_names_test(mtree, 'late')}")
+          "" if "o_defects" in late_merged and not late_odd
+          else f"late 实得 {sorted(set(late_merged))!r}｜可疑形状 {late_odd}")
+    sink = _sink_line(mtree)
+    check(g10, "两道拒收门都排在第一次落盘之前（落盘按 **sink** 认：write_out / _disk_write / X.write_text 都算）",
+          "" if sink and all(x < sink for x in d_live + l_live)
+          else f"落盘在第 {sink} 行，门在 {sorted(d_live + l_live)}")
+    esc = _escape_lines(mtree)
+    check(g10, "main 体内不许有 sys.exit / exit 逃逸（门之前先退出 = 既不落盘也不拒收，旧留档冒充交付）",
+          "" if not esc else f"main 第 {sorted(esc)} 行有退出逃逸")
+    sr_calls = [n.lineno for n in ast.walk(mtree) if isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Name) and n.func.id == "self_ref_defects"]
+    check(g10, "自指扫描真的接进 main 且排在落盘之前（探测器写了不调用，就又是一句好听的话）",
+          "" if sr_calls and min(sr_calls) < sink else f"调用行 {sorted(sr_calls)}，落盘在第 {sink} 行")
+
+    # 轮次自指（第十四轮 D 组 D-14-02）。第十三轮那批把**头部模板字面量**改成了指名轮次，而同一族的
+    # 另外两处一直活着：驱动注释里还有三行把第八轮那次 `OSError [Errno 22]` 写成「跑到这一轮时撞到的」，
+    # M 段一条判据的**名字**也被逐字印进留档（L 段第 479 行那串就是现场）。留档每轮整份重打，
+    # 所以代词那句每重印一次就换一个所指——改一次措辞只能管到这一次，得让它有靶子。
+    g11 = "轮次自指"
+    src_defects = self_ref_defects(pathlib.Path(__file__).read_text(encoding="utf-8-sig"), "驱动源码")
+    check(g11, "驱动源码里没有自指措辞（注释与印进留档的判据名都算：下一轮读它的人不知道那句是谁写的）",
+          "" if not src_defects else src_defects[0])
+    # 探针里的样本也用拼接：这一行既要把措辞喂进探测器，又不能让它出现在**源码**里——
+    # 写成一条字面量就会被上面那一判点名（它判的是「有没有拿代词说事」，分不清那串字符是数据还是句子）。
+    dirty_probe = "第一行正常\n本" + "轮实测撞过一次\n第三行也正常\n"
+    hit_probe = self_ref_defects(dirty_probe, "探针")
+    check(g11, "探针：措辞混进文本时必须点名行号（探测器不许只在干净文本上静默）",
+          "" if len(hit_probe) == 1 and "第 2 行" in hit_probe[0] else f"实得 {hit_probe!r}")
+    named_probe = self_ref_defects("第八轮当时实测撞过一次\n`65f508b` 那批重印过\n", "探针")
+    check(g11, "探针：指名轮次与提交的句子一律放行（否则这条判据变成「不许提轮次」，那是禁止记账）",
+          "" if not named_probe else f"误咬 {named_probe!r}")
+    check(g11, "登记表非空且每一项都不是空串（清空它 ⇒ 上面两条探针只剩一档，这句话就又假不了了）",
+          "" if len(SELF_REF_MARKS) >= 2 and all(SELF_REF_MARKS) else f"实得 {SELF_REF_MARKS!r}")
 
     # 读数归一化（第十二轮复审 B3）。上一版头部那句「段体里有三类读数……都在 `run_cmd()` 里统一处理」
     # 是模板字面量：实测在库留档里墙钟 2 处、③ 的标注 1 处、② **一处都没有**——那句声明只能靠留档
@@ -1344,7 +1656,8 @@ def self_test(listing: bool = False) -> int:
           "第二台（S2.1.4/S2.1.5）的头部与 O 段对账同样由 `af_ids()`/`o_ledger()` 现数并各配反证；"
           "读数归一化每一条都有正/反两档靶子且计数与正文两条通道对账；"
           "每段末行 `rc=` 与 `EXPECTED_RC` 相符；本包里的变异副本没有落盘权；"
-          "「交真库跑」那句话点到的文件与用例逐条在磁盘上核对过")
+          "「交真库跑」那句话点到的文件与用例逐条在磁盘上核对过，本步新增的用例文件与 git 现取的那份对过账；"
+          "驱动源码与拼好的整份留档都没有用自指措辞说事")
     print(f"SELF-TEST PASS：{len(ran)} 条反证全过（{tally}）"
           f"——取不到命令时驱动停下，落不进磁盘时驱动也停下，两种都不许抄旧输出")
     return 0
@@ -1358,14 +1671,14 @@ def main() -> int:
         print(f"FAIL 交付：{why}")
         return 1
     if not OUT.exists():
-        # 自举依赖：A–I 段的命令是从**上一版留档**里取的，留档不在就无命令可跑。本轮实测把
+        # 自举依赖：A–I 段的命令是从**上一版留档**里取的，留档不在就无命令可跑。第八轮当时实测把
         # `out_s213.txt` 删掉后，驱动直接以 `FileNotFoundError` traceback 收场——那不是裁决，按项目纪律落 FAIL。
         print(f"FAIL 交付：{OUT} 不存在——A–I 段的命令取自这份留档，它没了就断链；"
               f"先 `git checkout -- {RELPATH(OUT)}` 恢复再重放（G/J/K/M/N/L 几段不依赖它）。")
         return 1
     sections = [(t, b) for t, b in split_sections(OUT.read_text(encoding="utf-8"))
                 if re.match(r"^########## [A-I] ", t)]
-    want = sorted([*ARCHIVED, "G"])  # G 在旧留档里也是归档段，只是从本轮起命令改由 `g_section()` 现生成
+    want = sorted([*ARCHIVED, "G"])  # G 在旧留档里也是归档段，只是自 `65f508b`（第十轮处置批）起命令改由 `g_section()` 现生成
     found = sorted(t.split()[1] for t, _ in sections)
     if found != want:
         print(f"FAIL 交付：留档的 A–I 段与登记表不符——期望 {want}，实得 {found}；"
@@ -1426,13 +1739,13 @@ def main() -> int:
                 "③ `write_ok` 的四种原因原先把「半成品」排在最前，而生产写入点的意图**本身就带**占位符 "
                 "⇒ 任何一种字节坏都塌成同一句「回填没成功」（实测：`_disk_write` 退回文本模式后盘上 CR=269，"
                 "报的却是半成品），现在按生产形状调序，两种形状各一发判据。\n")
-    # N 段：本轮新判据的「改坏必须红 / 等价不许假红」电池。它必须在留档落盘**之前**跑——
+    # N 段：每条新判据的「改坏必须红 / 等价不许假红」电池。它必须在留档落盘**之前**跑——
     # 电池会把整个证据包（含 out_s213.txt）拷进临时目录，拷到半成品就等于把半成品当成了基准。
     n = run_cmd(f"python {RELPATH(EV / 'mutate_replay_r9.py')}",
                 "########## N 反证电池：M 段每条判据都要有一发能把它打红的变异（覆盖率现算，缺一条就 rc≠0）",
                 "# 这一段的存在理由：第九轮报回的两条 MAJOR，恰好是上一版电池的读数**证明不了**的"
                 "（回读走文本模式 ⇒ CRLF 能骗过；`ATTEMPTS`/`PAUSE` 没人判 ⇒ 改 1 改 0 照样 PASS）。\n"
-                "# 所以本轮每条新判据先发变异确认能红，再发等价写法确认不假红；变异锚找不到时报 FAIL 而不是跳过"
+                "# 所以每条新判据都要先发变异确认能红，再发等价写法确认不假红；变异锚找不到时报 FAIL 而不是跳过"
                 "（锚点漂了就等于这条反证被悄悄注销）。\n"
                 "# 第十轮复审对着电池自己提了四条，都已落地：① 它原先只比 rc，**基线没绿也会让十发变异"
                 "全报 OK**（实测：注入一条无关的红之后 10 发照样 OK）⇒ 现在先跑一次未变异的副本，"
@@ -1461,7 +1774,7 @@ def main() -> int:
     # 全仓库另有未跟踪项时（`_workspace/`、规划目录……），只报范围内的数字会让人以为整棵树干净。
     # 两个**历史**实测形状：dcb1ffb 那次重放时工作区有 7 个待提交文件，头部只报「6 项」（步卡在
     # `docs/任务规划V0.3.0/` 下，不在担保路径里）——所以「范围内」与「全仓库」两句话分开说，各自带号数。
-    # 本轮这一趟跑出来的号数**不在注释里抄**（第十轮复审 10-5：上一版把「现在再跑则是范围内 0 项 /
+    # 这一趟跑出来的号数**不在注释里抄**（第十轮复审 10-5：上一版把「现在再跑则是范围内 0 项 /
     # 全局 3 项」写死在这里，同一次提交里留档第 2 行却是「5 项 / 8 项」，两句话当场互相矛盾；
     # 抄来的工作区形状一 commit 就腐烂）——要看就读本文件生成物的第 2 行，那才是 `_porcelain` 现算的。
     def _porcelain(*pathspec: str) -> int:
@@ -1512,7 +1825,10 @@ def main() -> int:
 #   M 段机检驱动自己的两条通道（取命令：把手丢了仍取到同一条、取不到就 raise；落盘：写入必须按**字节**回读
 #   逐位相同——{head_causes}，{head_retry}。
 #   第八轮当时实测撞到过一次回填 `OSError [Errno 22]` 而驱动照过（那句账记在 README §4.9 S-2；
-#   「本轮」这种自指措辞从前每轮都印「本轮撞到」，第十三轮 B 组 R13B-07 抓到并改成指名轮次）；
+#   那句事故描述从前用的是自指措辞——每轮重印都把**写它的那一轮**冒充成**读它的那一轮**）；
+#   第十三轮 B 组 R13B-07 抓到并把头部改成指名轮次，第十四轮 D 组发现驱动注释里还剩三处、
+#   M 段的一条判据名也被印进留档，所以现在这句话是读数而不是声明：见 M 段「轮次自指」那一组，
+#   它同时扫驱动源码与拼好的整份留档（模板字面量与判据名是两个不同的漏口））；
 #   那句 Errno 22 的成因**不再写成「瞬时占用」**：
 #   本机实测「被读柄持有」时覆盖写不抛，能稳定抛 Errno 22 的是 win32 保留字符名、抛 Errno 13 的是目标为目录）。
 #   上一版留档这些都做不到：驱动放在不入库的 `_workspace/` 里、按 `$ ` 前缀找命令又在输出时剥掉前缀，
@@ -1541,6 +1857,14 @@ def main() -> int:
 
 """
     body = header + sections_text
+    # 轮次自指扫描（第十四轮 D 组 D-14-02）：留档是**每轮整份重打**的，代词那句每重印一次就把所指
+    # 换成跑这一趟的那一轮——第八轮那次 `OSError [Errno 22]` 因此在下一轮的纸上仍然自称刚刚发生。
+    # 头部模板字面量与各台 harness 印出来的**判据名**是两个不同的漏口，所以扫的是拼好的整份。
+    sr_bad = self_ref_defects(body, "留档正文")
+    if sr_bad:
+        for d in sr_bad:
+            print(f"FAIL 交付：{d}")
+        return 1
     # 段集合先在**落盘之前**核一遍（落盘之后再发现，磁盘上已经是一份缺段的留档了：第十二轮实测
     # 本包里那份变异副本跑完就把在库 `out_s213.txt` 的 N 段标题重写成了 M 段，收尾判据只能拒收、
     # 不能 undo）。L 段此刻还在占位符上，所以这一趟只核 A–N，L 留给落盘后那一遍。
@@ -1579,7 +1903,7 @@ def main() -> int:
     written = OUT.read_text(encoding="utf-8")
     # 交付出去的**这一份**再走一遍收尾闸门：段末 `rc=` 与登记表相符、归一化两条通道对得上账、
     # 且 L 回填没有再贡献新的命中（贡献了就说明头部那句描述的不是这一份）。
-    final = rc_gate(written) + norm_ledger(NORM_HITS, written)[1]
+    final = rc_gate(written) + norm_ledger(NORM_HITS, written)[1] + self_ref_defects(written, "落盘后的留档")
     if NORM_HITS != hits_at_header:
         final.append(f"L 回填后又归一化了读数：头部那句写的是 {hits_at_header}，这一趟结束时是 {NORM_HITS}"
                      f"——声明描述的不是交付出去的这一份")

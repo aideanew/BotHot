@@ -98,8 +98,10 @@ async def test_url_fragment_empty_returns_none_without_warning(recorder: _Record
     assert recorder.warnings == [], f"空串被当成短片段告警：{recorder.warnings!r}"
 
 
-@pytest.mark.parametrize(("fragment", "queries"),
-                         [("abcdefg", 0), ("abcdefgh", 1), ("p0-cache-001", 1), ("热点热", 0)])
+@pytest.mark.parametrize(
+    ("fragment", "queries"),
+    [("abcdefg", 0), ("abcdefgh", 1), ("p0-cache-001", 1), ("热点热", 0), ("1234567", 0)],
+)
 async def test_url_fragment_boundary_is_exactly_min_len(
     fragment: str, queries: int, recorder: _Recorder
 ) -> None:
@@ -109,6 +111,9 @@ async def test_url_fragment_boundary_is_exactly_min_len(
     阈值被悄悄改成 12（把存量兼容路径也挡了）⇒ 8 那一行红。
     `热点热` 那一行钉的是**计数单位**（A 组 MI-2）：3 个字符 = 9 个 UTF-8 字节，
     守卫若被改成按字节数长度就会把它放行——三个样本全是 ASCII 时字符数与字节数谁也分不开。
+    `1234567` 那一行钉的是**守卫的返回必须无条件**（第十四轮 C 组 C-14-02）：
+    把 `return None` 嵌进 `if fragment.isalpha():` 那种写法，四个字母/汉字样本全都照旧，
+    只有纯数字的短片段（缓存键、纯数字 mid）会被放出去发 LIKE——没有这一行，那条旁路无人可证。
     """
     assert MIN_FRAGMENT_LEN == 8, f"卡面阈值是 8，代码里是 {MIN_FRAGMENT_LEN}"
     sess = _RecordingSession()

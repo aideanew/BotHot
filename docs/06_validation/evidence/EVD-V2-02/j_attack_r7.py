@@ -43,7 +43,7 @@ KB = (ROOT / "apps/api/app/services/kb.py").read_text(encoding="utf-8")
 CALL = "        for anchor in (a for a in (_biz_from_url(url), article_key) if a):"
 #: 宿主方法（`kb._find_source_by_anchor`）的当前尾部锚——S2.1.4 删掉 `Source.url.like(...)` 兜底后，
 #: 旧锚 `).scalar_one_or_none()\n return row` 在磁盘上已经出现 0 次，J-8 那一发因此「应红未红」
-#: （本轮实测：`FAIL 攻击对照：J-8 … 应红未红 ['BD-14']`）。锚失配由下面的 count 校验出声，
+#: （第十三轮实测：`FAIL 攻击对照：J-8 … 应红未红 ['BD-14']`）。锚失配由下面的 count 校验出声，
 #: 所以这里跟着磁盘改锚，而不是把那一发跳过。
 TAIL = ("            if row is not None:\n"
         "                return row\n"
@@ -89,7 +89,7 @@ CRASHES = {
 tmp = pathlib.Path(tempfile.mkdtemp(prefix="j_r7_"))
 probe = EV / "_harness_prefix_r7.py"
 
-#: 锚失配预检（本轮实测踩到的）：S2.1.4 删掉 `Source.url.like(...)` 兜底之后，`TAIL` 这个锚
+#: 锚失配预检（第十三轮实测踩到的）：S2.1.4 删掉 `Source.url.like(...)` 兜底之后，`TAIL` 这个锚
 #: 在磁盘上出现 0 次，于是 J-8 那发的 `KB.replace(TAIL, …)` **静默返回原文**——读数写成
 #: 「应红未红 ['BD-14']」，看起来像判据漏抓了一次攻击，实际是攻击压根没打出去。
 #: 那两种红的含义相反（一个是判据不够严，一个是取证工具坏了），所以必须先分开报，且不允许跳过。

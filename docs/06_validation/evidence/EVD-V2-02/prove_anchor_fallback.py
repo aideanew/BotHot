@@ -26,9 +26,12 @@
 
 判据分三面（`--list-checks` 打全清单，条数一律现算不手抄）：
 - 前提 AF-P0：两个目标都能被单独 exec（exec 不了就没有裁决，只有 traceback）；
-- 行为面 AF-B1…B5 / AF-A1…A5：biz 锚命中、两锚皆空不许落到 URL 兜底、多源含 `s` 不崩、
-  `limit(1)` 真的挡住同 `external_id` 的脏数据、短链的空 biz 被跳过；
-  短片段不发 SQL 且留 WARNING、空串不告警、阈值边界卡在 7/8、放行路径形态仍是
+- 行为面 AF-B1…B6 / AF-A1…A5：biz 锚命中、两锚皆空不许落到 URL 兜底、多源含 `s` 不崩、
+  `limit(1)` 真的挡住同 `external_id` 的脏数据、短链的空 biz 被跳过、
+  生产量级的 18 字符键也不下发 URL 列的 like 条件（B6 读的是**假会话收到的条件**，
+  所以 `getattr(getattr(...),"like")` 与 `methodcaller("like", …)` 两种拼法都在射程里）；
+  短片段不发 SQL 且留 WARNING、空串不告警、阈值边界卡在 7/8（含 `1234567` 那一发，
+  它钉的是「守卫的 `return None` 必须是分支的直接语句」）、放行路径形态仍是
   (source_id eq + url like %片段% + limit 1)、LIKE 携带的真是 `%片段%`；
 - 结构面 AF-S1…S7：函数体内没有 `.like(`、体内每条 select 链都带字面 `.limit(1)`、
   守卫分支的形状（比较 + `return None` + `logger.warning`）齐备、磁盘上的 `MIN_FRAGMENT_LEN`
@@ -283,17 +286,59 @@ def _module_const(src: str, name: str) -> tuple[object, int, str | None]:
     return vals[-1], len(vals), None
 
 
+def _alias_map(tree: ast.AST) -> tuple[dict[str, str], dict[str, str]]:
+    """两小张别名表：`名字 → 它被绑到的函数名`、`名字 → 它被绑到的字符串常量`。
+
+    第十四轮 C 组 C-14-03 报的形状：`_R14T = setattr` 之后 `_R14T(AssetRepository, "get_by_url_fragment", …)`
+    与 `NAME = "get_by_url_fragment"; setattr(Repo, NAME, …)` 都换掉了活绑定而判据绿——
+    旧扫描只认字面 `setattr` 与字面第二实参。别名不需要图完备：这里只认**直接赋值给一个名字**这一跳，
+    再深一层（`for` 循环里挑出来的）就由 AF-B5 那条行为面兜住，边界写在 README §7。
+    """
+    funcs: dict[str, str] = {}
+    strs: dict[str, str] = {}
+    for n in ast.walk(tree):
+        if not isinstance(n, ast.Assign) or len(n.targets) != 1 or not isinstance(n.targets[0], ast.Name):
+            continue
+        v = n.value
+        who = n.targets[0].id
+        if isinstance(v, ast.Name):
+            funcs[who] = v.id
+        elif isinstance(v, ast.Attribute):
+            funcs[who] = v.attr
+        sv = _str_of(v)
+        if sv is not None:
+            strs[who] = sv
+    return funcs, strs
+
+
+def _name_of_arg(node: ast.AST, strs: dict[str, str]) -> str | None:
+    """第二个实参到底是不是那个名字：字面量、或**绑定到该字面量的常量名**。"""
+    sv = _str_of(node)
+    if sv is not None:
+        return sv
+    if isinstance(node, ast.Name) and node.id in strs:
+        return strs[node.id]
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
 def _attr_rebinds(src: str, name: str) -> list[int]:
-    """换掉活绑定的三种形状：`X.<name> = …`/`del X.<name>`、`setattr`/`delattr`、下标赋值。
+    """换掉活绑定的形状：`X.<name> = …`/`del X.<name>`、`setattr`/`delattr`（含别名与常量名实参）、
+    `type(X).__setattr__(…)`、下标赋值。
 
     第十三轮 A 组实测：只有第一类会被抓到——`setattr(AssetRepository, "get_by_url_fragment", _legacy)`
     把方法换掉了而这条判据绿（`getattr` 反例 `AssetRepository.get_by_url_fragment = _legacy2` 才红）。
     BD 那台早就把这一族配齐（`j_attack_r7.py` 的 J-1…J-4），AF 台只配了一发，是覆盖不对称。
+    第十四轮 C 组 C-14-03 又推进两发：`type.__setattr__` 与「别名 + 常量名」的 setattr 照样绿——
+    这一族的规矩是**认语义不认字形**：谁调的不重要，重要的是那个名字被换掉了。
     名字查不到时还能由模块级 `__getattr__`（PEP 562）凭空造一份——那在 BD 台是 J-3，
     本台的 exec 面不经过模块属性查找，所以不在这里判，边界写在 README §7。
     """
+    tree = ast.parse(src)
+    funcs, strs = _alias_map(tree)
     hits = []
-    for n in ast.walk(ast.parse(src)):
+    for n in ast.walk(tree):
         tg: list[ast.expr] = []
         if isinstance(n, ast.Assign):
             tg = list(n.targets)
@@ -307,11 +352,25 @@ def _attr_rebinds(src: str, name: str) -> list[int]:
             # `vars(AssetRepository)["get_by_url_fragment"] = …` / `d["…"] = …`：下标形态同样换绑定
             if any(isinstance(s, ast.Subscript) and _str_of(s.slice) == name for s in ast.walk(t)):
                 hits.append(getattr(n, "lineno", 0))
-        # `setattr(obj, "name", v)` / `delattr(obj, "name")`
-        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
-                and n.func.id in {"setattr", "delattr"}
-                and len(n.args) >= 2 and _str_of(n.args[1]) == name):
-            hits.append(n.lineno)
+        if not isinstance(n, ast.Call):
+            continue
+        f = n.func
+        callee = ""
+        if isinstance(f, ast.Name):
+            callee = funcs.get(f.id, f.id)
+        elif isinstance(f, ast.Attribute):
+            callee = f.attr
+        # `setattr(obj, "name", v)` / `delattr(obj, "name")` / `_T = setattr; _T(obj, "name", v)`
+        if callee in {"setattr", "delattr"} and len(n.args) >= 2:
+            idx = 1
+            if _name_of_arg(n.args[idx], strs) == name:
+                hits.append(n.lineno)
+        # `type(X).__setattr__(X, "name", v)` / `object.__setattr__(…)` / `X.__setattr__("name", v)`
+        elif isinstance(f, ast.Attribute) and f.attr in {"__setattr__", "__delattr__"}:
+            for idx in (0, 1):
+                if len(n.args) > idx and _name_of_arg(n.args[idx], strs) == name:
+                    hits.append(n.lineno)
+                    break
     return sorted(set(hits))
 
 
@@ -485,6 +544,24 @@ def af_b4(kb: str, asset: str) -> tuple[bool, object]:
     return got is not None and exc == "" and limits == [1], f"结果 {got!r}、异常 {exc!r}、limit 列 {limits}"
 
 
+def af_b6(kb: str, asset: str) -> tuple[bool, object]:
+    """生产量级的短链键（18 字符）也不许下发任何 URL 列的 like 条件——按**条件**判，不按源码里的写法判。
+
+    第十四轮 C 组 C-14-01 报的就是这一格：AF-B2 用的键是 `"s"`，而那一发攻击把兜底写成
+    `if len(article_key) > 8: … getattr(getattr(Source, "url"), "like")(…)`——
+    短键不发、长键才发，于是「兜底有没有复活」取决于探针喂了多长的键；而 `operator.methodcaller("like", …)`
+    那一发连 AST 里的 `.like(` 字面形状都不留（AF-S1/S6 抓不到）。
+    「URL LIKE 复活」在 SQL 层是一个**条件**，所以这里读的是假会话收到的条件集：任何拼法造出来的都算。
+    """
+    key = "RwMKZ3pT7qLdXe1bQs"
+    url = f"https://mp.weixin.qq.com/s/{key}"
+    rows = [_row("MzNotThisOne", url)]
+    got, log, exc = _call_anchor(kb, asset, key, url, rows)
+    likes = [c for c in _url_conds(log) if c.op == "like"]
+    return (got is None and not exc and not likes), (
+        f"结果 {got!r}、异常 {exc!r}、URL 上的 like 条件 {likes}（键长 {len(key)} 字符，短链 article_key 的真实量级）")
+
+
 def af_b5(kb: str, asset: str) -> tuple[bool, object]:
     """短链：`_biz_from_url(SHORT_1)` 是空串，锚元组里的 `if a` 必须把它跳过，只用 article_key 锚。"""
     _biz, _long, short_1, short_key = _samples()
@@ -529,17 +606,21 @@ def af_a2(kb: str, asset: str) -> tuple[bool, object]:
 
 
 def af_a3(kb: str, asset: str) -> tuple[bool, object]:
-    """阈值边界卡在 8 个**字符**：7 挡、8 放，且非 ASCII 那侧同口径（`热点热` 是 3 字符 = 9 字节，必须挡）。
+    """阈值边界卡在 8 个**字符**：7 挡、8 放，且非 ASCII 与非字母那两侧同口径。
 
     数字漂移（改成 1 或 12）当场红；把守卫换成按字节数（`len(fragment.encode("utf-8"))`）也会红——
     这一发是第十三轮 A 组报回的：三个样本全是 ASCII 时，字符数与字节数谁也分不开（MI-2）。
+    `1234567` 是第十四轮 C 组 C-14-02 补的第四发：只测字母样本时，
+    `if not fragment or fragment.isalpha(): return None` 那种「嵌一层条件的返回」在行为面上看不出来，
+    而短数字片段（缓存键、纯数字 mid）正是被它放过去的那一类。
     """
-    seen = {}
-    for frag in ("abcdefg", "abcdefgh", "热点热"):
+    want = {"abcdefg": 0, "abcdefgh": 1, "热点热": 0, "1234567": 0}
+    seen: dict[str, tuple[int, str]] = {}
+    for frag, _ in want.items():
         _g, log, _r, exc = _call_frag(kb, asset, frag, [_arow(f"https://x/{frag}")])
-        seen[len(frag)] = (len(log), exc)
-    ok = (seen.get(7) == (0, "") and seen.get(8) == (1, "") and seen.get(3) == (0, ""))
-    return ok, f"字符数→(SQL 条数, 异常) {seen}（`热点热` 是 3 字符 / 9 字节，按字节数就会放行）"
+        seen[frag] = (len(log), exc or "")
+    ok = all(seen[f] == (n, "") for f, n in want.items())
+    return ok, f"片段→(SQL 条数, 异常) {seen}（`热点热` 3 字符 / 9 字节，按字节数就会放行；`1234567` 7 字符必须挡）"
 
 
 def af_a4(kb: str, asset: str) -> tuple[bool, object]:
@@ -578,26 +659,48 @@ def af_s1(kb: str, _asset: str) -> tuple[bool, object]:
 
 
 def _select_chains(fn: ast.AST) -> list[tuple[list[ast.Call], int]]:
-    """每条 `select(...)` 的**方法链**（自下而上爬），返回 (链上的调用节点序列, 起始行号)。
+    """每条 `select(...)` 的**方法链**（自下而上爬，再把分句的那几跳接回来）。
 
     只数处数判不了「limit 挂在哪条链上」——第十三轮 A 组的绕过是
     `q = select(Source).where(...)`（无 limit）+ 另起一句 `_diag = q.limit(1)`：
     体内 select 与 limit 的个数仍然相等，AF-S2 那版「数处数」就绿了，而真正被执行的链没带 limit。
+
+    反过来，第十四轮 C 组 C-14-06 报的是**假红**那一侧：`q = select(…).where(…)` 之后
+    `q = q.limit(1)` 这种拆句写法、`sel = select` 的别名、`sqlalchemy.select(…)` 的属性形态，
+    三种都语义正确地带着 LIMIT 1，旧爬法第一跳就断。所以这里把链读成**数据流上的链**：
+    向上爬完之后，顺着「这条链被赋给了哪个变量」再走一跳，把 `q.<meth>(…)` 的后续调用也算进同一条链。
     """
     parent: dict[ast.AST, ast.AST] = {}
     for node in ast.walk(fn):
         for child in ast.iter_child_nodes(node):
             parent[child] = node
+    funcs, _strs = _alias_map(fn)
+    # 右端 → 被赋给的那个变量名（用来把 `q = select(…)` / `q = q.limit(1)` 这种断链接回去）
+    rvalue_vars: dict[int, list[str]] = {}
+    for n in ast.walk(fn):
+        if isinstance(n, ast.Assign):
+            for t in n.targets:
+                if isinstance(t, ast.Name):
+                    rvalue_vars.setdefault(id(n.value), []).append(t.id)
+
+    def is_origin(n: ast.AST) -> bool:
+        if not isinstance(n, ast.Call):
+            return False
+        f = n.func
+        if isinstance(f, ast.Name):
+            return funcs.get(f.id, f.id) == "select"
+        return isinstance(f, ast.Attribute) and f.attr == "select"
+
     out: list[tuple[list[ast.Call], int]] = []
     for n in ast.walk(fn):
-        if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "select"):
+        if not is_origin(n):
             continue
         chain: list[ast.Call] = []
         cur: ast.AST = n
         while True:
             up = parent.get(cur)
             # `select(X).where(...)` 的树形是 Call ← Attribute ← Call：中间那个 Attribute 必须先爬过去，
-            # 否则第一跳就断，链永远读成空（本轮实测错过这一跳，AF-S2 在**未变异**的 kb.py 上报红）。
+            # 否则第一跳就断，链永远读成空（第十三轮处置批实测错过这一跳，AF-S2 在**未变异**的 kb.py 上报红）。
             if isinstance(up, ast.Attribute) and up.value is cur:
                 cur = up
                 continue
@@ -606,6 +709,20 @@ def _select_chains(fn: ast.AST) -> list[tuple[list[ast.Call], int]]:
                 cur = up
                 continue
             break
+        # 分句那一跳：链尾被赋给了某个变量，就把 `变量.<meth>(…)` 的后续调用接进同一条链
+        seen_vars: set[str] = set()
+        work = list(rvalue_vars.get(id(cur), []))
+        while work:
+            var = work.pop()
+            if var in seen_vars:
+                continue
+            seen_vars.add(var)
+            for m in ast.walk(fn):
+                if (isinstance(m, ast.Call) and isinstance(m.func, ast.Attribute)
+                        and isinstance(m.func.value, ast.Name) and m.func.value.id == var):
+                    if m not in chain:
+                        chain.append(m)
+                    work += rvalue_vars.get(id(m), [])
         out.append((chain, n.lineno))
     return out
 
@@ -682,10 +799,17 @@ def _const_of(node: ast.AST) -> object:
 
 
 def af_s3(kb: str, asset: str) -> tuple[bool, object]:
-    """守卫分支形状：`if` 的条件是 len 与阈值的比较，分支体里既有 `logger.warning` 也 `return None`。
+    """守卫分支形状：`if` 的条件是 len 与阈值的比较，分支体里既有 `logger.warning` 也**直接** `return None`。
 
     合并成 `if fragment and len(...) < MIN:` 这种写法会被本条抓住（条件成了 BoolOp），
     因为它对空串不再返回 None——那是行为差，不是等价的换写法（见 MUTANTS 里那一发）。
+
+    「直接」这一限定是第十四轮 C 组 C-14-02 补的：把尾部换成
+    `if not fragment or fragment.isalpha(): return None` 之后，旧写法在整棵 If 子树里 `ast.walk`
+    找一个 `return None` 照样找得到 ⇒ 18 条判据全绿，而短**数字**片段（`1234567`）既不为空也不是字母，
+    守卫直接放行、LIKE 照发。守卫的语义是「进了这个分支就不许再往下查」，
+    所以那个 return 必须是分支体的成员，而不是嵌在下面某一层条件里——
+    告警那一半刻意不要求直接：它本来就该只在片段非空时响（AF-A2 判的就是这个差别）。
     """
     node, why = _guard_if(asset)
     if node is None:
@@ -700,9 +824,15 @@ def af_s3(kb: str, asset: str) -> tuple[bool, object]:
     bad = []
     if "logger.warning(" not in body and ".warning(" not in body:
         bad.append("分支里没有 logger.warning")
-    if not any(isinstance(n, ast.Return) and isinstance(n.value, ast.Constant) and n.value.value is None
-               for n in ast.walk(node)):
-        bad.append("分支里没有 return None")
+    direct = [st for st in node.body
+              if isinstance(st, ast.Return) and isinstance(st.value, ast.Constant)
+              and st.value.value is None]
+    if not direct:
+        nested = [n.lineno for n in ast.walk(node)
+                  if isinstance(n, ast.Return) and isinstance(n.value, ast.Constant)
+                  and n.value.value is None]
+        bad.append(f"分支体里没有**直接**的 `return None`（嵌在下一层条件的第 {nested} 行不算："
+                   f"那一层的条件不成立时，短片段照样往下发 LIKE）")
     return not bad, bad
 
 
@@ -807,6 +937,7 @@ CHECKS: tuple[tuple[str, str, object], ...] = (
     ("AF-B3", "P-4 形状：库内 ≥2 个含 s 的 source 时不抛 MultipleResultsFound", af_b3),
     ("AF-B4", "同 external_id 的脏数据两行被 limit(1) 截断（摘掉就抛）", af_b4),
     ("AF-B5", "短链：空 biz 被 `if a` 跳过，只用 article_key 锚", af_b5),
+    ("AF-B6", "生产量级的 18 字符键也不下发 URL 列 like 条件（按条件判，不按 `.like(` 字形判）", af_b6),
     ("AF-A1", "片段 's'：返回 None、零条 SQL、恰一条 WARNING（事件名点名）", af_a1),
     ("AF-A2", "空片段：返回 None、零条 SQL、不刷 WARNING", af_a2),
     ("AF-A3", "阈值边界卡在 8（7 挡、8 放）", af_a3),
@@ -1005,6 +1136,38 @@ MUTANTS: list[tuple[str, str, str, str, set[str]]] = [
      "        _biz_from_url(url)\n"
      "        for anchor in (a for a in (article_key,) if a):",
      {"AF-S7"}),
+    # ↓ 第十四轮 C 组报回的四发：上一批补的是**字形**（`.like(`、`setattr(`、属性赋值），
+    #   这四发都是同一族里换个字形的形状——静态扫描看不见，行为面或语义扫描才看得见。
+    ("嵌套 getattr 复活兜底、且只对长键生效：AF-S1/S6 读不到 `.like(` 字形，AF-B2 用的又是短键 ⇒ 全绿",
+     "kb", KB_LOOP,
+     KB_LOOP + "\n            if len(article_key) > 8:\n"
+     "                _r14 = select(Source).where(\n"
+     '                    getattr(getattr(Source, "url"), "like")(f"%{article_key}%")).limit(1)\n'
+     "                return (await self._session.execute(_r14)).scalar_one_or_none()",
+     {"AF-B6"}),
+    ("methodcaller 复活兜底：连 `like` 都不是被调用的那个属性名（AST 找 attr==\"like\" 也读不到）", "kb",
+     KB_LOOP,
+     KB_LOOP + "\n            import operator as _r14op\n"
+     "            _r14 = select(Source).where(\n"
+     '                _r14op.methodcaller("like", f"%{article_key}%")(Source.url)).limit(1)\n'
+     "            return (await self._session.execute(_r14)).scalar_one_or_none()",
+     {"AF-B6"}),
+    ("守卫的 return 嵌进另一层条件：静态三件（比较、告警、返回）都在，短数字片段却照样往下发 LIKE", "asset",
+     AS_GUARD,
+     AS_GUARD.replace("            return None\n",
+                      "            if fragment.isalpha():\n                return None\n"),
+     {"AF-S3", "AF-A3"}),
+    ("`type.__setattr__(类, \"方法名\", …)`：既不是属性赋值也不是裸 setattr", "asset", AS_NEXT_DEF,
+     '    type.__setattr__(AssetRepository, "get_by_url_fragment", lambda self, sid, frag: None)\n\n'
+     + AS_NEXT_DEF, {"AF-S5"}),
+    ("setattr 先被绑到一个别名上，再由别名调用（旧扫描只认 `setattr` 这个名字）", "asset", AS_NEXT_DEF,
+     '    _r14_t = setattr\n'
+     '    _r14_t(AssetRepository, "get_by_url_fragment", lambda self, sid, frag: None)\n\n'
+     + AS_NEXT_DEF, {"AF-S5"}),
+    ("setattr 的第二实参是常量名而不是字面量（旧扫描只比 `_str_of(args[1])`）", "asset", AS_NEXT_DEF,
+     '    _r14_name = "get_by_url_fragment"\n'
+     "    setattr(AssetRepository, _r14_name, lambda self, sid, frag: None)\n\n"
+     + AS_NEXT_DEF, {"AF-S5"}),
 ]
 
 #: select 链的原文（`.where` 在前、`.limit` 在后）与其等价换序版：AF-S2 数的是处数，不是顺序。
@@ -1023,6 +1186,59 @@ KB_SELECT_SWAPPED = (
     '                        Source.type == "wechat_oa",\n'
     "                        Source.external_id == anchor,\n"
     "                    )\n"
+)
+#: 整条 `row = (...)` 语句的原文：下面三发等价重构都以它为锚（第十四轮 C 组 C-14-06 报的三种形状，
+#: 每一种都真的带 LIMIT 1，旧 `_select_chains` 却把它们判成红——那是假红，不是抓到绕过）。
+KB_ROW_BLOCK = (
+    "            row = (\n"
+    "                await self._session.execute(\n"
+    "                    select(Source)\n"
+    "                    .where(\n"
+    '                        Source.type == "wechat_oa",\n'
+    "                        Source.external_id == anchor,\n"
+    "                    )\n"
+    "                    .limit(1)\n"
+    "                )\n"
+    "            ).scalar_one_or_none()\n"
+)
+#: 拆成三句：链被切成 `q = select(…)` / `q = q.where(…)` / `q = q.limit(1)`，被执行的还是同一个对象。
+KB_ROW_SPLIT = (
+    "            _r14_q = select(Source)\n"
+    "            _r14_q = _r14_q.where(\n"
+    '                Source.type == "wechat_oa",\n'
+    "                Source.external_id == anchor,\n"
+    "            )\n"
+    "            _r14_q = _r14_q.limit(1)\n"
+    "            row = (await self._session.execute(_r14_q)).scalar_one_or_none()\n"
+)
+#: 别名：`sel = select` 之后 `sel(Source)…`，select 这个名字根本不出现。
+KB_ROW_ALIAS = (
+    "            _r14_sel = select\n"
+    "            row = (\n"
+    "                await self._session.execute(\n"
+    "                    _r14_sel(Source)\n"
+    "                    .where(\n"
+    '                        Source.type == "wechat_oa",\n'
+    "                        Source.external_id == anchor,\n"
+    "                    )\n"
+    "                    .limit(1)\n"
+    "                )\n"
+    "            ).scalar_one_or_none()\n"
+)
+#: 模块限定：`ns.select(Source)…`——被调用者是属性而不是裸名字。
+KB_ROW_QUALIFIED = (
+    "            import types as _r14_types\n"
+    "            _r14_ns = _r14_types.SimpleNamespace(select=select)\n"
+    "            row = (\n"
+    "                await self._session.execute(\n"
+    "                    _r14_ns.select(Source)\n"
+    "                    .where(\n"
+    '                        Source.type == "wechat_oa",\n'
+    "                        Source.external_id == anchor,\n"
+    "                    )\n"
+    "                    .limit(1)\n"
+    "                )\n"
+    "            ).scalar_one_or_none()\n"
 )
 #: 片段查询的原文与「先存局部变量」版：行为完全一致，只考验判据是否依赖链式写法。
 AS_QUERY_BLOCK = (
@@ -1046,6 +1262,11 @@ AS_QUERY_LOCAL = (
 #: (标签, 改哪份文件, 旧锚, 等价新写法)
 EQUIVS: list[tuple[str, str, str, str]] = [
     ("select 链里 .where 与 .limit 换序", "kb", KB_SELECT_BLOCK, KB_SELECT_SWAPPED),
+    ("链拆成三句（`q = select(…)` / `q = q.where(…)` / `q = q.limit(1)`）——语义带着 LIMIT 1，"
+     "旧爬法第一跳就断（第十四轮 C 组 MI-1 的假红）", "kb", KB_ROW_BLOCK, KB_ROW_SPLIT),
+    ("select 被起了个别名（`_sel = select` 之后 `_sel(Source)…`）", "kb", KB_ROW_BLOCK, KB_ROW_ALIAS),
+    ("select 走模块属性（`ns.select(Source)…`，被调用者是 Attribute 而不是裸名字）", "kb",
+     KB_ROW_BLOCK, KB_ROW_QUALIFIED),
     ("锚元组的生成式换成列表推导", "kb", KB_LOOP,
      "        for anchor in [a for a in (_biz_from_url(url), article_key) if a]:"),
     ("委托结果先存局部变量再进锚元组", "kb", KB_LOOP,
@@ -1101,6 +1322,23 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig")
 
 
+def _read_pair(kb_path: Path, asset_path: Path) -> tuple[str, str, str]:
+    """把两份源文件读进来；读不动时返回原因而不是让 UnicodeDecodeError 往上抛。
+
+    第十四轮 C 组 C-14-11：`_judged()` 那层管住了**判据**崩，`run()` 开头也核对了「解析不了」，
+    但 `main()` 里的两次 `_read()` 一直裸着——喂一份 `# -*- coding: gbk -*-` 的副本（CPython 认它）
+    就 rc=1 + traceback，stdout 连「合计」行都没有。那是第三种形态（压根没读到东西），
+    按本项目的纪律必须落 INCONCLUSIVE 档，而不是混进「有判据红」。
+    """
+    out = []
+    for p in (kb_path, asset_path):
+        try:
+            out.append(_read(p))
+        except (UnicodeDecodeError, OSError) as exc:
+            return "", "", f"{p.name} 读不出来：{type(exc).__name__}: {exc}"
+    return out[0], out[1], ""
+
+
 def _strip_fn(src: str, name: str) -> str:
     """按行删掉目标 def（含其装饰器，只在内存里，不动工作树），用于档位自证。"""
     node = _fn_nodes(src, name)[-1]
@@ -1111,8 +1349,10 @@ def _strip_fn(src: str, name: str) -> str:
 
 def self_test() -> int:
     rc = 0
-    kb = _read(_ovr("--kb=") or KB)
-    asset = _read(_ovr("--asset=") or ASSET)
+    kb, asset, why = _read_pair(_ovr("--kb=") or KB, _ovr("--asset=") or ASSET)
+    if why:
+        print(f"INCONCLUSIVE self-test 的基准读不出来：{why}——变异与等价两条通道都没有锚")
+        return RC_INCONCLUSIVE
     if not _fn_nodes(kb, KB_TARGET) or not _fn_nodes(asset, AS_TARGET):
         print(f"INCONCLUSIVE 目标至少缺一个（kb.{KB_TARGET} / asset.{AS_TARGET}）——"
               f"基准都无从构造，变异与等价两条通道的锚没有落点")
@@ -1157,20 +1397,24 @@ def self_test() -> int:
     offenders: list[str] = []
     try:
         cases = [
-            ("基准", kb, asset, RC_GREEN),
-            ("基准带 BOM", "\ufeff" + kb, asset, RC_GREEN),
-            ("删掉锚定方法", _strip_fn(kb, KB_TARGET), asset, RC_INCONCLUSIVE),
-            ("删掉片段方法", kb, _strip_fn(asset, AS_TARGET), RC_INCONCLUSIVE),
-            ("退回旧实现", m0[0], m0[1], RC_FAIL),
-            ("kb 解析不了", kb + "\ndef _probe_broken(:\n    pass\n", asset, RC_INCONCLUSIVE),
+            ("基准", kb, asset, RC_GREEN, "utf-8"),
+            ("基准带 BOM", "﻿" + kb, asset, RC_GREEN, "utf-8"),
+            ("删掉锚定方法", _strip_fn(kb, KB_TARGET), asset, RC_INCONCLUSIVE, "utf-8"),
+            ("删掉片段方法", kb, _strip_fn(asset, AS_TARGET), RC_INCONCLUSIVE, "utf-8"),
+            ("退回旧实现", m0[0], m0[1], RC_FAIL, "utf-8"),
+            ("kb 解析不了", kb + "\ndef _probe_broken(:\n    pass\n", asset, RC_INCONCLUSIVE, "utf-8"),
             # MI-8 的第二层：同一发世界建不起来的情况走真实进程退出码，并且不许留 traceback。
             ("阈值重复绑定（世界建不起来）", kb,
              asset.replace("MIN_FRAGMENT_LEN = 8\n",
-                           "MIN_FRAGMENT_LEN = 8\nMIN_FRAGMENT_LEN = 3\n", 1), RC_FAIL),
+                           "MIN_FRAGMENT_LEN = 8\nMIN_FRAGMENT_LEN = 3\n", 1), RC_FAIL, "utf-8"),
+            # 第十四轮 C 组 C-14-11：`main()` 里那两次读文件当时没有 try——喂一份 GBK 的副本
+            # （CPython 认 `# -*- coding: gbk -*-`，那是**合法源文件**而不是坏输入）就 rc=1 + traceback，
+            # stdout 连「合计」行都没有。现在它必须落 INCONCLUSIVE 档，与「有判据红」分开。
+            ("kb 是 GBK 编码的合法源文件", "# -*- coding: gbk -*-\n" + kb, asset, RC_INCONCLUSIVE, "gbk"),
         ]
-        for name, kb_body, asset_body, want in cases:
+        for name, kb_body, asset_body, want, enc in cases:
             ck, ca = tmp / "kb.py", tmp / "asset.py"
-            ck.write_text(kb_body, encoding="utf-8")
+            ck.write_text(kb_body, encoding=enc, errors="replace")
             ca.write_text(asset_body, encoding="utf-8")
             r = subprocess.run(  # noqa: S603 - 只跑本文件自己
                 [sys.executable, str(Path(__file__).resolve()), f"--kb={ck}", f"--asset={ca}", "--quiet"],
@@ -1259,7 +1503,7 @@ def self_test() -> int:
     else:
         print(f"OK   覆盖：{len(CHECKS)} 条判据 each 至少被一发变异实测打红（变异 {len(observed)}/{len(MUTANTS)} 发跑成）")
     # 这条覆盖判据自己也要能假。阈值在这一批**反过来定**（第十三轮处置批自查，理由必须留在这里）：
-    # 前一版要求「≥2 发变异抽不得」，而本轮补进 8 发同族变异之后 26 发**全都抽得**——因为 18 条判据
+    # 前一版要求「≥2 发变异抽不得」，而第十三轮补进 8 发同族变异之后 26 发**全都抽得**——因为 18 条判据
     # 每条都有了 ≥2 发 provider。旧阈值把冗余当成缺陷：电池越结实它越要报 FAIL，方向是反的。
     # 现在门禁判「每条判据至少有两发独立变异能把它打红」（provider<2 即红，0 发也在这条里），
     # 「有多少发抽不得」降级为读数——0 才说明没有单点依赖。这条改动是可假的两端：
@@ -1303,7 +1547,13 @@ def main() -> int:
         return RC_FAIL
     label = "｜".join(p.relative_to(REPO).as_posix() if p.is_relative_to(REPO) else str(p)
                       for p in (kb_path, asset_path))
-    return run(_read(kb_path), _read(asset_path), label)
+    kb_src, asset_src, why = _read_pair(kb_path, asset_path)
+    if why:
+        print(f"INCONCLUSIVE {why}——结构面要 AST、行为面要 exec，两条通道都无从判定；"
+              "把它打成 FAIL 会冒充「有判据红」，让它 traceback 上去则违反「崩栈不是裁决」。")
+        print(f"合计 未判定 PASS=0 FAIL=0（INCONCLUSIVE，rc={RC_INCONCLUSIVE}）")
+        return RC_INCONCLUSIVE
+    return run(kb_src, asset_src, label)
 
 
 if __name__ == "__main__":

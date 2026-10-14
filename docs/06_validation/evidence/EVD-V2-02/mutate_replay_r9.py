@@ -28,11 +28,11 @@
   形状口径从 `_tmp_*` 改成「以 `_` 开头的文件」（`__pycache__` 是目录，不算残留——见 `residues`）。
 - 第十三轮：S2.1.4/S2.1.5 进包，驱动多了 `af_ids()`/`af_headline()`/`o_ledger()` 与 O 段三条命令。
   「头部现算」那组从前只担保 BD 一台，第二台的条数如果只加读数不加反证，就是第十轮 10-1 那条纪律
-  第五次欠账 ⇒ 新增 `锚定台现算` 一组（15 发 RED + 1 发 GREEN）。这一组的由来很难写轻：本轮驱动
+  第五次欠账 ⇒ 新增 `锚定台现算` 一组（15 发 RED + 1 发 GREEN）。这一组的由来很难写轻：那一轮驱动
   **真的**以 `ValueError: invalid literal for int() with base 10: 'P0'` 崩过一次（AF 的 id 是
   三段形状 `AF-<面字母><号数>`，从前那支 `int(s.split("-")[1])` 只适用于 BD 的两段形状），
   崩栈没有裁决 ⇒ 现在 `af_ids()` 不抛、形状不符由判据变红，且这一发形状本身有靶（形状档）。
-  同批再加 `真库指针` 一组：本轮把 P-4 连库用例从 `test_kb_longlink_ingest.py` 搬到卡面点名的
+  同批再加 `真库指针` 一组：那一轮把 P-4 连库用例从 `test_kb_longlink_ingest.py` 搬到卡面点名的
   `test_kb_multisource_anchor.py`，而「真库那条走 某文件::某用例」这句话从前只写在 harness 的
   print 与 O 段注释里——搬一次就烂掉、没人核对磁盘上确有其事。现在名字集中在驱动的
   `REAL_DB_TARGETS`，G 段落盘前逐条按 AST 核对（grep 会放过「文件在、函数已改名」这种形状）。
@@ -155,8 +155,8 @@ SHOTS: list[tuple[str, str, str, str, str]] = [
      "return sorted(beh, key=key), sorted(strct, key=key)",
      "return sorted(beh, key=key), sorted(beh, key=key)", "RED", "头部现算"),
     # ↓ 锚定台现算（第十三轮：S2.1.4/S2.1.5 的 O 段与 `af_headline()`/`o_ledger()` 进驱动，
-    #   判据面从一台变两台。上一轮「头部现算」只担保 BD，本轮若只加读数不加反证，
-    #   就是第十轮 10-1 那条纪律在第二台上第五次欠账。这一组也是本轮那发
+    #   判据面从一台变两台。上一轮「头部现算」只担保 BD，第十三轮若只加读数不加反证，
+    #   就是第十轮 10-1 那条纪律在第二台上第五次欠账。这一组也是第十三轮那发
     #   `ValueError: invalid literal for int() with base 10: 'P0'` 的靶子来源。）
     ("AF 清单按字符串排序 ⇒ AF-S10 排到 AF-S2 前（面内连续与形状档一起塌）",
      "    return {k: [i for _, i in sorted(set(v))] for k, v in groups.items()}",
@@ -287,11 +287,59 @@ SHOTS: list[tuple[str, str, str, str, str]] = [
      "    return text, defects\n",
      "    return text, []\n",
      "RED", "真库指针"),
-    ("孤儿编译件核对见人就报 ⇒「正常编译件不该被咬」那半口径失去对照"
-     "（注：改 `if True` 那种写法在本电池里测不出——`stage()` 拷副本时 ignore 了 `__pycache__`，"
-     "那份世界里根本没有 `.pyc`，判据照样绿；所以这一发直接把结果写成非空，逼出绿档那一判）",
-     "    out = []\n    for pyc in sorted((ev / \"__pycache__\").glob(\"*.pyc\")):",
-     "    out = [\"注入：见谁都咬\"]\n    for pyc in sorted((ev / \"__pycache__\").glob(\"*.pyc\")):",
+    ("孤儿编译件核对见人就报（条件恒真）⇒「正常编译件不该被咬」与「两类位置都点名」同时失去对照。"
+     "注：这一发从前在电池里测不出——`stage()` 拷副本时 ignore 了 `__pycache__`，那份世界里根本没有 "
+     "`.pyc`，只判真包的探测档永远静默。第十四轮 C 组 C-14-09 之后判据自己造一棵带三种位置的小树，"
+     "所以恒真这一发终于有读数了（缺的那一发不是凑数，是这一档从前根本无法被证）",
+     "        if not (home / f\"{stem}.py\").exists():",
+     "        if True:  # 变异：见谁都咬",
+     "RED", "真库指针"),
+    ("孤儿探测退回「只看包根那层 __pycache__」⇒ 子目录与包根两类位置重新隐形（C-14-09 的那一半）",
+     "    for pyc in sorted(ev.rglob(\"*.pyc\")):",
+     "    for pyc in sorted((ev / \"__pycache__\").glob(\"*.pyc\")):",
+     "RED", "真库指针"),
+    ("同一发的第二条通道：直接把结果写成非空 ⇒「本包没有孤儿编译件」这条（判的是真包，"
+     "`stage()` 的副本里根本没有 `.pyc`，所以 `if True` 那一咬在这里没有读数）也必须出声",
+     "    out = []\n    for pyc in sorted(ev.rglob(\"*.pyc\")):",
+     "    out = [\"注入：见谁都咬\"]\n    for pyc in sorted(ev.rglob(\"*.pyc\")):",
+     "RED", "真库指针"),
+    ("用例收集口径退回「只看 tree.body 那一层」⇒ 类里与 `if` 里的用例重新不被要求登记（C-14-08）",
+     "    visit(tree.body, \"\")\n    return out",
+     "    for node in tree.body:\n        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) \\\n"
+     "                and node.name.startswith(\"test\"):\n            out.append(node.name)\n    return out",
+     "RED", "真库指针"),
+    ("用例收集口径过头：不以 Test 开头的类也被要求登记 ⇒ 判据咬合法形状（C-14-08 的另一端）",
+     "                if node.name.startswith(\"Test\"):\n                    visit(node.body, f\"{node.name}::\")",
+     "                visit(node.body, f\"{node.name}::\")",
+     "RED", "真库指针"),
+    ("解析保护改成「静默交出空模块」⇒ 语法坏掉的用例文件不再点名，而是当成「没有缺陷」（C-14-10）",
+     "    except (SyntaxError, UnicodeDecodeError, ValueError) as exc:",
+     "    except (SyntaxError, UnicodeDecodeError, ValueError):\n"
+     "        return ast.parse(\"\")\n    except ZeroDivisionError as exc:",
+     "RED", "真库指针"),
+    ("等价：异常类名换一种取法（`type(exc).__name__` 与 `exc.__class__.__name__` 同一个字符串）",
+     "        bad.append(f\"{rel} 读不出用例清单：{type(exc).__name__}: {exc}——指针核对在这一条上没跑成，\"",
+     "        bad.append(f\"{rel} 读不出用例清单：{exc.__class__.__name__}: {exc}——指针核对在这一条上没跑成，\"",
+     "GREEN", ""),
+    ("登记表与 git 现取名单从不对账 ⇒「本步又新写第三份用例文件」这件事在门禁里重新不存在（C-14-08 另一半）",
+     "    defects += registry_drift(STEP_NEW_TEST_FILES, fresh)",
+     "    pass  # 变异：对账没接进交付判据",
+     "RED", "真库指针"),
+    ("对账函数见人就报 ⇒「两边相符时静默」那一档绿不可证",
+     "    reg, got = set(registered), set(present)\n    bad: list[str] = []",
+     "    reg, got = set(registered), set(present)\n    bad: list[str] = [\"注入：见人就报\"]",
+     "RED", "真库指针"),
+    ("对账函数被掏空 ⇒ 两个探针档都没了靶子（只有绿档的判据等于没判）",
+     "    reg, got = set(registered), set(present)\n    bad: list[str] = []",
+     "    reg, got = set(registered), set(present)\n    return []\n    bad: list[str] = []",
+     "RED", "真库指针"),
+    ("git 取不到清单时不再出声，而是交空集 ⇒「没跑成」被读成「通过」",
+     "    if fresh is None:",
+     "    if False:",
+     "RED", "真库指针"),
+    ("g_section 不再问 git 要本步新增清单 ⇒ 那条对账拿的是永远不变的旧名单",
+     "    fresh = new_test_files_from_git()",
+     "    fresh = STEP_NEW_TEST_FILES  # 变异：不现取",
      "RED", "真库指针"),
     ("指针表里的文件被从 G 段门禁名单里摘掉 ⇒ 交代去哪儿跑的文件自己不过静态自检",
      '                "apps/api/tests/test_kb_multisource_anchor.py", '
@@ -330,6 +378,57 @@ SHOTS: list[tuple[str, str, str, str, str]] = [
      "    k_chunks, k_defects = k_sections()",
      '    write_out("")  # 变异：先落盘再判\n    k_chunks, k_defects = k_sections()',
      "RED", "交付门"),
+    ("换一种落盘口（`OUT.write_text`）绕过按函数名认的 sink 判据 ⇒ 第十四轮 C 组 C-14-05 那一发",
+     "    k_chunks, k_defects = k_sections()",
+     '    OUT.write_text("坏留档：门之前先落盘", encoding="utf-8")  # 变异\n'
+     "    k_chunks, k_defects = k_sections()",
+     "RED", "交付门"),
+    ("门留着、缺陷用带 if 的推导式过滤掉 ⇒ 形状在场而值恒空（C-14-04 h1：M 段与电池当时全绿）",
+     "            defects += g_defects",
+     "            defects += [d for d in g_defects if False]  # 变异：形状保留、语义掏空",
+     "RED", "交付门"),
+    ("收尾门同理：late 里把 o_defects 过滤掉 ⇒ 只认名字在场的判据会被这一发骗过",
+     "    late = rc_gate(sections_text) + norm_bad + o_defects",
+     "    late = rc_gate(sections_text) + norm_bad + [d for d in o_defects if False]",
+     "RED", "交付门"),
+    ("两道拒收门留着，但门之前先 sys.exit(0) ⇒ 既不落盘也不拒收，旧留档冒充交付（C-14-04 h6）",
+     "def main() -> int:\n    why = stray_copy(pathlib.Path(__file__), EV)",
+     "def main() -> int:\n    sys.exit(0)  # 变异：走不到门\n    why = stray_copy(pathlib.Path(__file__), EV)",
+     "RED", "交付门"),
+    ("等价：`defects += g_defects` 写成 `defects = defects + g_defects`（行为一字不差，不许假红）",
+     "            defects += g_defects",
+     "            defects = defects + g_defects",
+     "GREEN", ""),
+    ("等价：`if defects:` 写成 `if len(defects) > 0:`（C-14-07：旧判据只认裸名字，把等价改写判成红）",
+     "    if defects:\n        # 崩栈不是裁决",
+     "    if len(defects) > 0:  # 变异：等价形状\n        # 崩栈不是裁决",
+     "GREEN", ""),
+    ("等价：`if late:` 写成双重取反（`if not not late:` 仍然以它为条件）",
+     "    if late:\n        for d in late:",
+     "    if not not late:\n        for d in late:",
+     "GREEN", ""),
+    # ↓ 轮次自指（第十四轮 D 组 D-14-02：头部模板字面量改掉之后，驱动注释里还剩三处把第八轮的
+    #   事故说成当轮刚发生，M 段一条判据名也被印进留档。下面几发管的是「这条判据自己能不能红」。）
+    ("把指名轮次换回自指代词（直接写进驱动注释）⇒ 「驱动源码里没有自指措辞」必须红",
+     "#   第八轮当时实测撞到过一次回填 `OSError [Errno 22]` 而驱动照过（那句账记在 README §4.9 S-2；",
+     "#   本轮当时实测撞到过一次回填 `OSError [Errno 22]` 而驱动照过（那句账记在 README §4.9 S-2；",
+     "RED", "轮次自指"),
+    ("探测器被掏空 ⇒「混进文本必须点名行号」那一档失去靶子（只在干净文本上静默的探测器等于没判）",
+     "                       f\"——事故与读数要指名轮次或提交，代词每轮重印都会把旧事说成新事\")\n    return out",
+     "                       f\"——事故与读数要指名轮次或提交，代词每轮重印都会把旧事说成新事\")\n    return []",
+     "RED", "轮次自指"),
+    ("探测器见人就报 ⇒ 指名轮次的历史读数也被咬（那条判据就变成「不许提轮次」）",
+     "        hit = [m for m in SELF_REF_MARKS if m in line]\n        if hit:",
+     "        hit = [m for m in SELF_REF_MARKS if m in line] or [\"注入\"]\n        if hit:",
+     "RED", "轮次自指"),
+    ("登记表被清空 ⇒ 两条探针只剩一档，那句纪律又变成永不失败的断言",
+     'SELF_REF_MARKS = ("本" + "轮", "本" + "次", "本" + "趟")',
+     "SELF_REF_MARKS = ()",
+     "RED", "轮次自指"),
+    ("等价：命中项换一种取法（filter + list 与列表推导同一个结果）",
+     "        hit = [m for m in SELF_REF_MARKS if m in line]",
+     "        hit = list(filter(lambda m: m in line, SELF_REF_MARKS))",
+     "GREEN", ""),
     # ↓ 归一化（第十二轮复审 B3：头部那句「三类读数都处理了」从前是模板字面量）
     ("墙钟阈值放宽一位 ⇒ 正样本（带小数）不再被改写",
      '("墙钟", r"\\bin \\d+\\.\\d+s\\b", "in <redacted>s", "in 12.34s", "in 5s"),',

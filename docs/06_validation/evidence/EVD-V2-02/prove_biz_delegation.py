@@ -970,7 +970,7 @@ _PLAIN_IMPORT = "    from app.services.article_identity import parse_wechat_url\
 _CALLER_LINE = "        for anchor in (a for a in (_biz_from_url(url), article_key) if a):"
 #: 宿主（`_find_source_by_anchor`）的**当前**尾部锚。S2.1.4 把末尾那句 `Source.url.like(...)`
 #: 兜底删掉之后，旧锚 `).scalar_one_or_none()\n return row` 在磁盘上出现 0 次 ⇒ 两发以它为锚的
-#: 变异（宿主同名重复定义 / 正当 setattr 不连坐）一起失配，本轮实测 BD 台 `--self-test` rc=1。
+#: 变异（宿主同名重复定义 / 正当 setattr 不连坐）一起失配，第十三轮实测 BD 台 `--self-test` rc=1。
 #: 锚失效必须由电池说出来而不是被跳过，所以这里不换 grep、只把锚跟着磁盘走。
 _HOST_TAIL = ("            if row is not None:\n"
               "                return row\n"

@@ -122,8 +122,7 @@ cd apps/api && uv run pytest tests/test_article_identity.py -q -k biz
 **执行步骤**：
 1. [ ] 复制探针为常驻用例（改前红：MultipleResultsFound）
 2. [ ] 删 LIKE、加 limit
-3. [ ] 转绿；另加「已有 biz 源时优先命中 biz 源」用例（第十三轮交付为
-   `test_kb_multisource_anchor.py::test_biz_anchor_wins_when_both_anchors_exist`，判的是**锚序**）
+3. [ ] 转绿
 
 **验收命令**：
 ```bash

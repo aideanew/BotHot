@@ -7,7 +7,7 @@
 | 规模 | 中（约 1.5 人日） |
 | 依赖 | S2.1.x：STEP-00C；S2.2 起：STEP-01（ADR-0011） |
 | 裁决 | D-V2-01、D-13 |
-| 剩余原子任务 | 现算：`grep -cE "^- \*\*S" <本文件>` 减去 `grep -c "✅"` 的同段条数（S2.1.4/S2.1.5 已于第十三轮交付，见 §4 的 ✅ 与 EVD-V2-02 §4.14/§4.15；我上一版在这里抄的「6」是错的，B 组 R13B-21 抓到） |
+| 剩余原子任务 | 现算，顶层口径：`grep -E '^- \*\*S' <本文件> \| grep -vc '✅'`（未带 ✅ 的顶层 S 项；仓库根执行、把 `<本文件>` 换成本卡路径）。子项另算，不与本行混：`grep -cE '^  - S' <本文件>` 为子项总数、`grep -E '^  - S' <本文件> \| grep -vc '✅'` 为未交付子项。**勘误（第十四轮 D 组 D-14-04）**：上一版这条给的是 `grep -cE "^- \*\*S"` 减 `grep -c "✅"`，两个基数不同源（后一个把表头图例与交付门那句「每个 ✅ 有读数」也数进去），按字面跑出 `9 - 10 = -1`——一个负数不是「剩余任务数」，所以这一处「换成命令」换得并不比手抄更可核。S2.1.4/S2.1.5 已于第十三轮交付（见 §4 的 ✅ 与 EVD-V2-02 §4.14/§4.15） |
 | 所有权（写） | W：apps/api/app/services/article_identity.py、kb.py、batch_ingest.py、repositories/asset.py；apps/api/tests/test_article_identity.py、test_kb_longlink_ingest.py、test_kb_multisource_anchor.py（新）及复刻旧键的 3 个测试文件 |
 | 基线 | main@65f508b |
 
@@ -43,11 +43,14 @@
     `grep -n "\.like(" apps/api/app/services/kb.py` 实得 1 处命中（`kb.py:342`，正是本轮为交代
     「为什么删掉这条兜底」而写进 docstring 的那一行）——B 组 R13B-11 抓的就是我上一版在这里写的
     「必须为空」，那句话按字面跑当场是红的。
-  - S2.1.4.3 ✅ 本机侧 AF-B1…B5 全绿；连库侧另加 `test_biz_anchor_wins_when_both_anchors_exist`
-    （判**顺序**：两条锚源同时存在时返回 biz 那条）
+  - S2.1.4.3 ✅ 本机侧 AF-B1…B6 全绿（B6 是第十四轮 C 组补的那一格：18 字符的**生产量级**短链键也不许
+    下发 URL 列的 like 条件——旧行为面只喂过 `"s"`，恰好被攻击里那句长度门排除）；连库侧另加
+    `test_biz_anchor_wins_when_both_anchors_exist`（判**顺序**：两条锚源同时存在时返回 biz 那条）
 - **S2.1.5** ✅🛠 `get_by_url_fragment` 守卫：片段长度 <8（`MIN_FRAGMENT_LEN`）时直接返回 None 并记 WARNING
   - S2.1.5.1 ✅ 单测 `apps/api/tests/test_asset_fragment_guard.py`：`s` ⇒ None 且**零条 SQL**、
-    正常 token ⇒ 命中、边界卡在 8/7、放行路径仍是 `source_id eq + url like + limit(1)`
+    正常 token ⇒ 命中、边界卡在 8/7（第十四轮起含 `1234567` 那一行——它钉的是「守卫的 `return None`
+    必须是分支的**直接**语句」：把返回嵌进 `if fragment.isalpha():` 那种写法，字母与汉字样本全都照旧，
+    只有纯数字短片段会被放出去发 LIKE）、放行路径仍是 `source_id eq + url like + limit(1)`
     （本机不可跑 ⇒ §5 J-7；本机侧等价证明 AF-A1…A5）
   - 卡面那句「或等于 `s` 时」按长度阈值实现：`s` 是长度 1，已被 `<8` 覆盖，不再单列特判
     （单列会让守卫在下一个单字符键形上再次失效——登记为口径说明，不是打折）
