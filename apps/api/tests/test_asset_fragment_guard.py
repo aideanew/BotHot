@@ -35,7 +35,13 @@ class _RecordingSession:
         self.calls: list[str] = []
 
     async def scalar(self, stmt):  # noqa: ANN202
-        self.calls.append(str(stmt.compile()))
+        # 渲染必须带 `literal_binds`：默认方言把值渲染成绑定参数
+        # （`source_id = :source_id_1 … LIKE :url_1 LIMIT :param_1`），下面那条
+        # 「断言渲染文本里有字面值」的机器门在 CI 上就恒红。这条红由 V0.8.0 的
+        # `docs/任务规划V0.8.0/evidence/61358c3/pytest_local_noPG.txt` 抓到，
+        # 修法照 V0.8.0 STEP-00C 卡 S0C.1.2 那一条；本包另有一条静态判据
+        # （`replay_s213.py` 的 `sql_render_defects`）防止再犯。
+        self.calls.append(str(stmt.compile(compile_kwargs={"literal_binds": True})))
         return _asset()
 
 

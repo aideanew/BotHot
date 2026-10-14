@@ -540,7 +540,97 @@ def _collect_cases(tree: ast.Module) -> list[str]:
     return out
 
 
+#: 值形状：字面量里有 `=`、引号、`%…%`，或**任何数字**，就是在断言一个会被渲染成绑定参数的值
+#: （`LIMIT 1` 在默认方言里是 `LIMIT :param_1`——纯关键字的断言不含数字，两者分得开）。
+_VALUE_SHAPE = re.compile(r"=|['\"%]|\d")
+
+
+def sql_render_defects(text: str, where: str = "文件") -> list[str]:
+    """用例里「对 `compile()` 渲染出的文本断言字面值」这件事，是**可静态抓到的恒红形状**。
+
+    SQLAlchemy 的默认方言把值渲染成绑定参数（`content_assets.source_id = :source_id_1
+    AND … LIKE :url_1 LIMIT :param_1`），于是
+    `assert "source_id = 'src-1'" in str(stmt.compile())` 在 CI/真库上必红、在本机恒不可跑。
+    第十七轮由 `docs/任务规划V0.8.0/evidence/61358c3/pytest_local_noPG.txt` 的 CI 实测抓到；
+    本包此前十六轮都没抓到，**因为这条判据根本不存在**——这是「判据的覆盖面=上一轮想到的形状」
+    那一族的第 N 次现场。
+
+    抓法不 grep 字形，按 AST 认两件事：
+    ① 哪些名字的值来自 `str(….compile(…))`（也认内联写法 `X in str(stmt.compile())`）；
+    ② 有没有一句 `in` 比较：左操作数是**带值形状**的字符串字面量（含 `=`、引号或 `%…%`），
+       右操作数落在 ① 那些名字/表达式上。
+    只判结构关键字（`"LIKE" in flat`）不算缺陷——那不带值，方言怎么渲染都能过。
+    """
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError) as exc:
+        return [f"{where} 读不出 AST：{type(exc).__name__}: {exc}——这一档没判成，不是判绿"]
+    rendered: set[str] = set()      # 值是「渲染文本」的名字（污点沿赋值传播）
+    rendered_lists: set[str] = set()  # 假会话里 append 渲染文本的那个属性名（如 `calls`）
+    bad: list[str] = []
+
+    def base_rendered(node: ast.AST) -> bool:
+        """这一子树里是否出现「会丢值的」渲染：`x.compile()` 或 `str(x.compile())`。
+
+        **带 `compile_kwargs={"literal_binds": True}` 的渲染不算**——那种写法就是把值内联进文本，
+        断言字面值正是它的用途（V0.8.0 STEP-00C 卡 S0C.1.2 给的修法即此）。少了这一格豁免，
+        这条判据会把修法本身判成缺陷。
+        """
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Call):
+                f = sub.func
+                if isinstance(f, ast.Attribute) and f.attr == "compile":
+                    if not any("literal_binds" in ast.unparse(k.value) for k in sub.keywords):
+                        return True
+                if isinstance(f, ast.Name) and f.id == "str" and sub.args \
+                        and base_rendered(sub.args[0]):
+                    return True
+        return False
+
+    def is_rendered(node: ast.AST) -> bool:
+        """这个表达式读的是不是渲染文本：内含 `…compile()` 调用、内含被污名化的名字，或取自律会话。"""
+        if isinstance(node, ast.Name):
+            return node.id in rendered
+        if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) \
+                and node.value.attr in rendered_lists:
+            return True   # `sess.calls[0]`：假会话往里塞的就是渲染文本
+        if base_rendered(node):
+            return True
+        # `flat = " ".join(sql.split())` 这种**在受污名字上调方法**的写法：污点在子节点里
+        # （`walk` 会连自己一起给，必须跳过，否则这里无限递归）
+        return any(is_rendered(sub) for sub in ast.walk(node) if sub is not node)
+
+    # 先认假会话：`async def scalar(self, stmt): self.<attr>.append(str(stmt.compile()))`
+    # （必须同时认 `AsyncFunctionDef`——仓库里的夹具是 async 的，第一版只认 def 就漏了整条链）
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "scalar":
+            for c in (x for x in ast.walk(n) if isinstance(x, ast.Call)):
+                f = c.func
+                if isinstance(f, ast.Attribute) and f.attr == "append" \
+                        and isinstance(f.value, ast.Attribute) and base_rendered(c):
+                    rendered_lists.add(f.value.attr)
+
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Assign) and any(is_rendered(sub) for sub in ast.walk(n.value)):
+            # 污点要**顺着赋值传播**：真实用例是 `sql = str(x.compile())` → `flat = " ".join(sql.split())`
+            # → `assert "…" in flat`，只认第一跳的判据等于没判（第十七轮自查实测：第一版就这样漏的）
+            for t in n.targets:
+                if isinstance(t, ast.Name):
+                    rendered.add(t.id)
+        elif isinstance(n, ast.Assert):
+            for cmp in (x for x in ast.walk(n.test) if isinstance(x, ast.Compare)
+                        and any(isinstance(op, ast.In) for op in x.ops)):
+                left, right = cmp.left, cmp.comparators[0]
+                if isinstance(left, ast.Constant) and isinstance(left.value, str) \
+                        and _VALUE_SHAPE.search(left.value) and is_rendered(right):
+                    bad.append(f"{where}:{n.lineno} 对 compile 渲染文本断言字面值 {left.value!r}"
+                               "——默认方言把值渲染成绑定参数，这句在 CI 上必红；"
+                               "要判值就走 `compile().params` 的值侧，要判单行就走 `get_limit()`")
+    return bad
+
+
 def db_pointer_defects(targets: tuple[tuple[str, str], ...],
+
                        root: pathlib.Path = ROOT) -> list[str]:
     """逐条核对「交给真库的那些用例」在 `root` 下确有其事：文件在、那句指针点到的 `def` 在。
 
@@ -625,6 +715,12 @@ def g_section() -> tuple[str, list[str]]:
                        f"清单与被检结果脱节（登记的那几份与跑出来的那几份不是同一批）")
     defects += db_pointer_defects(REAL_DB_TARGETS)
     defects += db_pointer_missing(REAL_DB_TARGETS)
+    # 第十七轮：本步那些「假会话只记一条渲染 SQL」的用例，断言写字面值就会在 CI 恒红
+    # （V0.8.0 的 CI 实测抓到 `test_asset_fragment_guard.py:143-145` 三条全红）。这条判据在那之前不存在。
+    for rel in sorted({p for p, _ in REAL_DB_TARGETS} | set(STEP_NEW_TEST_FILES)):
+        f = ROOT / rel
+        if f.is_file():
+            defects += sql_render_defects(f.read_text(encoding="utf-8-sig"), rel)
     fresh = new_test_files_from_git()
     if fresh is None:
         defects.append("本步新增用例文件的清单没跑成（git 取不到读数）——`registry_drift` 这一判据**没跑**，"
@@ -1611,6 +1707,48 @@ def self_test(listing: bool = False) -> int:
           else f"实得调用 { _calls_brief(gtree, 'db_pointer_defects')}")
     check(g9, "g_section 真的调 db_pointer_missing（用例级那条也得接进交付判据）",
           "" if _first_call_line(gtree, "db_pointer_missing") else "g_section 里没有那次调用")
+    # 第十七轮：V0.8.0 的 CI 实测抓到本步一条用例恒红（断言 `str(stmt.compile())` 里的字面值，
+    # 而默认方言把值渲染成 `:source_id_1`）。这条判据当时不存在，所以十六轮都没抓到——现在补上，
+    # 并且三档各配靶：坏形状必须红、修好的语义 API 不许红、污点传播断链（只认第一跳）也必须红。
+    render_bad = (
+        "class S:\n    def __init__(self):\n        self.calls = []\n\n"
+        "    async def scalar(self, stmt):\n        self.calls.append(str(stmt.compile()))\n"
+        "        return 1\n\n\n"
+        "async def t(sess):\n    sql = sess.calls[0]\n    flat = ' '.join(sql.split())\n"
+        '    assert "source_id = \'src-1\'" in flat\n    assert "LIMIT 1" in flat.upper()\n')
+    render_good = (
+        "class S:\n    def __init__(self):\n        self.calls = []\n\n"
+        "    async def scalar(self, stmt):\n        self.calls.append(stmt)\n        return 1\n\n\n"
+        "async def t(sess):\n    stmt = sess.calls[0]\n    assert stmt.get_limit() == 1\n"
+        "    params = stmt.compile().params\n"
+        '    assert any(v == "src-1" for v in params.values())\n'
+        '    assert "LIKE" in str(stmt.compile()).upper()\n')
+    render_defects = sql_render_defects(render_bad, "坏样例.py")
+    check(g9, "探针：对 compile 渲染文本断言字面值必须点名（CI 上恒红的那一类，第十七轮由 V0.8.0 抓到）",
+          "" if len(render_defects) == 2 else f"实得 {len(render_defects)} 条：{render_defects!r}")
+    check(g9, "探针：污点要沿赋值与方法调用传播（`sess.calls[0]`→`sql`→`flat` 三跳都要跟上）",
+          "" if {d.split(":")[1].strip().split(" ")[0] for d in render_defects}
+          == {str(i) for i, ln in enumerate(render_bad.splitlines(), 1) if " in flat" in ln}
+          else f"只点到这些行：{[d.split('——')[0] for d in render_defects]!r}")
+
+    check(g9, "绿档：改成读 `get_limit()` 与 `compile().params` 的值侧之后不许再咬"
+              "（「assert 里出现 .compile()」这种粗判会连正确写法一起咬掉）",
+          "" if not sql_render_defects(render_good, "好样例.py")
+          else f"误咬 {sql_render_defects(render_good, '好样例.py')!r}")
+    # 绿档第二侧：V0.8.0 STEP-00C 给的修法是**带 literal_binds 的渲染**——那种写法就是把值内联进文本，
+    # 断言字面值是它的用途。豁免掉了这一格，判据就会把修法本身判成缺陷（假红方向，同样要配靶）。
+    render_lb = (
+        "class S:\n    def __init__(self):\n        self.calls = []\n\n"
+        "    async def scalar(self, stmt):\n"
+        '        self.calls.append(str(stmt.compile(compile_kwargs={"literal_binds": True})))\n'
+        "        return 1\n\n\n"
+        "async def t(sess):\n    flat = ' '.join(sess.calls[0].split())\n"
+        '    assert "source_id = \'src-1\'" in flat\n')
+    check(g9, "绿档：带 `literal_binds` 的渲染文本里断言字面值**是正当用法**，不许咬（这条豁免本身要能红）",
+          "" if not sql_render_defects(render_lb, "修好的样例.py")
+          else f"误咬 {sql_render_defects(render_lb, '修好的样例.py')!r}")
+    check(g9, "g_section 真的把这条接进交付判据（写了不调用 = 又一句好听的话）",
+          "" if _first_call_line(gtree, "sql_render_defects") else "g_section 里没有那次调用")
     check(g9, "g_section 真的拿 git 现取的新增清单去喂 registry_drift（探测器写了不调用就是形容词）",
           "" if _first_call_line(gtree, "registry_drift") and _first_call_line(gtree, "new_test_files_from_git")
           else f"registry_drift 在第 {_first_call_line(gtree, 'registry_drift')} 行、"

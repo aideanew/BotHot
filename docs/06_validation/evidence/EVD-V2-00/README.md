@@ -332,7 +332,7 @@ S0.2.1 只覆盖 `test_w3_push_scheduler.py`。**建议**：新增 S0.2.3 收口
 - **锚点（两个数只有后者与 ruff 可比）**：`apps/api/tests/test_env_isolation.py:68` 折行前是
   **112 个字符 / 134 列**，而 `evidence/65f508b/ruff_65f508b.txt` 报的正是
   `E501 Line too long (134 > 120)`。现读：
-  `python -c "import pathlib,unicodedata;l=pathlib.Path('apps/api/tests/test_env_isolation.py').read_text(encoding='utf-8').splitlines()[67];print(len(l), sum(2 if unicodedata.east_asian_width(c) in 'WF' else 1 for c in l))"`
+  `python -X utf8 -c "import subprocess,unicodedata;t=subprocess.run(['git','show','65f508b:apps/api/tests/test_env_isolation.py'],capture_output=True).stdout.decode('utf-8');l=t.splitlines()[67];print(len(l), sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in l))"` （**锚 `65f508b` 才读得到 112/134**：那一行后来被折成三行，今天同一行号读出来是 `38 38`、全文件最大列宽 102——那是修法生效的痕迹，不是锚点错了。第十六轮复核 C4 抓的是「命令指向改后的文件、句子宣称的却是改前的读数」，与 06 条 17「指错的复现命令比没有更糟」同一族）
 - **改前它自己还把这个错误编进了自证**：旧 E501 反样本 `"长"*110`（119 字符 / 229 列）被登记为
   「绿档不许咬」，按列宽判必须报——直接调本表的 `check()` 读回
   `sample_old_green.py:1 E501 行宽 229 > 120（119 个字符）`。这条与本卡 §6.2 是同族：

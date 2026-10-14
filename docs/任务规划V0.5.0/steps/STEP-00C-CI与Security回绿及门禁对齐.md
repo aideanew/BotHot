@@ -57,8 +57,8 @@ gitleaks 默认读取仓库根 `.gitleaksignore`（指纹 = commit:path:rule:lin
   - 上一版写的是「已完成于本批之前：现读该行 112 列（≤120）」——**那 112 是字符数，而 ruff 的 120 是列宽**：
     East Asian Width 为 `W`/`F` 的字符占 2 列。同一行按列宽是 134，正是 `evidence/65f508b/ruff_65f508b.txt`
     报的那一句 `E501 Line too long (134 > 120)`。锚点核对（现读，两条一起看）：
-    `python -c "import pathlib,unicodedata;l=pathlib.Path('apps/api/tests/test_env_isolation.py').read_text(encoding='utf-8').splitlines()[67];print(len(l), sum(2 if unicodedata.east_asian_width(c) in 'WF' else 1 for c in l))"`
-    ——折行前给 `112 134`，两个数分别是「字符」与「列宽」，只有后者与 ruff 可比。
+    `python -X utf8 -c "import subprocess,unicodedata;t=subprocess.run(['git','show','65f508b:apps/api/tests/test_env_isolation.py'],capture_output=True).stdout.decode('utf-8');l=t.splitlines()[67];print(len(l), sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in l))"` （**锚 `65f508b` 才读得到 112/134**：那一行后来被折成三行，今天同一行号读出来是 `38 38`、全文件最大列宽 102——那是修法生效的痕迹，不是锚点错了。第十六轮复核 C4 抓的是「命令指向改后的文件、句子宣称的却是改前的读数」，与 06 条 17「指错的复现命令比没有更糟」同一族）
+    ⇒ 那一版给 `112 134`；两个数分别是「字符」与「列宽」，只有后者与 ruff 可比。
   - 根因不在这条用例，在**本机那张近似表**：`EVD-V2-00/g24_static_check.py` 的 E501 按 `len(line)` 计，
     所以它对 CJK 撑爆的行一律假绿。本卡 §4 与 G 段门禁（EVD-V2-02 留档的 G 段）都读它，
     于是「本表 0 违规」这句话当时是**更宽**而不是更严——这一点也写进了该表的 docstring（两处方向性差异，
@@ -84,6 +84,7 @@ gitleaks 默认读取仓库根 `.gitleaksignore`（指纹 = commit:path:rule:lin
 - **S0C.2.1** 🛠 工作树占位 DSN 去口令：`x:y@` → `x@`（prove_net_isolation.py:702/705/1214/1219、out_evidence_check.txt:137）
   - S0C.2.1.1 替换后复跑 prove_net_isolation.py，PASS=24 FAIL=0
   - S0C.2.1.2 `gitleaks dir` 对这两个文件 0 命中
+  - **同案未清的一格（第十六轮复核 C7 抓到）**：那四处 `x:y@` 从在册源码里消掉了，却**原样活在刻意未跟踪的 `evidence/65f508b/STEP-00C_simulated_65f508b.patch`**（84/88/97/103 行）里——`secret_shape_scan.py docs/任务规划V0.5.0` 现读 `HIGH 命中：5（ALLOWED 3）`，其中 4 发就是那份补丁。它按 §5 第 2 批口径故意不入库，所以 gitleaks 的 dir 模式在当前工作树上仍然看得见这些形状：处置与那 6 个历史指纹同案（S0C.2.2 / D-12），本机不猜指纹、也不擅自把那份补丁改名或删除。
 - **S0C.2.2** 🛠 新建 `.gitleaksignore`，逐条登记 6 个历史指纹（D-12 默认 A）
   - S0C.2.2.1 指纹取自 `gitleaks git --log-opts=origin/main --report-format json`
   - S0C.2.2.2 去掉该文件复跑必须重新出现 6 条（必要性反证）

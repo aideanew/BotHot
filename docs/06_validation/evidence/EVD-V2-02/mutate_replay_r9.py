@@ -347,6 +347,40 @@ SHOTS: list[tuple[str, str, str, str, str]] = [
      "    print(\"坏留档\", file=OUT.open(\"w\"))  # 变异：经 print 落盘\n"
      "    k_chunks, k_defects = k_sections()",
      "RED", "交付门"),
+    # ↓ 第十七轮自查（V0.8.0 的 CI 实测抓到本步一条用例恒红）：新加的 `sql_render_defects` 那条链
+    #   每一环都要能红——认假会话的那一步、污点传播的那一步、值形状的那一格、以及接进交付判据的那一行。
+    ("假会话只认 `def scalar` 不认 `async def scalar` ⇒ 仓库里那个夹具是 async 的，整条链从源头断掉",
+     '        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "scalar":',
+     '        if isinstance(n, ast.FunctionDef) and n.name == "scalar":  # 变异：漏 async',
+     "RED", "真库指针"),
+ ("污点不沿「在受污名字上调方法」传播（只认第一跳）⇒ 两跳之后的断言点不到",
+     "        return any(is_rendered(sub) for sub in ast.walk(node) if sub is not node)",
+     "        return False  # 变异：不传播",
+     "RED", "真库指针"),
+    ("值形状丢了「含数字」那一格 ⇒ `\"LIMIT 1\"` 这种渲染成 `:param_1` 的断言不再被点名",
+     "_VALUE_SHAPE = re.compile(r\"=|['\\\"%]|\\d\")",
+     "_VALUE_SHAPE = re.compile(r\"=|['\\\"%]\")  # 变异：数字那一格没了",
+     "RED", "真库指针"),
+    ("探测器写了但没接进 g_section ⇒ 这句话又回到「有判据没交付」",
+     "            defects += sql_render_defects(f.read_text(encoding=\"utf-8-sig\"), rel)",
+     "            pass  # 变异：没接进交付判据",
+     "RED", "真库指针"),
+    ("等价：把两个集合的注解写得宽一点（`set` 与 `set[str]` 是同一个空集合，运行时不看注解）",
+     "    rendered_lists: set[str] = set()  # 假会话里 append 渲染文本的那个属性名（如 `calls`）",
+     "    rendered_lists: set = set()  # 变异：注解放宽，行为一字不差",
+     "GREEN", ""),
+    ("值形状那一格放宽成「任何字面量都算」⇒ 纯关键字断言（`\"LIKE\" in str(…).upper()`）也被咬，"
+     "绿档那条必须红（判据过严与判据过松是同一枚硬币的两面，两端都要有靶）",
+     "_VALUE_SHAPE = re.compile(r\"=|['\\\"%]|\\d\")",
+     "_VALUE_SHAPE = re.compile(\".*\")  # 变异：不再区分值形状与关键字",
+     "RED", "真库指针"),
+    ("豁免掉了 `literal_binds` 那一格 ⇒ 把 V0.8.0 给的修法本身判成缺陷（假红方向也要配靶，"
+     "第十七轮自查：这条判据第一版就这样咬过正确写法）",
+     '                    if not any("literal_binds" in ast.unparse(k.value) for k in sub.keywords):',
+     "                    if True:  # 变异：不再认 literal_binds",
+     "RED", "真库指针"),
+
+
     ("解析保护改成「静默交出空模块」⇒ 语法坏掉的用例文件不再点名，而是当成「没有缺陷」（C-14-10）",
      "    except (SyntaxError, UnicodeDecodeError, ValueError) as exc:",
      "    except (SyntaxError, UnicodeDecodeError, ValueError):\n"
