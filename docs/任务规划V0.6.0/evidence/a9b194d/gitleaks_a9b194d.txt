@@ -1,0 +1,16 @@
+[90m2:38AM[0m [32mINF[0m 130 commits scanned.
+[90m2:38AM[0m [32mINF[0m scan completed in 8.41s
+[90m2:38AM[0m [31mWRN[0m leaks found: 9
+# dir
+[90m2:39AM[0m [32mINF[0m scan completed in 44.7s
+[90m2:39AM[0m [31mWRN[0m leaks found: 6
+de78125b91434caa3ef711e5382d6e955d8557af:docs/06_validation/evidence/EVD-V2-00R/out_evidence_check.txt:connection-string-embedded-password:137
+1470b77b996a31892b2c9bea398c8a3228b2c05f:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:921
+1470b77b996a31892b2c9bea398c8a3228b2c05f:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:926
+1af68fc7e0ba4f9cf3851eca34af4f66240ef411:docs/06_validation/evidence/EVD-V2-00R/out_evidence_check.txt:connection-string-embedded-password:135
+1af68fc7e0ba4f9cf3851eca34af4f66240ef411:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:206
+1af68fc7e0ba4f9cf3851eca34af4f66240ef411:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:209
+798f2638124b75ab164855c6d16d69be545dbcdf:docs/03_solution/decisions/adr-0010-externalize-connection-strings.md:connection-string-embedded-password:15
+798f2638124b75ab164855c6d16d69be545dbcdf:docs/05_execution/tasks/TASK-004.md:connection-string-embedded-password:21
+798f2638124b75ab164855c6d16d69be545dbcdf:docs/04_planning/current-plan.md:connection-string-embedded-password:796
+# main-only（CI 口径）：gitleaks git --log-opts=origin/main → leaks found: 6（指纹同 65f508b；上方 9 条中 798f263×3 来自未合并分支 plan/2026-10-12-remaining-tasks）

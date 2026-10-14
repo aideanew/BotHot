@@ -1,0 +1,101 @@
+# ruff ruff 0.12.12
+E501 Line too long (121 > 120)
+   --> tests/test_asset_fragment_guard.py:104:110
+    |
+102 |     sess = _RecordingSession()
+103 |     got = await AssetRepository(sess).get_by_url_fragment("src-1", fragment)  # type: ignore[arg-type]
+104 |     assert len(sess.calls) == queries, f"{fragment!r}（{len(fragment)} 字符）下发了 {len(sess.calls)} 条，期望 {queries}"
+    |                                                                                                                         ^
+105 |     assert (got is None) is (queries == 0), f"{fragment!r} → {got!r}，与下发条数不自洽"
+    |
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests/test_chat_sse.py:8:1
+   |
+ 6 |   """
+ 7 |
+ 8 | / from __future__ import annotations
+ 9 | |
+10 | | import json
+11 | | import socket
+12 | | import sys
+13 | | from types import SimpleNamespace
+14 | | from typing import Any
+15 | |
+16 | | import httpx
+17 | | import pytest
+18 | | from conftest import PG_URL, SKIP_UNSET_REASON, _PG_URL_SOURCE
+19 | | from fastapi.testclient import TestClient
+20 | | from test_repositories import _make_user
+21 | |
+22 | | from app.api.deps import get_current_user_id, get_db, get_langbot_client
+23 | | from app.core.errors import DependencyUnavailableError, ResourceNotFoundError
+24 | | from app.main import create_app
+25 | | from app.models.entities import KnowledgeSpace
+26 | | from app.models.entities import User as UserEntity
+27 | | from app.providers.langbot.client import LangBotClient
+28 | | from app.repositories.user import SqlAlchemyUserStore
+   | |_____________________________________________________^
+   |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests/test_env_isolation.py:23:1
+   |
+21 |   """
+22 |
+23 | / from __future__ import annotations
+24 | |
+25 | | import os
+26 | |
+27 | | import pytest
+28 | | from conftest import NO_PROXY_ISOLATION_VALUE, _PROXY_ENV_VARS
+29 | | from fixtures.net import REFUSED_HTTP_URL
+30 | |
+31 | | from app.providers.push.base import PushMessage
+32 | | from app.providers.push.webhook import WebhookPushProvider
+   | |__________________________________________________________^
+33 |
+34 |   # 收集期快照：模块导入发生在任何夹具运行之前，故此处的 os.environ 就是宿主原貌。
+   |
+help: Organize imports
+
+E501 Line too long (134 > 120)
+  --> tests/test_env_isolation.py:68:99
+   |
+66 | …}"
+67 | …
+68 | …49 超时支、:51 异常支均置 retryable=True）：reason={reason!r}"
+   |                                                  ^^^^^^^^^^^^^^
+   |
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests/test_kb_longlink_ingest.py:36:1
+   |
+34 |   """
+35 |
+36 | / from __future__ import annotations
+37 | |
+38 | | from urllib.parse import quote
+39 | |
+40 | | import pytest
+41 | |
+42 | | from fixtures.wechat_urls import (
+43 | |     BIZ_A,
+44 | |     LONG_A,
+45 | |     LONG_A_TRACKING,
+46 | |     LONG_B,
+47 | |     OFFSITE,
+48 | |     SHORT_1,
+49 | |     SHORT_WITH_FAKE_BIZ_PARAM,
+50 | | )
+51 | |
+52 | | from app.services.article_identity import parse_wechat_url
+53 | | from app.services.kb import _biz_from_url
+   | |_________________________________________^
+   |
+help: Organize imports
+
+Found 5 errors.
+[*] 3 fixable with the `--fix` option.
+rc=1

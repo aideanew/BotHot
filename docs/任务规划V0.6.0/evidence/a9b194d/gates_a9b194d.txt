@@ -1,0 +1,17 @@
+# alembic
+INFO  [alembic.runtime.migration] Running upgrade ab1004w3a -> ab1004w4a, WB（审查补完）：推送投递重试字段 + 4 个无索引 FK 补索引。
+INFO  [alembic.runtime.migration] Running upgrade ab1004w4a -> ab1005w5a, R1.2a：站内通知持久化底座（离线补投存储层）。
+INFO  [alembic.runtime.migration] Running upgrade ab1005w5a -> ab1005w5b, S2.1：bot_channels.extra_config 明文 JSON → AES-256-GCM 重加密。
+ab1005w5b (head)
+# mypy
+Success: no issues found in 107 source files
+# contracts
+[ok] packages/contracts/src/knowledge/dto.ts 幂等一致
+[ok] packages/contracts/src/subscription/dto.ts 幂等一致
+[ok] packages/contracts/src/ingest/dto.ts 幂等一致
+rc=0
+# docs
+检查完成：共 23 个路径引用，0 个不存在
+
+[ok] 文档一致性检查通过
+rc=0

@@ -1,0 +1,57 @@
+# E501 / lint 静态判定 @ main@13acacc
+
+## 0. 口径与免责
+- 规则来源：`apps/api/pyproject.toml:47` `line-length = 120`；`[tool.ruff.lint] select = ["E","F","I","W","UP","B"]`（:51）。
+- CI 执行：`.github/workflows/ci.yml:68` `ruff check app tests`（无 `--line-length` 覆盖，无 per-file-ignores）。
+- 本机 `ruff` = MISSING（见 static_readings S-10）。**本文件是静态复现，不是 ruff 实跑读数。**
+  交付时 `ruff check app tests` 的真实输出必须重新采集入 EVD-V3-00C。
+
+## 1. 度量方法（关键，曾经踩错两次）
+E501 判定按**终端显示宽度**，CJK（East_Asian_Width = W/F）每字记 2 列；不是字节数，也不是字符数。
+同一行三种度量的差别（test_asset_fragment_guard.py，实测）：
+- 字节数 = 132
+- 字符数 = 110
+- 显示宽度 = 121 → 超过 120，触发 E501
+（先前的错误做法：按字节数扫会得到 26 条、按字符数扫会得到 0 条，两者都与 ruff 实际输出不符。）
+
+## 2. 全量候选（display width > 120），apps/api/app + apps/api/tests，共 28 条
+标记：ti = 尾随 `# type:` pragma，noqa = 尾随 `# noqa` pragma，二者按 ruff 文档在「去掉 pragma 后不超限」时豁免。
+
+| # | file:line | width | chars | 备注 |
+|---|---|---|---|---|
+| 1 | apps/api/tests/test_asset_fragment_guard.py:116 | 121 | 110 | **无豁免** |
+| 2 | apps/api/tests/test_env_isolation.py:68 | 134 | 112 | **无豁免** |
+| 3 | apps/api/tests/test_resolver.py:46 | 133 | 133 | 无 pragma；行为 `'<p><img src="https://mmbiz.qpic.cn/…?wx_fmt=jpeg" data-src="http…'`，120 列之后无空格 |
+| 4 | apps/api/tests/test_kb_orphan_purge.py:91 | 122 | 122 | ti |
+| 5 | apps/api/tests/test_manifest_sync.py:481 | 123 | 123 | noqa |
+| 6-9 | apps/api/tests/test_metadata_filter.py:174/:233/:288/:346 | 126/122/125/140 | 同左 | ti |
+| 10 | apps/api/tests/test_p2_subscription.py:170 | 122 | 122 | ti |
+| 11-14 | apps/api/tests/test_process_heartbeat.py:122/:132/:150/:170/:227 | 122/122/122/121/122 | 同左 | ti |
+| 15-16 | apps/api/tests/test_public_library_admin.py:63/:84 | 140/137 | 同左 | ti |
+| 17-22 | apps/api/tests/test_r11_engine_keys.py:244/:285/:327/:405/:442/:450 | 123/135/130/121/123/126 | 同左 | ti |
+| 23-26 | apps/api/tests/test_r11_push.py:104/:182/:211/:272 | 141/133/134/134 | 同左 | ti |
+| 27 | apps/api/tests/test_reranker.py:238 | 121 | 121 | ti |
+
+24 条由 pragma 豁免。余下 3 条（#1 #2 #3）无 pragma，需要 ruff 的真实豁免规则（整行单一不可断词 / 行尾 URL）才能定论。
+
+## 3. 用已归档的 ruff 实跑输出定这 3 条的性
+`docs/任务规划V0.6.0/evidence/a9b194d/ruff_a9b194d.txt` 记录 a9b194d 实跑：`Found 5 errors`（3× I001 + 2× E501），
+其中 E501 恰为：
+- `E501 Line too long (121 > 120) --> tests/test_asset_fragment_guard.py:104:110`
+- `E501 Line too long (134 > 120) --> tests/test_env_isolation.py:68:99`
+
+对照本次静态扫描：#1 width=121、#2 width=134 —— **数值逐一对应**，证明本扫描的显示宽度模型与 ruff 一致。
+#3 test_resolver.py:46（width=133）未出现在 ruff 输出中 ⇒ 被 ruff 的「行尾 URL / 不可断行」豁免命中；
+本扫描无法自行判定该豁免，此处结论来自归档实跑而非推断。
+
+## 4. a9b194d → 13acacc 之间的 lint 变化（本次核对结论）
+`git diff --name-only a9b194d HEAD -- apps/api/tests` = 仅 `test_asset_fragment_guard.py`（a576bc2，插入 12 行）。
+`git diff --name-only a9b194d HEAD -- apps/api/app` = 空。
+
+结论：
+1. E501 **个数不变，仍为 2**；两个目标行的文本逐字未变（`git show a9b194d:<file>` 与 HEAD 同一行 width 均为 121/134）。
+2. 但其中一个**行号已漂移**：`test_asset_fragment_guard.py` 由 **:104 → :116**。
+   V0.6.0 的 STEP-00C 卡面 S0C.1.2 仍写 `:104`，属过期定位；
+   其合并补丁该 hunk 在 HEAD 以 `+12 offset` 命中（static_readings S-07），可套用但卡面文字已不对。
+3. I001 三个目标文件（test_chat_sse.py / test_env_isolation.py / test_kb_longlink_ingest.py）自 a9b194d 未变，判据可原样沿用。
+4. 规划方据此立规则：**卡面引用行号一律附「复现命令」，行号只作定位提示，不作判据。**

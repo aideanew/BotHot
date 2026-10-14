@@ -1,0 +1,14 @@
+# 回归二分（同一 PG16@5547/bothot_test，同一 venv）
+# 命令：pytest tests/test_be02_engine_routing.py -q -p no:cacheprovider -k short_link_second
+65f508b（git worktree /tmp/wt65，PYTHONPATH 指向 worktree，app.__file__=/tmp/wt65/apps/api/app/__init__.py）
+  -> 1 passed, 9 deselected
+a9b194d（main）
+  -> FAILED test_be02_engine_routing.py:301  assert stub.fetch_count == 1  /  assert 2 == 1
+065f508b..a9b194d 之间唯一改 app/ 的提交：078dc30（kb.py 删 LIKE 兜底；asset.py 片段守卫）
+
+# 修复模拟（/tmp/wtfix @ a9b194d + STEP-R0+00C 合并补丁）
+ruff check app tests            -> All checks passed!
+mypy app                        -> Success: no issues found in 107 source files
+pytest tests/ --cov=app --cov-fail-under=75 -> 1045 passed, 5 skipped, 0 failed
+gitleaks git --log-opts=HEAD    -> no leaks found
+gitleaks dir                    -> 1 条，仅 __pycache__/config.cpython-312.pyc（未入 git 的本地产物，CI 不涉及）

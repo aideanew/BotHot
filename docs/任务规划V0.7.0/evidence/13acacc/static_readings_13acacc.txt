@@ -1,0 +1,76 @@
+# V0.7.0 静态读数 @ main@13acacc（win32 执行机，无 venv/ruff/mypy/gitleaks/docker/psql/gh）
+# 采集时间: 2026-10-14 12:37:49 +0800
+# 口径: 本文件只收录在本机可复跑的静态读数；需依赖环境/网络的读数标 NOT_MEASURED 并给命令。
+
+## S-01 HEAD 与远端一致性
+13acaccd4dae4a4399c34a2396e22f4032f7be96
+13acaccd4dae4a4399c34a2396e22f4032f7be96
+left-right=0	0
+
+## S-02 078dc30..HEAD 业务代码变化（空=业务代码自回归引入以来未变）
+[empty above => 回归在 HEAD 仍成立]
+
+## S-03 a576bc2/13acacc 改了哪些 apps/api 文件
+a576bc2 test(step-02): 第十三轮复审处置——两份独立复核逐条复现，绕过补靶、交付门自己有靶
+apps/api/tests/test_asset_fragment_guard.py
+
+## S-04 短链回归哨兵用例定位（当前树）
+255:async def test_short_link_second_ingest_hits_cache_via_url_fallback(db_session) -> None:  # type: ignore[no-untyped-def]
+297:    assert stub.fetch_count == 1
+301:    assert stub.fetch_count == 1, "第二次不应再抓取（D-2/D-3 修复：URL 兜底锚命中缓存）"
+
+## S-05 kb.py 第三条锚现状
+     1	            ).scalar_one_or_none()
+     2	            if row is not None:
+     3	                return row
+     4	        return None
+     5	
+
+## S-06 R0 卡面 grep 判据可满足性
+$ grep -n "like(" apps/api/app/services/kb.py
+342:        S2.1.4（P-4 转正）：旧版此处还有一条 `Source.url.like(f"%{article_key}%")` 兜底，
+=> 命中 1 处，位于解释「为什么删」的 docstring（kb.py:342），判据恒红，不可满足
+
+## S-07 V0.6.0 合并补丁在当前 HEAD 的可套用性（git apply --check -v）
+Checking patch .gitleaksignore...
+Checking patch apps/api/app/services/kb.py...
+Checking patch apps/api/tests/test_asset_fragment_guard.py...
+Hunk #1 succeeded at 113 (offset 12 lines).
+Checking patch apps/api/tests/test_chat_sse.py...
+Checking patch apps/api/tests/test_env_isolation.py...
+Checking patch apps/api/tests/test_kb_longlink_ingest.py...
+Checking patch docs/06_validation/evidence/EVD-V2-00R/out_evidence_check.txt...
+Checking patch docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py...
+check-exit=0
+
+## S-08 .gitleaksignore 指纹指向的文件是否自 a9b194d 变更
+[empty=未变]
+e466e9ee1b8080eec8c263a9ea66c1444e78505a
+b7de3570245468d203f09cf66b3fa0a1d7f31d43
+补丁 index 行期望: e466e9e / b7de357
+
+## S-09 证明脚本行数（冻结基线要重锚）
+V0.6.0 口径 EVD-V2-00R + EVD-V2-02 *.py =   7322 total
+全部 evidence *.py =   8383 total
+V0.6.0 记录值: 6,801（a9b194d）
+
+## S-10 本机工具链可得性
+python   =OK
+uv       =MISSING
+ruff     =MISSING
+mypy     =MISSING
+pytest   =OK
+docker   =MISSING
+psql     =MISSING
+gh       =MISSING
+gitleaks =MISSING
+node     =OK
+apps/api venv: ABSENT
+
+## S-11 NOT_MEASURED（需依赖环境/网络，本会话未测，禁止当作读数引用）
+- 全量连库 pytest（failed/passed/skipped/覆盖率）: cd apps/api && .venv/bin/python -m pytest tests/ -q -rs --cov=app --junitxml=junit.xml
+- ruff 实际错误集: cd apps/api && ruff check app tests   (0.12.12)
+- mypy: cd apps/api && mypy app
+- gitleaks: gitleaks git --log-opts=origin/main --config .gitleaks.toml .
+- CI/Security 连续失败次数与 run id: gh run list --repo aideanew/BotHot --branch main --limit 30
+  本机 curl api.github.com => 403 rate limit（未认证），不可得

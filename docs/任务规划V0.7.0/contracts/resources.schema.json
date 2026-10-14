@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bothot/contracts/resources.schema.json",
+  "title": "BotHot 资源（内容资产 / 短链 / 密钥 / 站内通知）契约（冻结稿 V0.7.0 / 基线 main@13acacc）",
+  "description": "实测来源：apps/api/app/models/entities.py:118-146（ContentAsset）、:148+（ShortLinkMap）、apps/api/app/repositories/asset.py:22（MIN_FRAGMENT_LEN=8）/:66（url LIKE 片段查）、apps/api/app/services/article_identity.py:54（parse_wechat_url）、apps/api/app/core/secret_crypto.py（AES-256-GCM fail-closed）、apps/api/app/models/bothot_entities.py:265（Notification）。",
+  "type": "object",
+  "definitions": {
+    "ArticleKey": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128,
+      "description": "文章身份键。现状实测：ContentAsset.external_id = _article_key(url)（kb.py:432），而 ArticleManifest.external_id = 渠道上游 id —— 两个键空间不相交，即 P0-2/P-2 根因。规范键前缀方案（b:/s:/h:）见 03 §2 与 ADR-0011，属 D-V2-01 待裁决项，本文件记录的是**现状 + 目标**两栏，不得混用。",
+      "x-current-algo": "strip [?&#] 之后的段 + rsplit('/')[-1]（kb.py:554-557）⇒ 长链恒为 's'（P-3 冒名根因）",
+      "x-target-pattern": "^(b:[A-Za-z0-9+/=_-]{8,64}:[0-9]{1,12}:[0-9]{1,2}|s:[A-Za-z0-9_-]{8,64}|h:[0-9a-f]{32})$"
+    },
+    "ContentAsset": {
+      "type": "object",
+      "required": ["id", "sourceId", "externalId", "contentHash", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "maxLength": 36 },
+        "sourceId": { "type": "string", "maxLength": 36, "description": "FK sources.id ON DELETE CASCADE（entities.py:124-126）" },
+        "externalId": { "$ref": "#/definitions/ArticleKey" },
+        "url": { "type": "string", "maxLength": 512, "description": "原文 URL。片段反查靠 url LIKE '%fragment%'（asset.py:66），故 url 必须含可定位末段。" },
+        "title": { "type": "string", "maxLength": 512 },
+        "author": { "type": "string", "maxLength": 128 },
+        "publishedAt": { "type": ["string", "null"], "format": "date-time", "description": "nullable（entities.py:131）。null = 上游未给时间，禁止用抓取时间伪造。RSS RFC 822 解析失败即属此类（P-1）。" },
+        "contentType": { "type": "string", "enum": ["article"], "description": "String(16) 默认 'article'（:132）；新增取值属契约变更" },
+        "contentHash": { "type": "string", "minLength": 64, "maxLength": 64, "description": "幂等三元组之一（类 docstring :119）" },
+        "rawUri": { "type": "string", "maxLength": 512 },
+        "contentMarkdown": { "type": "string", "description": "Text，标准化正文；大正文不得进列表响应（见 x-projection-rules）" },
+        "version": { "type": "integer", "minimum": 1, "default": 1 },
+        "qualityScore": { "type": "number", "minimum": 0, "maximum": 100, "default": 0 },
+        "status": { "type": "string", "enum": ["READY", "PENDING", "FAILED", "STALE", "SUPERSEDED"], "default": "READY", "description": "DB 层 String(16) 默认 READY（:138）。实测代码只用到 READY（kb.py:430-432）与 stale 语义（kb.py:281-288）；后四值为本次冻结的目标枚举，取值扩展零迁移是本项目的既有惯例（AGENTS.md 关键约束 3）。" },
+        "hitCount": { "type": "integer", "minimum": 0, "default": 0, "description": "复用命中计数，命中即 +0 微信请求（:139-140 AB-P004）" },
+        "category": { "type": "string", "maxLength": 32, "default": "", "index": true }
+      },
+      "x-unique": ["uq_asset_source_external = (source_id, external_id)（entities.py:146）"],
+      "x-index-strategy": [
+        "现有：uq_asset_source_external 复合唯一键，前导列 source_id",
+        "缺口：按 external_id 单独查（规范键反查、P-3 修复后的资产反查）不走该索引 ⇒ 需 ix_content_assets_external_id（STEP-R0 R0.3.1，触发条件=资产量，迁移号 ab1006r0a）"
+      ]
+    },
+    "ShortLinkMap": {
+      "type": "object",
+      "required": ["shortKey", "articleKey"],
+      "properties": {
+        "shortKey": { "type": "string", "maxLength": 128 },
+        "articleKey": { "$ref": "#/definitions/ArticleKey" }
+      },
+      "x-write-rule": "仅在 final_key != short_key 时写（kb.py:276-278）。直抓后 URL 不变的短链场景写不进去 —— 这正是 R0 不能用映射表替代资产反查的原因（STEP-R0 §3 被否决方案③）。"
+    },
+    "ChannelSecret": {
+      "type": "object",
+      "description": "推送渠道密钥。密文列 secret_enc / extra_config 加密域。",
+      "x-algorithm": "AES-256-GCM（core/secret_crypto.py:17 AESGCM）",
+      "x-aad": "绑定 channel id（secret_crypto.py:58）；extra_config 用域分隔 AAD（:108-136）⇒ 跨渠道/跨域搬移密文会解密失败，不可复用",
+      "x-fail-closed": "主密钥缺失 / 非 base64 / 非 32 字节 ⇒ 抛 DependencyUnavailableError(50002/503)，绝不回落明文（:34-40）；解密失败 ⇒ RequestInvalidError(10005)（:82）",
+      "x-production-guard": "生产启动守卫同时要求 PUSH_SECRET_MASTER_KEY 与 ENGINE_KEY_MASTER_KEY（config.py:244-247，assert_production_ready 于 main.py:250 调用）",
+      "x-api-surface": "GET /admin/engines/keys 只回显「是否已配置 + 掩码」，禁止任何端点回传明文或可解密材料（admin.py:295/342/363 属管理面，rank=admin）"
+    },
+    "InAppNotification": {
+      "type": "object",
+      "required": ["id", "sub", "title", "createdAt"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 36 },
+        "sub": { "type": "string", "description": "可见性锚。定向 + 广播共用同一谓词（api/v1/system.py:297 注释）" },
+        "title": { "type": "string", "maxLength": 256 },
+        "body": { "type": "string" },
+        "readAt": { "type": ["string", "null"], "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "x-delivery": "写侧唯一生产调用点 push_scheduler.py:229（persist_web_notification 定义在 :274）⇒ 不经调度器领取的手动/测试路径目前不落库（coverage §3）。读侧 history/read 已在（system.py:323/:367）。投递侧 Redis pub/sub（providers/push/web.py:56-59），订阅侧 SSE（system.py:266-288）。",
+      "x-offline-catchup": "离线补投靠 notifications 表 + SSE 首连拉 history（前端 notifications.ts:109），不是消息队列重放。"
+    }
+  },
+  "x-projection-rules": [
+    "列表响应禁止携带 content_markdown / raw_uri（体积）；详情端点才给正文。",
+    "任何响应不得包含 secret_enc / 解密后的渠道凭据。",
+    "url 字段在管理端日志/面板中必须掩码 tracking 参数（含 pass_ticket / key / uin 等，见 03 §2 normalize_url 参数表）。"
+  ],
+  "x-resource-lifecycle": "DISCOVERED（清单行）→ ENQUEUED（入列）→ INGESTED（资产 READY 且文档 INDEXED）；ENQUEUED → FAILED（永久失败）；ENQUEUED 超 TTL → DISCOVERED（worker 崩溃回退）。该状态机属 D-V2-02，迁移号 ab1006c1a，详见 events.schema.json#/definitions/ManifestTransition。"
+}

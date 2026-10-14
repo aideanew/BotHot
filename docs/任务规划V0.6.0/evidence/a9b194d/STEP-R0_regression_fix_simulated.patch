@@ -1,0 +1,38 @@
+diff --git a/apps/api/app/services/kb.py b/apps/api/app/services/kb.py
+index 63dbaad..aa21c87 100644
+--- a/apps/api/app/services/kb.py
++++ b/apps/api/app/services/kb.py
+@@ -33,11 +33,11 @@ from app.core.errors import (
+     ResourceNotFoundError,
+     SourceUrlUnrecognizedError,
+ )
+-from app.models.entities import KnowledgeDocument, Source
++from app.models.entities import ContentAsset, KnowledgeDocument, Source
+ from app.providers.engine_port import ENGINE_UNAVAILABLE_HINT, EngineRouter, KnowledgeEnginePort
+ from app.providers.langbot.client import LangBotClient
+ from app.providers.raw_store import RawStore, make_raw_store
+-from app.repositories.asset import AssetRepository, DocumentRepository
++from app.repositories.asset import MIN_FRAGMENT_LEN, AssetRepository, DocumentRepository
+ from app.repositories.space import SpaceRepository
+ from app.services.categorizer import categorize
+ from app.services.extractor import ExtractedContent, ExtractorService
+@@ -360,6 +360,19 @@ class KnowledgeBaseService:
+             ).scalar_one_or_none()
+             if row is not None:
+                 return row
++        # 资产反查（精确等值，非 LIKE）：biz 锚源下的无参短链，资产 external_id=article_key。
++        # 短于 MIN_FRAGMENT_LEN 的键（如长链末段 `s`）无法区分身份，不查。
++        if len(article_key) >= MIN_FRAGMENT_LEN:
++            row = (
++                await self._session.execute(
++                    select(Source)
++                    .join(ContentAsset, ContentAsset.source_id == Source.id)
++                    .where(Source.type == "wechat_oa", ContentAsset.external_id == article_key)
++                    .limit(1)
++                )
++            ).scalar_one_or_none()
++            if row is not None:
++                return row
+         return None
+ 
+     async def _lookup_short_link(self, short_key: str) -> str:

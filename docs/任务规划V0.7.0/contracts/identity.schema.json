@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bothot/contracts/identity.schema.json",
+  "title": "BotHot 身份与权限边界契约（冻结稿 V0.7.0 / 基线 main@13acacc）",
+  "description": "实测来源：apps/api/app/models/entities.py:17-28（users 表）、apps/api/app/services/roles.py:29（ROLE_RANK）、apps/api/app/api/deps.py:52/72-84（get_current_sub / require_roles）、AGENTS.md 关键约束 2（SSO 身份锚点 = users.sub，余额/等级从不持久化）。",
+  "type": "object",
+  "definitions": {
+    "Sub": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "主平台 OIDC subject。全项目唯一身份锚点。DB 列 users.sub String(64) UNIQUE NOT NULL INDEXED（entities.py:23）。",
+      "x-rule": "任何跨服务/跨表引用用户身份一律用 sub，不得用本地 users.id 外泄给前端做身份判断。"
+    },
+    "UserId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "本地代理主键 UUID（entities.py:22）。仅作为 spaces/jobs 等域表的外键锚（deps.py:65 注释：sub → 本地 users 行 id）。"
+    },
+    "Role": {
+      "type": "string",
+      "enum": ["user", "operator", "admin"],
+      "x-rank": { "user": 0, "operator": 1, "admin": 2 },
+      "x-default": "user",
+      "description": "DB 列 String(32)（entities.py:28，非 enum 类型，新增渠道/角色零迁移的项目惯例）。授权走「等级比较」不走等值：require_roles(*roles) 取所需角色的最高 rank 与用户 rank 比较（roles.py:33-54）。",
+      "x-grant-rule": "升权只有一条路：显式写 users.role（可审计）。禁止用 env 白名单抬权——roles.py:12-16 记录了历史事故：曾把 PUBLIC_ADMIN_ALLOWLIST 复制成 role 兜底通道，使「allowlist 命中」静默等价于「被请求的任意角色」，授权面从发布能力放大到全站写权。"
+    },
+    "SessionClaims": {
+      "type": "object",
+      "required": ["sub"],
+      "properties": {
+        "sub": { "$ref": "#/definitions/Sub" },
+        "iss": { "type": "string", "description": "生产环境必须校验 iss/aud（REQ-NF-002，AGENTS.md「生产 iss-aud」）" },
+        "aud": { "type": "string" },
+        "exp": { "type": "integer" }
+      },
+      "x-transport": "HttpOnly Cookie（前端 EventSource/fetch 一律 withCredentials，实测 notifications.ts:106）。禁止把 token 放 localStorage。",
+      "x-never-persisted": ["balance", "level", "credits"],
+      "x-never-persisted-reason": "AGENTS.md 关键约束 2：余额/等级从不持久化，需实时查询主平台。任何把主平台数值落库的实现都是契约违规。"
+    },
+    "IsAdminEcho": {
+      "type": "boolean",
+      "description": "/me 回显字段，由 sub_has_min_rank 计算（roles.py:57-69）。",
+      "x-authoritative": false,
+      "x-warning": "此字段仅用于 UI 显隐，永不参与授权。缺本地 users 行时它 fail-closed 成 False，而授权路径 require_role 抛 10001（roles.py:8-10 docstring 明示两者会分歧）。前端不得据 is_admin 决定是否发请求。"
+    }
+  },
+  "x-permission-matrix": {
+    "note": "实测调用点：require_roles(\"admin\")、require_roles(\"operator\")、require_roles(\"admin\",\"operator\")（apps/api/app/api/v1/*.py grep 去重）。",
+    "tiers": [
+      { "surface": "用户端（自己的 spaces / subscriptions / jobs / kb / chat / notifications）", "minRole": "user", "gate": "require_roles() 不传角色 → 仅要求已认证", "crossTenant": "禁止：一切按 sub → users.id → 域表外键收窄，越权访问他人 space 必须 404/403 而非返回数据" },
+      { "surface": "运营端（ bots 渠道配置、日志、任务重试 ）", "minRole": "operator", "gate": "require_roles(\"operator\")", "crossTenant": "允许只读跨用户，写操作须记录操作者 sub" },
+      { "surface": "管理端（引擎密钥登记 admin.py:295/342/363、推送渠道 admin.py:449、发现渠道 :467、运维探针 :489、推送 :514）", "minRole": "admin", "gate": "require_roles(\"admin\")", "crossTenant": "允许" },
+      { "surface": "SSO 登出回调 backchannel-logout（auth.py:159）", "minRole": "service-to-service", "gate": "非用户会话鉴权：按 iss/aud + 签名校验，禁止接受普通用户 Cookie", "x-gap": "实测 apps/web/** 对该端点 0 消费（coverage §3 REQ-F-008），前端 logout 目前不清理服务端会话 —— 转 STEP-14/19 核实是否功能缺失" }
+    ],
+    "x-admin-escalation-prohibited-paths": [
+      "通过 env/allowlist 隐式抬权（见 Role.x-grant-rule）",
+      "用 is_admin 回显值作为授权依据",
+      "用 users.status != 'ACTIVE' 之外的方式屏蔽账号（status 列 entities.py:26，String(16) 默认 ACTIVE；封禁必须走 status，不得改 role 来「降级屏蔽」）",
+      "把 operator 当作 admin 的前置条件（rank 比较下 operator 不满足 require_roles(\"admin\")）"
+    ]
+  },
+  "x-idor-checklist": [
+    "凡路径含 {space_id}/{job_id}/{doc_id} 的端点，必须证明「资源属主 = 当前 sub」或「当前 rank ≥ operator」，二者皆无 → 403(10004)/404(30004)。",
+    "契约测试必须为每个此类端点生成一条「A 用户访问 B 用户的同一 id」用例（STEP-01 锚，见 04 §4.6）。"
+  ]
+}

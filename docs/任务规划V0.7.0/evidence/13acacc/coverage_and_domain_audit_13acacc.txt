@@ -1,0 +1,96 @@
+# 需求覆盖审计 @ main@13acacc（V0.7.0 新增，V0.6.0 未做此项）
+
+## 1. 需求文档实态（静态清点）
+```
+docs/02_requirements/product-requirements.md          ← 12 条需求全部在此（§二 F-001…F-008 / §三 NF-001…002 / §四 C-001…002）
+docs/02_requirements/features/.gitkeep                 ← 空
+docs/02_requirements/non-functional/.gitkeep           ← 空
+docs/02_requirements/constraints/.gitkeep              ← 空
+docs/02_requirements/inbox/README.md                   ← 仅模板，0 条原始需求
+```
+分节行号：`product-requirements.md:55` REQ-F-001、`:79` F-002、`:86` F-003、`:93` F-004、`:100` F-005、
+`:106` F-006、`:113` F-007、`:121` F-008、`:132` NF-001、`:138` NF-002、`:149` C-001、`:160` C-002。
+
+## 2. V0.6.0 的需求覆盖（全目录 grep 实测）
+```
+$ grep -rhoE 'REQ-(F|NF|C)-[0-9]{3}' docs/任务规划V0.6.0 | sort | uniq -c
+      3 REQ-F-004
+      1 REQ-NF-001
+```
+（REQ-F-006 仅以 `REQ-F-004/006` 缩写形式出现在 `04:425`，未被上面的完整 ID 匹配捕获；除此之外无第三条。）
+
+**12 条需求中，V0.6.0 有实质 STEP 覆盖的 = 2（F-004 采集入库、F-006 清单订阅）；
+部分覆盖 = 1（NF-001，仅采集切片 STEP-11）；完全无 STEP = 9（F-001 F-002 F-003 F-005 F-007 F-008 NF-002 C-001 C-002）。**
+
+## 3. 无 STEP 需求的代码实态（逐条静态核验，规划方自查 + 两路独立代理交叉）
+
+### REQ-F-003 知识库可插拔引擎 —— 真实缺口（最大的一块）
+- `apps/api/app/providers/engine_port.py` 内 `NotImplementedError` **16 处**（`grep -c` 实测）。
+  分布：RagflowAdapter 6 个方法（:112/:116/:120/:124/:128/:139）、coze/dify/fastgpt SaaS 各方法（:166-182、:192）、LangBot 建库（:65）。
+- 护栏到位，不是静默假成功：`engine_port.py:222-227` 注册表仅 `builtin: True`；`available` 三条件 `:253`；
+  路由层 `api/v1/engines.py:121` 明确返回「尚未实接（仅骨架实现）」⇒ 用户得到 10004/403 而非 500。
+- 结论：这是**已诚实标注但未实现**的 MUST 需求，12 条需求里唯一成片的骨架区。V0.6.0 全文未提。
+
+### REQ-F-008 管理后台 —— 后端有接口、前端无消费者（实测 0 命中）
+```
+$ for p in admin/push admin/ops/liveness admin/discovery/channels admin/engines/keys backchannel-logout; do
+    grep -rl "$p" apps/web/app apps/web/components apps/web/lib; done
+```
+五组路径在 `apps/web/**` 中命中数全部为 **0**。后端接口存在：
+`api/v1/admin.py:295/:342/:363`（engines/keys CRUD）、`:449`（push/channels）、`:467`（discovery/channels）、`:489`（ops/liveness）、`:514`（push）、
+`api/v1/auth.py:159`（backchannel-logout）。⇒ 管理能力只有 API 面，没有使用面。
+
+### REQ-F-005 RAG 问答 / REQ-F-007 SSO —— 有代码但完全未纳管
+- F-005：`api/v1/chat.py`、`providers/reranker.py`、`tests/test_chat_sse.py` 在；backlog 无对应条目，需求文档无状态字段。
+- F-007：`services/auth/logout_token.py`、`tests/test_backchannel_logout.py` 在；backlog 无 SSO 条目；
+  `auth.py:159` 的 backchannel-logout 无前端消费者（见上）。
+
+### REQ-NF-001 性能 SLA —— 四条 SLA 无任何度量锚
+- 需求：API<500ms、首 Token<3s、入库<30s、Feed<100ms。
+- 实测：仓内只有 `LLM_FIRST_TOKEN_TIMEOUT` 这类**超时保护**，没有延迟/吞吐断言用例；
+  backlog TEST-001 自述缺口①「无『千篇量级』性能用例」。
+- 影响纪律：§9.1「没有基线数字，后续禁止任何优化任务」——V0.6.0 STEP-11 只覆盖采集切片，其余三条 SLA 无基线。
+
+### REQ-NF-002 安全之「CORS 白名单」—— 已被架构裁决消化，但需求文档未回写
+```
+$ grep -rn 'CORSMiddleware|allow_origins' apps/api/app      → 0 命中
+```
+`apps/api/app/core/security.py:440` 原文：「**不含 CORS**——前端经 `next.config.mjs` rewrites 同源代理 `/api/v1/*`」。
+⇒ 不是漏实现，是「需求条目与实际达成方式不符」，属文档债（转 STEP-17）。
+
+### REQ-F-001 推送之「手动/事件触发站内通知落库」
+- `persist_web_notification` 生产调用点唯一：`push_scheduler.py:229`（定义在 :274）。
+  ⇒ 不经调度器领取的路径不写 `notifications` 行。
+
+## 4. 前端实态清点（决定 UI 类需求的规模）
+- 15 条路由（`apps/web/app/**/page.tsx`），全部经 `lib/api` 层；`lib/api/index.ts:7` 立「禁止自行 fetch」规则，
+  实际仅 2 处直接 fetch（`http.ts:86`、`ask.ts:79`）。
+- **mock 开关默认开**：`lib/api/http.ts:18-19` `MOCK_ENABLED = (NEXT_PUBLIC_API_MOCK ?? "true") !== "false"`。
+  `apps/web/Dockerfile:33` 构建期钉 false；开发/演示态默认走 mock。
+- 无 mock 分支的模块：`hot.ts`、`bots.ts`、`admin.ts`、`jobs.ts`、`subscriptions.ts`（`grep -c MOCK_ENABLED` = 0）。
+  但 `e2e/hot.spec.ts:4` 自述「mock 主干」⇒ **e2e 注释与实际不符**，该套件只在真实后端下可跑（转 STEP-15）。
+- 测试层：`vitest.config.ts` + `playwright.config.ts` 均在；45 个单测文件（22 tsx / 23 ts）、约 394 个用例块，
+  其中 **36/45 使用 `vi.mock`**（含 `vi.mock("@/lib/api")`）⇒ 单测主要验 UI 对假数据的行为，不验契约。
+  e2e 5 个文件 23 个测试，`real-backend.spec.ts:22` 默认 gate 跳过。
+- 组件层：`components/` 平铺 27 个文件 + 3 个子目录，**无 `components/ui` 设计系统层**；
+  复用件 `LoadingErrorShell.tsx` / `Skeleton` / `Pagination` / `ConfirmModal` / `AuthGate` / `TopBar`（22 个文件消费）。
+  状态：`AuthContext.tsx` + 局部 hooks，无 redux/zustand/react-query。
+- `NotificationBell` 真实挂载：`TopBar.tsx:8` import → `:174` render → `app/layout.tsx:16`；
+  SSE 订阅 `lib/api/notifications.ts:106`（`withCredentials`），首连拉 history `:109`，去重 `:137-148`。
+  ⚠ `notifications.ts:103` 在 `MOCK_ENABLED` 时直接不连接 ⇒ 默认演示态看不到实时通知。
+
+## 5. 门面文档与代码的不一致（本轮新增实测项）
+| 陈述 | 位置 | 实际 | 归类 |
+|---|---|---|---|
+| 「站内通知全链路已通」 | `AGENTS.md:75` | 读侧 history/read 已在（`system.py:323/:367`） | 与 :77 自相矛盾 |
+| 「写侧/读侧 history 待建 R1.2b/c/d」 | `AGENTS.md:77` | 同上，读侧已实现 | 过期陈述 |
+| 「本批诚实占位：校验全落地、投递未实接」 | `api/v1/admin.py:522` | `services/push.py:59-62` 已实接 | 代码内过期注释 |
+| 「[ ] 治理脚本入 CI 强制步（剩余项 R1.4）」 | `roadmap.md:95` | `ci.yml:97-105` 已把 `gen_contracts --check` 与 `check_docs_consistency` 设为阻断步 | 文档落后于代码，勿重复排期 |
+| 「运行期告警三类」 | `AGENTS.md:76` | 代码在，但 `ALERTING_ENABLED` 默认 **false**（`docker/compose.yml:196`、`docker/.env.example:107`） | 强度被高估：默认部署不告警 |
+| REQ-NF-002「CORS 白名单」 | `product-requirements.md:138+` | 无 CORS 中间件，由同源 rewrites 达成（`security.py:440`） | 需求表述与达成方式不符 |
+
+## 6. 告警链路的可达性前提（影响 V0.6.0 STEP-05 的可验收性）
+- 告警仅由推送调度循环触发：`push_scheduler.py:88-92` 调 `run_alert_checks`。
+- 开关默认关：`core/alerting.py:107` 读 settings，`compose.yml:196` 传 `${ALERTING_ENABLED:-false}`。
+- ⇒ V0.6.0 STEP-05 的目标「让 P0-3 一类缺陷下次在一天内被告警发现」在默认部署下**不成立**（探测器根本不在跑）。
+  必须在 V0.7.0 补一条前置任务（转 STEP-16），否则 STEP-05 的验收是纸面绿。

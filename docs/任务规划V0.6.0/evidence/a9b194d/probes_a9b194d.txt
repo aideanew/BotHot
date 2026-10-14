@@ -1,0 +1,16 @@
+=== longlink_collision
+PROBE fetch_count= 1 A.hitCache= False B.hitCache= True same_doc= True
+1 passed, 2 warnings in 16.42s
+=== multisource_crash
+PROBE2 ok False
+1 passed, 2 warnings in 0.80s
+=== reenqueue_loop
+manifest.external_id= aaaaaaaaaaaaaaaaaaaaaaaada20aa31 asset.external_id= RealTokenda20aa31
+已 READY 入库后 Diff 仍判为新增篇数 = 1
+=== row_mapping
+dajiala -> None
+justoneapi -> None
+redfox -> {'external_id': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'url': 'https://mp.weixin.qq.com/s/x', 'title': 't', 'publish_time': datetime.datetime(2026, 9, 27, 7, 42, tzinfo=zoneinfo.ZoneInfo(key='Asia/Shanghai')), 'content_hash': '053404e840147e71dd16cfa52834cd1ce30b4d2709486b870b55449f58606326', 'status': 'DISCOVERED'}
+rss item {'title': 'A', 'url': 'https://ex.com/a', 'link': 'https://ex.com/a', 'pubDate': 'Mon, 12 Oct 2026 07:00:00 +0000', 'publishTime': 'Mon, 12 Oct 2026 07:00:00 +0000', 'guid': 'https://ex.com/a', 'id': 'https://ex.com/a', 'description': '', 'digest': ''}
+rss -> {'external_id': 'https://ex.com/a', 'url': 'https://ex.com/a', 'title': 'A', 'publish_time': None, 'content_hash': '64c8bbc346e2615025e8bdace76872b48d2b0784aa8256d0ed126dbd04d12646', 'status': 'DISCOVERED'}
+atom -> {'external_id': 'tag:b', 'url': 'https://ex.com/b', 'title': 'B', 'publish_time': datetime.datetime(2026, 10, 12, 7, 0, tzinfo=datetime.timezone.utc), 'content_hash': 'c6f6f67cc58cd3da8953d4e0a9e6852d91ba51aa6f1d6dd4d8811d486f8a4dce', 'status': 'DISCOVERED'}

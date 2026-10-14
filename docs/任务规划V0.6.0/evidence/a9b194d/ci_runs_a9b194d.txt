@@ -1,0 +1,17 @@
+# GitHub Actions runs（2026-10-14 10:40 CST 拉取，匿名 API）
+38501576766 Security a9b194d failure 2026-10-14T02:32Z
+38501576733 CI a9b194d failure
+38409051873 Security e29000c failure
+38409051259 CI e29000c failure
+38408858562 CI 62446ab failure
+38408858431 Security 62446ab failure
+38388441489 CI 02465c2 failure
+38388441377 Security 02465c2 failure
+38381996319 Security d028075 failure
+38381996313 CI d028075 failure
+38379452054 CI 99506cf failure
+38379451978 Security 99506cf failure
+
+# run 38501576733 jobs: workflow-lint success / compose-smoke success / compose success / frontend success / backend failure ['Lint (ruff)']
+# run 38501576766 jobs: 安全扫描 failure ['汇总门禁（🔴 阻断 / 🟡 告警）']
+# 连续失败：65f508b 时 15 次 → a9b194d 时 22 次（每次推送 CI+Security 各 1）；最后双绿 86269a2
