@@ -79,7 +79,12 @@
   - S2.3.1.2 逐处替换为 canonical
 - **S2.3.3** 🛠 batch_ingest._article_key 委托 `canonical_article_key`，并加漂移守卫用例（kb 与 batch_ingest 对 LONG_A/LONG_B/SHORT_1 结果一致）
   - S2.3.3.1 与 S2.2.3 同一 PR
-- **S2.3.2** ✅ P-3/P-4 复跑达“修复后期望”；全量双环境 0 failed；ruff/mypy/CI 双绿
+- **S2.3.2** 🔴⏳ P-3/P-4 复跑达“修复后期望”；全量双环境 0 failed；ruff/mypy/CI 双绿
+  - 勘误（第十五轮 F 组）：这一格从前写着 ✅，而它三个分句**没有一条能在本机证**——
+    「全量 0 failed」与「ruff/mypy/CI 双绿」要 venv 与 CI（本机按约定不装依赖，且 CI 的 ruff 步在
+    `65f508b` 实测就是红的，那条红正是 STEP-00C 的对象），「P-3/P-4 复跑」要连库（§5 J-4/J-6/J-7）。
+    把不可证的完成态标成已完成，比不标更糟：它会让 §4 的「现算剩余」命令跟着少算一格。
+    现降级为 🔴⏳，交付时以 CI 两条 workflow 的 run 结论 + 有依赖环境的 pytest 读数为凭。
 
 ## 5. 测试设计
 - 新增：test_kb_multisource_anchor.py（3 条）、canonical 用例（约 10 条）、漂移守卫（3 条）、历史兼容（2 条）。

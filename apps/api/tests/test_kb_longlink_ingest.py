@@ -38,7 +38,6 @@ from __future__ import annotations
 from urllib.parse import quote
 
 import pytest
-
 from fixtures.wechat_urls import (
     BIZ_A,
     LONG_A,

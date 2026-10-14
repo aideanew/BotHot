@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 import pytest
-from conftest import PG_URL, SKIP_UNSET_REASON, _PG_URL_SOURCE
+from conftest import _PG_URL_SOURCE, PG_URL, SKIP_UNSET_REASON
 from fastapi.testclient import TestClient
 from test_repositories import _make_user
 

@@ -1,10 +1,19 @@
 """G-24 静态自检：本机无 ruff/mypy（venv 不存在，实测 `import httpx` → ModuleNotFoundError），
 用标准库复核 CI `ruff check app tests` 选中的规则族 E/F/I/W/UP/B 的可机检子集。
 
-覆盖：E501 E302 E303 E711 E712 | F401 F841 | W291 W292 W293 | I001（isort 段内
-「先 import X 后 from X import」顺序，锚点：app/services/manifest.py 现行通过 CI 的排布）
+覆盖：E501 E302 E303 E711 E712 | F401 F841 | W291 W292 W293 | I001（isort 三条：段序、
+from-import 的**成员序**、同一段被空行拆开；段表按 `sys.stdlib_module_names` + 「`apps/api/` 下
+确有其物才算第一方」+ 相对导入算 local-folder，与 ruff 同口径——锚点：`evidence/65f508b/
+ruff_65f508b.txt` 那四条红与实测通过的补丁）
 | UP006 UP007 UP017 | B006
 不覆盖：mypy 类型判定、ruff 其余规则——CI 才是终判，本脚本只是提交前的降险。
+本表与 ruff 已知的一处**方向性差异**（本表更严，不更宽）：ruff 的 E501 有 pragma 例外——
+代码部分本身不超限、只是行尾那句 `# type: ignore[...]` / `# noqa: ARG002` 把整行推过 120 列时，
+ruff 放行。实测四处正是这一形状（`test_kb_orphan_purge.py:91` 总 122 / 代码段 92，
+`test_metadata_filter.py:174` 总 126 / 代码段 96，`:233` 总 122 / 代码段 92，
+`test_manifest_sync.py:481` 总 123 / 代码段 109），而 `evidence/65f508b/ruff_65f508b.txt` 里
+ruff 对这四处一条都没报。本表按总长一律报，所以「本表 0 违规」比「CI ruff 0 违规」更强，
+反过来不成立——读的时候别把两者当同一个数。
 
 用法：python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py [文件...]
 无参数时检查 STEP-00 触碰的全部 Python。退出码 0=无违规。
@@ -14,6 +23,7 @@ from __future__ import annotations
 
 import ast
 import py_compile
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -30,30 +40,72 @@ DEFAULT_FILES = [
     "apps/api/tests/fixtures/wechat_urls.py",
 ]
 
-FUTURE_OR_FIRST = {"app", "tests", "conftest"}
+#: 第一段之外还算「本项目自己的包」的名字。**`conftest` 从前在这里，是错的**：
+#: 证据 `docs/任务规划V0.5.0/evidence/65f508b/ruff_65f508b.txt` 记 ruff 0.12.12 在 `test_chat_sse.py`
+#: 报的那条 I001，实测通过的修复（`evidence/65f508b/STEP-00C_simulated_65f508b.patch`，ruff 读数 0 错）
+#: **只重排了 from-import 的成员**，`from conftest import …` 仍与 httpx/pytest/fastapi 同一段——
+#: 说明 ruff 把 `conftest` 判成第三方段（它只认 `apps/api/` 那层直接子目录/模块为第一方，
+#: `conftest.py` 在 `apps/api/tests/` 下，不在那一层）。把它留在第一方表里，本近似就在**反方向**报错：
+#: 于是那两条 I001 挂了好几轮修不掉，因为要改的是本表而不是那两个文件。
+#: 后端根：`apps/api/`——ruff 的 isort 用它判「第一方」，本表跟它同口径（不再手抄名单）。
+BACKEND = ROOT / "apps" / "api"
+
+#: stdlib 名单直接用解释器自带的 `sys.stdlib_module_names`（3.10+）。
+#: 从前这里是一份手抄的白名单，**漏了 `hmac`/`binascii`/`html` 这类**，于是整批文件被误报 I001
+#: （实测：`dingtalk.py` 的 `import hmac` 被当成第三方段，`import json` 就被判成「倒序」）。
+#: 手抄名单还有一个方向性的错：把 `conftest` 当第一方，而 ruff 0.12.12 实测把它留在第三方段
+#: （证据见 `FUTURE_OR_FIRST` 上方那段）——那两条挂了好几轮的「I001 修不掉」就是这么造出来的。
+_STDLIB = set(getattr(sys, "stdlib_module_names", ()))
+
+#: 仍按名字点名的第一方（防御 `src` 推断不到的形状）；`conftest` **不在**这里。
+FUTURE_OR_FIRST = {"app", "tests"}
 
 
-def _section(mod: str) -> int:
-    """0=__future__ 1=stdlib 2=third-party 3=first-party（ruff isort 分段）。"""
+def _is_first_party(top: str) -> bool:
+    """与 ruff 的 `src` 同口径：`apps/api/<top>.py` 或 `apps/api/<top>/` 确有其物才算第一方。
+
+    这条判据是可核的：`conftest.py` 在 `apps/api/tests/` 下而不是 `apps/api/` 直接子层，
+    所以它**不是**第一方——与 ruff 实测通过的补丁一致（`from conftest import …` 与 httpx/pytest 同段）。
+    """
+    if top in FUTURE_OR_FIRST:
+        return True
+    return (BACKEND / f"{top}.py").is_file() or (BACKEND / top / "__init__.py").is_file()
+
+
+def _section(mod: str, level: int = 0) -> int:
+    """0=__future__ 1=stdlib 2=third-party 3=first-party 4=local-folder（ruff isort 的五段）。"""
+    if level > 0:
+        return 4  # `from .base import …` 是 local-folder，排在第一方之后（从前这里被当成第三方，
+                  # 于是 models/bothot_entities.py 那种「sqlalchemy 段之后另起一段相对导入」被误报两处）
     top = mod.split(".")[0]
     if top == "__future__":
         return 0
-    if top in FUTURE_OR_FIRST:
+    if top in _STDLIB:
+        return 1
+    if _is_first_party(top):
         return 3
-    # 本机无法可靠判定第三方（无 venv），用 Python 3.11 stdlib 前缀集白名单
-    stdlib_names = {
-        "abc", "argparse", "array", "ast", "asyncio", "base64", "bisect", "calendar",
-        "collections", "contextlib", "contextvars", "copy", "csv", "ctypes", "dataclasses",
-        "datetime", "decimal", "enum", "functools", "graphlib", "hashlib", "heapq", "http",
-        "importlib", "inspect", "io", "ipaddress", "itertools", "json", "logging", "math",
-        "mimetypes", "numbers", "operator", "os", "pathlib", "pickle", "platform",
-        "py_compile", "queue", "random", "re", "secrets", "select", "shutil", "signal",
-        "socket", "sqlite3", "statistics", "string", "struct", "subprocess", "sys",
-        "sysconfig", "tempfile", "textwrap", "time", "traceback", "types", "typing",
-        "unicodedata", "unittest", "urllib", "uuid", "warnings", "weakref", "xml",
-        "zoneinfo",
-    }
-    return 1 if top in stdlib_names else 2
+    return 2
+
+
+def _imp_section(node: ast.AST) -> int | None:
+    """一条 import 语句所属的段；非 import 或取不到模块名时给 None（不参与「同段被拆开」的判定）。"""
+    if isinstance(node, ast.ImportFrom):
+        return _section(node.module or "", node.level)
+    if isinstance(node, ast.Import) and node.names:
+        return _section(node.names[0].name)
+    return None
+
+
+def _member_key(name: str) -> tuple[int, str]:
+    """ruff isort 的成员排序键：常量先、类名次、函数与其它最后，同类内按小写名（`order-by-type` 默认开）。"""
+    bare = name.replace("_", "")
+    if bare and bare.isupper():
+        rank = 0
+    elif name[:1].isupper():
+        rank = 1
+    else:
+        rank = 2
+    return (rank, name.lower())
 
 
 def check(path: Path) -> list[str]:
@@ -88,7 +140,7 @@ def check(path: Path) -> list[str]:
         if isinstance(node, ast.Import):
             entries = [(node.lineno, _section(a.name), 0, a.name) for a in node.names]
         elif isinstance(node, ast.ImportFrom):
-            entries = [(node.lineno, _section(node.module or ""), 1, node.module or ".")]
+            entries = [(node.lineno, _section(node.module or "", node.level), 1, node.module or ".")]
         if not entries:
             if cur:
                 blocks.append(cur)
@@ -111,6 +163,34 @@ def check(path: Path) -> list[str]:
                     f"应排在 {prev_key[2]} 之前（段 {sec}，先 import 后 from）"
                 )
             prev_key = key
+
+    # ── I001 的第二半：from-import 的**成员序**与同段被空行拆开 ──────────
+    # 这两类从前本机读不到，而 ruff 0.12.12 在 `65f508b` 报的三条 I001 恰好全是这两类
+    # （成员序两处 + 同段空行一处，见 `evidence/65f508b/ruff_65f508b.txt`）。少了这两判，
+    # 「本表也判 I001」这句话在真实缺陷上是空的——补上之后它必须既能报坏的、也不许咬好的。
+    prev_import: ast.AST | None = None
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module and node.names:
+            names = [a.name for a in node.names]
+            want = sorted(names, key=_member_key)
+            if names != want:
+                viol.append(
+                    f"{path.name}:{node.lineno} I001 import 成员未排序：{names} "
+                    f"应为 {want}（ruff isort：常量先于类再于函数，同类内按小写名）"
+                )
+        if isinstance(node, (ast.Import, ast.ImportFrom)) and prev_import is not None:
+            if node.lineno - getattr(prev_import, "end_lineno", prev_import.lineno) == 2:
+                sec_prev = _imp_section(prev_import)
+                sec_now = _imp_section(node)
+                if sec_prev is not None and sec_prev == sec_now:
+                    viol.append(
+                        f"{path.name}:{node.lineno} I001 同一段（段 {sec_now}）被空行拆开："
+                        f"与上一条 import 之间不该留空行"
+                    )
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            prev_import = node
+        elif not isinstance(node, ast.Expr):
+            prev_import = None
 
     # ── F401：导入未使用 ───────────────────────────────────────────
     # 「使用」= import 语句之外出现的名字：AST 里的 Load 名、字符串字面量里的词
@@ -235,30 +315,72 @@ def _ident_iter(src: str):
 
 
 def self_test() -> int:
-    """变异测试：故意植入 6 类违规，确认检查器真的会报——否则「无违规」是空话（G-23）。"""
-    samples = {
-        "F401": "import json\nimport os\n\nprint(os.getcwd())\n",
-        "E501": "x = 1  # " + "长" * 130 + "\n",
-        "W291": "y = 2 \n",
-        "W292": "z = 3",
-        "E711": "a = None\nif a == None:  # noqa: E501\n    pass\n",
-        "B006": "def f(items=[]):\n    return items\n",
-        "I001": "import sys\nimport os\nprint(sys.argv, os.name)\n",
-    }
+    """变异测试：植入违规确认会报，再喂**实测通过 CI 的形状**确认不报——两端都承重（G-23）。
+
+    从前这里只有「必须报」的一半，于是 I001 把 `conftest` 的分段判反了也没人吱声：那两条挂了
+    好几轮的「I001 修不掉」，要改的是本表的段表而不是那两个文件（第十四轮实测，见
+    `FUTURE_OR_FIRST` 上方那段）。新增的两判（成员序、同段空行）同理——没有绿档，误报会长期隐身。
+    """
+    verified_green = (
+        "from __future__ import annotations\n\nimport os\n\nimport httpx\nimport pytest\n"
+        "from conftest import _PG_URL_SOURCE, PG_URL\nfrom test_repositories import _make_user\n\n"
+        "from app.main import create_app\n\nprint(os, httpx, pytest, create_app, _PG_URL_SOURCE,"
+        " PG_URL, _make_user)\n"
+    )
+    samples = [
+        ("F401", "import json\nimport os\n\nprint(os.getcwd())\n", True),
+        ("E501", "x = 1  # " + "长" * 130 + "\n", True),
+        ("W291", "y = 2 \n", True),
+        ("W292", "z = 3", True),
+        ("E711", "a = None\nif a == None:  # noqa: E501\n    pass\n", True),
+        ("B006", "def f(items=[]):\n    return items\n", True),
+        ("I001", "import sys\nimport os\nprint(sys.argv, os.name)\n", True),
+        ("I001", "from collections import defaultdict, OrderedDict\n"
+                 "print(defaultdict, OrderedDict)\n", True),
+        ("I001", "import json\n\nimport os\nprint(json, os)\n", True),
+        # ↓ 三发不是编出来的样本，是 ruff 0.12.12 在 `65f508b` 真报的那三条 I001 的原样形状
+        #   （`evidence/65f508b/ruff_65f508b.txt`），本表从前一条都读不到：成员序与同段空行都不判。
+        ("I001", "import httpx\nimport pytest\nfrom conftest import PG_URL, SKIP_UNSET_REASON, "
+                 "_PG_URL_SOURCE\nfrom fastapi.testclient import TestClient\n", True),
+        ("I001", "import pytest\nfrom conftest import NO_PROXY_ISOLATION_VALUE, _PROXY_ENV_VARS\n", True),
+        ("I001", "import pytest\n\nfrom fixtures.wechat_urls import BIZ_A\n", True),
+        # 绿档：成员序与段都对了的那一份（就是上面三发改好之后的形状），本表也不许咬。
+        ("I001", "import httpx\nimport pytest\nfrom conftest import _PG_URL_SOURCE, PG_URL, "
+                 "SKIP_UNSET_REASON\nfrom fastapi.testclient import TestClient\n"
+                 "print(httpx, pytest, TestClient, _PG_URL_SOURCE, PG_URL, SKIP_UNSET_REASON)\n", False),
+        # 绿档：这一份的形状就是 ruff 0.12.12 在 65f508b 实测 0 错的那一份（补丁
+        # `evidence/65f508b/STEP-00C_simulated_65f508b.patch`），本表不许在任何一条 I001 上咬它。
+        ("I001", verified_green, False),
+        ("E501", "x = 1  # " + "长" * 110 + "\n", False),
+    ]
     bad = 0
-    for rule, src in samples.items():
-        tmp = Path(__file__).with_name(f"_selftest_{rule}.py")
+    caught_n = green_n = 0
+    for i, (rule, src, should_hit) in enumerate(samples):
+        tmp = Path(__file__).with_name(f"_selftest_{rule}_{i}.py")
         tmp.write_text(src, encoding="utf-8", newline="\n")
         try:
-            hits = [v for v in check(tmp) if rule in v]
+            # 命中判定不能写 `rule in v`：违规串的前缀就是**这个临时文件名**（`_selftest_I001_12.py:1 …`），
+            # 于是文件名里那个规则号会让任何一条违规都被算成「本规则捕获了」——绿档永远不可能静默，
+            # 红档也可能因为咬错规则而算成通过。第十四轮加绿档时就是它自己把自己判红的。
+            hits = [v for v in check(tmp) if re.search(rf" {rule} ", v)]
         finally:
             tmp.unlink()  # 自建临时物，用完即删
-        if hits:
-            print(f"  自检 {rule}: 捕获 {hits[0].split(':')[-1].strip()[:60]}")
+        if bool(hits) == should_hit:
+            if should_hit:
+                caught_n += 1
+                print(f"  自检 {rule}: 捕获 {hits[0].split(':')[-1].strip()[:60]}")
+            else:
+                green_n += 1
+                print(f"  自检 {rule}（绿档）: 未误报——实测通过 CI 的形状不许被本表咬")
         else:
-            print(f"  自检 {rule}: ❌ 未捕获——检查器该项失效，结论不可信")
+            if should_hit:
+                print(f"  自检 {rule}: ❌ 未捕获——检查器该项失效，结论不可信")
+            else:
+                print(f"  自检 {rule}（绿档）: ❌ 误报 {hits[0][:80]}——本表比 ruff 严，"
+                      f"会把实测通过的形状判成违规")
             bad += 1
-    print(f"自检结果：{len(samples) - bad}/{len(samples)} 规则可捕获\n")
+    total = len(samples)
+    print(f"自检结果：{total - bad}/{total} 项判据两端都对（该报 {caught_n} 项、该静默 {green_n} 项）\n")
     return 1 if bad else 0
 
 

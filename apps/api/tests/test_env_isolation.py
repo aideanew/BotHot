@@ -25,7 +25,7 @@ from __future__ import annotations
 import os
 
 import pytest
-from conftest import NO_PROXY_ISOLATION_VALUE, _PROXY_ENV_VARS
+from conftest import _PROXY_ENV_VARS, NO_PROXY_ISOLATION_VALUE
 from fixtures.net import REFUSED_HTTP_URL
 
 from app.providers.push.base import PushMessage

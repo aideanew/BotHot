@@ -78,8 +78,12 @@ test-all: test-backend test-frontend-unit test-frontend-e2e ## 运行全部测�
 
 # ─── 代码检查 ───────────────────────────────────────
 .PHONY: lint-backend
-lint-backend: ## 后端代码检查
-	cd $(BACKEND_DIR) && ruff check app/ && ruff format --check app/
+lint-backend: ## 后端代码检查（与 CI 同口径：ruff check app tests，格式检查另拆非阻断目标）
+	cd $(BACKEND_DIR) && ruff check app tests
+
+.PHONY: fmt-check-backend
+fmt-check-backend: ## 后端格式检查（非阻断：CI 不跑这一步，历史上这 13 份未格式化——别把它当门禁）
+	cd $(BACKEND_DIR) && ruff format --check app tests
 
 .PHONY: lint-frontend
 lint-frontend: ## 前端代码检查
@@ -176,10 +180,20 @@ evidence-check: ## 复跑仓库内全部 stdlib 证据证明（不装依赖、�
 		echo "── S0.1.2 连库 DSN 两级解析 + 拒连广播 ──"; python docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py; \
 		echo "── S0.1.2 变异反证（断言必须能红）──"; python docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py --self-test; \
 		echo "── S0.3.2 Provider 样本形状 ↔ 真实读取路径 ──"; python docs/06_validation/evidence/EVD-V2-00/prove_provider_shapes.py; \
-		echo "── G-24 静态自检（ruff 子集 + 规则可捕获性）──"; python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py; python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py --self-test; \
+		echo "── G-24 静态自检（ruff 子集的 stdlib 近似表 + 规则两端自证；与 ruff 的已知差异写在脚本头部：E501 本表更严、I001 段表与成员序按 ruff 实测对齐）──"; python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py; python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py --self-test; \
 		echo "── S0R.1 测试出站代理隔离 ──"; python docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py; \
 		echo "── S0R.1 变异反证 ──"; python docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py --self-test; \
-		echo "✅ evidence-check 全部通过"
+		echo "── 真实工具步（CI 才是终判；本机按约定不装依赖 ⇒ 缺工具就 SKIP，并以退出码 3 与 PASS 区分）──"; \
+		missing=0; \
+		if command -v ruff >/dev/null 2>&1; then (cd $(BACKEND_DIR) && ruff check app tests); \
+		else echo "SKIP(tool missing) ruff——stdlib 近似表(g24)判不了的成员序/段序之外，终判在这一步"; missing=1; fi; \
+		if command -v gitleaks >/dev/null 2>&1; then gitleaks detect --source . --config .gitleaks.toml; \
+		else echo "SKIP(tool missing) gitleaks——Security 门禁的终判在这一步，本机只跑 secret_shape_scan 做召回"; missing=1; fi; \
+		if [ "$$missing" -ne 0 ]; then \
+			echo "⚠ evidence-check：上面的 stdlib 证据全过，但真实工具步没跑 ⇒ 退出码 3（这不是 PASS，也不是 FAIL）"; \
+			exit 3; \
+		fi; \
+		echo "✅ evidence-check 全部通过（stdlib 证据 + 真实工具两步）"
 
 # ─── 清理 ───────────────────────────────────────────
 .PHONY: clean

@@ -1,0 +1,79 @@
+采集时点：de9866b（2026-10-14T14:53:01+08:00）｜MINGW64_NT-10.0-19045
+工具在场性：ruff=无 gitleaks=无 make=无
+被扫的仓库侧 .py 文件数（现算）：191
+
+########## 1 旧版近似表（HEAD 那份 g24）在同一棵树上的 I001 读数
+  engine_keyring.py:20 I001 import 未排序：os 应排在 binascii 之前（段 1，先 import 后 from）
+  secret_crypto.py:14 I001 import 未排序：os 应排在 binascii 之前（段 1，先 import 后 from）
+  bothot_entities.py:14 I001 import 未排序：from base 应排在 sqlalchemy.orm 之前（段 2，先 import 后 from）
+  entities.py:14 I001 import 未排序：from base 应排在 sqlalchemy.orm 之前（段 2，先 import 后 from）
+  dingtalk.py:16 I001 import 未排序：json 应排在 hmac 之前（段 1，先 import 后 from）
+  feishu.py:15 I001 import 未排序：json 应排在 hmac 之前（段 1，先 import 后 from）
+  source_resolver.py:17 I001 import 未排序：from urllib.parse 应排在 html.parser 之前（段 1，先 import 后 from）
+  normalizer.py:14 I001 import 未排序：re 应排在 html 之前（段 1，先 import 后 from）
+  test_backchannel_logout.py:17 I001 import 未排序：json 应排在 fnmatch 之前（段 1，先 import 后 from）
+  test_chat_sse.py:19 I001 import 未排序：from fastapi.testclient 应排在 conftest 之前（段 2，先 import 后 from）
+  test_env_isolation.py:29 I001 import 未排序：from fixtures.net 应排在 conftest 之前（段 2，先 import 后 from）
+  test_push_providers.py:13 I001 import 未排序：from datetime 应排在 hmac 之前（段 1，先 import 后 from）
+  旧版 I001 计数：12
+
+########## 2 新版近似表（工作树这份）在同一棵树上的 I001 读数
+  新版 I001 计数：0
+
+########## 3 近似表自己的两端自证（该报的 12 项 + 该静默的 3 项）
+    自检 F401: 捕获 1 F401 未使用导入 json
+    自检 E501: 捕获 1 E501 行长 139 > 120
+    自检 W291: 捕获 1 W291 行尾空格
+    自检 W292: 捕获 W292 文件末尾缺换行
+    自检 E711: 捕获 2 E711 用 `is None` / `is not None`
+    自检 B006: 捕获 1 B006 可变默认参数
+    自检 I001: 捕获 2 I001 import 未排序：os 应排在 sys 之前（段 1，先 import 后 from）
+    自检 I001: 捕获 1 I001 import 成员未排序：['defaultdict', 'OrderedDict'] 应为 ['Orde
+    自检 I001: 捕获 3 I001 同一段（段 1）被空行拆开：与上一条 import 之间不该留空行
+    自检 I001: 捕获 3 I001 import 成员未排序：['PG_URL', 'SKIP_UNSET_REASON', '_PG_URL
+    自检 I001: 捕获 2 I001 import 成员未排序：['NO_PROXY_ISOLATION_VALUE', '_PROXY_ENV
+    自检 I001: 捕获 3 I001 同一段（段 2）被空行拆开：与上一条 import 之间不该留空行
+    自检 I001（绿档）: 未误报——实测通过 CI 的形状不许被本表咬
+    自检 I001（绿档）: 未误报——实测通过 CI 的形状不许被本表咬
+    自检 E501（绿档）: 未误报——实测通过 CI 的形状不许被本表咬
+  自检结果：15/15 项判据两端都对（该报 12 项、该静默 3 项）
+  
+
+########## 4 ruff 真报过的那三条 I001：改前形状（取自 65f508b）与改后形状（工作树）
+--- test_chat_sse.py（65f508b:18 → 工作树同一段）
+  改前: import pytest
+  改前: from conftest import PG_URL, SKIP_UNSET_REASON, _PG_URL_SOURCE
+  改前: from fastapi.testclient import TestClient
+  改后: 17:import pytest
+  改后: 18:from conftest import _PG_URL_SOURCE, PG_URL, SKIP_UNSET_REASON
+--- test_env_isolation.py（65f508b:28 → 工作树同一段）
+  改前: import pytest
+  改前: from conftest import NO_PROXY_ISOLATION_VALUE, _PROXY_ENV_VARS
+  改前: from fixtures.net import REFUSED_HTTP_URL
+  改后: 27:import pytest
+  改后: 28:from conftest import _PROXY_ENV_VARS, NO_PROXY_ISOLATION_VALUE
+--- test_kb_longlink_ingest.py（65f508b:41 → 工作树同一段）
+  改前:     SHORT_1,
+  改前:     SHORT_WITH_FAKE_BIZ_PARAM,
+  改前: )
+  改后: 40:import pytest
+  改后: 41:from fixtures.wechat_urls import (
+
+########## 5 已知的一处方向性差异：ruff 的 E501 有 pragma 例外，本表按总长一律报
+  test_kb_orphan_purge.py:91  总长 122｜注释前 92｜尾部 '# type: ignore[no-untyped-def]'
+  test_manifest_sync.py:481  总长 123｜注释前 109｜尾部 ', int | None]:  # noqa: ARG002'
+  test_metadata_filter.py:174  总长 126｜注释前 96｜尾部 '# type: ignore[no-untyped-def]'
+  test_metadata_filter.py:233  总长 122｜注释前 92｜尾部 '# type: ignore[no-untyped-def]'
+  对照：evidence/65f508b/ruff_65f508b.txt 里 ruff 0.12.12 报的 E501 只有 1 条（test_env_isolation.py:68），
+  上面这四处它一条没报——四处都是「代码段不超限、只有 pragma 注释把整行推过去」的形状。
+
+########## 6 真实工具两步的缺失分支（make 不在本机，跑的是 Makefile 里那段同构 shell）
+SKIP(tool missing) ruff
+SKIP(tool missing) gitleaks
+退出码 3（不是 PASS 也不是 FAIL）
+  实测退出码：3（Makefile 目标本身本机无法干跑——make 也不在这台机器上）
+
+########## 7 本机仍证明不了的那一半（登记为交人工/交 CI，不写成本地通过）
+  - `ruff check app tests` 在 96e8f31+ 之后的真实读数：要 venv（README §5 的 J-1/J-2 同一条通道）。
+  - `gitleaks detect`：`.gitleaksignore` 的 6 个历史指纹不许猜，必须有二进制实跑 ⇒ 属 D-12 拍板后的动作。
+  - `ruff format --check`：非阻断（13 份文件历史上未格式化），本卡只把它从 lint-backend 里拆出来。
