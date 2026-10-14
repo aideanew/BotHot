@@ -556,10 +556,23 @@ def sql_render_defects(text: str, where: str = "文件") -> list[str]:
     那一族的第 N 次现场。
 
     抓法不 grep 字形，按 AST 认两件事：
-    ① 哪些名字的值来自 `str(….compile(…))`（也认内联写法 `X in str(stmt.compile())`）；
-    ② 有没有一句 `in` 比较：左操作数是**带值形状**的字符串字面量（含 `=`、引号或 `%…%`），
+    ① 哪些名字的值来自 `str(….compile(…))`（也认内联写法 `X in str(stmt.compile())`、
+       海象 `if (sql := str(…)):` 与 `for sql in [str(…)]:` 这两种**在表达式/循环目标上**的绑定）；
+    ② 有没有一句 `in` 比较：左操作数是**带值形状**的字符串字面量（含 `=`、引号、`%…%` 或任何数字），
        右操作数落在 ① 那些名字/表达式上。
-    只判结构关键字（`"LIKE" in flat`）不算缺陷——那不带值，方言怎么渲染都能过。
+
+    三处**明认的边界**（第十八轮复核定下来写在这里，不是留给读者猜）：
+    - 宁严勿宽：值形状含「任何数字」，所以 `assert ":param_1" in sql`、`"sha256" in sql`
+      这类**在默认方言下其实正确**的断言也会被点名。占位符与含数字的关键字要不要放行属改契约，
+      与 BD-12 同一处理；本判据选的是「多问一处」而不是「漏一族」。
+    - 豁免只认 `compile_kwargs` 这一个通道（关键字或位置第二实参）；
+      `compile(**{"literal_binds": True})` 与 `compile(dialect="literal_binds")` **不豁免**——
+      那两个写法根本不内联值，放过它们就是放过恒红。
+    - 跨文件的辅助函数（别的模块返回渲染文本）与 f-string 左值不在射程内：那需要一个全仓的
+      过程间分析，代价与收益不匹配，留 J-6/J-7 的连库面与 CI 兜。
+    - **按名字记污点、不分作用域**（flow-insensitive）：两个函数都用 `sql` 这个名字时，一处绑定
+      会把另一处的引用也点亮——过判方向，同上一条契约。它的副作用是**探针必须给两段用不同变量名**，
+      否则两条分支任一被削掉，缺陷数照样是 2，电池那两发就测不出差别（第十八轮实测到这件事）。
     """
     try:
         tree = ast.parse(text)
@@ -573,18 +586,26 @@ def sql_render_defects(text: str, where: str = "文件") -> list[str]:
         """这一子树里是否出现「会丢值的」渲染：`x.compile()` 或 `str(x.compile())`。
 
         **带 `compile_kwargs={"literal_binds": True}` 的渲染不算**——那种写法就是把值内联进文本，
-        断言字面值正是它的用途（V0.8.0 STEP-00C 卡 S0C.1.2 给的修法即此）。少了这一格豁免，
-        这条判据会把修法本身判成缺陷。
+        断言字面值正是它的用途（V0.8.0 STEP-00C 卡 S0C.1.2 给的修法即此）。豁免只认
+        `compile_kwargs` 这一个通道（第十八轮 R18-7：上一版只看「某个关键字的值里含那个字样」，
+        于是 `compile(**{"literal_binds": True})` 与 `compile(dialect="literal_binds")`
+        也被放过——那两个写法并不内联值，放过就是放过恒红）。
         """
         for sub in ast.walk(node):
             if isinstance(sub, ast.Call):
                 f = sub.func
                 if isinstance(f, ast.Attribute) and f.attr == "compile":
-                    if not any("literal_binds" in ast.unparse(k.value) for k in sub.keywords):
+                    kw = next((k for k in sub.keywords if k.arg == "compile_kwargs"), None)
+                    positional = sub.args[1] if len(sub.args) > 1 else None
+                    got = (("literal_binds" in ast.unparse(kw.value)) if kw is not None
+                           else (positional is not None
+                                 and "literal_binds" in ast.unparse(positional)))
+                    if not got:
                         return True
                 if isinstance(f, ast.Name) and f.id == "str" and sub.args \
                         and base_rendered(sub.args[0]):
                     return True
+
         return False
 
     def is_rendered(node: ast.AST) -> bool:
@@ -617,6 +638,13 @@ def sql_render_defects(text: str, where: str = "文件") -> list[str]:
             for t in n.targets:
                 if isinstance(t, ast.Name):
                     rendered.add(t.id)
+        elif isinstance(n, ast.NamedExpr) and is_rendered(n.value) \
+                and isinstance(n.target, ast.Name):
+            rendered.add(n.target.id)          # `if (sql := str(x.compile())):` 也是绑定（R18-8）
+        elif isinstance(n, (ast.For, ast.AsyncFor)) and is_rendered(n.iter):
+            for t in (n.target,):
+                if isinstance(t, ast.Name):
+                    rendered.add(t.id)         # `for sql in [str(x.compile())]:` 同算
         elif isinstance(n, ast.Assert):
             for cmp in (x for x in ast.walk(n.test) if isinstance(x, ast.Compare)
                         and any(isinstance(op, ast.In) for op in x.ops)):
@@ -1747,6 +1775,31 @@ def self_test(listing: bool = False) -> int:
     check(g9, "绿档：带 `literal_binds` 的渲染文本里断言字面值**是正当用法**，不许咬（这条豁免本身要能红）",
           "" if not sql_render_defects(render_lb, "修好的样例.py")
           else f"误咬 {sql_render_defects(render_lb, '修好的样例.py')!r}")
+    # 第十八轮复核（R18-7/08）补的两端：豁免只认 `compile_kwargs` 这一个通道；污点要认
+    # 海象与循环目标上的绑定。前者防「放过恒红」，后者防「换一种绑定写法就隐身」。
+    render_escape = (
+        "async def t(q):\n    sql = q.compile(**{\"literal_binds\": True})\n"
+        '    assert "source_id = \'src-1\'" in str(sql)\n'
+        "async def u(q):\n    flat = str(q.compile(dialect=\"literal_binds\"))\n"
+        '    assert "LIMIT 1" in flat\n')
+    check(g9, "探针：`compile(**{…})` 与 `compile(dialect=\"literal_binds\")` 不内联值，"
+              "不许被 `compile_kwargs` 的豁免放过（R18-7）",
+          "" if len(sql_render_defects(render_escape, "假豁免.py")) == 2
+          else f"实得 {sql_render_defects(render_escape, '假豁免.py')!r}")
+    # 两处绑定各用一个**不同的变量名**：这条判据是按名字记污点、不区分作用域（flow-insensitive），
+    # 两段共用 `sql` 时，一处绑定的污点会把另一处也点亮——探针于是失去分辨力，两发变异都测不出差别
+    # （第十八轮实测到：把 NamedExpr 或 For 任一分支关掉，缺陷数仍是 2/2）。这既是我这条探针的教训，
+    # 也是这条判据的一个**过判方向**：跨函数同名会把没被渲染文本污染的引用一起点名。
+    render_walrus = (
+        "async def t(q):\n    if (sql_w := str(q.compile())):\n"
+        '        assert "source_id = \'src-1\'" in sql_w\n'
+        "async def u(q):\n    for sql_f in [str(q.compile())]:\n"
+        '        assert "LIMIT 1" in sql_f\n')
+
+    check(g9, "探针：海象绑定与循环目标上的渲染绑定也要点名（R18-8——只认 `=` 赋值的话，换一种绑定就隐身）",
+          "" if len(sql_render_defects(render_walrus, "换绑定.py")) == 2
+          else f"实得 {sql_render_defects(render_walrus, '换绑定.py')!r}")
+
     check(g9, "g_section 真的把这条接进交付判据（写了不调用 = 又一句好听的话）",
           "" if _first_call_line(gtree, "sql_render_defects") else "g_section 里没有那次调用")
     check(g9, "g_section 真的拿 git 现取的新增清单去喂 registry_drift（探测器写了不调用就是形容词）",

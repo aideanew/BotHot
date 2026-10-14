@@ -374,10 +374,27 @@ SHOTS: list[tuple[str, str, str, str, str]] = [
      "_VALUE_SHAPE = re.compile(r\"=|['\\\"%]|\\d\")",
      "_VALUE_SHAPE = re.compile(\".*\")  # 变异：不再区分值形状与关键字",
      "RED", "真库指针"),
-    ("豁免掉了 `literal_binds` 那一格 ⇒ 把 V0.8.0 给的修法本身判成缺陷（假红方向也要配靶，"
-     "第十七轮自查：这条判据第一版就这样咬过正确写法）",
-     '                    if not any("literal_binds" in ast.unparse(k.value) for k in sub.keywords):',
-     "                    if True:  # 变异：不再认 literal_binds",
+    ("豁免判据退回「任何关键字的值里含 literal_binds 就算」⇒ `compile(**{…})` 与 "
+     "`compile(dialect=\"literal_binds\")` 这两种不内联值的写法被放过（R18-7）",
+     '                    kw = next((k for k in sub.keywords if k.arg == "compile_kwargs"), None)',
+     '                    kw = next((k for k in sub.keywords'
+     ' if "literal_binds" in ast.unparse(k.value)), None)  # 变异：豁免面放宽回旧版',
+     "RED", "真库指针"),
+    ("海象绑定不再算污点来源 ⇒ `if (sql := str(q.compile())):` 后面那条断言隐身（R18-8）",
+     "        elif isinstance(n, ast.NamedExpr) and is_rendered(n.value) \\",
+     "        elif isinstance(n, ast.NamedExpr) and False and is_rendered(n.value) \\",
+     "RED", "真库指针"),
+    ("循环目标不再算污点来源 ⇒ `for sql in [str(q.compile())]:` 那条隐身（R18-8 的另一半）",
+     "        elif isinstance(n, (ast.For, ast.AsyncFor)) and is_rendered(n.iter):",
+     "        elif isinstance(n, (ast.For, ast.AsyncFor)) and False:",
+     "RED", "真库指针"),
+    ("等价：位置实参的判定换个写法（`len(args) > 1` 与 `len(args) >= 2` 同一个条件）",
+     "                    positional = sub.args[1] if len(sub.args) > 1 else None",
+     "                    positional = sub.args[1] if len(sub.args) >= 2 else None",
+     "GREEN", ""),
+    ("豁免整格拿掉 ⇒ V0.8.0 那个修法本身被判成缺陷（假红方向也要配靶：这条判据的第一版就咬过正确写法）",
+     "                    if not got:",
+     "                    if True:  # 变异：不再认任何豁免",
      "RED", "真库指针"),
 
 
