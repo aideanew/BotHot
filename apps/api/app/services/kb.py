@@ -33,11 +33,11 @@ from app.core.errors import (
     ResourceNotFoundError,
     SourceUrlUnrecognizedError,
 )
-from app.models.entities import KnowledgeDocument, Source
+from app.models.entities import ContentAsset, KnowledgeDocument, Source
 from app.providers.engine_port import ENGINE_UNAVAILABLE_HINT, EngineRouter, KnowledgeEnginePort
 from app.providers.langbot.client import LangBotClient
 from app.providers.raw_store import RawStore, make_raw_store
-from app.repositories.asset import AssetRepository, DocumentRepository
+from app.repositories.asset import MIN_FRAGMENT_LEN, AssetRepository, DocumentRepository
 from app.repositories.space import SpaceRepository
 from app.services.categorizer import categorize
 from app.services.extractor import ExtractedContent, ExtractorService
@@ -334,18 +334,28 @@ class KnowledgeBaseService:
         raise last_exc  # type: ignore[misc]
 
     async def _find_source_by_anchor(self, article_key: str, url: str) -> Source | None:
-        """先 biz 参数锚、后 article_key 锚查既有 source；两个锚都不命中就返回 None。
+        """三个锚依次查既有 source：biz 参数锚 → article_key 锚 → 资产精确反查，全不中返回 None。
 
-        BE-02 D-2/D-3 修复：无 biz 参数短链首抓后 source.external_id=article_key（见
-        _ensure_source 同口径），二次入库以 article_key 锚必然命中。
+        R0（V0.7.0 回归修复）：**前两个锚并不覆盖无参短链场景**，勿再按旧注释推断"必然命中"。
+        键的不对称在于两侧取的是**不同的 URL**：`_ensure_source` 用抓取结果建源
+        （`external_id = article.biz or _article_key(article.url)`，见 `_persist_document`
+        传 `article.url`），而本函数拿到的 `article_key` 是**入参 URL**（短链 token）算出来的。
+        无参短链时：`_biz_from_url(入参 URL)` 解不出 biz ⇒ 锚①空；源若按页面 biz 建（或按
+        重定向后长链建）⇒ 键都不等于短链 token，锚②也空。旧 docstring 说的"必然命中"不成立。
+        第三条锚用 `ContentAsset.external_id == article_key` 精确等值 join 回 Source 补齐这条路
+        （资产侧的键正是按入参 URL 落的，见 `_persist_document` 的 `_article_key(url)`），
+        使二次入库命中缓存而不是重复抓取——顺带恢复 `kb.py` 里依赖 source 的 stale 版本判定。
 
-        S2.1.4（P-4 转正）：旧版此处还有一条 `Source.url.like(f"%{article_key}%")` 兜底，
+        S2.1.4（P-4 转正）：旧版此处还有一条 URL 子串兜底（`Source.url.like`），
         而长链的 article_key 是 URL 末段 `s`（见 `_article_key`）——几乎所有 https URL 都含
         字母 s，LIKE 于是命中多行，`scalar_one_or_none()` 抛 `MultipleResultsFound`
         （有依赖环境实测读数：`docs/任务规划V0.3.0/evidence/probes_4afaedd.txt:19`）。
-        它原本为「历史 biz 锚遗留行」兜底，但 S2.1.3 委托解析层后长链也能解出 `__biz`，
-        那条遗留路径由 biz 参数锚本身覆盖，兜底不再有必要。
-        两条锚查询一律 `.limit(1)`：同一 external_id 若因存量脏数据有多行，取一行而不是崩。
+        S2.1.3 委托解析层后长链也能解出 `__biz`，遗留路径由 biz 参数锚覆盖，该子串兜底已删。
+        **本轮不复活它**：第三条锚是等值查，不会一个字母命中全表。
+
+        长度守卫：`article_key` 短于 `MIN_FRAGMENT_LEN` 时不跑第三条锚——`"s"` 这类键
+        无区分能力，等值查也会把 P-3 的冒名扩散成跨源冒名（STEP-02 S2.2 才是其正解）。
+        三条锚一律 `.limit(1)`：同一键若因存量脏数据有多行，取一行而不是崩。
         """
         for anchor in (a for a in (_biz_from_url(url), article_key) if a):
             row = (
@@ -354,6 +364,25 @@ class KnowledgeBaseService:
                     .where(
                         Source.type == "wechat_oa",
                         Source.external_id == anchor,
+                    )
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if row is not None:
+                return row
+        if len(article_key) >= MIN_FRAGMENT_LEN:
+            row = (
+                await self._session.execute(
+                    select(Source)
+                    .join(ContentAsset, ContentAsset.source_id == Source.id)
+                    .where(
+                        Source.type == "wechat_oa",
+                        ContentAsset.external_id == article_key,
+                        # 只认 READY 资产：缓存命中的语义是「这篇已可用」，
+                        # 领回一条正文还没就绪的源会把 hitCache 判成真的（调用方据 kb.py:246
+                        # 的 status 检查早退，那一步非 READY 时又会落回抓取，等于白锚一次还扩大
+                        # 了 token 撞名时的归属面）。与锚①②不同，这里必须带状态谓词。
+                        ContentAsset.status == "READY",
                     )
                     .limit(1)
                 )
@@ -465,8 +494,12 @@ class KnowledgeBaseService:
         """公众号源按 biz 幂等（uq_source_type_external）；biz 缺失降级用 article_key 锚。
 
         BE-02 D-2/D-3 兼容：biz 非空仍以 biz 为 external_id（订阅语义 + P0 测试锚点）；
-        biz 缺失（无参数 URL）时以 article_key 落库——短链场景二次入库经
-        _find_source_by_anchor 的 URL 兜底可命中。
+        biz 缺失（无参数 URL）时以 `_article_key(url)` 落库。
+
+        R0 更正：此处旧文案声称"短链场景二次入库经 `_find_source_by_anchor` 的 URL 兜底可
+        命中"，而该 URL 子串兜底已在 S2.1.4（078dc30）删除 ⇒ 陈述为假，且正是短链二次入库
+        重复抓取那一条回归能进主干的原因（读码者据此以为链路是通的）。现状：无参短链的二次
+        入库由 `_find_source_by_anchor` 的**第三条资产等值反查**覆盖，不是 URL 子串匹配。
         """
         external_id = biz or _article_key(url)
         row = (

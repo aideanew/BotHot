@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated
@@ -145,10 +146,15 @@ async def ready() -> JSONResponse:
         "schema": schema,
     }
     all_ok = all(bool(c["ok"]) for c in checks.values())
+    # STEP-16：告警启用态作为**可观测事实**回显，故刻意不放进 checks——ALERTING_ENABLED=false
+    # 不该让 /ready 变 503（摘流量与"没人替你盯着"是两件事）；但它必须出现在读数里，
+    # 否则"三类探测器在跑"永远是口头声明（规划 V0.7.0 01 F-83 的可见性缺口）。
+    alerting_enabled = os.environ.get("ALERTING_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
     body = success(
         data={
             "status": "ready" if all_ok else "not_ready",
             "checks": checks,
+            "alerting": "enabled" if alerting_enabled else "disabled",
         }
     )
     return JSONResponse(status_code=200 if all_ok else 503, content=body.model_dump())

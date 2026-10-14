@@ -191,9 +191,19 @@ services:
       - WELLBYTE_API_KEY=${WELLBYTE_API_KEY:-}
       - WELLBYTE_BASE_URL=${WELLBYTE_BASE_URL:-https://api.wellbyte.net}
       - ARTICLE_DETAIL_FALLBACK_ENABLED=${ARTICLE_DETAIL_FALLBACK_ENABLED:-false}
-      # S2.2（R1.3）：运行期告警注入（默认关闭；开启后 scheduler._tick 每轮探测，
-      # 经既有 push provider 投递——ALERT_CHANNEL 指向已配置渠道）
-      - ALERTING_ENABLED=${ALERTING_ENABLED:-false}
+      # S2.2（R1.3）→ STEP-16（V0.7.0）：运行期告警在**部署层默认开启**。
+      # 代码层默认仍为 false（`core/alerting.py` 的 _flag 默认值 + test_alerting_drill.py:139
+      # 明确钉「未置真 ⇒ 零探测零投递，开发/测试零副作用」），二者不矛盾：
+      # 之前 compose 也写 :-false，等于"三层全关"，STEP-05 的「缺陷一天内被发现」前提不成立
+      # （规划 V0.7.0 01 F-83：探测器压根不在跑）。
+      - ALERTING_ENABLED=${ALERTING_ENABLED:-true}
+      # 心跳告警的启动宽限：新进程还没写第一拍心跳时不报 stale（否则每次发版都误报）。
+      # 只在部署侧给值、代码默认 0——非零代码默认会吃掉刚启动就断言三探针全命中的既有用例。
+      - ALERT_STARTUP_GRACE_SECONDS=${ALERT_STARTUP_GRACE_SECONDS:-600}
+      # 同一告警的冷却窗口（秒）：run_alert_checks 由推送调度循环每 60s 调一次
+      # （services/push_scheduler.py:88-92），而本文件把 ALERTING_ENABLED 默认翻成 true，
+      # 无冷却 ⇒ 一条持续积压会每分钟投一条站内通知。代码默认 0（保住既有用例），部署给 1800。
+      - ALERT_COOLDOWN_SECONDS=${ALERT_COOLDOWN_SECONDS:-1800}
       - ALERT_CHANNEL=${ALERT_CHANNEL:-web}
       - ALERT_TARGET=${ALERT_TARGET:-}
       - ALERT_PUSH_FAIL_WINDOW=${ALERT_PUSH_FAIL_WINDOW:-5}

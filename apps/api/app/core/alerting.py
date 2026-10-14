@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import os
+import time
 
 import structlog
 from sqlalchemy import text as sa_text
@@ -46,6 +47,56 @@ def _int_env(name: str, default: int) -> int:
         return int(os.environ.get(name, "").strip() or default)
     except ValueError:
         return default
+
+
+# 进程启动时刻（单调钟）：供心跳告警的启动宽限使用。
+_PROCESS_START_MONOTONIC = time.monotonic()
+
+
+def in_startup_grace() -> bool:
+    """心跳类告警的启动宽限期是否仍在生效（`ALERT_STARTUP_GRACE_SECONDS`，默认 0=不宽限）。
+
+    为什么必须默认 0：滚动发布时新进程还没写第一拍心跳，`check_heartbeat_missing` 一定报 stale
+    ——不加宽限则每次发版都变成一次「进程心跳缺失」误报；把宽限设成非零默认则会反过来
+    吃掉 `test_alerting_drill.py:112` 那条「三探针全命中」的既有断言（进程刚起即在宽限内）。
+    所以：**代码默认不宽限，部署侧由 compose/env 显式给 600**（见 docker/compose.yml）。
+
+    只作用于心跳探测；Job 积压与推送连败是数据驱动的历史事实，与进程新旧无关，不受宽限影响。
+    """
+    grace = _int_env("ALERT_STARTUP_GRACE_SECONDS", 0)
+    if grace <= 0:
+        return False
+    return (time.monotonic() - _PROCESS_START_MONOTONIC) < grace
+
+
+# 同一告警的上次投递时刻（单调钟）。进程内状态——重启即重置，与"探测器随进程走"一致。
+_LAST_FIRED_MONO: dict[str, float] = {}
+
+
+def allow_alert(title: str) -> bool:
+    """同一告警在冷却期内只投一次（`ALERT_COOLDOWN_SECONDS`，默认 0=不冷却）。
+
+    为什么这条必须存在：`run_alert_checks` 由推送调度循环**每 60 秒**调一次
+    （`services/push_scheduler.py:88-92`），而 STEP-16 把部署层 `ALERTING_ENABLED` 默认翻成
+    true。没有冷却时，一条持续存在的积压/连败会**每分钟重投一条站内通知**——
+    告警把自己变成故障源，最终被人整个关掉（等于回到 F-83 的起点）。
+
+    代码默认仍是 0：`test_alerting_drill.py:123` 断言一次调用三探针全命中，
+    非零默认会吃掉它；部署侧由 compose 给 1800。
+    """
+    cooldown = _int_env("ALERT_COOLDOWN_SECONDS", 0)
+    now = time.monotonic()
+    if cooldown > 0:
+        last = _LAST_FIRED_MONO.get(title)
+        if last is not None and (now - last) < cooldown:
+            return False
+    _LAST_FIRED_MONO[title] = now
+    return True
+
+
+def reset_alert_cooldown_state() -> None:
+    """清空冷却状态，供用例隔离（进程内 dict 会让相邻用例互相污染）。"""
+    _LAST_FIRED_MONO.clear()
 
 
 def _str_env(name: str, default: str) -> str:
@@ -115,11 +166,19 @@ async def run_alert_checks(
         async with session_factory() as session:
             stale = await check_heartbeat_missing(session)
         if stale:
-            fired.append("常驻进程心跳缺失")
-            await _deliver(
-                "BotHot 告警：进程心跳缺失",
-                "以下常驻进程心跳过期或从未启动：" + "；".join(stale),
-            )
+            # 一次判定只调一次 allow_alert：它在放行时就写入时间戳，
+            # 若在条件里调一次、分支里再调一次，第二次必然落进自己的冷却 ⇒ 告警永远投不出去。
+            if in_startup_grace():
+                # 发版窗口内的首拍心跳缺失不是故障：降噪但留痕，避免"没告警"等于"没发生过"。
+                logger.info("心跳缺失告警被启动宽限抑制", stale=len(stale))
+            elif not allow_alert("常驻进程心跳缺失"):
+                logger.info("心跳缺失告警被冷却期抑制", stale=len(stale))
+            else:
+                fired.append("常驻进程心跳缺失")
+                await _deliver(
+                    "BotHot 告警：进程心跳缺失",
+                    "以下常驻进程心跳过期或从未启动：" + "；".join(stale),
+                )
     except Exception:  # noqa: BLE001  # 单类探测异常隔离
         logger.warning("心跳缺失探测失败", exc_info=True)
 
@@ -127,11 +186,14 @@ async def run_alert_checks(
         async with session_factory() as session:
             backlog = await check_job_backlog(session)
         if backlog >= backlog_threshold:
-            fired.append("Job 积压")
-            await _deliver(
-                "BotHot 告警：Job 积压",
-                f"当前 QUEUED 任务 {backlog} 条（阈值 {backlog_threshold}）",
-            )
+            if allow_alert("Job 积压"):
+                fired.append("Job 积压")
+                await _deliver(
+                    "BotHot 告警：Job 积压",
+                    f"当前 QUEUED 任务 {backlog} 条（阈值 {backlog_threshold}）",
+                )
+            else:
+                logger.info("Job 积压告警被冷却期抑制", backlog=backlog)
     except Exception:  # noqa: BLE001
         logger.warning("Job 积压探测失败", exc_info=True)
 
@@ -139,11 +201,14 @@ async def run_alert_checks(
         async with session_factory() as session:
             all_failed = await check_push_consecutive_failures(session, window)
         if all_failed:
-            fired.append("推送连续失败")
-            await _deliver(
-                "BotHot 告警：推送连续失败",
-                f"最近 {window} 条推送投递全部失败，请检查渠道配置与目标可达性",
-            )
+            if allow_alert("推送连续失败"):
+                fired.append("推送连续失败")
+                await _deliver(
+                    "BotHot 告警：推送连续失败",
+                    f"最近 {window} 条推送投递全部失败，请检查渠道配置与目标可达性",
+                )
+            else:
+                logger.info("推送连败告警被冷却期抑制", window=window)
     except Exception:  # noqa: BLE001
         logger.warning("推送连败探测失败", exc_info=True)
 
