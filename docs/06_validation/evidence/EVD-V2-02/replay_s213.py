@@ -544,6 +544,22 @@ def _collect_cases(tree: ast.Module) -> list[str]:
 #: （`LIMIT 1` 在默认方言里是 `LIMIT :param_1`——纯关键字的断言不含数字，两者分得开）。
 _VALUE_SHAPE = re.compile(r"=|['\"%]|\d")
 
+#: 在渲染文本上「读一段」的方法名——这些与 `in` 是同一族，只是换了谓词形状（第十九轮机制组：
+#: 只认 `in` 的话，`sql.find("…= 'x'")` 与 `sql == "…"` 这两句同样恒红的写法就隐身）。
+#: 不含 `split`/`join`：那两个是**污点传播**用的（`flat = " ".join(sql.split())`），不是断言形状。
+_READ_TEXT_METHODS = frozenset({"find", "rfind", "index", "count", "startswith",
+                                "endswith", "removeprefix", "removesuffix"})
+_RE_FUNCS = frozenset({"search", "match", "fullmatch", "findall", "finditer"})
+#: 比较族：`in` 只是其中一个字形。恒红的原因是**被比的那一侧是渲染文本**，与用哪个运算符无关，
+#: 所以等值/含/不含/大小比较全收（第十九轮机制组：只认 `in` 时 `sql == "… = 'src-1'"` 隐身）。
+_CMP_HOW: dict[type, str] = {
+    ast.In: "在渲染文本上断言", ast.NotIn: "在渲染文本上断言「不含」（这句更坏：它恒绿，只会好看）",
+    ast.Eq: "让渲染文本全等于", ast.NotEq: "让渲染文本不等于",
+    ast.Lt: "拿渲染文本做大小比较", ast.Gt: "拿渲染文本做大小比较",
+    ast.LtE: "拿渲染文本做大小比较", ast.GtE: "拿渲染文本做大小比较",
+}
+_CMP_OPS = tuple(_CMP_HOW)
+
 
 def sql_render_defects(text: str, where: str = "文件") -> list[str]:
     """用例里「对 `compile()` 渲染出的文本断言字面值」这件事，是**可静态抓到的恒红形状**。
@@ -555,63 +571,81 @@ def sql_render_defects(text: str, where: str = "文件") -> list[str]:
     本包此前十六轮都没抓到，**因为这条判据根本不存在**——这是「判据的覆盖面=上一轮想到的形状」
     那一族的第 N 次现场。
 
-    抓法不 grep 字形，按 AST 认两件事：
-    ① 哪些名字的值来自 `str(….compile(…))`（也认内联写法 `X in str(stmt.compile())`、
-       海象 `if (sql := str(…)):` 与 `for sql in [str(…)]:` 这两种**在表达式/循环目标上**的绑定）；
-    ② 有没有一句 `in` 比较：左操作数是**带值形状**的字符串字面量（含 `=`、引号、`%…%` 或任何数字），
-       右操作数落在 ① 那些名字/表达式上。
+    第十九轮机制组复核把这条判据自己的四格「换个写法就隐身」量了出来，于是按语义重写：
+    ① **谓词族**而不是字形：`in` / `not in` / `==` / `!=` 两侧任一是带值形状的字符串字面量、另一侧
+       是渲染文本就算。只认 `in` 会漏掉同样恒红的 `sql == "… = 'src-1'"`；只认左常量会漏掉 `not in`
+       那句**恒绿的空话**（它比恒红更坏：它永远好看）。`re.search(r"= 'x'", sql)`、`sql.find(…)`、
+       `sql.startswith(…)` 这些「读文本」的方法同样算，且不再要求外面套着 `assert`——
+       `if "x = '1'" in sql: raise` 与 `assert` 里的同一句在 CI 上一样红；
+    ② **绑定面**：`=` 赋值、海象、`for` 与推导式的目标、`self.x = …` 这类**属性目标**，以及假会话里
+       `self.calls.append(str(stmt.compile()))`——append 的宿主方法名**不再要求叫 `scalar`**
+       （机制组实测：夹具改叫 `execute` 整条链就失效，而方法名从来不是这条判据该关心的东西）；
+    ③ **同模块跨函数**：辅助函数的形参被拿去比字面值、而调用点传进来的就是渲染文本，算缺陷
+       （`def check(sqlx): assert "…" in sqlx` + `check(str(q.compile()))`）；
+    ④ 污点**按名字记、不分作用域**，且绑定先扫到不动点再判——两段的先后顺序不再影响读数
+       （第十八轮那条「探针必须换变量名」的教训就此消失，因为它本是判据的性质而不是探针的性质）。
 
-    三处**明认的边界**（第十八轮复核定下来写在这里，不是留给读者猜）：
+    明认的边界（写在这里而不是留给读者猜）：
     - 宁严勿宽：值形状含「任何数字」，所以 `assert ":param_1" in sql`、`"sha256" in sql`
-      这类**在默认方言下其实正确**的断言也会被点名。占位符与含数字的关键字要不要放行属改契约，
-      与 BD-12 同一处理；本判据选的是「多问一处」而不是「漏一族」。
-    - 豁免只认 `compile_kwargs` 这一个通道（关键字或位置第二实参）；
-      `compile(**{"literal_binds": True})` 与 `compile(dialect="literal_binds")` **不豁免**——
-      那两个写法根本不内联值，放过它们就是放过恒红。
-    - 跨文件的辅助函数（别的模块返回渲染文本）与 f-string 左值不在射程内：那需要一个全仓的
+      这类**在默认方言下其实正确**的断言也会被点名；`sql.count("=")` 同理。要不要放行属改契约。
+    - **豁免只认 `compile_kwargs=<字典字面量>` 且其中 `literal_binds` 的值恰为 `True`**。
+      第十九轮**删掉**了「位置第二实参也算豁免」那一格：本机按约定不装依赖，无法核实 SQLAlchemy 2.0
+      的形参槽位（机制组读作 2.0 会 `TypeError`），而「核实不了的写法一律放行」等于亲手拆掉这道门禁，
+      所以它按 fail-closed 处理——现在是缺陷，装了依赖的连库面（J-6）可以把它证伪。
+      `{"literal_binds": False}` 也不再豁免：False 就是默认方言，值照样是绑定参数，那句断言恒红。
+    - **`.params` 是值侧不是文本**：`params = stmt.compile().params` 之后拿值去比是**修法**，
+      不-binding 那个名字；否则这条判据会把自己推荐的修法判成缺陷（第十八轮就犯过这个方向）。
+    - 跨文件的辅助函数、f-string 左值、`getattr` 动态取的属性名不在射程内：那需要一个全仓的
       过程间分析，代价与收益不匹配，留 J-6/J-7 的连库面与 CI 兜。
-    - **按名字记污点、不分作用域**（flow-insensitive）：两个函数都用 `sql` 这个名字时，一处绑定
-      会把另一处的引用也点亮——过判方向，同上一条契约。它的副作用是**探针必须给两段用不同变量名**，
-      否则两条分支任一被削掉，缺陷数照样是 2，电池那两发就测不出差别（第十八轮实测到这件事）。
+    - 过程间那条是**按形参名过判**的：只要 `guarded` 函数的任一位置实参是渲染文本就点名，
+      不做形参-实参的精确配对（宁可多问一处）。
     """
     try:
         tree = ast.parse(text)
     except (SyntaxError, ValueError) as exc:
         return [f"{where} 读不出 AST：{type(exc).__name__}: {exc}——这一档没判成，不是判绿"]
-    rendered: set[str] = set()      # 值是「渲染文本」的名字（污点沿赋值传播）
-    rendered_lists: set[str] = set()  # 假会话里 append 渲染文本的那个属性名（如 `calls`）
+    rendered: set[str] = set()          # 值是渲染文本的名字（含属性目标 `self.sql` 的 `sql`）
+    rendered_attrs: set[str] = set()    # `self.sql = str(…)` 那种属性目标
+    rendered_lists: set[str] = set()    # 假会话里 append 渲染文本的那个属性名（如 `calls`）
     bad: list[str] = []
 
-    def base_rendered(node: ast.AST) -> bool:
-        """这一子树里是否出现「会丢值的」渲染：`x.compile()` 或 `str(x.compile())`。
+    def _defect(line: int, literal: str, how: str) -> str:
+        return (f"{where}:{line} 对 compile 渲染文本{how}字面值 {literal!r}"
+                "——默认方言把值渲染成绑定参数，这句在 CI 上必红；"
+                "要判值就走 `compile().params` 的值侧，要判单行就走 `get_limit()`")
 
-        **带 `compile_kwargs={"literal_binds": True}` 的渲染不算**——那种写法就是把值内联进文本，
-        断言字面值正是它的用途（V0.8.0 STEP-00C 卡 S0C.1.2 给的修法即此）。豁免只认
-        `compile_kwargs` 这一个通道（第十八轮 R18-7：上一版只看「某个关键字的值里含那个字样」，
-        于是 `compile(**{"literal_binds": True})` 与 `compile(dialect="literal_binds")`
-        也被放过——那两个写法并不内联值，放过就是放过恒红）。
+    def _exempt(call: ast.Call) -> bool:
+        """`compile(compile_kwargs={"literal_binds": True})`：值真被内联，断言字面值是它的用途。
+
+        必须把**字典字面量的值**读出来判（V0.8.0 STEP-00C 卡 S0C.1.2 给的修法即此）；上一版判的是
+        「那个通道的 unparse 里含这个字样」，于是 `{"literal_binds": False}` 也被放过——那正是默认方言。
         """
+        kw = next((k for k in call.keywords if k.arg == "compile_kwargs"), None)
+        if kw is None or not isinstance(kw.value, ast.Dict):
+            return False
+        return any(isinstance(key, ast.Constant) and key.value == "literal_binds"
+                   and isinstance(val, ast.Constant) and val.value is True
+                   for key, val in zip(kw.value.keys, kw.value.values))
+
+    def base_rendered(node: ast.AST) -> bool:
+        """这一子树里是否出现「会丢值的」渲染：`x.compile()` 或 `str(x.compile())`。"""
         for sub in ast.walk(node):
             if isinstance(sub, ast.Call):
                 f = sub.func
                 if isinstance(f, ast.Attribute) and f.attr == "compile":
-                    kw = next((k for k in sub.keywords if k.arg == "compile_kwargs"), None)
-                    positional = sub.args[1] if len(sub.args) > 1 else None
-                    got = (("literal_binds" in ast.unparse(kw.value)) if kw is not None
-                           else (positional is not None
-                                 and "literal_binds" in ast.unparse(positional)))
-                    if not got:
+                    if not _exempt(sub):
                         return True
                 if isinstance(f, ast.Name) and f.id == "str" and sub.args \
                         and base_rendered(sub.args[0]):
                     return True
-
         return False
 
     def is_rendered(node: ast.AST) -> bool:
-        """这个表达式读的是不是渲染文本：内含 `…compile()` 调用、内含被污名化的名字，或取自律会话。"""
+        """这个表达式读的是不是渲染文本：内含非豁免 `…compile()`、含被污名化的名字/属性，或取自律会话。"""
         if isinstance(node, ast.Name):
             return node.id in rendered
+        if isinstance(node, ast.Attribute):
+            return node.attr in rendered_attrs or node.attr in rendered_lists
         if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) \
                 and node.value.attr in rendered_lists:
             return True   # `sess.calls[0]`：假会话往里塞的就是渲染文本
@@ -621,39 +655,211 @@ def sql_render_defects(text: str, where: str = "文件") -> list[str]:
         # （`walk` 会连自己一起给，必须跳过，否则这里无限递归）
         return any(is_rendered(sub) for sub in ast.walk(node) if sub is not node)
 
-    # 先认假会话：`async def scalar(self, stmt): self.<attr>.append(str(stmt.compile()))`
-    # （必须同时认 `AsyncFunctionDef`——仓库里的夹具是 async 的，第一版只认 def 就漏了整条链）
-    for n in ast.walk(tree):
-        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "scalar":
-            for c in (x for x in ast.walk(n) if isinstance(x, ast.Call)):
-                f = c.func
+    def _value_lit(node: ast.AST) -> bool:
+        return isinstance(node, ast.Constant) and isinstance(node.value, str) \
+            and bool(_VALUE_SHAPE.search(node.value))
+
+    def _is_params_read(node: ast.AST) -> bool:
+        return any(isinstance(sub, ast.Attribute) and sub.attr == "params" for sub in ast.walk(node))
+
+    def _bind(target: ast.AST) -> None:
+        if isinstance(target, ast.Name):
+            rendered.add(target.id)
+        elif isinstance(target, ast.Attribute):        # `self.sql = str(q.compile())`（机制组 H 格）
+            rendered_attrs.add(target.attr)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            for elt in target.elts:
+                _bind(elt)
+
+    def _collect_bindings() -> None:
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Call):
+                # 假会话记渲染文本这件事与**方法名无关**：`def scalar` / `def execute` / `def all`
+                # 都只是夹具自己的命名，判据认的是「把渲染文本 append 进了某个属性列表」。
+                f = n.func
                 if isinstance(f, ast.Attribute) and f.attr == "append" \
-                        and isinstance(f.value, ast.Attribute) and base_rendered(c):
+                        and isinstance(f.value, ast.Attribute) and base_rendered(n):
                     rendered_lists.add(f.value.attr)
+            elif isinstance(n, ast.Assign) and not _is_params_read(n.value) \
+                    and any(is_rendered(sub) for sub in ast.walk(n.value)):
+                # 污点要**顺着赋值传播**：真实用例是 `sql = str(x.compile())` → `flat = " ".join(sql.split())`
+                # → `assert "…" in flat`，只认第一跳的判据等于没判（第十七轮自查实测：第一版就这样漏的）
+                for t in n.targets:
+                    _bind(t)
+            elif isinstance(n, ast.NamedExpr) and not _is_params_read(n.value) \
+                    and is_rendered(n.value):
+                _bind(n.target)          # `if (sql := str(x.compile())):` 也是绑定（R18-8）
+            elif isinstance(n, (ast.For, ast.AsyncFor)) and is_rendered(n.iter):
+                _bind(n.target)          # `for sql in [str(x.compile())]:` 同算
+            elif isinstance(n, ast.comprehension) and is_rendered(n.iter):
+                _bind(n.target)          # `[sql for sql in [str(q.compile())]]`：换到推导式里也还是绑定
+
+    # 绑定先扫到不动点：链上后一跳要能看见前一跳已经染上，且**与源码里的先后顺序无关**
+    for _ in range(5):
+        before = len(rendered | rendered_attrs | rendered_lists)
+        _collect_bindings()
+        if len(rendered | rendered_attrs | rendered_lists) == before:
+            break
+
+    def _touches_param(node: ast.AST, pname: str) -> bool:
+        """这个表达式是不是拿 `pname` 去比字面值/在 `pname` 上读文本——即该形参是「被断言的文本」。"""
+        if isinstance(node, ast.Compare):
+            sides = [node.left, *node.comparators]
+            for i, op in enumerate(node.ops):
+                if isinstance(op, _CMP_OPS):
+                    a, b = sides[i], sides[i + 1]
+                    if (_value_lit(a) and isinstance(b, ast.Name) and b.id == pname) \
+                            or (_value_lit(b) and isinstance(a, ast.Name) and a.id == pname):
+                        return True
+        elif isinstance(node, ast.Call):
+            f = node.func
+            if isinstance(f, ast.Attribute) and f.attr in _READ_TEXT_METHODS \
+                    and isinstance(f.value, ast.Name) and f.value.id == pname \
+                    and any(_value_lit(a) for a in node.args):
+                return True
+        return False
+
+    # 同模块的辅助函数：形参被拿去比字面值 ⇒ 谁把渲染文本传进去，谁就是那句恒红断言的执行处
+    guarded: dict[str, set[str]] = {}
+    for fn in (x for x in ast.walk(tree)
+               if isinstance(x, (ast.FunctionDef, ast.AsyncFunctionDef))):
+        params = {a.arg for a in (*fn.args.posonlyargs, *fn.args.args, *fn.args.kwonlyargs) if a.arg}
+        used = {p for p in params if any(_touches_param(sub, p) for sub in ast.walk(fn))}
+        if used:
+            guarded[fn.name] = used
 
     for n in ast.walk(tree):
-        if isinstance(n, ast.Assign) and any(is_rendered(sub) for sub in ast.walk(n.value)):
-            # 污点要**顺着赋值传播**：真实用例是 `sql = str(x.compile())` → `flat = " ".join(sql.split())`
-            # → `assert "…" in flat`，只认第一跳的判据等于没判（第十七轮自查实测：第一版就这样漏的）
-            for t in n.targets:
-                if isinstance(t, ast.Name):
-                    rendered.add(t.id)
-        elif isinstance(n, ast.NamedExpr) and is_rendered(n.value) \
-                and isinstance(n.target, ast.Name):
-            rendered.add(n.target.id)          # `if (sql := str(x.compile())):` 也是绑定（R18-8）
-        elif isinstance(n, (ast.For, ast.AsyncFor)) and is_rendered(n.iter):
-            for t in (n.target,):
-                if isinstance(t, ast.Name):
-                    rendered.add(t.id)         # `for sql in [str(x.compile())]:` 同算
-        elif isinstance(n, ast.Assert):
-            for cmp in (x for x in ast.walk(n.test) if isinstance(x, ast.Compare)
-                        and any(isinstance(op, ast.In) for op in x.ops)):
-                left, right = cmp.left, cmp.comparators[0]
-                if isinstance(left, ast.Constant) and isinstance(left.value, str) \
-                        and _VALUE_SHAPE.search(left.value) and is_rendered(right):
-                    bad.append(f"{where}:{n.lineno} 对 compile 渲染文本断言字面值 {left.value!r}"
-                               "——默认方言把值渲染成绑定参数，这句在 CI 上必红；"
-                               "要判值就走 `compile().params` 的值侧，要判单行就走 `get_limit()`")
+        if isinstance(n, ast.Compare):
+            sides = [n.left, *n.comparators]
+            for i, op in enumerate(n.ops):
+                if not isinstance(op, _CMP_OPS):
+                    continue
+                a, b = sides[i], sides[i + 1]
+                how = _CMP_HOW[type(op)]
+                if _value_lit(a) and is_rendered(b):
+                    bad.append(_defect(n.lineno, a.value, how))
+                elif _value_lit(b) and is_rendered(a):
+                    bad.append(_defect(n.lineno, b.value, how + "（字面量写在另一侧，同一件事）"))
+        elif isinstance(n, ast.Call):
+            f = n.func
+            if isinstance(f, ast.Attribute) and f.attr in _READ_TEXT_METHODS and is_rendered(f.value):
+                for a in n.args:
+                    if _value_lit(a):
+                        bad.append(_defect(n.lineno, a.value, f"用 {f.attr}() 在渲染文本上找"))
+            elif isinstance(f, ast.Attribute) and f.attr in _RE_FUNCS \
+                    and isinstance(f.value, ast.Name) and f.value.id == "re" \
+                    and n.args and _value_lit(n.args[0]) \
+                    and any(is_rendered(a) for a in n.args[1:]):
+                bad.append(_defect(n.lineno, n.args[0].value, f"用 re.{f.attr}() 在渲染文本上匹配"))
+            elif isinstance(f, ast.Name) and f.id in guarded \
+                    and any(is_rendered(a) for a in n.args):
+                bad.append(f"{where}:{n.lineno} 把 compile 渲染文本传给 {f.id}()，"
+                           f"而它对形参 {sorted(guarded[f.id])} 断言字面值——同一句恒红只是换了个作用域")
+    return bad
+
+
+def sql_scan_face() -> list[str]:
+    """渲染文本判据的扫描面：`apps/api/tests` 下**全部** .py，外加真库目标与本步新文件。
+
+    从前这里扫的是 `{REAL_DB_TARGETS 的文件} | STEP_NEW_TEST_FILES`，共三份——那是「本步登记了谁」，
+    不是「这一族在哪里」。机制组第十九轮实测：`apps/api/tests/test_hot_scorer_batch.py:44` 就在面外，
+    而它同样在假会话里 `str(stmt.compile())`（它只判结构关键字，所以不是缺陷——但**没人检查过这件事**）。
+    判据说「这一族封死了」，扫描面就必须是全仓；按登记名单扫等于把结论建在名单的完备性上，
+    而那份完备性正是 §7 里那句「两面之间没有谁兜谁」要防的东西。
+    """
+    face = {p.relative_to(ROOT).as_posix() for p in (ROOT / "apps" / "api" / "tests").glob("*.py")}
+    return sorted(face | {p for p, _ in REAL_DB_TARGETS} | set(STEP_NEW_TEST_FILES))
+
+
+#: 规划文档面：大纲与任务卡是**两张表**，S0T 的迁移清单是**机器产物**。这三处各改一头都不会有人吱声，
+#: 所以从这里开始它们要吱声（第十九轮：机制组量的「行只进大纲不进卡」是当场抓到的，
+#: 记账组量的「`--write` 永不幂等」是同一族的第二格——产物声称机器生成，却没有任何一条命令能证伪）。
+PLAN_DIR = ROOT / "docs" / "任务规划V0.5.0"
+S0T_SCRIPT = "docs/任务规划V0.5.0/evidence/S0T/extract_checks.py"
+
+
+def outline_card_ids() -> tuple[dict[str, set[str]], dict[str, set[str]], list[str]]:
+    """现取「大纲的三级行集（按前缀分组）」与「每张卡的行集」，外加读不出来的原因清单。
+
+    形状口径（与 `04-剩余可执行大纲体系.md` 的版式同源）：大纲里三级行是 `  - S2.1.6 …`，
+    卡里同一级是 `- **S2.1.6** …`，卡里的四级 `  - S2.1.4.1` 取其父级计入。
+    """
+    outline = PLAN_DIR / "04-剩余可执行大纲体系.md"
+    steps = PLAN_DIR / "steps"
+    why: list[str] = []
+    if not outline.is_file():
+        return {}, {}, [f"大纲不在盘上：{outline.relative_to(ROOT)}"]
+    if not steps.is_dir():
+        return {}, {}, [f"任务卡目录不在盘上：{steps.relative_to(ROOT)}"]
+    out_ids: dict[str, set[str]] = {}
+    try:
+        text = outline.read_text(encoding="utf-8-sig")
+    except (UnicodeDecodeError, OSError) as exc:
+        return {}, {}, [f"大纲读不出来：{type(exc).__name__}: {exc}"]
+    for sid in re.findall(r"^  - (S[0-9A-Z]+\.[0-9]+\.[0-9]+)", text, re.M):
+        out_ids.setdefault(sid.split(".")[0], set()).add(sid)
+    card_ids: dict[str, set[str]] = {}
+    for card in sorted(steps.glob("STEP-*.md")):
+        try:
+            ct = card.read_text(encoding="utf-8-sig")
+        except (UnicodeDecodeError, OSError) as exc:
+            why.append(f"{card.name} 读不出来：{type(exc).__name__}: {exc}——这一张没判成，不是判绿")
+            continue
+        found = set(re.findall(r"^- \*\*(S[0-9A-Z]+\.[0-9]+\.[0-9]+)\*\*", ct, re.M))
+        # 四级行的父级也算「卡里有这一行」：`S2.1.6` 只带了个四级子项时，父行本身就是欠的
+        found |= {p for p in re.findall(r"^  - (S[0-9A-Z]+\.[0-9]+\.[0-9]+)\.[0-9]+", ct, re.M)}
+        if not found:
+            why.append(f"{card.name} 里一行 S 编号都没有——这张卡没被对账，不算通过")
+            continue
+        card_ids[card.name] = found
+    return out_ids, card_ids, why
+
+
+def doc_face_defects() -> list[str]:
+    """规划文档面：大纲↔卡行集对账 + S0T 迁移清单的新鲜度核对。"""
+    bad: list[str] = []
+    out_ids, card_ids, why = outline_card_ids()
+    bad += [f"文档面读不出来：{w}" for w in why]
+    if not out_ids or not card_ids:
+        return bad + ["文档面一条都没对上（读不出大纲或读不出任何一张卡）——这不是「一致」，是没判"]
+    # 每张卡认领它自己那个前缀：卡名里没有的编号段不许互相顶
+    for card, ids in card_ids.items():
+        stem = re.search(r"STEP-([0-9A-Z]+)", card)
+        if not ids or not stem:
+            continue
+        code = stem.group(1)
+        # 编号段的来历：STEP-00C → `S0C.*`（掉一个 0，字母保留），STEP-02 → `S2.*`、STEP-10 → `S10.*`。
+        # 这里从前写成 `"S" + code`，于是四张 00 卡全被报成「大纲里没有前缀 S00C」——**门自己假红**，
+        # 与它要抓的那个缺陷（两面各改一头）是同族，所以这条映射由下面那发等价变异与 ① 档一起管着。
+        prefix = "S0" + code[2:] if code.startswith("00") else "S" + str(int(code))
+        want = out_ids.get(prefix, set())
+        if not want:
+            bad.append(f"文档面：大纲里没有前缀 {prefix} 的三级行，而卡 {card} 有 {len(ids)} 行"
+                       "——两面至少有一面写错了编号段（对账不能建立在「大纲那一节刚好没登记」上）")
+            continue
+        only_out = sorted(want - ids)
+        only_card = sorted(i for i in ids - want if i.startswith(prefix + "."))
+        if only_out:
+            bad.append(f"文档面：{only_out} 只出现在大纲、不在 {card}——"
+                       f"卡表头那句「剩余原子任务」是按**本文件** grep 现算的，只进大纲的行它量不到"
+                       "（第十九轮机制组当场抓到 S2.1.6 这一格）")
+        if only_card:
+            bad.append(f"文档面：{only_card} 只出现在 {card}、不在大纲——大纲是交付门读的那一份，"
+                       "卡里有活儿而大纲里没有，等于这活儿没人验收")
+    # S0T 迁移清单：产物必须与当前树逐字节相同（`--check` 是这条声明的证伪通道）
+    try:
+        r = subprocess.run([sys.executable, "-X", "utf8", S0T_SCRIPT, "--check"],
+                           capture_output=True, text=True, encoding="utf-8",
+                           env=ENV, cwd=str(ROOT), timeout=120)
+    except (OSError, subprocess.SubprocessError) as exc:
+        bad.append(f"文档面：S0T 的 `--check` 没跑成（{type(exc).__name__}: {exc}）"
+                   "——按「没测到」记缺陷，不许把旧清单当新的")
+    else:
+        if r.returncode not in (0, 1):
+            bad.append(f"文档面：S0T 的 `--check` 退出码 {r.returncode}，既不是绿(0)也不是红(1)"
+                       f"——崩栈不是裁决：{r.stderr.strip()[:80]}")
+        elif r.returncode == 1:
+            bad.append(f"文档面：{r.stdout.strip().splitlines()[0] if r.stdout.strip() else 'rc=1 但没有 FAIL 行'}")
     return bad
 
 
@@ -745,10 +951,14 @@ def g_section() -> tuple[str, list[str]]:
     defects += db_pointer_missing(REAL_DB_TARGETS)
     # 第十七轮：本步那些「假会话只记一条渲染 SQL」的用例，断言写字面值就会在 CI 恒红
     # （V0.8.0 的 CI 实测抓到 `test_asset_fragment_guard.py:143-145` 三条全红）。这条判据在那之前不存在。
-    for rel in sorted({p for p, _ in REAL_DB_TARGETS} | set(STEP_NEW_TEST_FILES)):
+    # 第十九轮起扫描面换成 `sql_scan_face()`（全仓 tests 目录），不再按本步的登记名单。
+    for rel in sql_scan_face():
         f = ROOT / rel
         if f.is_file():
             defects += sql_render_defects(f.read_text(encoding="utf-8-sig"), rel)
+    # 第十九轮：规划文档面（大纲↔卡行集 + S0T 清单新鲜度）。这一面从前只在 prose 里被「已核对」
+    # 一句话带过，而它连「漏了一行」都不产生读数——S2.1.6 那一格就是这么混过去的。
+    defects += doc_face_defects()
     fresh = new_test_files_from_git()
     if fresh is None:
         defects.append("本步新增用例文件的清单没跑成（git 取不到读数）——`registry_drift` 这一判据**没跑**，"
@@ -1738,6 +1948,12 @@ def self_test(listing: bool = False) -> int:
     # 第十七轮：V0.8.0 的 CI 实测抓到本步一条用例恒红（断言 `str(stmt.compile())` 里的字面值，
     # 而默认方言把值渲染成 `:source_id_1`）。这条判据当时不存在，所以十六轮都没抓到——现在补上，
     # 并且三档各配靶：坏形状必须红、修好的语义 API 不许红、污点传播断链（只认第一跳）也必须红。
+    # 第十七轮：V0.8.0 的 CI 实测抓到本步一条用例恒红（断言 `str(stmt.compile())` 里的字面值，
+    # 而默认方言把值渲染成 `:source_id_1`）。这条判据当时不存在，所以十六轮都没抓到——现在补上，
+    # 并且三档各配靶：坏形状必须红、修好的语义 API 不许红、污点传播断链（只认第一跳）也必须红。
+    #: 检核名统一带 `渲染文本判据/` 这个前缀（第十九轮记账组实测：README 里那句「M 段有几条渲染探针」
+    #: 从前写成 `grep -c 渲染`，数到的却是 prose 里的「渲染」二字，与检核条数无关）。现读：
+    #: `python docs/06_validation/evidence/EVD-V2-02/replay_s213.py --list-checks | grep -c 渲染文本判据/`
     render_bad = (
         "class S:\n    def __init__(self):\n        self.calls = []\n\n"
         "    async def scalar(self, stmt):\n        self.calls.append(str(stmt.compile()))\n"
@@ -1752,14 +1968,14 @@ def self_test(listing: bool = False) -> int:
         '    assert any(v == "src-1" for v in params.values())\n'
         '    assert "LIKE" in str(stmt.compile()).upper()\n')
     render_defects = sql_render_defects(render_bad, "坏样例.py")
-    check(g9, "探针：对 compile 渲染文本断言字面值必须点名（CI 上恒红的那一类，第十七轮由 V0.8.0 抓到）",
+    check(g9, "渲染文本判据/对 compile 渲染文本断言字面值必须点名（CI 上恒红的那一类，第十七轮由 V0.8.0 抓到）",
           "" if len(render_defects) == 2 else f"实得 {len(render_defects)} 条：{render_defects!r}")
-    check(g9, "探针：污点要沿赋值与方法调用传播（`sess.calls[0]`→`sql`→`flat` 三跳都要跟上）",
+    check(g9, "渲染文本判据/污点要沿赋值与方法调用传播（`sess.calls[0]`→`sql`→`flat` 三跳都要跟上）",
           "" if {d.split(":")[1].strip().split(" ")[0] for d in render_defects}
           == {str(i) for i, ln in enumerate(render_bad.splitlines(), 1) if " in flat" in ln}
           else f"只点到这些行：{[d.split('——')[0] for d in render_defects]!r}")
 
-    check(g9, "绿档：改成读 `get_limit()` 与 `compile().params` 的值侧之后不许再咬"
+    check(g9, "渲染文本判据/绿档：改成读 `get_limit()` 与 `compile().params` 的值侧之后不许再咬"
               "（「assert 里出现 .compile()」这种粗判会连正确写法一起咬掉）",
           "" if not sql_render_defects(render_good, "好样例.py")
           else f"误咬 {sql_render_defects(render_good, '好样例.py')!r}")
@@ -1772,7 +1988,8 @@ def self_test(listing: bool = False) -> int:
         "        return 1\n\n\n"
         "async def t(sess):\n    flat = ' '.join(sess.calls[0].split())\n"
         '    assert "source_id = \'src-1\'" in flat\n')
-    check(g9, "绿档：带 `literal_binds` 的渲染文本里断言字面值**是正当用法**，不许咬（这条豁免本身要能红）",
+    check(g9, "渲染文本判据/绿档：带 `literal_binds` 的渲染文本里断言字面值**是正当用法**，不许咬"
+              "（这条豁免本身要能红）",
           "" if not sql_render_defects(render_lb, "修好的样例.py")
           else f"误咬 {sql_render_defects(render_lb, '修好的样例.py')!r}")
     # 第十八轮复核（R18-7/08）补的两端：豁免只认 `compile_kwargs` 这一个通道；污点要认
@@ -1782,23 +1999,164 @@ def self_test(listing: bool = False) -> int:
         '    assert "source_id = \'src-1\'" in str(sql)\n'
         "async def u(q):\n    flat = str(q.compile(dialect=\"literal_binds\"))\n"
         '    assert "LIMIT 1" in flat\n')
-    check(g9, "探针：`compile(**{…})` 与 `compile(dialect=\"literal_binds\")` 不内联值，"
+    check(g9, "渲染文本判据/`compile(**{…})` 与 `compile(dialect=\"literal_binds\")` 不内联值，"
               "不许被 `compile_kwargs` 的豁免放过（R18-7）",
           "" if len(sql_render_defects(render_escape, "假豁免.py")) == 2
           else f"实得 {sql_render_defects(render_escape, '假豁免.py')!r}")
-    # 两处绑定各用一个**不同的变量名**：这条判据是按名字记污点、不区分作用域（flow-insensitive），
-    # 两段共用 `sql` 时，一处绑定的污点会把另一处也点亮——探针于是失去分辨力，两发变异都测不出差别
-    # （第十八轮实测到：把 NamedExpr 或 For 任一分支关掉，缺陷数仍是 2/2）。这既是我这条探针的教训，
-    # 也是这条判据的一个**过判方向**：跨函数同名会把没被渲染文本污染的引用一起点名。
+    # 两处绑定各用一个**不同的变量名**：这条判据按名字记污点、不分作用域，两段共用 `sql` 时一处绑定
+    # 会把另一处的引用也点亮，探针于是失去分辨力（第十八轮实测：削掉 NamedExpr 或 For 任一分支，
+    # 缺陷数照样是 2/2）。第十九轮把绑定改成**先扫到不动点**，所以「先后顺序」不再是探针的责任——
+    # 下面那条 render_order 就是这件事的靶。
     render_walrus = (
         "async def t(q):\n    if (sql_w := str(q.compile())):\n"
         '        assert "source_id = \'src-1\'" in sql_w\n'
         "async def u(q):\n    for sql_f in [str(q.compile())]:\n"
         '        assert "LIMIT 1" in sql_f\n')
 
-    check(g9, "探针：海象绑定与循环目标上的渲染绑定也要点名（R18-8——只认 `=` 赋值的话，换一种绑定就隐身）",
+    check(g9, "渲染文本判据/海象绑定与循环目标上的渲染绑定也要点名（R18-8——只认 `=` 赋值的话，换一种绑定就隐身）",
           "" if len(sql_render_defects(render_walrus, "换绑定.py")) == 2
           else f"实得 {sql_render_defects(render_walrus, '换绑定.py')!r}")
+    # ↓ 第十九轮机制组量的四格。它们共同的形状是「上一版判据认的是**字形**而不是**语义**」：
+    #   认 `in` 而不认整族比较、认 `assert` 而不认任何取真值的位置、认函数内的局部名而不认属性目标、
+    #   认「方法名叫 scalar」而不认「把渲染文本 append 进了某个属性列表」。
+    render_ops = (
+        "q1 = str(s.compile())\nassert q1 == \"source_id = 'src-1'\"\n"
+        "q2 = str(s.compile())\nassert \"LIMIT 1\" not in q2\n"
+        "q3 = str(s.compile())\nassert re.search(\"= 'src-1'\", q3)\n"
+        "q4 = str(s.compile())\nassert q4.find(\"source_id = 'x'\") >= 0\n"
+        "q5 = str(s.compile())\nif \"a = '1'\" in q5:\n    raise SystemExit(1)\n"
+        "q6 = str(s.compile())\nassert \"b = '2'\" == q6\n")
+    check(g9, "渲染文本判据/比较与取段**整族**都要点名：== / not in / re.search / .find / 非 assert 语境 /"
+              "字面量写在另一侧（机制组 M1：只认 `Assert∧In∧左常量` 时这六句同样恒红却全部隐身）",
+          "" if len(sql_render_defects(render_ops, "谓词族.py")) == 6
+          else f"实得 {sql_render_defects(render_ops, '谓词族.py')!r}")
+    render_bind = (
+        "self.b1 = str(s.compile())\nassert \"x = '1'\" in self.b1\n"
+        "b2 = [v2 for v2 in [str(s.compile())]]\nassert \"y = '2'\" in b2[0]\n"
+        "def w4(q):\n    return [v4 for v4 in [str(q.compile())] if \"w = '4'\" in v4]\n"
+        "class S:\n    async def execute(self, st):\n"
+        "        self.rows.append(str(st.compile()))\n        return 1\n\n"
+        "async def t(sess):\n    assert \"z = '3'\" in sess.rows[0]\n")
+    check(g9, "渲染文本判据/属性目标、推导式目标、以及**方法名不叫 `scalar`** 的假会话都要跟得上"
+              "（机制组 M2：夹具改名整条链失效——方法名从来不是这条判据该关心的东西。"
+              "第四行是**只由推导式那一支**才跟得上的：`b2 = [v2 for …]` 那种写法即使关掉推导式分支"
+              "也会被赋值规则染上，电池因此一度把那一发明明注销了还报 GREEN）",
+          "" if len(sql_render_defects(render_bind, "绑定面.py")) == 4
+          else f"实得 {sql_render_defects(render_bind, '绑定面.py')!r}")
+    render_helper_def = "def check(sqlx):\n    assert \"x = '1'\" in sqlx\n"
+    render_helper_call = "stmt_sql = str(q.compile())\ncheck(stmt_sql)\n"
+    n_fwd = len(sql_render_defects(render_helper_def + render_helper_call, "跨函数.py"))
+    n_rev = len(sql_render_defects(render_helper_call + render_helper_def, "跨函数倒装.py"))
+    check(g9, "渲染文本判据/同模块辅助函数的形参被拿去比字面值时，**把渲染文本传进去的那一call**要点名，"
+              "且读数与两段源码的先后顺序无关（机制组 M2 的第 6 格 + 第十八轮那条探针教训的根因）",
+          "" if n_fwd == n_rev == 1 else f"正序 {n_fwd} 条、倒装 {n_rev} 条（应各 1 条）")
+    render_failclosed = (
+        "f1 = str(q.compile(compile_kwargs={\"literal_binds\": False}))\n"
+        'assert "source_id = \'src-1\'" in f1\n'
+        "f2 = str(q.compile(None, {\"literal_binds\": True}))\n"
+        'assert "LIMIT 1" in f2\n')
+    check(g9, "渲染文本判据/豁免必须是**读字典字面量的值**：`literal_binds: False` 就是默认方言、"
+              "位置实参那一槽本机无法核实（不装依赖），两种都不许放行（机制组 M3，fail-closed）",
+          "" if len(sql_render_defects(render_failclosed, "假豁免二.py")) == 2
+          else f"实得 {sql_render_defects(render_failclosed, '假豁免二.py')!r}")
+    render_green2 = (
+        "sess.calls = []\nassert sess.calls == []\n"
+        "compiled = str(q.compile())\nassert compiled.startswith(\"UPDATE\")\n"
+        'assert "FEED_ITEMS" in compiled\n'
+        "params = q.compile().params\nassert \"src-1\" in params.values()\n")
+    check(g9, "渲染文本判据/绿档第二份：空列表相等、**不带值的结构关键字**、`params` 值侧都不许咬"
+              "（把它们咬红就等于把 `test_hot_scorer_batch.py` 那种正当写法判成缺陷）",
+          "" if not sql_render_defects(render_green2, "绿二.py")
+          else f"误咬 {sql_render_defects(render_green2, '绿二.py')!r}")
+    face = sql_scan_face()
+    face_src = inspect.getsource(sql_scan_face)
+    tests_dir = ROOT / "apps" / "api" / "tests"
+    if tests_dir.is_dir():
+        want = {p.relative_to(ROOT).as_posix() for p in tests_dir.glob("*.py")}
+        miss = sorted(want - set(face))
+        face_ok, face_why = (not miss), f"面里缺 {len(miss)} 份：{miss[:3]!r}"
+    else:
+        # 电池把 harness 暂存进一个只含本包内容的目录，那里**根本没有** `apps/api/tests`。
+        # 第一版这条探针写的是 `len(face) >= 40`，于是在暂存世界里恒假，N-00 按纪律把整批判成
+        # INCONCLUSIVE（「下面每一发的红都可能来自这条无关的红」）——那是对的，红的是我自己的探针：
+        # 它断言的是仓库布局而不是取面语义。没有目录的那一档改判**形状**：面必须由目录 glob 现取，
+        # 并与两张登记表取并集（`face = set()` 那种退回登记名单的变异照样红）。
+        face_ok = 'glob("*.py")' in face_src and "REAL_DB_TARGETS" in face_src \
+            and "STEP_NEW_TEST_FILES" in face_src
+        face_why = f"取面形状不符：{[ln for ln in face_src.splitlines() if 'face =' in ln][-1][:90]!r}"
+    check(g9, "渲染文本判据/扫描面由 tests 目录现取并与两张登记表取并集，不是抄一份登记名单"
+              "（机制组 M4：面外=宣称别处不存在这一族。真实树核并集，暂存树核形状——"
+              "把份数写死会让这台机器在自己的取证副本上跑崩）",
+          "" if face_ok else face_why)
+
+    # 第十九轮：规划文档面（大纲↔卡行集对账 + S0T 清单新鲜度）。
+    # 这一组**不复制真实规划树**：电池把 harness 暂存进一个只装着本包内容的目录里，那里根本没有
+    # `docs/任务规划V0.5.0/`，而第一版写的是 `shutil.copytree(PLAN_DIR, …)`——整趟自证直接跑成
+    # traceback，N-00 那句「基线副本不绿（rc=1）：一条可读裁决都没有」就是它（探针把自己跑在哪棵树上
+    # 当成前提，等于把判据的可用性绑在目录布局上；这正是本项目禁的那类「只会说好话的声明」的反面教材）。
+    # 改成自带一棵最小合成树：判的合成树与判真实树用的是同一个函数。
+    with tempfile.TemporaryDirectory(prefix="docface_") as td:
+        mirror = pathlib.Path(td) / "V"
+        (mirror / "steps").mkdir(parents=True)
+        outline_f = mirror / "04-剩余可执行大纲体系.md"
+        card_f = mirror / "steps" / "STEP-02-合成.md"
+        card00c = mirror / "steps" / "STEP-00C-合成.md"
+        outline_f.write_text("  - S2.1.4 ✅ 锚\n  - S2.1.5 ✅ 守卫\n  - S0C.1.1 🔴 ruff\n", encoding="utf-8")
+        card_f.write_text("- **S2.1.4** ✅ 锚\n  - S2.1.4.1 ✅ 子项\n- **S2.1.5** ✅ 守卫\n", encoding="utf-8")
+        card00c.write_text("- **S0C.1.1** 🔴 ruff\n", encoding="utf-8")
+        old_plan = globals()["PLAN_DIR"]
+        globals()["PLAN_DIR"] = mirror
+        try:
+            base_out, base_cards, base_why = outline_card_ids()
+            check(g9, "文档面/两面行集都能取到（大纲前缀非空、每张卡至少一行；一行都没读出来不算对账）",
+                  "" if base_out and base_cards and not base_why
+                  else f"大纲前缀 {sorted(base_out)}、卡 {len(base_cards)} 张、原因 {base_why!r}")
+            quiet = [d for d in doc_face_defects() if "只出现在" in d or "前缀" in d]
+            check(g9, "文档面/绿档：两面一致时必须静默（这道核对不是只会红——没有绿档的判据会长期被读成"
+                      "「它只是烦」；「前缀」那一类也一并核，否则映射写错时这条仍然安静）",
+                  "" if not quiet else f"一致却仍点名：{quiet!r}")
+            outline_f.write_text(outline_f.read_text(encoding="utf-8")
+                                 + "  - S0C.9.9 🛠 只进大纲的 00 卡行\n", encoding="utf-8")
+            mapped = [d for d in doc_face_defects() if "S0C.9.9" in d and "STEP-00C" in d]
+            check(g9, "文档面/前缀映射：STEP-00C 那张卡必须认领 S0C 那一段（上一版这条只查「大纲里有没有"
+                      "S0C 这个键」——那是从大纲文本直接读出来的，卡那边的映射怎么写都红不了；"
+                      "映射错成 S00C 时四张 00 卡的行既不认领也不点名，整段账从此隐身）",
+                  "" if len(mapped) == 1 else f"点名 {len(mapped)} 条：{mapped[:1]!r}")
+            outline_f.write_text(outline_f.read_text(encoding="utf-8").replace(
+                "  - S0C.9.9 🛠 只进大纲的 00 卡行\n", ""), encoding="utf-8")
+            outline_f.write_text(outline_f.read_text(encoding="utf-8")
+                                 + "  - S2.9.9 🛠 只进大纲的一行\n", encoding="utf-8")
+            hit = [d for d in doc_face_defects() if "S2.9.9" in d]
+            check(g9, "文档面/只进大纲、不进卡的行必须点名（真实现场是 S2.1.6：卡表头那句「剩余原子任务」"
+                      "按**本文件** grep 现算，量不到大纲独有的行，连「漏了一行」都不产生读数）",
+                  "" if len(hit) == 1 else f"点名 {len(hit)} 条：{hit[:1]!r}")
+            outline_f.write_text(outline_f.read_text(encoding="utf-8").replace(
+                "  - S2.9.9 🛠 只进大纲的一行\n", ""), encoding="utf-8")
+            card_f.write_text(card_f.read_text(encoding="utf-8")
+                              + "- **S2.1.88** 🛠 只写在卡里的一行\n", encoding="utf-8")
+            hit2 = [d for d in doc_face_defects() if "S2.1.88" in d]
+            check(g9, "文档面/反方向也要点名：只写在卡里、大纲没有的行"
+                      "（大纲是交付门读的那一份，卡里有活儿大纲没有 = 这活儿没人验收）",
+                  "" if len(hit2) == 1 else f"点名 {len(hit2)} 条：{hit2[:1]!r}")
+
+        finally:
+            globals()["PLAN_DIR"] = old_plan
+    # `gtree` 是 g_section **那一个函数节点**的 AST，模块级其它函数不在它下面：先前在这里
+    # `ast.walk(gtree)` 找 `doc_face_defects`，三档 df_src 检核于是恒假（第一次跑就红了——
+    # 红得对，它抓到的正是我自己写错的那个假设）。取源码改用 `inspect.getsource`。
+    df_src = inspect.getsource(doc_face_defects)
+    check(g9, "文档面/S0T 的 `--check` 退出码既不是 0 也不是 1 时按「崩栈不是裁决」记缺陷"
+              "（三档 rc 是本项目自己定的：红要有 FAIL 行，2 与 traceback 属没判成）",
+          "" if "not in (0, 1)" in df_src else "doc_face_defects 里没有 rc∉{0,1} 那一叉")
+    check(g9, "文档面/rc=1 却没打出 FAIL 首行时不许交出空话（那样一道红会被读成一句形容词）",
+          "" if "rc=1 但没有 FAIL 行" in df_src else "没有那句兜底")
+    check(g9, "文档面/接进去的那一路必须是 `--check`（只读对账）而不是 `--write`"
+              "（把「核对」写成「重写」＝门禁自己把过期证据刷新成新的，从此恒绿）",
+          "" if "--check" in df_src and "--write" not in df_src
+          else f"这一路里 --check 在不在：{'--check' in df_src}，混进 --write：{'--write' in df_src}")
+    check(g9, "g_section 真的把文档面接进交付判据（上一轮这条探针根本没落进文件，于是电池那一发"
+              "「把合并语句改成 pass」报了 GREEN——写了不调用与忘了写进去，在外面看是同一个绿）",
+          "" if _first_call_line(gtree, "doc_face_defects") else "g_section 里没有那次调用")
 
     check(g9, "g_section 真的把这条接进交付判据（写了不调用 = 又一句好听的话）",
           "" if _first_call_line(gtree, "sql_render_defects") else "g_section 里没有那次调用")

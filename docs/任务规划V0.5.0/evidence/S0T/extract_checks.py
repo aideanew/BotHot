@@ -7,7 +7,8 @@
 用法（仓库根）：
     PYTHONIOENCODING=utf-8 python docs/任务规划V0.5.0/evidence/S0T/extract_checks.py [--write]
 不带 `--write` 只打合计与各来源条数；带 `--write` 把 markdown 表写进
-`docs/任务规划V0.5.0/evidence/S0T/判据迁移清单.md`（表尾自动带生成命令与合计）。
+`docs/任务规划V0.5.0/evidence/S0T/判据迁移清单.md`；带 `--check` 与盘上那份逐字节对账，
+**过期就 rc=1**（第十九轮记账组：表头带时间戳时 `--write` 永不可能幂等，「机器生成」四字不可证伪）。
 
 分类是**启发式**：它只回答「这条判据在问哪一类问题」，
 『现有 pytest 等价』与『目标用例名』两列一律留 `⏳ 待补`——那两列是 S0T.1.1.2 的人工活，
@@ -18,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import datetime
 import pathlib
 import re
 
@@ -97,10 +97,49 @@ def labels_from(path: pathlib.Path) -> list[tuple[int, str]]:
     return out
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--write", action="store_true", help="把 markdown 表写进本目录")
-    args = ap.parse_args()
+def render_markdown(label_rows: list[tuple[str, int, str, str, str]],
+                    placeholder_rows: list[tuple[str, int, str, str, str]],
+                    per: dict[str, int]) -> str:
+    """整份 markdown 是**输入树的纯函数**：没有时钟、没有绝对路径、没有随机序。
+
+    第十九轮记账组实测：上一版表头有一行 `> 生成：<时间戳>`，于是 `--write` **永远**不可能字节幂等——
+    「这张表是机器生成的」那句因此只是修辞；同一批发现在还量出 92 行的 `行` 列与注册件的当前树不符
+    （它们记的是提交前的中间态）。幂等是「可复跑」这条要求的下限，所以把时钟从这里拿掉，
+    把「行号在哪个树上有效」交给 `--check` 去现读，而不是写死在表头里等它过期。
+    """
+    out = [
+        "# 判据迁移清单（S0T.1.1.1 自动初表 —— 标签由脚本提取，不手抄）",
+        "",
+        "> 生成命令：`PYTHONIOENCODING=utf-8 python docs/任务规划V0.5.0/evidence/S0T/extract_checks.py --write`"
+        "（本表是那次运行所在树的纯函数：**同一棵树重跑必逐字节相同**，所以「是否过期」这件事现在能红了——"
+        "核对用同目录的 `--check`）",
+        f"> 合计 {len(label_rows)} 条**标签**，另有 {len(placeholder_rows)} 行「未提取到标签」的占位登记"
+        f"（来源：{', '.join(r[0].split('/')[-1] for r in placeholder_rows) or '无'}）；"
+        f"登记来源 {len(SOURCES)} 份、提取到标签的 {len(per)} 份。"
+        "四个数都由脚本现算，抄进正文就会旧。",
+        "> 『现有 pytest 等价』与『目标用例名』两列**故意留空**：那是 S0T.1.1.2 的人工判断，"
+        "机器替人填就会把「已迁」写成愿望（本仓为此付过学费，见 `06-执行记录.md` 条 17）。",
+        "> **`行` 列的口径**：它是**生成本表那一次**的行号。注册件（尤其 `replay_s213.py`）一改动就会漂，"
+        "漂了不出声——所以「过期」现在由 `extract_checks.py --check` 判：它重跑提取并与盘上这份逐行比，"
+        "不一致就 rc=1 并点名是哪几行。",
+        "",
+        "| # | 来源 | 行 | 分类 | 判据标签（原文） | 被证对象 | 现有 pytest 等价 | 目标用例名 |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for i, (rel, line, label, kind, target) in enumerate(
+            sorted(label_rows + placeholder_rows, key=lambda x: (x[0], x[1])), 1):
+        short = label if len(label) <= 90 else label[:88] + "…"
+        out.append(f"| {i} | `{rel.split('/')[-1]}` | {line} | {kind} | {short} | {target} | ⏳ 待补 | ⏳ 待补 |")
+    out += ["", "## 分类口径", "",
+            "- **行为面**：跑一段真实/仿真代码问「返回了什么、下发了什么条件」；迁 pytest 时可等价。",
+            "- **结构面**：AST/文本扫描问「这份源码长什么样」；多数**不可**等价进 pytest（CI 里没有这台机器）。",
+            "- **探针 / 反证 / 等价 / 自证**：判的是门禁自身的判定力与体面性，属**取证工具**，"
+            "迁移时随脚本一起归档（S0T.3.1），不冒充业务用例。",
+            "- **前提/其它**：登记表在不在册、路径存不存在这类前置。"]
+    return "\n".join(out) + "\n"
+
+
+def build_rows() -> tuple[list[tuple[str, int, str, str, str]], list[str], dict[str, int]]:
     rows: list[tuple[str, int, str, str, str]] = []
     for rel, target in SOURCES.items():
         p = ROOT / rel
@@ -114,43 +153,65 @@ def main() -> int:
         per[r[0]] = per.get(r[0], 0) + 1
     # 零标签的登记来源不是「没有判据」，而是**这份脚本认不出它的判定形态**——
     # 沉默地少一份，下一轮就会被读成「那份已经迁完了」。这里把它显式登记成待人工补。
-    empty = [rel for rel in SOURCES if per.get(rel, 0) == 0]
-    for rel in empty:
-        rows.append((rel, 0, "⏳ 未提取到标签：这份件的判定不走 check(...) 也不走登记表元组，"
-                             "形态需人工登记（见本脚本 SOURCES）", "未分类（S0T.1.1.2 人工）", SOURCES[rel]))
+    empty = sorted(rel for rel in SOURCES if per.get(rel, 0) == 0)
+    return rows, empty, per
+
+
+def compose() -> str:
+    """`--write` 与 `--check` 共用的那一份文本：**两条通道必须走同一个函数**。
+
+    第一版分开写（`--write` 把占位行渲进表、`--check` 没加），结果刚生成的清单立刻被自己的
+    `--check` 报过期（506 行 vs 508 行）。对账工具与产出物各算各的，是这一族的老病根。
+    """
+    rows, empty, per = build_rows()
+    ph = [(rel, 0, "⏳ 未提取到标签：这份件的判定不走 check(...) 也不走登记表元组，"
+                   "形态需人工登记（见本脚本 SOURCES）", "未分类（S0T.1.1.2 人工）", SOURCES[rel])
+          for rel in empty]
+    return render_markdown(rows, ph, per)
+
+
+def check_fresh(dst: pathlib.Path) -> int:
+    """`--check`：把当前树重跑一遍并与盘上那份比，不一致就 rc=1。
+
+    这一档存在的原因是「机器生成」这四个字从前**不可证伪**：表头带时间戳时，任何一次重跑都与盘上不同，
+    于是没人能区分「表是旧的」与「表本来就是纯函数」。有了它，`行` 列过期从一句提醒变成一个读数。
+    """
+    want = compose()
+    if not dst.is_file():
+        print(f"FAIL 迁移清单不在盘上：{dst.relative_to(ROOT)}——登记表说有，磁盘说没有")
+        return 1
+    have = dst.read_text(encoding="utf-8")
+    if have == want:
+        print(f"OK 迁移清单与当前树逐字节相同（{want.count(chr(10))} 行）")
+        return 0
+    diff = [ln for ln in want.splitlines() if ln.startswith("| ") and ln not in have.splitlines()]
+    old = [ln for ln in have.splitlines() if ln.startswith("| ") and ln not in want.splitlines()]
+    print(f"FAIL 迁移清单过期：与当前树不一致——新表有 {len(diff)} 行不在盘上那份里，"
+          f"盘上有 {len(old)} 行不在新表里（多半是 `行` 列漂了）。重跑 `--write` 并随件提交。")
+    for ln in (diff + old)[:4]:
+        print(f"  {ln[:110]}")
+    return 1
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--write", action="store_true", help="把 markdown 表写进本目录")
+    ap.add_argument("--check", action="store_true",
+                    help="与盘上那份逐字节对账（过期就 rc=1，不写任何东西）")
+    args = ap.parse_args()
+    dst = pathlib.Path(__file__).with_name("判据迁移清单.md")
+    if args.check:
+        return check_fresh(dst)
+    rows, empty, per = build_rows()
     if not args.write:
         for k in sorted(per):
             print(f"  {per[k]:>4}  {k}")
-        print(f"合计标签 {len(rows)} 条、登记来源 {len(SOURCES)} 份（提取到标签的 {len(per)} 份）"
-              "——三个数现算，勿抄进正文")
+        print(f"合计标签 {len(rows)} 条 + 占位 {len(empty)} 行、"
+              f"登记来源 {len(SOURCES)} 份（提取到标签的 {len(per)} 份）——四个数现算，勿抄进正文")
         return 0
-    stamp = datetime.datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S%z")
-    out = [
-        "# 判据迁移清单（S0T.1.1.1 自动初表 —— 标签由脚本提取，不手抄）",
-        "",
-        f"> 生成：{stamp}｜生成命令：`PYTHONIOENCODING=utf-8 python "
-        "docs/任务规划V0.5.0/evidence/S0T/extract_checks.py --write`",
-        f"> 合计 {len(rows)} 条标签、登记来源 {len(SOURCES)} 份（其中 {len(per)} 份提取到标签、"
-        f"{len(SOURCES) - len(per)} 份提取为 0 并已显式登记为待人工补）；三个数都由脚本现算。",
-        "> 『现有 pytest 等价』与『目标用例名』两列**故意留空**：那是 S0T.1.1.2 的人工判断，"
-        "机器替人填就会把「已迁」写成愿望（本仓为此付过学费，见 `06-执行记录.md` 条 17）。",
-        "",
-        "| # | 来源 | 行 | 分类 | 判据标签（原文） | 被证对象 | 现有 pytest 等价 | 目标用例名 |",
-        "|---|---|---|---|---|---|---|---|",
-    ]
-    for i, (rel, line, label, kind, target) in enumerate(sorted(rows, key=lambda x: (x[0], x[1])), 1):
-        short = label if len(label) <= 90 else label[:88] + "…"
-        out.append(f"| {i} | `{rel.split('/')[-1]}` | {line} | {kind} | {short} | {target} | ⏳ 待补 | ⏳ 待补 |")
-    out += ["", "## 分类口径", "",
-            "- **行为面**：跑一段真实/仿真代码问「返回了什么、下发了什么条件」；迁 pytest 时可等价。",
-            "- **结构面**：AST/文本扫描问「这份源码长什么样」；多数**不可**等价进 pytest（CI 里没有这台机器）。",
-            "- **探针 / 反证 / 等价 / 自证**：判的是门禁自身的判定力与体面性，属**取证工具**，"
-            "迁移时随脚本一起归档（S0T.3.1），不冒充业务用例。",
-            "- **前提/其它**：登记表在不在册、路径存不存在这类前置。"]
-    dst = pathlib.Path(__file__).with_name("判据迁移清单.md")
-    dst.write_text("\n".join(out) + "\n", encoding="utf-8")
-    print(f"写出 {dst.relative_to(ROOT)}：{len(rows)} 行、登记来源 {len(SOURCES)} 份"
-          f"（提取到标签的 {len(per)} 份）——合计由脚本现算")
+    dst.write_text(compose(), encoding="utf-8")
+    print(f"写出 {dst.relative_to(ROOT)}：{len(rows) + len(empty)} 行、登记来源 {len(SOURCES)} 份"
+          f"（提取到标签的 {len(per)} 份）——行数现算")
     return 0
 
 
