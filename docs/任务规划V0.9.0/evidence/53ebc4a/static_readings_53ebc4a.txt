@@ -1,0 +1,100 @@
+# V0.9.0 静态读数 @ main@53ebc4a
+# 采集：2026-10-14，win32 执行机（无 venv/ruff/mypy/gitleaks/docker/psql/gh；node v24.21.0 在，pnpm 不在）
+# 口径：本文件只收本机可复跑的静态读数。需依赖环境/网络的读数一律标 NOT_MEASURED 并给命令。
+#       凡引用 V0.7.0/V0.8.0 的数，均注明是哪一版哪一基线的时点值，不冒充本轮实测。
+
+## S-01 同步与基线
+- `git fetch origin main` 成功（经本机 10808 代理）。
+- `git rev-parse HEAD origin/main` = 两者同为 `53ebc4a921ad7cb1301065911fc8e56ec006d183`。
+- `git rev-list --left-right --count origin/main...HEAD` = `0 0` ⇒ 双端一致，无需推送即可开始规划。
+- `git remote get-url origin` = `https://github.com/aideanew/BotHot.git`（账号 aideanew，分支 main）⇒ 与指令指定一致。
+
+## S-02 V0.8.0 基线（61358c3）→ 本版基线（53ebc4a）的增量
+7 个提交：`8d4b434`(V0.8.0 规划) → `0e870d1`(第十六轮机制组) → `f97ae53`(第十七轮自查) → `b2ee622`(06 记录) → `f710ce9`(06 修回) → `2315cda`(第十八轮处置) → `53ebc4a`(第十九轮处置：渲染判据按语义重写 + 规划文档面加门 + S0T 产物改纯函数)
+
+    $ git diff --stat 61358c3 HEAD -- apps/api/app
+    (无输出)                       ⇒ 业务代码零改动
+
+推论（可核）：V0.8.0 记为「已实现、未验收」的 STEP-R0 与 STEP-16 **状态未变**，既没被回退也没被验收。
+
+## S-03 我（V0.7.0 会话）落地的两处仍在 HEAD
+    $ git show HEAD:apps/api/app/services/kb.py | grep -c 'ContentAsset.status == "READY"'      → 1
+    $ git show HEAD:docker/compose.yml | grep -c 'ALERTING_ENABLED:-true'                        → 1
+    $ git show HEAD:apps/api/app/core/alerting.py | grep -c 'def allow_alert\|def in_startup_grace' → 2
+    $ git cat-file -e HEAD:apps/api/tests/test_alerting_default.py                               → 存在
+- `f70d52f` / `d709987` / `b2d0b66` 均为 HEAD 祖先（`git merge-base --is-ancestor` 全 YES）⇒ 无 force-push、无历史改写。
+
+## S-04 V0.8.0 认定的「CI 唯一红项」已在本基线被修掉（本轮实测源码）
+V0.8.0 F-03/F-04：`tests/test_asset_fragment_guard.py` 的 `_RecordingSession.scalar` 用 `str(stmt.compile())`，
+绑定参数渲染成 `:source_id_1` 而断言找字面值 ⇒ 对任何正确实现恒红。
+本轮实测 HEAD 的该文件（`:43`）：
+
+    self.calls.append(str(stmt.compile(compile_kwargs={"literal_binds": True})))
+
+且注释自述该红由 V0.8.0 的 `evidence/61358c3/pytest_local_noPG.txt` 抓到、修法照 STEP-00C S0C.1.2，
+并新增静态判据 `replay_s213.py` 的 `sql_render_defects` 防再犯。
+⇒ **STEP-00C 的"改测试断言可满足化"这格已被别人做掉**；V0.9.0 不得再把它列为待办（否则重复下发＝冲突源）。
+⇒ 但「CI 因此转绿」仍属 `NOT_MEASURED`：无 gh，且 CI 是否只剩这一条红，须 run id 证实。
+
+## S-05 本轮自己发现并自己修掉的缺陷（凭据形自伤）
+- V0.8.0 F-10 记录：`f70d52f`（V0.7.0 规划提交）在 `docs/任务规划V0.7.0/06-入库与双端一致.md` 引入 1 处 gitleaks 新增命中。
+- 本轮定位到**两处**同源自伤：
+  1. 该行抄了占位 DSN 字面量（作为"为什么排除某文件"的理由）；
+  2. 同一篇的"扫描判据"命令里把正则字面量也抄了进去 —— **反凭据入库的文档自己成了凭据形**。
+- 修法与验证（本轮真跑）：改用仓内既有 `secret_shape_scan.py` 作判据载体，文档不再落任何相邻字面量。
+
+    $ python docs/任务规划V0.5.0/evidence/65f508b/secret_shape_scan.py docs/任务规划V0.7.0
+      文件数 43；HIGH 命中 0；ALLOWED 0
+    $ python ... docs/任务规划V0.9.0        → HIGH 0（本轮新建目录，边写边自净）
+    $ python ... docs/任务规划V0.6.0        → HIGH 5，全部落在被排除的 STEP-R0+00C_*.patch
+                                             （:124/:137/:141/:150/:156）
+⇒ 关键：**排除判据仍然有效**（真凭据形照样被抓到），不是把命令写废来让文档变干净。
+
+## S-06 证据脚本规模（V0.7.0/V0.8.0 设的「只降不升」连续第二版被破）
+    $ find docs/06_validation/evidence -name '*.py' | xargs wc -l | tail -1  → 10406 total
+    $ wc -l docs/06_validation/evidence/EVD-V2-00R/*.py docs/.../EVD-V2-02/*.py | tail -1 → 9194
+
+| 口径 | V0.6.0@ a9b194d | V0.7.0@ 13acacc | V0.8.0@ 61358c3 | **本版@ 53ebc4a** |
+|---|---|---|---|---|
+| EVD-V2-00R + 02 | 6,801 | 7,322 | (未单列) | **9,194** |
+| 全部 evidence/*.py | — | 8,383 | 9,519 | **10,406** |
+
+### S-06.1 时点归属更正（本版自己踩的坑，独立验证者抓出）
+本文件初稿把 10,406 / 9,194 标在 `2315cda` 名下，**那是错的**：这两个数是**当前 HEAD `53ebc4a` 的提交态**，
+而 `2315cda` 的提交态是 **9,934 / 8,722**。原因是我在会话中段采集，采完后 main 又前进了一个提交（第十九轮），
+我直接把工作树现值挂在了旧哈希上——正是我上一版批评别人的"把转抄/过期读数写成本时点值"。
+复算口径（提交态用 `git cat-file`，不看工作树）：
+```
+2315cda 提交态：py 文件 11 个，全量 9,934，EVD-V2-00R+02 口径 8,722
+53ebc4a 提交态：py 文件 11 个，全量 10,406，EVD-V2-00R+02 口径 9,194   ← 本版引用值
+工作树现值：10,406（与 53ebc4a 提交态一致）
+```
+⇒ 结论：**"每轮的基线哈希必须与该轮所有读数的采集时刻绑定"**，且凡引用行数类指标，须同时给"提交态"与"工作树态"两个口径，
+否则共享工作树里的漂移会被误读成上一版的读数错了（本次 V0.8.0 的 9,519 与本版的 10,406 之间并无矛盾，只是不同采集时刻）。
+
+- 同期业务代码：`git diff --stat 61358c3 HEAD -- apps/api/app` = 空。⇒ 本区间「docs+证据涨、产品代码不动」的比例是**未定义除以零**，比 V0.7.0 记的 150:1 更极端。
+- 复审轮次标签实测（`git log --grep='轮'` 去重）：第四…第十九轮**共 15 个轮次标签存在**，被证对象 `kb.py:587-591` 至今未变。
+
+## S-07 V0.8.0 的 F-08 已失效（环境也会漂）
+    $ ls -d apps/web/node_modules   → 不存在
+    $ command -v pnpm               → 不在 PATH
+    $ node -v                        → v24.21.0（V0.8.0 记的是 Node 22 + pnpm 9.15.9 + node_modules 存在）
+⇒ V0.8.0 说"上一轮『装不装依赖』的问题已失效"，本版该前提**又回来了**。共享工作树里连工具链状态都不是常量，
+   任何以"上次能跑"为凭的验收结论都必须本轮重取。
+
+## S-08 未纳管需求面的实态（沿用 V0.7.0 的清点口径，本轮复跑）
+- `grep -c NotImplementedError apps/api/app/providers/engine_port.py` = **16**（未变）。
+- 管理端 6 组端点在 `apps/web/**` 命中数：admin/push=0、admin/ops/liveness=0、admin/discovery/channels=0、
+  admin/engines/keys=0、backchannel-logout=0、admin/alerts=0 ⇒ 全 0（未变）。
+- `docs/03_solution/decisions/decision-log.md` **仍不存在** ⇒ V0.7.0 的 20 项 + V0.8.0 的增量裁决**累计 0 已签**。
+- `.gitleaksignore` **仍不存在** ⇒ Security 的历史指纹没有豁免载体（STEP-00S 未落地）。
+- Alembic 单头仍为 `ab1005w5b`（`grep -rl 'down_revision = "ab1005w5b"'` = 0 个后继）⇒ 本版规划不占新迁移号。
+
+## S-09 NOT_MEASURED（本机测不了，禁止当读数引用）
+| 项 | 原因 | 复跑命令 |
+|---|---|---|
+| 真库全量 pytest（R0/16 的 Done 判据） | 无 venv、无 PG；V0.8.0 F 表亦记本机 PG 实例被并发会话清掉 | `cd apps/api && .venv/bin/python -m pytest tests/ -q -rs --cov=app --junitxml=junit.xml` |
+| ruff / mypy 实际读数 | 工具缺失（V0.8.0 F-07 曾记本地 ruff All checks passed，那是它的环境，非本轮） | `cd apps/api && ruff check app tests` |
+| CI/Security run id、成功失败数、gitleaks 8→? | `gh` MISSING；未认证 API 403 rate-limit | `gh run list --repo aideanew/BotHot --branch main --limit 20` |
+| 前端 typecheck / vitest / e2e | `node_modules` 本轮实测不存在（S-07） | `cd apps/web && pnpm install --frozen-lockfile && pnpm typecheck && pnpm vitest run` |
+| gitleaks 真实命中数 | 无二进制；本轮只用仓内近似器（S-05），它复刻 .gitleaks.toml 规则 1，**不替代**上游默认规则/熵判据 | `gitleaks git --log-opts=origin/main --config .gitleaks.toml .` |

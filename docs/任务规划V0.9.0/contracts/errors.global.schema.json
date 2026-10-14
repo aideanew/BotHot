@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bothot/contracts/errors.global.schema.json",
+  "title": "BotHot 全局错误码契约（冻结稿 V0.7.0 / 基线 main@13acacc）",
+  "description": "唯一源 = apps/api/app/core/errors.py:9-39 的 ERROR_CODES 字典与各类的 http_status 属性；HTTP 状态由 http_status_for(code)（:236+）派生，路由禁止手写状态码。本表逐条从该源抄录，新增码位属契约变更（errors.py:44 注释：「只使用上表已登记的 code；新增码位属契约变更，须先报 A 登记」）。采集域细分见 errors.collection.json。",
+  "type": "object",
+  "definitions": {
+    "ErrorCode": {
+      "type": "integer",
+      "enum": [0, 10001, 10002, 10003, 10004, 10005, 10006, 10007, 10008, 20001, 20002, 20003, 20004, 20005, 30001, 30002, 30003, 30004, 30005, 30006, 50001, 50002],
+      "x-segments": "1xxxx 用户/认证与请求级客户端错误 | 2xxxx 采集/信息源 | 3xxxx 知识库/机器人 | 5xxxx 系统（errors.py:4-6 段位约定）"
+    },
+    "ErrorEntry": {
+      "type": "object",
+      "required": ["code", "name", "httpStatus", "retryable", "frontendSurface"],
+      "properties": {
+        "code": { "$ref": "#/definitions/ErrorCode" },
+        "name": { "type": "string" },
+        "httpStatus": { "type": "integer" },
+        "retryable": { "type": "boolean", "description": "客户端是否可原样重试。5xx 与 429 为 true（429 须退避），4xx 为 false。" },
+        "frontendSurface": {
+          "type": "string",
+          "enum": ["toast", "inline-field", "empty-state", "error-boundary", "redirect-login", "silent-log-only", "admin-panel"],
+          "description": "前端呈现方式。统一由 LoadingErrorShell.tsx 承接，不允许各页自造错误 UI。"
+        }
+      }
+    },
+    "ErrorBody": {
+      "description": "失败信封（api.envelope.schema.json 的 code!=0 形态）",
+      "allOf": [{ "$ref": "api.envelope.schema.json" }],
+      "properties": { "code": { "enum": [10001, 10002, 10003, 10004, 10005, 10006, 10007, 10008, 20001, 20002, 20003, 20004, 20005, 30001, 30002, 30003, 30004, 30005, 30006, 50001, 50002] }, "data": { "type": "null" } }
+    }
+  },
+  "x-table": [
+    { "code": 10001, "name": "UNAUTHENTICATED", "httpStatus": 401, "retryable": false, "frontendSurface": "redirect-login", "source": "errors.py:59-61", "note": "未登录或本地 users 行缺失。roles.py:72-82：授权路径缺行也抛 10001，不得当「权限不足」显示。" },
+    { "code": 10002, "name": "SSO_STATE_INVALID", "httpStatus": 400, "retryable": false, "frontendSurface": "redirect-login", "source": "errors.py:64-66", "note": "OIDC state 校验失败，须重发起授权，禁止自动重试。" },
+    { "code": 10003, "name": "SSO_TOKEN_EXCHANGE_FAILED", "httpStatus": 401, "retryable": false, "frontendSurface": "redirect-login", "source": "errors.py:69-71" },
+    { "code": 10004, "name": "FORBIDDEN", "httpStatus": 403, "retryable": false, "frontendSurface": "empty-state", "source": "errors.py:74-76", "note": "引擎未实接的骨架也走此码（api/v1/engines.py:121-122 抛 ForbiddenError『尚未实接（仅骨架实现）』）。前端须显示「该引擎暂未开放」而非「未知错误」。" },
+    { "code": 10005, "name": "REQUEST_INVALID", "httpStatus": 422, "retryable": false, "frontendSurface": "inline-field", "source": "errors.py:79-86", "note": "亦承接 RequestValidationError（main.py:123-127，裁决 2026-09-07），message 内嵌首条 pydantic 错误。" },
+    { "code": 10006, "name": "MALFORMED_URL", "httpStatus": 400, "retryable": false, "frontendSurface": "inline-field", "source": "errors.py:95-96" },
+    { "code": 10007, "name": "RATE_LIMITED", "httpStatus": 429, "retryable": true, "frontendSurface": "toast", "source": "errors.py:106-107", "note": "我方限流（对方被限）。与 20005 严格区分（errors.py:19-22 注释）。⚠ 实测 Redis 不可达时限流 fail-open（core/security.py:141-153,205），此码在降级期不会出现——不得据此判断「没被限流」。" },
+    { "code": 10008, "name": "PAYLOAD_TOO_LARGE", "httpStatus": 413, "retryable": false, "frontendSurface": "inline-field", "source": "errors.py:117-118" },
+    { "code": 20001, "name": "SOURCE_URL_UNRECOGNIZED", "httpStatus": 400, "retryable": false, "frontendSurface": "inline-field", "source": "errors.py:124-126" },
+    { "code": 20002, "name": "EXTRACT_FAILED", "httpStatus": 502, "retryable": true, "frontendSurface": "toast", "source": "errors.py:130-131" },
+    { "code": 20003, "name": "EXTRACT_QUALITY_LOW", "httpStatus": 422, "retryable": false, "frontendSurface": "toast", "source": "errors.py:134-136" },
+    { "code": 20004, "name": "DISCOVERY_FAILED", "httpStatus": 502, "retryable": true, "frontendSurface": "admin-panel", "source": "errors.py:139-141" },
+    { "code": 20005, "name": "RATE_LIMITED_UPSTREAM", "httpStatus": 429, "retryable": true, "frontendSurface": "silent-log-only", "source": "errors.py:144-146", "note": "上游限频（我们被限），由调度器退避消费，不打扰用户。" },
+    { "code": 30001, "name": "SPACE_NOT_FOUND", "httpStatus": 404, "retryable": false, "frontendSurface": "empty-state", "source": "errors.py:152-154" },
+    { "code": 30002, "name": "LANGBOT_API_ERROR", "httpStatus": 502, "retryable": true, "frontendSurface": "toast", "source": "errors.py:157-166" },
+    { "code": 30003, "name": "INGEST_FAILED", "httpStatus": 502, "retryable": true, "frontendSurface": "toast", "source": "errors.py:173-175" },
+    { "code": 30004, "name": "RESOURCE_NOT_FOUND", "httpStatus": 404, "retryable": false, "frontendSurface": "empty-state", "source": "errors.py:183-195" },
+    { "code": 30005, "name": "JOB_STATE_INVALID", "httpStatus": 409, "retryable": false, "frontendSurface": "toast", "source": "errors.py:178-180" },
+    { "code": 30006, "name": "SPACE_NAME_CONFLICT", "httpStatus": 409, "retryable": false, "frontendSurface": "inline-field", "source": "errors.py:207-211" },
+    { "code": 50001, "name": "INTERNAL_ERROR", "httpStatus": 500, "retryable": true, "frontendSurface": "error-boundary", "source": "errors.py:218-219", "note": "AppError 默认码/状态（:47-48）。前端必须带 requestId 上报。" },
+    { "code": 50002, "name": "DEPENDENCY_UNAVAILABLE", "httpStatus": 503, "retryable": true, "frontendSurface": "error-boundary", "source": "errors.py:232-233", "note": "主密钥缺失/非法亦走此码（secret_crypto.py:34-40 fail-closed，不回落明文）。站内通知在 Redis 缺失时不抛此码，而是降级为 service_unavailable 帧（api/v1/system.py:232-242）。" }
+  ],
+  "x-invariants": [
+    "任何新增 code 必须先入 ERROR_CODES 再被引用；未登记 code 出现即契约违规（对应 STEP-01 契约测试锚）。",
+    "httpStatus 只能由 http_status_for(code) 派生，禁止在路由里手写 status_code。",
+    "业务路由禁用 HTTPException（main.py:131 注释：仅兜框架/中间件层遗留）。",
+    "同一 code 的 frontendSurface 全项目唯一，禁止一个码在 A 页 toast、在 B 页静默。"
+  ]
+}

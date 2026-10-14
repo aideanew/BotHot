@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bothot/contracts/ux_states.schema.json",
+  "title": "BotHot 核心界面六态契约（冻结稿 V0.7.0 / 基线 main@13acacc）",
+  "description": "实测来源：apps/web/components/LoadingErrorShell.tsx:6-44（统一 loading/error/重试三态，合并自 spaces/[id]、AddArticlePanel、/public、/engines 等重复实现）、apps/web/app/**/{error,loading,not-found}.tsx 共 28 个边界文件（find 清点）、apps/web/lib/api/http.ts:18-19（MOCK_ENABLED 默认 true）、components/NotificationBell.tsx:109/137-148/157-170（SSE 首连拉 history、5s 去重、CLOSED 重连）。",
+  "type": "object",
+  "definitions": {
+    "State": {
+      "type": "string",
+      "enum": ["initial", "loading", "empty", "success", "error", "forbidden", "unauthenticated", "degraded"],
+      "x-required-for-every-core-view": true,
+      "note": "8 态而非 5 态：unauthenticated(10001/401) 与 forbidden(10004/403) 必须分开——前端把 401 当「权限不足」显示是本项目已确认的分歧点（identity.schema.json：授权缺 users 行也抛 10001）。degraded 承接 503/依赖不可达（Redis 缺失时 SSE 走 service_unavailable 帧而非报错）。"
+    },
+    "StateRendering": {
+      "type": "object",
+      "required": ["state", "surface", "actionable"],
+      "properties": {
+        "state": { "$ref": "#/definitions/State" },
+        "surface": { "type": "string", "description": "渲染组件：Skeleton | 空态卡 | LoadingErrorShell | AuthGate | 降级横幅" },
+        "text": { "type": "string", "maxLength": 140 },
+        "actionable": { "type": "boolean", "description": "是否给用户可点的下一步（重试/去登录/去配置）" },
+        "retryAllowed": { "type": "boolean", "description": "错误码 retryable=false 时必须 false（见 errors.global.schema.json#/x-table）" }
+      }
+    }
+  },
+  "x-core-views": [
+    {
+      "view": "/spaces 列表 + /spaces/[id] 详情",
+      "reqId": "REQ-F-003",
+      "boundaryFiles": ["app/spaces/error.tsx", "app/spaces/loading.tsx"],
+      "states": {
+        "loading": "Skeleton，文案「加载中…」",
+        "empty": "「还没有知识库」+ 主按钮「新建空间」（区别于加载完但为 0 条）",
+        "success": "空间卡列表；卡片不得显示 content_markdown",
+        "error": "LoadingErrorShell + 重试（5xx retryable=true）",
+        "forbidden": "「无权限访问该空间」，不显示资源是否存在（防枚举）",
+        "unauthenticated": "AuthGate 拦截 → 跳主平台 SSO，不得停留在空白页",
+        "degraded": "引擎不可用时显示「当前使用内置引擎」，不隐藏既有内容"
+      }
+    },
+    {
+      "view": "/hot + /hot/daily",
+      "reqId": "REQ-F-002",
+      "boundaryFiles": ["app/hot/error.tsx", "app/hot/loading.tsx", "app/hot/not-found.tsx", "app/hot/daily/error.tsx", "app/hot/daily/loading.tsx"],
+      "states": {
+        "loading": "Skeleton + 热度条占位（保持布局高度，避免 CLS）",
+        "empty": "「今日暂无热点」+ 最近更新时间；与「聚类未产出」区分并分别埋点",
+        "success": "按 hot_score 倒序；score 为 0.0 时显示为「待评分」而非「0 分」（hot_cluster.py:276 落 0.0 占位由评分回填）",
+        "error": "重试；分页越界回退到最后一页而不是报错",
+        "degraded": "日报 LLM 摘要失败走既有降级路径 ⇒ 显示标题 + 原文摘要，标注「摘要生成失败」"
+      },
+      "x-note": "hot.ts 无 MOCK_ENABLED 分支（grep 实测 0 命中），而 e2e/hot.spec.ts:4 自称「mock 主干」⇒ 该 e2e 只在真实后端下可跑。注释与实现不符，转 STEP-15 纠正（不得反向把实现改成 mock 来迁就注释）。"
+    },
+    {
+      "view": "/chat 流式问答",
+      "reqId": "REQ-F-005",
+      "boundaryFiles": ["app/chat/error.tsx", "app/chat/loading.tsx"],
+      "states": {
+        "loading": "首 Token 前显示「思考中…」占位 + 可中断按钮",
+        "success": "增量渲染，含引用来源列表",
+        "error": "流中断必须保留已渲染内容 + 「连接中断，可重试」，禁止清空重页",
+        "unauthenticated": "跳登录，保留提问草稿",
+        "degraded": "30002 LANGBOT_API_ERROR / 50002 ⇒ 回落非流式或提示不可用；超时锚 LLM_FIRST_TOKEN_TIMEOUT 触发时给「响应较慢」而非静默"
+      },
+      "x-baseline-gap": "REQ-NF-001 要求「首 Token <3s」，实测无任何度量锚（coverage §3）⇒ 本卡只定 UI 态，性能数字待 STEP-18 建基线后才允许出现「优化」任务。"
+    },
+    {
+      "view": "/admin（管理端能力面）",
+      "reqId": "REQ-F-008",
+      "boundaryFiles": ["app/admin/error.tsx", "app/admin/loading.tsx"],
+      "states": {
+        "unauthenticated": "重定向登录",
+        "forbidden": "「需要管理员权限」+ 不渲染任何管理数据（rank<2）",
+        "empty": "「未登记任何引擎密钥」+ 入口按钮",
+        "success": "密钥只显示掩码与「是否已配置」（resources.schema.json#ChannelSecret.x-api-surface）",
+        "error": "写操作失败不得伪装成功；POST/DELETE 结果必须逐条回执",
+        "degraded": "masterKeyConfigured=false 时整页禁用写并说明原因（admin.py:338）"
+      },
+      "x-gap": "实测 apps/web/** 对 admin/engines/keys、admin/push/channels、admin/discovery/channels、admin/ops/liveness、admin/push 五组端点 **0 消费者**（coverage §3）⇒ 后端有接口、前端无使用面。本 view 的六态是「待建」规范，不是现状描述。转 STEP-14。"
+    },
+    {
+      "view": "NotificationBell（站内通知）",
+      "reqId": "REQ-F-001",
+      "boundaryFiles": ["挂载于 TopBar.tsx:174 → app/layout.tsx:16"],
+      "states": {
+        "loading": "铃铛图标 + 未读数 skeleton",
+        "empty": "「暂无通知」",
+        "success": "列表 + 未读点；5s 去重（NotificationBell.tsx:137-148）",
+        "error": "SSE CLOSED → 指数退避重连（:157-164），卸载时清理（:167-170）",
+        "degraded": "Redis 缺失 ⇒ service_unavailable 帧 ⇒ 显示「实时推送暂不可用，历史仍可查」，不得显示为「无通知」",
+        "offstate": "⚠ MOCK_ENABLED 时 notifications.ts:103 直接不连接 ⇒ 默认演示态看不到实时通知。契约要求：演示态必须显式显示「演示数据，未连接实时通道」，禁止静默装作正常。"
+      }
+    },
+    {
+      "view": "/onboarding",
+      "reqId": "REQ-F-008",
+      "states": {
+        "success": "步骤进度",
+        "degraded": "页面自身在 :26/:182 标注后端 GET /onboarding/steps 是「静态快照桩」，进度实际存 localStorage ⇒ 换设备/清缓存即丢。契约要求：UI 必须显示「进度仅保存在本机」，不得暗示服务端同步。转 STEP-14 裁决是否补服务端持久化。"
+      }
+    }
+  ],
+  "x-universal-rules": [
+    "任何界面不得把 loading 与 empty 合并渲染（用户无法区分「还在加载」与「真没有」）。",
+    "任何界面不得把 forbidden 与 empty 合并（既是体验问题也是枚举面问题）。",
+    "错误呈现必须带 requestId（api.envelope.schema.json#requestId），且 requestId 可一键复制。",
+    "重试按钮的显隐由错误码的 retryable 决定，不由组件自行判断。",
+    "新增核心 view 必须一次交齐 8 态并附对应 vitest 用例；只交 success 态的 PR 不予合并（STEP-15 门禁）。",
+    "三态承载一律复用 LoadingErrorShell.tsx，不得另起一套 loading/error UI（该组件 :6-7 的立项理由就是消除 5+ 页重复）。"
+  ]
+}
