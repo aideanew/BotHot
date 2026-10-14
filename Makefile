@@ -180,7 +180,7 @@ evidence-check: ## 复跑仓库内全部 stdlib 证据证明（不装依赖、�
 		echo "── S0.1.2 连库 DSN 两级解析 + 拒连广播 ──"; python docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py; \
 		echo "── S0.1.2 变异反证（断言必须能红）──"; python docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py --self-test; \
 		echo "── S0.3.2 Provider 样本形状 ↔ 真实读取路径 ──"; python docs/06_validation/evidence/EVD-V2-00/prove_provider_shapes.py; \
-		echo "── G-24 静态自检（ruff 子集的 stdlib 近似表 + 规则两端自证；与 ruff 的已知差异写在脚本头部：E501 本表更严、I001 段表与成员序按 ruff 实测对齐）──"; python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py; python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py --self-test; \
+		echo "── G-24 静态自检（ruff 子集的 stdlib 近似表 + 规则两端自证；与 ruff 的两处方向差异写在脚本头部：E501 按**列宽**与 ruff 同口径（CJK 占 2 列）、pragma 那一侧本表更严；I001 段表与成员序按 ruff 实测对齐）──"; python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py; python docs/06_validation/evidence/EVD-V2-00/g24_static_check.py --self-test; \
 		echo "── S0R.1 测试出站代理隔离 ──"; python docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py; \
 		echo "── S0R.1 变异反证 ──"; python docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py --self-test; \
 		echo "── 真实工具步（CI 才是终判；本机按约定不装依赖 ⇒ 缺工具就 SKIP，并以退出码 3 与 PASS 区分）──"; \
