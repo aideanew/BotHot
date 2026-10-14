@@ -401,30 +401,54 @@ def _str_of(node: ast.AST) -> str | None:
     return None
 
 
+#: SQLAlchemy 里会渲染成 LIKE 的谓词方法名。第十六轮复核报的是同一族的下一格：
+#: `Source.url.op(_OP)(f"%{key}%")`（模式串在一个 Name 变量里）与 `.contains(...)`/`.startswith(...)`
+#: ——它们都不产生 `.like(` 这个字形，却下发一模一样的模糊匹配。判**语义**（会渲染成 LIKE 的谓词）
+#: 而不是判字形，就得把这一族列出来；`op` 的模式串**拼不出来时按可疑算**（fail-closed，
+#: 读起来像误报，但漏一族的代价比多问一处的代价大，见 §7 那条「宁严勿宽」的契约说明）。
+_FUZZY_ATTRS = frozenset({"like", "ilike", "notlike", "not_ilike", "icontains",
+                          "istartswith", "iendswith", "contains", "startswith", "endswith"})
+
+
 def _calls_any_like(fn: ast.AST) -> list[ast.AST]:
-    """构造 like 条件的调用点，**三种拼法都算**。
+    """构造模糊匹配条件的调用点，**五种拼法都算**。
 
     ① 字面 `recv.like(...)`（Attribute 位上就是 like）；
     ② `getattr(源, "like")(...)` 与 `operator.attrgetter("like")`——属性名不出现在 Attribute 位上，
        只出现在字符串实参里（第十四轮 C 组 C-14-01 的第一发就是这个形状）；
     ③ `operator.methodcaller("like", ...)`（第十四轮补的那发，第十五轮 E 组又把它挪到**另一个函数**里：
-       行为面 exec 的只有那两个目标函数，看不见别处的兜底，所以这一族必须由**全文扫**的 AF-S6 兜住）。
+       行为面 exec 的只有那两个目标函数，看不见别处的兜底，所以这一族必须由**全文扫**的 AF-S6 兜住）；
+    ④ 同族的其他模糊谓词 `.contains(...)` / `.startswith(...)` / `.ilike(...)` 等
+       （第十六轮报的：这些都不带 `like` 字形，却下发一模一样的 LIKE）；
+    ⑤ `.op(模式串)` 与 `text("SELECT … LIKE …")`——`.op` 的模式串若是字面量就按内容判，
+       **是变量/拼不出来就按可疑算**；`text()` 是原生 SQL，静态面读不到引擎行为，
+       但带 LIKE 字样的模式串足够点名「有人在写回模糊匹配」。
     """
     hits: list[ast.AST] = []
     for n in ast.walk(fn):
         if not isinstance(n, ast.Call):
             continue
         f = n.func
-        if isinstance(f, ast.Attribute) and f.attr == "like":
+        callee = f.id if isinstance(f, ast.Name) else (f.attr if isinstance(f, ast.Attribute) else "")
+        if isinstance(f, ast.Attribute) and f.attr in _FUZZY_ATTRS:
             hits.append(n)
             continue
-        callee = f.id if isinstance(f, ast.Name) else (f.attr if isinstance(f, ast.Attribute) else "")
+        if isinstance(f, ast.Attribute) and f.attr == "op":
+            mode = _str_of(n.args[0]) if n.args else None
+            if mode is None or "like" in mode.lower():
+                hits.append(n)
+            continue
         if callee in {"getattr", "attrgetter"} and len(n.args) >= 2:
             pick = n.args[1] if callee == "getattr" else n.args[0]
             if _str_of(pick) == "like":
                 hits.append(n)
                 continue
         if callee == "methodcaller" and n.args and _str_of(n.args[0]) == "like":
+            hits.append(n)
+            continue
+        if callee == "text" and "like" in ast.unparse(n).lower():
+            # `text(f"… LIKE …")` 的模式串可能是 f-string / 变量拼接，`_str_of` 取不到常量；
+            # 这一条判的是「有人在原生 SQL 里写回模糊匹配」，按整句 unparse 后含 like 字样算。
             hits.append(n)
     return hits
 
@@ -588,19 +612,24 @@ def af_b4(kb: str, asset: str) -> tuple[bool, object]:
 
 
 def af_b6(kb: str, asset: str) -> tuple[bool, object]:
-    """生产量级的短链键（18/19/25/41 字符四档）都不下发**任何列**的 like 条件——按条件判，不按字形判。
+    """16..45 **每一档键长**都不下发任何列的 like 条件——按条件判，不按字形判，也不按取样点判。
 
-    第十四轮 C 组 C-14-01 开了这一格，第十五轮 E 组又报出它自己的三格，这一版把三格都堵上：
+    第十四轮 C 组 C-14-01 开了这一格，第十五轮 E 组报出它自己的三格，第十六轮复核又报出第四格：
     ① **长度维**：攻击写成 `if len(article_key) > 19:` 时，只喂 18 字符的探针什么都看不到——
-       所以键长不再取单点，按短链 article_key 的真实分布取 18/19/25/41 四档（41 是带 `&` 截断前的全长）；
+       所以键长不取单点也不取「四档」，而是把短链 article_key 的可能区间 **16..45 逐档扫**
+       （上一版那四档是手挑的，`== 22` 那一档恰好不在里面，这就是「样本集合替判据说话」的代价）；
     ② **列维**：把 like 打到 `Source.external_id` 上，旧写法用 `_url_conds`（只挑 `col=="url"`）读不到；
        本判据要的是「兜底那种模糊匹配」，它在 SQL 层是**任意列上的一个 like 条件**，所以读 `_like_conds`；
     ③ **位置维**：兜底挪进 kb.py 里另一个函数——行为面 exec 的只有那两个目标，看不见它；那一格由
-       AF-S1/S6 的全文扫（连同 `getattr`/`methodcaller` 两种非字形拼法）负责，见 `_calls_any_like`。
+       AF-S1/S6 的全文扫（连同 `getattr`/`methodcaller`/`.op`/`.contains`/`text` 五种拼法）负责，
+       见 `_calls_any_like`；
+    ④ **拼法维**（第十六轮）：模糊匹配可以是 `url.op(_OP)(...)`、`url.contains(...)`、
+       `text("… LIKE …")`，全都不带 `like` 字形——行为面读**假会话收到的条件**，
+       只要落到 `select/where` 构造上就照样进账本；纯原生 SQL 字符串那一侧由静态面的 `text` 判兜。
     """
     bad: list[str] = []
     seen: dict[int, tuple[object, str, int]] = {}
-    for width in (18, 19, 25, 41):
+    for width in range(16, 46):
         key = "RwMKZ3" + "".join(str((i * 7 + 1) % 10) for i in range(width - 6))
         url = f"https://mp.weixin.qq.com/s/{key}"
         rows = [_row("MzNotThisOne", url)]
@@ -677,7 +706,7 @@ def af_a3(kb: str, asset: str) -> tuple[bool, object]:
     这两发钉的是「合法片段必须仍走那一条查询并返回行」，多一条早退分支就会被 AF-A4/A5 的形状判据抓住。
     """
     want = {"abcdefg": 0, "abcdefgh": 1, "热点热": 0, "1234567": 0,
-            "ab-12345": 1, "p0-st_01": 1, "ab-1234": 0}
+            "ab-12345": 1, "p0-st_01": 1, "ab-1234": 0, "a--b": 0}
     seen: dict[str, tuple[int, str]] = {}
     for frag, _ in want.items():
         _g, log, _r, exc = _call_frag(kb, asset, frag, [_arow(f"https://x/{frag}")])
@@ -863,6 +892,22 @@ def _const_of(node: ast.AST) -> object:
     return None
 
 
+#: 守卫分支里**允许**的调用：量长度/转字符串那一族，加上留痕的 warning。
+#: 这是白名单而不是黑名单——黑名单永远差一个名字（第十六轮复核实测：`session.query(...).filter(...)`
+#: 与 `.first()` 都不在任何查询名单上，因而整台判据全绿）。代价是将来守卫里真要用别的
+#: 无害函数时必须显式改这份口径，属「宁严勿宽的显式契约」，与 BD-12 同一处理。
+_GUARD_SAFE_FUNCS = frozenset({"len", "str", "repr", "bool", "int", "isinstance", "hash"})
+
+
+def _guard_call_ok(func: ast.expr) -> bool:
+    """守卫体内这个被调用者是否属于「量长度 + 留痕」那一族。"""
+    if isinstance(func, ast.Name):
+        return func.id in _GUARD_SAFE_FUNCS or func.id.endswith(("warn", "warning"))
+    if isinstance(func, ast.Attribute):
+        return func.attr in _GUARD_SAFE_FUNCS or func.attr.endswith(("warn", "warning"))
+    return False
+
+
 def af_s3(kb: str, asset: str) -> tuple[bool, object]:
     """守卫分支形状：`if` 的条件是 len 与阈值的比较，分支体里既有 `logger.warning` 也**直接** `return None`。
 
@@ -898,16 +943,16 @@ def af_s3(kb: str, asset: str) -> tuple[bool, object]:
                   and n.value.value is None]
         bad.append(f"分支体里没有**直接**的 `return None`（嵌在下一层条件的第 {nested} 行不算："
                    f"那一层的条件不成立时，短片段照样往下发 LIKE）")
-    # 第十五轮 E 组：守卫分支里再开一条「自己发查询再返回」的早退分支时，上面三件（比较、告警、返回）
-    # 全都还在，而那条分支专挑样本集合之外的字符类动手（`ab-12345` 这种混合类）——所以这一条判据
-    # 顺带要求守卫体内**不出现任何查询构造**：守卫的职责是「放弃模糊匹配」，它不该同时是第二条兜底。
+    # 第十五轮 E 组开出「守卫体内不许有查询构造」，第十六轮复核报的是它的下一格：那一版是**名单式**
+    # 判法（认 select/text/execute/scalar/scalars/like 那几个名字），把它换成
+    # `self._session.query(ContentAsset).filter(ContentAsset.url.contains(fragment)).first()`
+    # 就一个都不认——守卫的语义是「进了这个分支就放弃兜底」，所以它体内除了量长度与留痕，
+    # 不该有任何调用。这里因此从「列黑名单」翻成「列白名单」：白名单之外的任何 Call 都算越界。
     querying = [n.lineno for n in ast.walk(node)
-                if isinstance(n, ast.Call)
-                and ((isinstance(n.func, ast.Name) and n.func.id in {"select", "text"})
-                     or (isinstance(n.func, ast.Attribute)
-                         and n.func.attr in {"select", "execute", "scalar", "scalars", "like"}))]
+                if isinstance(n, ast.Call) and not _guard_call_ok(n.func)]
     if querying:
-        bad.append(f"守卫分支体内出现了查询调用 @{querying}——守卫只该放弃兜底，不该自己再发一条查询")
+        bad.append(f"守卫分支体内出现了白名单之外的调用 @{querying}——守卫只该放弃兜底并留痕，"
+                   f"`query/execute/scalar/select/…` 的任何形状（含名单外新起的名字）都算第二条兜底")
     return not bad, bad
 
 
@@ -1022,7 +1067,9 @@ CHECKS: tuple[tuple[str, str, object], ...] = (
     ("AF-S2", f"{KB_TARGET} 体内每条 select 链都带字面 .limit(1)", af_s2),
     ("AF-S3", f"{AS_TARGET} 守卫分支形状齐备（比较 + return None + warning）", af_s3),
     ("AF-S4", f"磁盘上 MIN_FRAGMENT_LEN 唯一绑定且等于 {CARD_MIN_LEN}", af_s4),
-    ("AF-S5", "两个目标各自活绑定唯一（无重复 def / 无属性重绑 / 无装饰器）", af_s5),
+    ("AF-S5", "两个目标各自活绑定唯一（无重复 def / 无属性重绑 / 无装饰器）；"
+              "**明认盲区**：拼出来的名字（f-string、`"".join([...])` 再当字典键）不在射程内，"
+              "那一族要么在 exec 时炸成 INCONCLUSIVE，要么交 J-6/CI", af_s5),
     ("AF-S6", "kb 全文 AST 层不再出现 Source.url.like(...)", af_s6),
     ("AF-S7", "锚仍来自 _biz_from_url 的结果（不许顺手拆掉 S2.1.3）", af_s7),
 )
@@ -1290,6 +1337,42 @@ MUTANTS: list[tuple[str, str, str, str, set[str]]] = [
      "AssetRepository = type(\"AssetRepository\", (), "
      "{\"get_by_url_fragment\": lambda self, sid, frag: None})\n\n\n"
      "class AssetRepository:", {"AF-S5"}),
+    # ↓ 第十六轮复核（F-17 组）报回的四格。前两格是 AF-B6/AF-S3 自己的「名单式判法差一个名字」，
+    #   第三格是守卫里那条 legacy ORM 形态，第四格是内容等值门——**它期望红在静态面而不是行为面**：
+    #   行为面喂进去的键里没有那个魔数，任何样本集合都撞不上，这一格只能由全文扫兜住（§7 有边界）。
+    ("模糊匹配走 `.op(变量)`：模式串在一个 Name 里、字形上既不是 `.like(` 也不在任何名字名单上，"
+     "旧 `_calls_any_like` 三认五不认（F-17-01）。行为面这一发不红——它由 `article_key == 魔数` 门控，"
+     "样本永远撞不上；红只能记在静态两条上，把期望写成三条就是凭想象读数", "kb", KB_LOOP,
+     KB_LOOP + "\n            if article_key == \"AbCdEfGhIjKlMnOpQrStUv\":\n"
+     "                _OP = \"like\"\n"
+     "                _r17 = select(Source).where(Source.url.op(_OP)(f\"%{article_key}%\")).limit(1)\n"
+     "                return (await self._session.execute(_r17)).scalar_one_or_none()",
+     {"AF-S1", "AF-S6"}),
+    ("模糊匹配换成同族谓词 `.contains(...)`：不产生 like 字形、不是 op 拼法，旧名单里没有它（F-17-02）",
+     "kb", KB_LOOP,
+     KB_LOOP + "\n            if len(article_key) > 8:\n"
+     "                _r17 = select(Source).where(Source.url.contains(article_key)).limit(1)\n"
+     "                return (await self._session.execute(_r17)).scalar_one_or_none()",
+     {"AF-B5", "AF-B6", "AF-S1", "AF-S6"}),
+    ("守卫体内走 legacy ORM：`self._session.query(…).filter(….contains(…)).first()`——"
+     "「不许有查询构造」那版是黑名单（select/execute/scalar/like），这一族一个都不沾（F-17-03）。"
+     "翻成白名单之后它必须红在 S3；行为面 A3 也红：`a--b` 那条样本被早退分支捞走",
+     "asset", AS_GUARD,
+     "        if len(fragment) < MIN_FRAGMENT_LEN:\n"
+     "            if fragment:\n"
+     '                logger.warning("asset_url_fragment_too_short", source_id=source_id,\n'
+     "                               fragment=fragment, min_len=MIN_FRAGMENT_LEN)\n"
+     '            if "--" in fragment:\n'
+     "                return self._session.query(ContentAsset).filter(\n"
+     "                    ContentAsset.url.contains(fragment)).first()\n"
+     "            return None\n",
+     {"AF-S3", "AF-A3"}),
+    ("原生 SQL 兜底：`text(\"SELECT … LIKE …\")`——完全没有 Attribute，旧五种拼法全看不见（F-17-04）",
+     "kb", KB_LOOP,
+     KB_LOOP + "\n            if article_key.startswith(\"Rw\"):\n"
+     '                _r17 = text("SELECT * FROM sources WHERE url LIKE \'%' + "{article_key}%'\")\n"
+     "                return (await self._session.execute(_r17)).scalar()",
+     {"AF-B6", "AF-S1", "AF-S6"}),
 ]
 
 #: select 链的原文（`.where` 在前、`.limit` 在后）与其等价换序版：AF-S2 数的是处数，不是顺序。
@@ -1399,6 +1482,16 @@ EQUIVS: list[tuple[str, str, str, str]] = [
     ("比较两侧换边：MIN_FRAGMENT_LEN > len(fragment)", "asset", "        if len(fragment) < MIN_FRAGMENT_LEN:",
      "        if MIN_FRAGMENT_LEN > len(fragment):"),
     ("select 先存局部变量再 scalar", "asset", AS_QUERY_BLOCK, AS_QUERY_LOCAL),
+    # ↓ 第十六轮（F-17 组）为「白名单/名单不是认死字面」配的两端：等价写法不许因为换了名字而假红。
+    ("守卫里那句 `min_len=MIN_FRAGMENT_LEN` 写成 `min_len=len(\"12345678\")`（同一个整数 8）："
+     "白名单认的是「量长度那一族」这个语义，`len` 换了形态还在里面；"
+     "反面留给文档——把 logger 改名成 `_LOG` 在这一版里会红，因为 exec 的世界里没有那个名字，"
+     "而白名单也**故意**不认没见过的名字（宁严勿宽，代价写进 §7）", "asset", AS_GUARD,
+     "        if len(fragment) < MIN_FRAGMENT_LEN:\n"
+     "            if fragment:\n"
+     '                logger.warning("asset_url_fragment_too_short", source_id=source_id,\n'
+     "                               fragment=fragment, min_len=len(\"12345678\"))\n"
+     "            return None\n"),
 ]
 
 

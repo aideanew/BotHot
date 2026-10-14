@@ -505,7 +505,14 @@ def _collect_cases(tree: ast.Module) -> list[str]:
                 if node.name.startswith("test"):
                     out.append(f"{prefix}{node.name}")
             elif isinstance(node, ast.ClassDef):
-                if node.name.startswith("Test"):
+                # pytest 的默认口径两半：`python_classes` 名字匹配（默认 `Test*`）**且**该类没有
+                # `__init__`；但 `unittest.TestCase` 的子类**不看名字**也照收（pytest 文档明写的例外）。
+                # 十六轮复核报的就是这条例外没进射程：`class Helper(unittest.TestCase): def test_u`
+                # 会被真收集，而旧写法既不要它登记也判它合法——两边读数都错。
+                testcase = any(ast.unparse(b).endswith("TestCase") for b in node.bases)
+                has_init = any(isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef))
+                               and st.name == "__init__" for st in node.body)
+                if testcase or (node.name.startswith("Test") and not has_init):
                     # 前缀要**累加**：第十五轮 E 组实测嵌套类读出来是 `TestInner::test_c`，
                     # 那既不是能跑的 node id（pytest 要 `TestOuter::TestInner::test_c`），
                     # 也不是「不收集」——两边读数都错。
@@ -522,6 +529,12 @@ def _collect_cases(tree: ast.Module) -> list[str]:
                 visit(node.finalbody, prefix)
             elif isinstance(node, ast.With):
                 visit(node.body, prefix)             # `with ...: def test_x()` 也是模块级执行
+            elif isinstance(node, (ast.For, ast.While)):
+                visit(node.body, prefix)             # 循环体里的 def 在收集期就执行了（十六轮复核）
+                visit(node.orelse, prefix)
+            elif isinstance(node, ast.Match):
+                for case in node.cases:
+                    visit(case.body, prefix)         # `match/case` 体同理
 
     visit(tree.body, "")
     return out
@@ -817,9 +830,15 @@ def _merge_targets(tree: ast.AST, target: str) -> tuple[list[str], list[str]]:
         if isinstance(node, ast.Name):
             names.append(node.id)
         elif isinstance(node, (ast.ListComp, ast.GeneratorExp, ast.SetComp, ast.DictComp)):
+            if len(node.generators) > 1:
+                # `[d for d in g_defects for _ in ()]`：形状、名字、门都在，值恒空——
+                # 第二个 for 挂一个空可迭代对象就足以把合并掏空（第十六轮复核报的那发）。
+                odd.append(f"第 {getattr(node, 'lineno', 0)} 行：多重 for 的推导式并入（任一层为空即恒空）")
             for gen in node.generators:
                 if gen.ifs:
                     odd.append(f"第 {getattr(node, 'lineno', 0)} 行用带 if 的推导式并入（名字在场、值可恒空）")
+                if isinstance(gen.iter, (ast.List, ast.Tuple, ast.Set, ast.Dict)) and not gen.iter.elts:
+                    odd.append(f"第 {getattr(node, 'lineno', 0)} 行：推导式遍历一个空字面量（恒不产出）")
                 harvest(gen.iter)
             for part in ([node.elt] if isinstance(node, (ast.ListComp, ast.GeneratorExp, ast.SetComp))
                          else [node.key, node.value]):
@@ -900,9 +919,21 @@ def _sink_line(tree: ast.AST) -> int:
         elif isinstance(f, ast.Attribute):
             if f.attr in plain or f.attr.startswith("write"):
                 lines.append(n.lineno)
+            elif f.attr == "open":
+                # `fh = OUT.open("w")` 之后 `print(…, file=fh)`：写动作藏在两行里，句柄换了名字
+                # （第十六轮复核报的那发——旧写法只认裸 `open(...)` 的名字形态，属性形态整个漏掉）。
+                mode = ast.unparse(n.args[0]) if n.args else next(
+                    (ast.unparse(k.value) for k in n.keywords if k.arg == "mode"), "")
+                if any(t in mode for t in ("w", "a", "x")):
+                    lines.append(n.lineno)
             elif f.attr in module_y and isinstance(f.value, ast.Name) and f.value.id in {
                     "os", "shutil", "pathlib", "tempfile", "io", "sys"}:
                 lines.append(n.lineno)
+        if isinstance(f, ast.Name) and f.id == "print" and any(
+                k.arg == "file" for k in n.keywords):
+            # 写句柄的另一种形态：`print("坏留档", file=fh)`。它自己不是 sink，但**拿着 w 模式句柄**
+            # 的 print 就是那次写；上一行那句 `OUT.open("w")` 已经把行号交了，这一条是双保险。
+            lines.append(n.lineno)
     return min(lines) if lines else 0
 
 
@@ -1459,13 +1490,19 @@ def self_test(listing: bool = False) -> int:
             "try:\n    raise RuntimeError\nexcept RuntimeError:\n    def test_in_handler():\n        pass\n"
             "else:\n    def test_in_else():\n        pass\nfinally:\n    def test_in_final():\n        pass\n\n\n"
             "with pytest.MonkeyPatch().context() as _mp:\n    def test_in_with():\n        pass\n\n\n"
+            "for _i in [1]:\n    def test_in_loop():\n        pass\n\n\n"
+            "match _i:\n    case 1:\n        def test_in_match():\n            pass\n\n\n"
+            "class UTHelper(unittest.TestCase):\n    def test_in_unittest(self):\n        pass\n\n\n"
+            "class TestHasInit:\n    def __init__(self):\n        self.x = 1\n\n"
+            "    def test_not_collected_init(self):\n        pass\n\n\n"
             "if True:\n    def test_delta():\n        pass\n", encoding="utf-8")
         four = ("apps/tests/t_one.py", "test_alpha")
         full = (("apps/tests/t_one.py", "test_alpha"), ("apps/tests/t_one.py", "test_beta"),
                 ("apps/tests/t_one.py", "TestHelper::test_gamma"), ("apps/tests/t_one.py", "test_delta"))
         deep = tuple(("apps/tests/t_one.py", n) for n in (
             "TestOuter::TestInner::test_deep", "test_in_handler", "test_in_else",
-            "test_in_final", "test_in_with"))
+            "test_in_final", "test_in_with", "test_in_loop", "test_in_match",
+            "UTHelper::test_in_unittest"))
         check(g9, "指针核对：文件在、用例在 ⇒ 静默（这道核对不是只会红）",
               "" if not db_pointer_defects(full, staged)
               else f"实报 {db_pointer_defects(full, staged)!r}")
@@ -1489,15 +1526,24 @@ def self_test(listing: bool = False) -> int:
         # ⇒ 其余 8 条必须逐条点名；全登记 ⇒ 必须静默。
         one_only = db_pointer_missing((four,), staged, must_files=("apps/tests/t_one.py",))
         named = {d.split("::", 1)[1].split(" ")[0] for d in one_only}
-        check(g9, "用例级点名：登记表漏掉文件里的用例必须逐条出声（NI-2 + 嵌套类 + handler/else/finally + with）",
-              "" if len(one_only) == 8 and named == {
+        check(g9, "用例级点名：登记表漏掉文件里的用例必须逐条出声（NI-2 + 嵌套类 + handler/else/finally + with"
+                  " + 循环/match 体 + unittest.TestCase 子类）",
+              "" if len(one_only) == 11 and named == {
                   "test_beta", "TestHelper::test_gamma", "test_delta",
                   "TestOuter::TestInner::test_deep", "test_in_handler", "test_in_else",
-                  "test_in_final", "test_in_with"} else f"实得 {sorted(named)!r}")
+                  "test_in_final", "test_in_with", "test_in_loop", "test_in_match",
+                  "UTHelper::test_in_unittest"} else f"实得 {sorted(named)!r}")
+        # 绿档两侧：pytest 的默认口径**不收**这两种形状，把它们算进射程就是判据咬合法形状——
+        # ① 不以 Test 开头且不是 TestCase 的类；② 名字以 Test 开头但自带 `__init__` 的类（文档明写跳过）。
+        check(g9, "绿档：`Helper`（非 Test 名）与 `TestHasInit`（有 __init__）那两条不许被要求登记"
+                  "（第十六轮复核给这条白名单补的反面——只看名字会把 pytest 不收集的形状也判成欠登记）",
+              "" if "test_not_collected" not in named and "TestHasInit::test_not_collected_init" not in named
+              else f"误咬 {sorted(named)!r}")
         check(g9, "探针：嵌套 Test 类要登记成 `外层::内层::用例`——只给内层前缀那种名字既跑不动也不算登记",
               "" if any("TestOuter::TestInner::test_deep" in d for d in one_only)
               else f"实得 {sorted(named)!r}")
-        check(g9, "用例级判据的绿档：九条全登记时必须静默（不以 Test 开头的类里那条不许被要求登记）",
+        check(g9, "用例级判据的绿档：收集面全登记时必须静默（条数由 `_collect_cases` 现算，"
+                  "这里不抄；不以 Test 开头又没有 __init__ 例外的那两条不许被要求登记）",
               "" if not db_pointer_missing((*full, *deep), staged, must_files=("apps/tests/t_one.py",))
               else f"实报 {db_pointer_missing((*full, *deep), staged, must_files=('apps/tests/t_one.py',))!r}")
         ghost = db_pointer_missing((four,), staged, must_files=("apps/tests/t_none.py",))
