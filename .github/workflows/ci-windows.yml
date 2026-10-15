@@ -1,0 +1,164 @@
+name: CI-Windows
+
+# STEP-00W S00W.2.1：windows-dev 从 ci.yml 拆成独立工作流。
+# 为什么要拆（不是洁癖，是读数被遮蔽）：windows job 每次卡在全量 pytest 到 timeout-minutes:35 被 cancelled，
+# 而同一 run 里 ubuntu 五个 job 每次都 success —— 同居一个工作流时，"CI" 这个对外结论被 Windows 拖成
+# cancelled，正式验收面（D-V4-01：CI ubuntu-latest）的真实状态反而看不见。V0.12.0 实测最近 10 次
+# CI 全部 cancelled，就是这个形态（证据 docs/任务规划V0.12.0/evidence/3a67e96/workflow_runs_main.json）。
+# 拆完之后：`CI` 只反映正式验收面；`CI-Windows` 只反映开发平台门。两者互不遮蔽，各自可红可绿。
+# 触发条件与 ci.yml 逐字一致，避免"同一提交两个工作流覆盖不同提交"这种新盲区。
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  # ── STEP-00X（V0.11.0 第二增量）：Windows 开发平台门 ─────────────────────────
+  # 语义边界（D-V4-01，2026-10-15 签）：**正式验收面是上面的 ubuntu backend/frontend，
+  # 本 job 不是**。它只回答一个问题——"Windows 10 作为一等开发平台，装/跑/验这条链
+  # 有没有平台性断裂"。所以：
+  #   ① ubuntu 的两个 job 一行不改（改了就会动正式验收语义）；
+  #   ② 本 job 不起 PG/Redis service，连库用例在本平台**必然全 skip**
+  #      ⇒ 本 job 对任何连库结论零主张，也不得被引用成"真库验证过了"；
+  #   ③ skip 阈值单独设（SKIP_BASELINE_WIN），否则平台差异会伪装成回归；
+  #   ④ 命令实体一律走 scripts/entry.py，与本机 @win 用的是同一份代码——
+  #      这条 job 绿只说明"这份入口在 Windows 上成立"，不说明 ubuntu 上换了实现。
+  # 读数取证按 D-V6-02：run id + head_sha + conclusion 都要落进日志（末步打印）。
+  windows-dev:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    env:
+      PYTHONUTF8: "1"
+      # 保守上界，不是测量值：本机 @win 实测 45 files / 366 tests 全过（vitest），
+      # 后端连库用例在无 PG 的 Windows 上会整批 skip。首跑读数回来后收紧到真实值 ±1，
+      # 并在 STEP-00X 的 EVD 里记录收紧依据。
+      SKIP_BASELINE_WIN: "320"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      # 与 frontend job 同样的 pnpm 版本解析：packageManager 必须是精确版本，
+      # 隐式/范围写法会让 action-setup 静默漂移（见 frontend job N12b 的注释）。
+      - name: Resolve pnpm version from packageManager
+        id: pnpm
+        working-directory: apps/web
+        run: |
+          pm=$(node -e "console.log(require('./package.json').packageManager || '')")
+          case "$pm" in
+            pnpm@[0-9]*\.[0-9]*\.[0-9]*)
+              echo "version=${pm#pnpm@}" >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "❌ packageManager 必须写成 pnpm@<精确版本>，实际：'${pm:-<缺失>}'"
+              exit 1 ;;
+          esac
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ steps.pnpm.outputs.version }}
+          run_install: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"      # 与 backend job 逐字同锚
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: apps/web/.nvmrc
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: Tool fingerprint（Windows 侧实际装到了什么）
+        run: |
+          echo "os=$RUNNER_OS  python=$(python -V 2>&1)  node=$(node -v)  pnpm=$(pnpm -v)"
+          exp_pnpm=${{ steps.pnpm.outputs.version }}
+          act_pnpm=$(pnpm -v)
+          if [ "$exp_pnpm" != "$act_pnpm" ]; then
+            echo "❌ pnpm 漂移：期望 $exp_pnpm 实际 $act_pnpm"; exit 1
+          fi
+          py_major=$(python -c "import sys;print('%d.%d' % sys.version_info[:2])")
+          if [ "$py_major" != "3.12" ]; then
+            echo "❌ Python 期望 3.12 实际 $py_major（与 CI ubuntu 侧不同版会让 ruff/mypy 结论不可比）"; exit 1
+          fi
+
+      - name: Install backend deps（与 backend job 同口径 .[dev] + pytest-cov）
+        working-directory: apps/api
+        run: python -m pip install -e ".[dev]" pytest-cov
+
+      - name: Install frontend deps（frozen lockfile）
+        working-directory: apps/web
+        run: pnpm install --frozen-lockfile
+
+      # 平台分支只允许两处（entry.py 的 dispatch() 与 Makefile 的 ifeq），
+      # 这里机检"Makefile 的开发类目标在 entry.py 任务表里都存在"，防止两侧名字漂移。
+      - name: entry.py 与 Makefile 目标面一致性
+        run: python scripts/check_entry_parity.py
+
+      - name: Lint backend（ruff check app tests）
+        working-directory: apps/api
+        run: python -m ruff check app tests
+
+      - name: Type check backend（mypy app）
+        working-directory: apps/api
+        run: python -m mypy app
+
+      - name: Backend tests（连库用例在本平台会 skip，只记账不主张）
+        working-directory: apps/api
+        # STEP-00W S00W.2.2：逐用例超时 + faulthandler 定时转栈。
+        # 为什么两个都要：只给 --timeout 时，卡住的用例是"被线程法打断"，拿到的是打断点而不是阻塞点；
+        # faulthandler_timeout 到点把**所有线程的原始栈**写进日志，才答得出"卡在哪个调用"。
+        # --timeout-method=thread：Windows 上主线程若阻塞在 C 层（connect、DNS），信号法无效。
+        # 300s 单用例上限是刻意宽松的：本 job 的目标不是催绿，而是**任何卡死都必须留下栈**。
+        run: >-
+          python -m pytest tests/ -q --no-header
+          -o faulthandler_timeout=120
+          --timeout=300 --timeout-method=thread
+          --junitxml=pytest-report-win.xml
+
+      - name: Windows skip 门禁（阈值与 ubuntu 分开设定）
+        working-directory: apps/api
+        run: |
+          python - <<'PY'
+          import os, xml.etree.ElementTree as ET
+          total = failed = 0
+          skips = []
+          root = ET.parse("pytest-report-win.xml").getroot()
+          for suite in root.iter("testsuite"):
+              failed += int(suite.get("failures", 0) or 0) + int(suite.get("errors", 0) or 0)
+          for case in root.iter("testcase"):
+              s = case.find("skipped")
+              if s is not None:
+                  skips.append((case.get("classname", ""), (s.get("message") or "")[:80]))
+          baseline = int(os.environ.get("SKIP_BASELINE_WIN", "0"))
+          print(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")
+          for cls, msg in skips[:12]:
+              print(f"  skip · {cls} :: {msg}")
+          if failed:
+              print("❌ Windows 上有失败用例——这才是本 job 要抓的（平台性断裂）")
+              raise SystemExit(1)
+          if len(skips) > baseline:
+              print(f"❌ skip 数 {len(skips)} 超阈值 {baseline}——可能有用例被无条件标记 skip（在 Windows 上静默放行）")
+              raise SystemExit(1)
+          print("✅ windows 门：无失败；skip 在阈值内（连库结论仍以 ubuntu job 为准）")
+          PY
+
+      - name: Frontend typecheck + unit（vitest）
+        working-directory: apps/web
+        run: |
+          pnpm exec tsc --noEmit
+          pnpm run test:unit
+
+      - name: Frontend build（NEXT_PUBLIC_API_MOCK=false 是生产守卫硬要求）
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_API_MOCK: "false"
+        run: pnpm run build
+
+      - name: 取证行（D-V6-02：run id + head_sha + 结论要能被下游引用）
+        if: always()
+        run: |
+          echo "run_id=${GITHUB_RUN_ID}  run_number=${GITHUB_RUN_NUMBER}"
+          echo "head_sha=${GITHUB_SHA}  conclusion=${{ job.status }}  job=windows-dev"

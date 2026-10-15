@@ -180,6 +180,14 @@ APP_ROUTERS: tuple[APIRouter, ...] = (
 )
 
 
+# STEP-00W：启动期 schema 探测的两级上界（秒）。
+# connect_timeout=3 让 TCP 建连自己断；总上界 5s 兜住"连上了但卡住"。
+# 取值理由：CI ubuntu 本地 PG 正常握手 <0.1s，3s 足够容忍冷启动抖动；
+# 而生产上任何"3 秒连不上库"的场景都不该由 import 期来等。
+_SCHEMA_PROBE_CONNECT_TIMEOUT_SECONDS = 3
+_SCHEMA_PROBE_TOTAL_TIMEOUT_SECONDS = 5.0
+
+
 def _assert_schema_current(settings) -> None:
     """R6.1.4：schema/code 版本一致性守卫（开发环境仅告警，生产拒启）。
 
@@ -205,7 +213,15 @@ def _assert_schema_current(settings) -> None:
 
         head = schema_guard.get_alembic_head()
 
-        engine, _ = create_engine_and_session(resolve_database_url(settings.database_url))
+        # STEP-00W：这条一次性探测连接必须带上界。改之前它没有任何超时——
+        # "数据库所在网络丢包（而非拒连）"时 psycopg 会一直等下去，而本函数跑在 import 期
+        # （app/main.py:281 `app = create_app()`），于是 uvicorn 连端口都没绑上，
+        # /live 与 /ready 根本没机会应答。@win 实测黑洞地址下 >40s 仍不返回
+        # （栈停在 selectors._select，见 EVD-V7-00W/probe_selector_prefix.txt）。
+        engine, _ = create_engine_and_session(
+            resolve_database_url(settings.database_url),
+            connect_args={"connect_timeout": _SCHEMA_PROBE_CONNECT_TIMEOUT_SECONDS},
+        )
 
         async def _probe_and_dispose() -> str | None:
             try:
@@ -215,7 +231,23 @@ def _assert_schema_current(settings) -> None:
                 # 泄漏绑在已关 loop 上的连接池会污染进程单例（跨 loop 报错）。
                 await engine.dispose()
 
-        current = asyncio.run(_probe_and_dispose())
+        async def _probe_with_ceiling() -> str | None:
+            # connect_timeout 管"建连"，这层 wait_for 管"整次探测"：
+            # 连上之后卡在鉴权/查询上同样不能吊死 import。
+            return await asyncio.wait_for(
+                _probe_and_dispose(), _SCHEMA_PROBE_TOTAL_TIMEOUT_SECONDS
+            )
+
+        try:
+            current = asyncio.run(_probe_with_ceiling())
+        except TimeoutError:
+            # 与"连不上"归同一支：不可判定 ⇒ 开发告警放行、生产维持现有放行语义（U-22 不改）。
+            # 这里唯一要保住的是"import 必然在有限时间内返回"。
+            logger.warning(
+                "⚠️ schema 版本探测超时（>{}s），按不可判定放行",
+                _SCHEMA_PROBE_TOTAL_TIMEOUT_SECONDS,
+            )
+            return
         if head is not None and current != head:
             msg = f"schema/code 版本不一致：DB={current}, HEAD={head}"
             if settings.app_env.strip().lower() == "production":

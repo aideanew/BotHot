@@ -8,9 +8,15 @@
 | 平台 | 角色 | 能证明什么 | 不能证明什么 |
 |---|---|---|---|
 | CI `ubuntu-latest` | **正式验收面** | 连库 pytest 全量、alembic 单头与 upgrade/downgrade 往返、gitleaks 8.21.2、pnpm build/e2e | — |
-| CI `windows-latest` | **开发平台门** | "Win10 上装/跑/验这条链没有平台性断裂" | 不得替代 ubuntu 的出门判据 |
+| CI `windows-latest` | **开发平台门** | "Win10 上装/跑/验这条链有没有平台性断裂" | 不得替代 ubuntu 的出门判据 |
 | 本机 `@win` | 开发烟测 | 单测/静态检查/构建/扫描能否跑，以及**跑出来的读数长什么样** | 无 PG/Redis ⇒ 连库结论一律不成立 |
 | `@linux`（容器/WSL2） | 本机等价面 | 需要真库时的本地复现 | 需自建服务，端口不得改动 |
+
+> **D-V7-01（2026-10-15 签）：多平台门 = `CI-Windows` 工作流的结论**，与 `CI` 工作流分开读。
+> 拆分的理由不是审美：windows job 曾每次卡在全量 pytest 到 35 分钟被 `cancelled`，而同一 run 里
+> ubuntu 五个 job 全部 success —— 两者同居一个工作流时，对外那个"CI 徽章"读的是工作流级结论，
+> 于是**正式验收面明明是绿的，显示出来是灰的**（V0.12.0 实测最近 10 次 CI 全 cancelled）。
+> 否决过的两个替代：`continue-on-error`（红也显示绿＝取消这道门）、只改读法（徽章与分支保护仍读工作流级）。
 
 **规则**：任何读数必须带机器标签 `@win` / `@linux` / `@ci`（D-V6-01）。没有标签的数字不算读数；
 CI 的读数还要 run id + head_sha + conclusion（D-V6-02），否则只能记 `采信[REMOTE]`。

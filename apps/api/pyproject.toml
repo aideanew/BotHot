@@ -29,6 +29,9 @@ dependencies = [
 dev = [
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
+    # STEP-00W S00W.2.2：windows job 需要**逐用例**超时 + 栈转储。没有它，一个卡住的用例
+    # 会把整个 job 拖到 timeout-minutes 才被 cancelled——什么栈都留不下（V0.12.0 实测 10 连 cancelled）。
+    "pytest-timeout==2.4.0",
     # W6 交付的前置：W10 覆盖率门禁依赖 pytest-cov（本批只装依赖，不改 CI 门禁口径）
     "pytest-cov>=6.0",
     "httpx>=0.27.0",

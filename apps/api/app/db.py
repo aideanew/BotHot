@@ -44,10 +44,18 @@ def resolve_database_url(default_url: str | None = None, environ: Mapping[str, s
     return env.get("DATABASE_URL") or default_url or get_settings().database_url
 
 
-def create_engine_and_session(url: str | None = None) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
+def create_engine_and_session(
+    url: str | None = None,
+    connect_args: dict[str, object] | None = None,
+) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
     """按连接串创建引擎与会话工厂（缺省取 Settings.database_url）。
 
     池参数取模块常量（env 可覆盖）；pool_recycle 前置回收防 idle 断连。
+
+    `connect_args` **默认 None 时行为与改动前逐字一致**（业务连接池不引入任何新语义）。
+    它存在的唯一理由：STEP-00W 的启动期 schema 探测需要一条"必带上界"的一次性连接——
+    黑洞地址（丢包而非拒连）下 psycopg 默认会挂到 TCP 自行放弃（@win 实测 >40s 未返回），
+    而那条探测跑在 import 期，进程连端口都没绑上，健康检查读不到任何东西。
     """
     database_url = url or get_settings().database_url
     engine = create_async_engine(
@@ -56,6 +64,8 @@ def create_engine_and_session(url: str | None = None) -> tuple[AsyncEngine, asyn
         pool_size=_DB_POOL_SIZE,
         max_overflow=_DB_MAX_OVERFLOW,
         pool_recycle=_DB_POOL_RECYCLE,
+        # 空 dict 就是 SQLAlchemy 的默认值 ⇒ 不传 connect_args 时行为与改动前逐字一致
+        connect_args=dict(connect_args or {}),
     )
     factory = async_sessionmaker(engine, expire_on_commit=False)
     return engine, factory
