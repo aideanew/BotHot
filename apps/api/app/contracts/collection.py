@@ -233,7 +233,7 @@ class CollectionEvent(BaseModel):
 
 
 class Divergence(NamedTuple):
-    """一条"模型 vs 冻结稿"的已知差异。
+    """一条"模型 vs 冻结稿"的已知差异，**带责任人**。
 
     `kind` 五值：
       `structural`   等价写法，接受集不变；
@@ -241,13 +241,20 @@ class Divergence(NamedTuple):
       `serialization` 接受集不变，但 `model_dump()` 会物化冻结稿没有的默认值；
       `strictness`   接受集不变，但多余字段被丢弃而非透传；
       `documentation` 只影响人读文本（description / x-* 注释），不影响校验。
-    比对脚本的纪律：**表里没有的差异一律算违规**（红），而不是"看起来无害就放过"——
-    放过一次的代价是这条差异下次没人记得，正是第一轮验证者判我 docstring 清单不全的那个坑。
+
+    `rule` 是这条差异的**消费者标识**，不是注释：`tests/test_collection_contract.py` 里的
+    元测试要求每条登记都真的被消费掉——要么被比对器实际用到（出现在 `used` 集合里），
+    要么有一个可执行断言替它兑现在 `reason` 里许的诺。
+    第三轮独立验证就是拿这个打的："x-not 由比对器强制""dump 形状另设检查"
+    当时都是**没有实现者的承诺**。没有 rule 字段，登记表就会长这种条目。
+
+    比对脚本的纪律仍是：**表里没有的差异一律算违规**（红）。
     """
 
     ref: str
     field: str
     kind: str
+    rule: str
     draft: str
     model: str
     reason: str
@@ -256,115 +263,118 @@ class Divergence(NamedTuple):
 CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
     Divergence(
         "ArticleKey",
-        "*",
-        "structural",
-        "oneOf 三条 pattern（^b:…$ / ^s:…$ / ^h:…$）",
-        "单条带锚 alternation ^(?:b:…|s:…|h:…)$",
-        "三支前缀互斥（b:/s:/h:），且 pattern 均自带 ^…$ ⇒ 接受集相同。"
-        "换行注入探针实测：Pydantic-core 用 ECMA-strict 的 $，`h:<32hex>\\n` 被拒，等价性成立。",
-    ),
-    Divergence(
-        "*（所有可空字段）",
-        "*",
-        "structural",
-        '"type": ["string", "null"]',
-        '"anyOf": […, {"type": "null"}]',
-        "Pydantic 生成器的固定写法，语义相同；比对脚本按此归一。",
-    ),
-    Divergence(
-        "ArticleKey",
         "article_key（所有引用处）",
         "structural",
-        "是 9 个 $defs 之一，被 `$ref: #/$defs/ArticleKey` 引用",
-        "生成物 $defs 只有 8 个：ArticleKey 是约束类型别名 ⇒ 在使用处内联 pattern，生成物里没有任何 ref 指向它",
-        "Pydantic 不为类型别名建 $defs（只为 BaseModel/Enum 建）。实测生成物里不存在指向 ArticleKey 的 $ref。"
-        "⇒ 比对脚本按「属性落点」归一，而不是按 $defs 目录归一。**第二版更正**：本条第一版还写着"
-        "`CollectionEvent.event` 也在稿的 $defs 里——那是错的，稿里 event 本来就是内联 enum（验证者复核），"
-        "所以它根本不构成差异，已从本条删掉。",
-    ),
-    Divergence(
-        "*（所有模型）",
-        "description",
-        "documentation",
-        "只有 3 个 def 带 description（ArticleKey / ChannelName / ManifestStatus）",
-        "每个模型都带 description（来自类 docstring），每个属性都带 description（来自 Field description）",
-        "文本不同不构成契约差异：描述是人读面，不是约束面。比对脚本**剥离 description 文本**，"
-        "只要求「稿里有 ⇒ 生成物里也得有」。文字内容改由 S1.4.1 的测试断言约束语义，而不是比字符。",
-    ),
-    Divergence(
-        "ArticleKey",
-        "x-not",
-        "documentation",
-        '有注释性禁令 `x-not: "禁止单字符或纯 s（P0-1 回归锚）"`',
-        "生成物无对应键",
-        "`x-not` 不是 JSON Schema 关键字、也不参与校验 ⇒ 若只把它删了就算对齐，那条 P0-1 回归锚就无主了。"
-        "它由见证向量承担：`ArticleKey` 拒绝裸 `s`（实测报 `string_too_short`），且该向量进 "
-        "`tests/test_collection_contract.py`。比对脚本要求稿里每个 `x-*` 都能在登记表里找到归宿，"
-        "否则红——**注释也要有责任人**。",
+        "pattern-equivalence",
+        "是 9 个 $defs 之一，`oneOf` 三条带锚 pattern",
+        "生成物 $defs 只有 8 个；引用处内联成**一条**带锚 alternation",
+        "等价性由**文本推导**证明而不是靠语料：比对器把稿的三支去掉 ^/$ 后拼成 "
+        "`^(?:A|B|C)$`，与生成物的 pattern **逐字符相等**才算过。第三轮验证证明"
+        "只用 11 条见证语料会漏掉 `{32}`→`{31,32}`、字符类去掉 `-`、`{1,12}`→`{1,13}` 等 4 类改动"
+        "——量词和字符类是 regex 的语义，不是有限样本能覆盖的。",
     ),
     Divergence(
         "ArticleKey",
         "minLength/maxLength",
         "structural",
+        "bounds-redundant",
         "minLength 3 / maxLength 128",
         "同样声明 3 / 128，但对 pattern 而言是冗余约束",
-        "实测最短可通过串 `s:12345678`（10 字符）、最长分支 ≤ 82 ⇒ 两条边界都不会先于 pattern 生效。"
-        "保留是为了与稿一致，不是因为它有用。",
+        "最短可通过串是 `s:12345678`（10 字符）、最长分支 ≤ 82 ⇒ 两条边界永远先不到。"
+        "由 `test_article_key_bounds_are_redundant` 断言「三支分支各自能过的极值都在 3/128 之内」。",
+    ),
+    Divergence(
+        "*（所有可空字段）",
+        "*",
+        "structural",
+        "nullable-form",
+        '"type": ["string", "null"]',
+        '"anyOf": […, {"type": "null"}]',
+        "Pydantic 生成器的固定写法，语义相同；比对脚本按此归一。",
+    ),
+    Divergence(
+        "*（所有模型与所有属性）",
+        "title",
+        "documentation",
+        "strip-title",
+        "只有 3 个 def 有 title",
+        "每个模型/属性都带 title（类名、字段名派生）",
+        "关不掉：`ConfigDict(field_title_generator=…)` 返回 None 实测抛 "
+        "`TypeError: must return str` ⇒ 比对脚本剥离 title 后比。",
+    ),
+    Divergence(
+        "*（所有模型与所有属性）",
+        "description",
+        "documentation",
+        "strip-description",
+        "只有 3 个 def 带 description",
+        "每个模型都带（类 docstring），每个带说明的字段都带（Field description）",
+        "文本不同不构成契约差异：描述是人读面。比对脚本剥离 description 文本，"
+        "但保留一条断言：**稿里某个 def/字段有 description ⇒ 生成物对应位置也得有**"
+        "（否则「唯一源把说明弄丢了」就没人管）。",
+    ),
+    Divergence(
+        "ArticleKey",
+        "x-not",
+        "documentation",
+        "x-not-by-witness",
+        '有注释性禁令 `x-not: "禁止单字符或纯 s（P0-1 回归锚）"`',
+        "生成物无对应键",
+        "`x-not` 不是校验关键词，删掉就算对齐会让 P0-1 回归锚无主 ⇒ 改由见证向量承担："
+        "裸 `s` 被 `ValidationError(string_too_short)` 拒。另由 "
+        "`test_every_draft_x_keyword_is_registered` 强制「稿里每个 x-* 都能在本表 field 里找到」。",
     ),
     Divergence(
         "WorkListRow / ArticleManifest",
         "publish_time",
         "tightening",
-        "format: date-time（默认只是注记，不校验）",
-        "AwareDatetime：无时区串被拒（实测 `timezone_aware`）",
-        "稿内字段说明自己写「provider 内即转为带时区时间」⇒ 把意图从注记升成真校验。",
+        "timezone-required:publish_time",
+        "format: date-time（默认只是注记，不 assert）",
+        "AwareDatetime：无时区串被拒",
+        "稿内字段说明自己写「provider 内即转为带时区时间」⇒ 把意图从注记升成真校验。"
+        "消费者：`test_publish_time_requires_timezone_aware_value`。",
     ),
     Divergence(
         "CollectionEvent",
         "at",
         "tightening",
+        "timezone-required:at",
         "format: date-time（注记）",
         "AwareDatetime",
-        "同上，且这是「时间一律 ISO 8601 带时区；存储 UTC，业务日界 Asia/Shanghai」的落点。",
+        "「时间一律 ISO 8601 带时区；存储 UTC，业务日界 Asia/Shanghai」的落点。"
+        "消费者：`test_collection_event_at_requires_timezone`。",
     ),
     Divergence(
         "DiscoveryChannelView",
         "lastSuccessAt",
         "tightening",
-        'format: date-time + ["string","null"]',
+        "timezone-required:lastSuccessAt",
+        "format: date-time + [string,null]",
         "AwareDatetime | None：无时区串被拒",
-        "与 publish_time 同一口径。**第一轮验证者抓到我在 docstring 里只写了 publish_time/at 两处**"
-        "，漏了这一处 ⇒ 差异清单从叙述改成登记表就是为了让它没地方漏。",
-    ),
-    Divergence(
-        "*（所有模型与所有属性）",
-        "title",
-        "structural",
-        "只有 def 级中文 title（如「发现渠道清单行…」），属性级无 title",
-        "Pydantic 给每个模型加类名 title、给每个属性加派生 title（`Url` / `Publish Time` …）",
-        "无法关闭：`ConfigDict(field_title_generator=…)` 实测要求返回 str，返回 None 直接"
-        " `TypeError: must return str`（本轮试出来的，不是查文档猜的）⇒ "
-        "**比对脚本统一剥离 `title` 后再比形状**，人读的描述走 `description`"
-        "（类 docstring 与 Field description 会自动进 `description`，实测 ChannelName 的说明就这么带上去了）。",
+        "与 publish_time 同口径。第一版清单漏了它，是第二轮验证者补的。"
+        "消费者：`test_last_success_at_requires_timezone`。",
     ),
     Divergence(
         "WorkListRow / ArticleManifest / ManifestSyncReport / CollectionEvent / DiscoveryChannelView",
-        "digest, author, content_hash, all_skipped_pages, idempotency_key, count,"
-        " contractVerifiedAt, verifiedScope, lastSuccessAt, lastError",
+        "digest, author, content_hash, all_skipped_pages, idempotency_key, count, "
+        "contractVerifiedAt, verifiedScope, lastSuccessAt, lastError",
         "serialization",
-        "可选字段，无 default（DiscoveryChannelView 四项还允许 null）",
+        "dump-materializes-defaults",
+        "可选字段，无 default",
         'default="" / 0 / None ⇒ model_dump() 会物化出来',
-        "接受集不变（缺省即可通过），但响应里会多出显式的空串/0/null。"
-        "前端按字段存在与否分支时会看到差异 ⇒ 比对脚本只比「接受集」，另设一条 dump 形状检查。",
+        "接受集不变，但响应里多出显式的空串/0/null，前端按「字段是否存在」分支时会看到。"
+        "消费者：`test_optional_defaults_materialize_on_dump`——本条 reason 第一次写的时候"
+        "只承诺「另设一条 dump 形状检查」却没有实现者，第三轮验证正是因此判它 dead claim。",
     ),
     Divergence(
         "*（除 WorkListRow 外所有模型）",
         "*",
         "strictness",
+        "extra-dropped",
         "未声明 additionalProperties（= 允许）",
-        'Pydantic 默认 extra="ignore" ⇒ 多余字段静默丢弃',
-        "有意不对称：WorkListRow 是上游透传面（各渠道字段差异大，`additionalProperties: true` 明写在稿里），"
-        "其余是落库/视图形状，不该让未知字段穿过。差异体现在「丢弃」而不是「拒绝」，"
-        "所以记为 strictness 而不是 tightening。",
+        'Pydantic 默认 extra="ignore" ⇒ 多余字段静默丢弃；生成物里也没有 additionalProperties 键',
+        "有意不对称：WorkListRow 是上游透传面（稿里明写 additionalProperties: true），"
+        "其余是落库/视图形状。差异体现在「丢弃」而不是「拒绝」⇒ 比对器看不见它，"
+        "必须由行为断言负责。消费者：`test_unknown_fields_dropped_except_work_list_row`。",
     ),
 )

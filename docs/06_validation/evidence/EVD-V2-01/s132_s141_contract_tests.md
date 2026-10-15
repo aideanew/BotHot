@@ -75,3 +75,52 @@ B007 那条修得值得记：我原来写 `for rule, need in _NORMALIZATION_TO_K
 - 语义比对里 `tightening` 类差异**在 schema 形状上看不见**（稿的 `format: date-time` 与模型的
   `{"format":"date-time"}` 归一后同形），所以那三条登记只由**行为测试**负责，
   比对器不负责——这点在登记表 reason 里写了，别让下一个人以为比对器能抓到它。
+
+## 7. 第三轮独立验证：**S1.4.1 PASS，S1.3.2 作为门禁 FAIL**（抓到 6 类绕过）
+
+它没接受我 §3 的"门确实打得住"，而是自己发明注入方式去打，结果 15 类里 **6 类穿过去了**：
+
+| 它注入的漂移 | 第一版结果 | 根因 |
+|---|---|---|
+| `s:` 分支字符类去掉连字符 `-` | **0 条，漏** | pattern 只比 11 条语料的接受向量，语料里没有含 `-` 的 token |
+| `h:` 的 `{32}`→`{31,32}` | **0 条，漏** | 同上：语料罩不住量词边界 |
+| `b:` 的 mid `{1,12}`→`{1,13}`、idx `{1,2}`→`{1,3}` | **0 条，漏 ×2** | 同上 |
+| 往生成物塞 `minItems` | **0 条，漏** | 未知关键词检查**只跑稿侧**（`:254` `:312`），生成物侧塞什么都行 |
+| 往生成物塞 `const` | **0 条，漏** | 同上；且 `_canon` 只读它认识的键，多余键静默丢弃 |
+| 真差异发生时参数化的 `[WorkListPage]` 那条 | **PASSED，误报平安** | 差异路径是 `WorkListPage.required: …`，过滤器找的是 `WorkListPage:` 或 `.WorkListPage.` ⇒ 9 条参数化测试全绿，只有汇总那条红。所谓"每 def 可定位"是假的 |
+
+⇒ 我 §3 写的那句"门确实打得住"**把 4 类的读数当成 15 类的结论**，是外推过度。
+
+## 8. 修完后的形态（本次增量）
+
+| 修法 | 落点 |
+|---|---|
+| pattern **先比文本推导**：稿的 `oneOf` 三支去掉 `^`/`$` 折成 `^(?:A\|B\|C)$`，与生成物 pattern 逐字符相等；语料向量降为第二层，并补 17 条边界见证（含连字符 token、hex 31/32/33、biz/mid/idx 位数边界） | `canonical_alternation` / `_pattern_fact` / `test_article_key_pattern_text_is_derivable_from_draft` |
+| **两侧**都跑未知关键词检查；`_canon` 把没映射的键收进 `unmapped` ⇒ 成为差异，不再静默丢 | `test_neither_side_uses_a_keyword_the_comparator_does_not_implement`（参数化两侧） |
+| 差异统一以 `def名:` 前缀 ⇒ 参数化的每-def 测试真的分得清责任 | `test_each_draft_def_is_explained_or_equal[9]` |
+| **登记表加 `rule` 字段并要求双向消费**：被比对器用到 或 本文件有个函数替它兑现 reason 里的承诺 | `test_registry_rules_are_all_consumed`、`test_normalizations_used_are_all_backed_by_registry` |
+| 三条 dead claim 补上实现者：`x-not` → `test_every_draft_x_keyword_is_registered`；"另设 dump 形状检查" → `test_optional_defaults_materialize_on_dump`；`strictness` → `test_unknown_fields_dropped_except_work_list_row` | 同上 |
+| 外部验证者的击败方式**钉成 11 类参数化测试**（下次谁把比对器改坏，CI 替它再问一遍） | `test_comparator_bites_on_each_drift_class` |
+| 补上"改了模型没重跑生成器"这段空档：进程内 import 生成器重算，与已提交产物比 | `test_generated_artifact_matches_current_model` |
+
+登记表从 12 条收敛到 **11 条**（第一版把 ArticleKey 的"oneOf 折一条"与"别名内联无 $defs"写成两条，其实是同一件事）；
+每条多一个 `rule`。`used` 不再是无人接的返回值——`_USED_RULES` 由比对过程记录、由双向核对消费。
+
+## 9. 本次读数（@win，修复后）
+
+- `pytest tests/test_collection_contract.py -q` ⇒ **61 passed in 0.90s**（第一版 44 条）
+- `ruff check app tests`（apps/api cwd）rc=0；`mypy app` rc=0，109 files
+- 两条新断言**自己也被打过**（不是声称，是跑过）：
+  - 把产物指向一份只改过一个字符（`title.maxLength` 512→511）的副本 ⇒
+    `test_generated_artifact_matches_current_model` 报"模型与已提交产物不一致"；
+  - 合成一条没有消费者的登记（`rule=bogus-rule-with-no-consumer`）⇒
+    `test_registry_rules_are_all_consumed` 报 `dead claim：bogus-rule-with-no-consumer（SomeDef / someField）`。
+  两次都在内存里做，未改任何仓库文件（副本写在 `.staging/` 且用完删除）。
+- 邻居回归：`pytest tests/test_collection_contract.py tests/test_discovery.py tests/test_startup_probe_timeout.py`
+  （第一轮读数 62 passed / 2 skipped；本轮未重跑那两条邻居，改动只在契约文件内）
+
+## 10. `@ci` 侧对 9b70bc2（修复前那版）的读数
+
+- `CI` run **38737622962** = **success**（backend 含这 44 条新测试 + 覆盖率门禁 75 未破）
+- `CI-Windows` run **38737622022** = **failure**（13:10:16Z，第七个同形态读数，仍非 cancelled）
+- 修复后的这版（61 条）的 @ci 读数**尚未取**——它是下一步要补的凭据，不在这里预支。
