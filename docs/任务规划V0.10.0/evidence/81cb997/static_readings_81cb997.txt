@@ -1,0 +1,44 @@
+## app/web diff 61358c3..HEAD
+ apps/api/tests/test_asset_fragment_guard.py | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+## node_modules
+apps/web/node_modules
+/usr/bin/pnpm
+/usr/bin/node
+v22.23.3
+## CI runs
+/bin/bash: line 4: gh: command not found
+
+## decision-log
+ls: cannot access 'docs/03_solution/decisions/decision-log.md': No such file or directory
+## gitleaksignore
+ls: cannot access '.gitleaksignore': No such file or directory
+## gitleaks HEAD tree
+2:57AM WRN leaks found: 2
+## gitleaks history
+2:58AM WRN leaks found: 11
+96e8f31d7c0120b159c54fd35923df6ca27e5a09:docs/06_validation/evidence/EVD-V2-02/prove_anchor_fallback.py:generic-api-key:556
+f70d52fb9c023a3dda2d47934816849ca852819f:docs/任务规划V0.7.0/06-入库与双端一致.md:connection-string-embedded-password:46
+de78125b91434caa3ef711e5382d6e955d8557af:docs/06_validation/evidence/EVD-V2-00R/out_evidence_check.txt:connection-string-embedded-password:137
+1470b77b996a31892b2c9bea398c8a3228b2c05f:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:921
+1470b77b996a31892b2c9bea398c8a3228b2c05f:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:926
+1af68fc7e0ba4f9cf3851eca34af4f66240ef411:docs/06_validation/evidence/EVD-V2-00R/out_evidence_check.txt:connection-string-embedded-password:135
+1af68fc7e0ba4f9cf3851eca34af4f66240ef411:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:206
+1af68fc7e0ba4f9cf3851eca34af4f66240ef411:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:209
+798f2638124b75ab164855c6d16d69be545dbcdf:docs/03_solution/decisions/adr-0010-externalize-connection-strings.md:connection-string-embedded-password:15
+798f2638124b75ab164855c6d16d69be545dbcdf:docs/04_planning/current-plan.md:connection-string-embedded-password:796
+798f2638124b75ab164855c6d16d69be545dbcdf:docs/05_execution/tasks/TASK-004.md:connection-string-embedded-password:21
+## evidence py
+ 10406 total
+## NotImpl
+16
+## admin consumers
+admin/push=0
+admin/ops/liveness=0
+admin/discovery/channels=0
+admin/engines/keys=0
+backchannel-logout=0
+admin/alerts=0
+## mako
+680:name = "mako"
+681-version = "1.4.1"

@@ -1,0 +1,10 @@
+# GitHub Actions 最近运行（apicall workflow_runs_list，2026-10-15 10:58 CST 读取）
+38570541936 81cb997 CI       completed success
+38570541871 81cb997 Security completed failure
+38568030423 53ebc4a CI       completed success
+38568030385 53ebc4a Security completed failure
+38558870416 2315cda CI       completed success
+38558870350 2315cda Security completed failure
+38550315271 f710ce9 CI       completed success
+38550315289 f710ce9 Security completed failure
+# 说明：CI 含 postgres service 与 skip 门（ci.yml:106-134，PG 不可达类 skip 判红、SKIP_BASELINE=6）⇒ CI success 即「真库全量 0 failed 且 skip≤6」的机器读数。

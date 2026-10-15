@@ -1,0 +1,35 @@
+`next lint` is deprecated and will be removed in Next.js 16.
+For new projects, use create-next-app to choose your preferred linter.
+For existing projects, migrate to the ESLint CLI:
+npx @next/codemod@canary next-lint-to-eslint-cli .
+
+Attention: Next.js now collects completely anonymous telemetry regarding usage.
+This information is used to shape Next.js' roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://nextjs.org/telemetry
+
+✔ No ESLint warnings or errors
+ ✓ tests/p5-workbench.spec.ts (3 tests) 3ms
+
+ Test Files  45 passed (45)
+      Tests  366 passed (366)
+   Start at  03:00:10
+   Duration  66.27s (environment 53%, import 28%, tests 16%, transform 3%)
+
+Environment  happy-dom was created 45 times · 31.35s total, 53% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+JUNIT report written to /workspace/work/BotHot/apps/web/vitest-report/junit.xml
+Error: NEXT_PUBLIC_API_MOCK must be explicitly set to false in production (NEXT_PUBLIC_API_MOCK=false)
+└ ○ /subscriptions                       5.56 kB         121 kB
++ First Load JS shared by all             103 kB
+  ├ chunks/8262-6554da3dd4e3aab6.js      46.6 kB
+  ├ chunks/c4db5efe-a10e3d75ec54dda3.js  54.2 kB
+  └ other shared chunks (total)             2 kB
+
+
+ƒ Middleware                             34.2 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
