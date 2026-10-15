@@ -81,6 +81,7 @@ V0.6.0 把 STEP-00C 排第一是为了防"没跑就合"；V0.7.0 实测本机无
 
 ## V0.9.0 → V0.10.0 本卡变更（基线 main@81cb997）
 
-- **状态：🟡 前端一半已满足（本机实测）**：`apps/web/node_modules` 存在、pnpm/Node 22 在 PATH；typecheck/lint rc=0；vitest 45 文件 366 用例全过；`build` 在未设 `NEXT_PUBLIC_API_MOCK=false` 时按生产守卫 rc=1，设后 rc=0（E-frontend）。
+- **状态：🟡 前端一半已满足（`采信[REMOTE]`——产自 V0.10.0 的 Linux 沙箱 `/workspace/work/BotHot`，非任一阅读者所在的机器）**：`apps/web/node_modules` 存在、pnpm/Node 22 在 PATH；typecheck/lint rc=0；vitest 45 文件 366 用例全过；`build` 在未显式设 `NEXT_PUBLIC_API_MOCK=false` 时 rc=1（设计如此）。
+  - ⚠ 本行原写「本机实测」，与 D-V6-01（每条读数必须标执行机）冲突，V0.11.0 已加限定：**换一台机器（含这台 win32：`node_modules`/`pnpm`/`gitleaks`/`venv`/`gh` 全无，见 01 F-04/F-05）该半边即不成立**，验收前须在目标机重跑，不得引用本行。`build` 在未设 `NEXT_PUBLIC_API_MOCK=false` 时按生产守卫 rc=1，设后 rc=0（E-frontend）。
 - V0.9.0 F-10『node_modules 不存在』是另一台机器的读数，两者都真 ⇒ 工具链状态按机器记录，不跨机器继承。
 - 剩余 4 项：后端 testenv（compose.test.yml、Makefile 四目标中的 testenv-up/down/verify-backend）与 conventions 一节；`verify-frontend` 必须显式带 `NEXT_PUBLIC_API_MOCK=false` 跑 build。
