@@ -16,6 +16,13 @@
 所以"字节比较版在 @ci 上也绿"目前是**推断**（依据：`.gitattributes` 钉 `* text=auto eol=lf`，
 ubuntu 检出即 LF），**凭据未取**。取到之后追加在下面，取不到就红着说明。
 
-## 字节比较版的 @ci 读数（后续提交）
+## 字节比较版的 @ci 读数（后续提交，**已取到**）
 
-- 待补。
+- 提交 `c1657d6`（把 `check()` / `check_schemas()` 改成 `read_bytes()` 之后）
+- run_id=**38734298632**  job_id=**116419550320**  job=backend  conclusion=**success**
+  （2026-10-15T12:23:46Z → 12:26:22Z；原始响应 `jobs_ci_c1657d6.json`）
+- 步 **「Contract drift gate (gen_contracts --check)」= success**
+  ⇒ 前面写的"CI 按 `.gitattributes` 检出 LF ⇒ 字节比较预期 rc=0"这条**推断被读数证实**，
+  不再是推断。同 run `Security` run 38734298616 = success。
+- 反面仍成立：本机 worktree 那 6 个 dto.ts 在字节比较版之前是 CRLF，
+  `@win` 直接跑 `--check` 当时 rc=1（这正是字节比较想抓的东西，不是 CI 的问题）。

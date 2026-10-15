@@ -1,0 +1,625 @@
+{
+  "total_count": 5,
+  "jobs": [
+    {
+      "id": 116419550158,
+      "run_id": 38734298632,
+      "workflow_name": "CI",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/aideanew/BotHot/actions/runs/38734298632",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOUxwS-M8AAAAbGyVbzg",
+      "head_sha": "c1657d6694bdc8a55c7a1bea6c90f4ad8995993f",
+      "url": "https://api.github.com/repos/aideanew/BotHot/actions/jobs/116419550158",
+      "html_url": "https://github.com/aideanew/BotHot/actions/runs/38734298632/job/116419550158",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-15T12:23:44Z",
+      "started_at": "2026-10-15T12:23:46Z",
+      "completed_at": "2026-10-15T12:26:53Z",
+      "name": "frontend",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T12:23:47Z",
+          "completed_at": "2026-10-15T12:23:48Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T12:23:48Z",
+          "completed_at": "2026-10-15T12:23:52Z"
+        },
+        {
+          "name": "Resolve pnpm version from packageManager",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T12:23:52Z",
+          "completed_at": "2026-10-15T12:23:52Z"
+        },
+        {
+          "name": "Run pnpm/action-setup@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T12:23:52Z",
+          "completed_at": "2026-10-15T12:23:53Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T12:23:53Z",
+          "completed_at": "2026-10-15T12:24:00Z"
+        },
+        {
+          "name": "Runtime fingerprint & parity assert",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T12:24:00Z",
+          "completed_at": "2026-10-15T12:24:01Z"
+        },
+        {
+          "name": "Install",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-10-15T12:24:01Z",
+          "completed_at": "2026-10-15T12:24:03Z"
+        },
+        {
+          "name": "Type check",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-10-15T12:24:03Z",
+          "completed_at": "2026-10-15T12:24:08Z"
+        },
+        {
+          "name": "Contracts package strict check (tsc --noEmit)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-10-15T12:24:08Z",
+          "completed_at": "2026-10-15T12:24:09Z"
+        },
+        {
+          "name": "TypeScript strict check (tsc --noEmit)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-10-15T12:24:09Z",
+          "completed_at": "2026-10-15T12:24:12Z"
+        },
+        {
+          "name": "Unit tests (vitest)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-15T12:24:12Z",
+          "completed_at": "2026-10-15T12:24:26Z"
+        },
+        {
+          "name": "Upload vitest diagnostics on failure",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 12,
+          "started_at": "2026-10-15T12:24:26Z",
+          "completed_at": "2026-10-15T12:24:26Z"
+        },
+        {
+          "name": "Build",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T12:24:26Z",
+          "completed_at": "2026-10-15T12:24:54Z"
+        },
+        {
+          "name": "Install Playwright browser (chromium)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-10-15T12:24:54Z",
+          "completed_at": "2026-10-15T12:25:23Z"
+        },
+        {
+          "name": "Build (mock artifact, for UI e2e)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-10-15T12:25:23Z",
+          "completed_at": "2026-10-15T12:25:51Z"
+        },
+        {
+          "name": "E2E (mock UI)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-10-15T12:25:51Z",
+          "completed_at": "2026-10-15T12:26:50Z"
+        },
+        {
+          "name": "E2E (real backend, non-blocking)",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 17,
+          "started_at": "2026-10-15T12:26:50Z",
+          "completed_at": "2026-10-15T12:26:50Z"
+        },
+        {
+          "name": "Upload Playwright diagnostics on failure",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 18,
+          "started_at": "2026-10-15T12:26:50Z",
+          "completed_at": "2026-10-15T12:26:50Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 34,
+          "started_at": "2026-10-15T12:26:50Z",
+          "completed_at": "2026-10-15T12:26:50Z"
+        },
+        {
+          "name": "Post Run pnpm/action-setup@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 35,
+          "started_at": "2026-10-15T12:26:50Z",
+          "completed_at": "2026-10-15T12:26:50Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 36,
+          "started_at": "2026-10-15T12:26:50Z",
+          "completed_at": "2026-10-15T12:26:51Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 37,
+          "started_at": "2026-10-15T12:26:51Z",
+          "completed_at": "2026-10-15T12:26:51Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/aideanew/BotHot/check-runs/116419550158",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000001206,
+      "runner_name": "GitHub Actions 1000001206",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 116419550320,
+      "run_id": 38734298632,
+      "workflow_name": "CI",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/aideanew/BotHot/actions/runs/38734298632",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOUxwS-M8AAAAbGyVccA",
+      "head_sha": "c1657d6694bdc8a55c7a1bea6c90f4ad8995993f",
+      "url": "https://api.github.com/repos/aideanew/BotHot/actions/jobs/116419550320",
+      "html_url": "https://github.com/aideanew/BotHot/actions/runs/38734298632/job/116419550320",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-15T12:23:44Z",
+      "started_at": "2026-10-15T12:23:46Z",
+      "completed_at": "2026-10-15T12:26:22Z",
+      "name": "backend",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T12:23:46Z",
+          "completed_at": "2026-10-15T12:23:47Z"
+        },
+        {
+          "name": "Initialize containers",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T12:23:47Z",
+          "completed_at": "2026-10-15T12:24:09Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T12:24:09Z",
+          "completed_at": "2026-10-15T12:24:11Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T12:24:11Z",
+          "completed_at": "2026-10-15T12:24:15Z"
+        },
+        {
+          "name": "Install",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T12:24:15Z",
+          "completed_at": "2026-10-15T12:24:31Z"
+        },
+        {
+          "name": "Tool fingerprint",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T12:24:31Z",
+          "completed_at": "2026-10-15T12:24:31Z"
+        },
+        {
+          "name": "Lint (ruff)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-10-15T12:24:31Z",
+          "completed_at": "2026-10-15T12:24:31Z"
+        },
+        {
+          "name": "Type check (mypy)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-10-15T12:24:31Z",
+          "completed_at": "2026-10-15T12:24:45Z"
+        },
+        {
+          "name": "Migrate schema (alembic upgrade head)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-10-15T12:24:45Z",
+          "completed_at": "2026-10-15T12:24:47Z"
+        },
+        {
+          "name": "Assert single alembic head",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-10-15T12:24:47Z",
+          "completed_at": "2026-10-15T12:24:47Z"
+        },
+        {
+          "name": "Contract drift gate (gen_contracts --check)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-15T12:24:47Z",
+          "completed_at": "2026-10-15T12:24:49Z"
+        },
+        {
+          "name": "Docs reference consistency gate (check_docs_consistency)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-15T12:24:49Z",
+          "completed_at": "2026-10-15T12:24:49Z"
+        },
+        {
+          "name": "Tests (pytest) + coverage + skip gate",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T12:24:49Z",
+          "completed_at": "2026-10-15T12:26:20Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 24,
+          "started_at": "2026-10-15T12:26:20Z",
+          "completed_at": "2026-10-15T12:26:20Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 25,
+          "started_at": "2026-10-15T12:26:20Z",
+          "completed_at": "2026-10-15T12:26:20Z"
+        },
+        {
+          "name": "Stop containers",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 26,
+          "started_at": "2026-10-15T12:26:20Z",
+          "completed_at": "2026-10-15T12:26:20Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 27,
+          "started_at": "2026-10-15T12:26:20Z",
+          "completed_at": "2026-10-15T12:26:20Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/aideanew/BotHot/check-runs/116419550320",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000001205,
+      "runner_name": "GitHub Actions 1000001205",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 116419550326,
+      "run_id": 38734298632,
+      "workflow_name": "CI",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/aideanew/BotHot/actions/runs/38734298632",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOUxwS-M8AAAAbGyVcdg",
+      "head_sha": "c1657d6694bdc8a55c7a1bea6c90f4ad8995993f",
+      "url": "https://api.github.com/repos/aideanew/BotHot/actions/jobs/116419550326",
+      "html_url": "https://github.com/aideanew/BotHot/actions/runs/38734298632/job/116419550326",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-15T12:23:44Z",
+      "started_at": "2026-10-15T12:23:46Z",
+      "completed_at": "2026-10-15T12:23:55Z",
+      "name": "compose",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T12:23:47Z",
+          "completed_at": "2026-10-15T12:23:48Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T12:23:48Z",
+          "completed_at": "2026-10-15T12:23:52Z"
+        },
+        {
+          "name": "Validate compose config",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T12:23:52Z",
+          "completed_at": "2026-10-15T12:23:53Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T12:23:53Z",
+          "completed_at": "2026-10-15T12:23:53Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-10-15T12:23:53Z",
+          "completed_at": "2026-10-15T12:23:53Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/aideanew/BotHot/check-runs/116419550326",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000001204,
+      "runner_name": "GitHub Actions 1000001204",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 116419550511,
+      "run_id": 38734298632,
+      "workflow_name": "CI",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/aideanew/BotHot/actions/runs/38734298632",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOUxwS-M8AAAAbGyVdLw",
+      "head_sha": "c1657d6694bdc8a55c7a1bea6c90f4ad8995993f",
+      "url": "https://api.github.com/repos/aideanew/BotHot/actions/jobs/116419550511",
+      "html_url": "https://github.com/aideanew/BotHot/actions/runs/38734298632/job/116419550511",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-15T12:23:44Z",
+      "started_at": "2026-10-15T12:23:46Z",
+      "completed_at": "2026-10-15T12:27:27Z",
+      "name": "compose-smoke",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T12:23:47Z",
+          "completed_at": "2026-10-15T12:23:47Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T12:23:47Z",
+          "completed_at": "2026-10-15T12:23:51Z"
+        },
+        {
+          "name": "Validate compose config",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T12:23:51Z",
+          "completed_at": "2026-10-15T12:23:53Z"
+        },
+        {
+          "name": "Generate ephemeral master keys",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T12:23:53Z",
+          "completed_at": "2026-10-15T12:23:53Z"
+        },
+        {
+          "name": "Build backend image",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T12:23:53Z",
+          "completed_at": "2026-10-15T12:26:42Z"
+        },
+        {
+          "name": "Start core services",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T12:26:42Z",
+          "completed_at": "2026-10-15T12:27:22Z"
+        },
+        {
+          "name": "Smoke (health + scheduler/worker heartbeat)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-10-15T12:27:22Z",
+          "completed_at": "2026-10-15T12:27:25Z"
+        },
+        {
+          "name": "Dump compose logs on failure",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 8,
+          "started_at": "2026-10-15T12:27:25Z",
+          "completed_at": "2026-10-15T12:27:25Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-10-15T12:27:25Z",
+          "completed_at": "2026-10-15T12:27:25Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-10-15T12:27:25Z",
+          "completed_at": "2026-10-15T12:27:25Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/aideanew/BotHot/check-runs/116419550511",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000001208,
+      "runner_name": "GitHub Actions 1000001208",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 116419550615,
+      "run_id": 38734298632,
+      "workflow_name": "CI",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/aideanew/BotHot/actions/runs/38734298632",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOUxwS-M8AAAAbGyVdlw",
+      "head_sha": "c1657d6694bdc8a55c7a1bea6c90f4ad8995993f",
+      "url": "https://api.github.com/repos/aideanew/BotHot/actions/jobs/116419550615",
+      "html_url": "https://github.com/aideanew/BotHot/actions/runs/38734298632/job/116419550615",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-15T12:23:44Z",
+      "started_at": "2026-10-15T12:23:46Z",
+      "completed_at": "2026-10-15T12:23:54Z",
+      "name": "workflow-lint",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T12:23:47Z",
+          "completed_at": "2026-10-15T12:23:47Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T12:23:47Z",
+          "completed_at": "2026-10-15T12:23:51Z"
+        },
+        {
+          "name": "Install actionlint (pinned)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T12:23:51Z",
+          "completed_at": "2026-10-15T12:23:51Z"
+        },
+        {
+          "name": "actionlint (all workflows)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T12:23:51Z",
+          "completed_at": "2026-10-15T12:23:52Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-10-15T12:23:52Z",
+          "completed_at": "2026-10-15T12:23:52Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-10-15T12:23:52Z",
+          "completed_at": "2026-10-15T12:23:52Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/aideanew/BotHot/check-runs/116419550615",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000001210,
+      "runner_name": "GitHub Actions 1000001210",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    }
+  ]
+}
