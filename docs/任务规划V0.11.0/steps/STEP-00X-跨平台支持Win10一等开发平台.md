@@ -86,7 +86,7 @@ cd apps/web && pnpm build
 `docs/06_validation/evidence/EVD-V5-00X/`
 
 ## 允许修改
-`scripts/entry.py`（新）、`scripts/dev-env.ps1`（新，可选）、`Makefile`（目标体转薄调用）、`README.md`、`.gitattributes`、`docs/04_engineering/cross-platform.md`（新）、`docs/04_engineering/conventions.md`、`docs/00_governance/project-map.md`、`.github/workflows/ci.yml`（**仅新增** windows job）、`docker/compose.test.yml`（若 00E 未建则可建）、EVD-V5-00X
+`scripts/entry.py`（新）、`scripts/dev-env.ps1`（新，可选）、`Makefile`（目标体转薄调用）、`README.md`、`.gitattributes`、**`.gitignore`（本版追加：S00X.1.1 实测 `git check-ignore -v .venv/x`、`apps/api/.venv/x`、`venv/x` 全部 NO-RULE，而 `scripts/preflight.sh` 的修复提示要求 `apps/api/.venv/Scripts/python.exe` ⇒ 照它做就会在共享工作树里造出未跟踪目录；补 `.venv/` 与 `venv/` 两条是"装依赖不污染共享树"的前提，属本卡范围）**、`docs/04_engineering/cross-platform.md`（新）、`docs/04_engineering/conventions.md`、`docs/00_governance/project-map.md`、`.github/workflows/ci.yml`（**仅新增** windows job）、`docker/compose.test.yml`（若 00E 未建则可建）、EVD-V5-00X
 ## 禁止修改
 `apps/api/app/**`、`apps/api/tests/**`（本卡不改被测行为）、`apps/web/app|components|lib/**`（UI 线归 14b/15）、`apps/api/alembic/**`（**不占迁移号**）、`packages/contracts/**`、`.github/workflows/ci.yml` 的 **ubuntu job 语义**、**`.project/**`**（vendored 子树，实测含 14 个 `.sh`，属 LangBot/firecrawl/reclip，不是 BotHot 的入口，跨平台化不覆盖它）、`docs/06_validation/evidence/EVD-V2-02/**` 与 `docs/任务规划V0.5.0/**`（并发会话在途，硬规则第五节）
 
