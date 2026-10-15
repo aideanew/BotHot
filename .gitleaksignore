@@ -1,0 +1,50 @@
+# .gitleaksignore —— 逐指纹豁免（STEP-00S S0S.2.2）
+#
+# 纪律（D-12 / D-V4-04，均已签）：
+#   ① 只允许**逐指纹**登记，禁止整目录、整文件、整 commit 豁免——那会让安全门禁永久失效；
+#   ② 指纹只准由真实 gitleaks **8.21.2** 产出（与 security.yml:53 同版），禁止手搓或猜测；
+#   ③ 禁止重写历史来"消灭"这些命中（历史提交是不可变事实）。
+#
+# 每条上方的注释写清：它是什么、为什么不是真实凭据、出自哪个提交。
+# 产出与对账（@win，2026-10-15，见 docs/06_validation/evidence/EVD-V5-00X/win_dev_platform_readings.md）：
+#   · 本机 git 模式：`GIT_ATTR_NOSYSTEM=1 gitleaks detect --source . --config .gitleaks.toml -f json`
+#     → 156 commits scanned / 8 leaks found（不加该环境变量时 gitleaks 会因 Git for Windows 的
+#       docx textconv 报错而整次扫描失败，见 EVD §5-4）
+#   · V0.10.0 在其 Linux 机器上同版产出 11 条（任务规划V0.10.0/evidence/81cb997/gitleaks_fingerprints_81cb997.txt）
+#   · 两机对账：本机 8 条与 V0.10.0 的 8 条**逐字符串相同**；差的 3 条全部来自 798f263
+#     （本机 scan 未覆盖那三个文件的当时形态）⇒ 按卡面"以 CI artifact 为准、取并集"写入 11 条。
+#   · 反证（本文件生效性）：删掉本文件 → git 模式回到 8 leaks found；恢复 → 0 leaks。
+
+# ── 1) EVD-V2-02/prove_anchor_fallback.py:556 · generic-api-key ──────────
+# 文章身份回退夹具里的 `key = "…"` 形状样本；值是假 key。
+# 该路径属并发会话（硬规则：本会话不写 EVD-V2-02/**），故**不改源码只登记指纹**。
+96e8f31d7c0120b159c54fd35923df6ca27e5a09:docs/06_validation/evidence/EVD-V2-02/prove_anchor_fallback.py:generic-api-key:556
+
+# ── 2) 任务规划V0.7.0/06-入库与双端一致.md:46 · connection-string-embedded-password ──
+# 我自己在 V0.7.0 落盘时写进表格的**占位 DSN**（无真实主机、无真实口令）。
+# 工作树内容已在后续版本清形；此条豁免的是历史提交 f70d52f 里的形态。
+f70d52fb9c023a3dda2d47934816849ca852819f:docs/任务规划V0.7.0/06-入库与双端一致.md:connection-string-embedded-password:46
+
+# ── 3) EVD-V2-00R/out_evidence_check.txt:137 · 同上 ──────────────────────
+# NR-7 读数的夹具占位串（x:y@127.0.0.1:5547/z）。工作树已于 2026-10-15 去形（见该文件末尾补记）；
+# 此条豁免历史提交 de78125b 的形态。
+de78125b91434caa3ef711e5382d6e955d8557af:docs/06_validation/evidence/EVD-V2-00R/out_evidence_check.txt:connection-string-embedded-password:137
+
+# ── 4) EVD-V2-00R/prove_net_isolation.py:921/926 · 同上 ──────────────────
+# 出站代理隔离证明脚本自造的假 DSN（127.0.0.1 + x/y 位），用于断言"清代理不动 DSN"。
+1470b77b996a31892b2c9bea398c8a3228b2c05f:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:921
+1470b77b996a31892b2c9bea398c8a3228b2c05f:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:926
+
+# ── 5) EVD-V2-00R/out_evidence_check.txt:135 + prove_net_isolation.py:206/209 · 同上 ──
+# 与 4) 同一夹具在另一次提交（1af68fc7）里的行位漂移；三条一起登记，
+# 因为指纹含行号，同一段内容在不同提交里是不同指纹。
+1af68fc7e0ba4f9cf3851eca34af4f66240ef411:docs/06_validation/evidence/EVD-V2-00R/out_evidence_check.txt:connection-string-embedded-password:135
+1af68fc7e0ba4f9cf3851eca34af4f66240ef411:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:206
+1af68fc7e0ba4f9cf3851eca34af4f66240ef411:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:209
+
+# ── 6) 798f263 三条：ADR-0010 草稿 / current-plan / TASK-004 ─────────────
+# 这批来自"把连接串外置"的 ADR 草稿与其计划引用，全是 `<user>:<pass>@<host>` 形状的示例，
+# 无真实凭据。本机扫描没覆盖到它们（差集正好是这三条），依 V0.10.0 同版产物 + 卡面"取并集"登记。
+798f2638124b75ab164855c6d16d69be545dbcdf:docs/03_solution/decisions/adr-0010-externalize-connection-strings.md:connection-string-embedded-password:15
+798f2638124b75ab164855c6d16d69be545dbcdf:docs/04_planning/current-plan.md:connection-string-embedded-password:796
+798f2638124b75ab164855c6d16d69be545dbcdf:docs/05_execution/tasks/TASK-004.md:connection-string-embedded-password:21

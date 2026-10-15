@@ -134,7 +134,7 @@ PASS NR-4-a 脏环境下 6 个代理变量被清空 :: 残留=[]
 PASS NR-4-b NO_PROXY 与 no_proxy 均写成契约值（win32 上两键折叠，小写那一半由 NR-14 兜） :: NO_PROXY='127.0.0.1,localhost,::1' no_proxy='127.0.0.1,localhost,::1'（期望 '127.0.0.1,localhost,::1'）
 PASS NR-6 undo() 后宿主原貌恢复（夹具经 monkeypatch 而非直写 os.environ） :: undo 后 NO_PROXY='internal.example' no_proxy='internal.example' HTTP_PROXY='http://127.0.0.1:10808'｜宿主原貌 = 'internal.example' / 'internal.example' / 代理 URL（win32 大小写合并，见常量注释）
 PASS NR-5 无代理的干净环境调用夹具不抛异常 :: delenv(raising=False) 生效
-PASS NR-7 清理代理不影响 AIDEANBOT_TEST_PG_DSN :: 夹具后='postgresql+psycopg://x:y@127.0.0.1:5547/z'
+PASS NR-7 清理代理不影响 AIDEANBOT_TEST_PG_DSN :: 变量仍在且值非空；host:port=127.0.0.1:5547、库名 z（口令位去形，原件见 prove_net_isolation.py 的夹具 DSN，非真实凭据）
 PASS NR-8 tests 全树无 localhost:9999 字面量 :: 命中=[]
 PASS NR-9-a fixtures/net.py 导出 REFUSED_HTTP_URL 且端口为 1 :: 值='http://127.0.0.1:1/bothot-hook-no-listener'
 PASS NR-9-b 5 个消费方均把该常量接到 webhook_url 实参上（AST） :: 未接线=无｜test_alerting_drill.py:import=True、实参行=[101] test_bots_logs_filter.py:import=True、实参行=[28] test_wb_push_hardening.py:import=True、实参行=[80] test_w3_push_scheduler.py:import=True、实参行=[87, 160] test_env_isolation.py:import=True、实参行=[58]
@@ -211,3 +211,11 @@ OK  等价重构 海象别名后再遍历 → 应变 0 红｜实际红项=（无
 OK  等价重构 契约值套一层 str() → 应变 0 红｜实际红项=（无）
 SELF-TEST PASS：20 个 conftest 变异体各自让对应断言变红 + 18 个源码探针敏感 + 13 个等价重构不假红
 rc=0
+
+# ── 2026-10-15 脱敏补记（STEP-00S S0S.1.4，@win）────────────────────────
+# 第 137 行原文是一条"方案://用户位:口令位@地址:端口/库名"形状的夹具连接串（用户位 x、口令位 y、地址 127.0.0.1:5547、库 z）。
+# 那是**夹具占位串、不是真实凭据**，但形状命中 gitleaks 的 connection-string-embedded-password，
+# 且它是 HEAD 里唯一仍带该形状的已跟踪内容 ⇒ 改为"值仍在 + host:port + 库名"的去形写法。
+# 判据本身不变（NR-7 断言的是"清代理后 AIDEANBOT_TEST_PG_DSN 未被 delenv"），
+# 变的只是这一行读数的呈现方式；历史提交 de78125b / 1af68fc7 里的旧形状仍在 git 模式扫描域内，
+# 由 .gitleaksignore 逐指纹登记（D-12：禁整目录/整文件豁免）。

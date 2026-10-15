@@ -38,6 +38,27 @@
 - **S0S.3.2** `uv sync` + 全量 pytest 不回归
 - **S0S.3.3** 推送后 Security run = success，阻断 0、告警 ≤2
 
+## 执行记录（V0.11.0 第二增量 · 2026-10-15 · @win + gitleaks 8.21.2 本机自装）
+读数与对账在 `docs/06_validation/evidence/EVD-V5-00S/security_gitleaks_mako.md`。
+
+| 三级任务 | 状态 | 事实 |
+|---|---|---|
+| S0S.1.1 V0.7.0/06:46 去形 | ✅ 已在前一轮完成 | 本轮核对该行：worktree 内容已无凭据形；历史形态由指纹登记覆盖 |
+| S0S.1.2 改 prove_anchor_fallback.py | ❌ **不执行，偏离卡面** | 该路径属并发会话（硬规则第五节优先）；同一条命中改为逐指纹登记，门禁效果等价 |
+| S0S.1.3 本地 `--no-git` 工作树 0 命中 | ❌ **判据在 @win 不成立** | 工作树模式给反斜杠路径，`.gitleaks.toml` 的 POSIX 斜杠 allowlist 全失配 ⇒ 507 条 vendored 假命中。替代判据：git 模式 0 命中 + `secret_shape_scan` HIGH 0 |
+| S0S.1.4 `out_evidence_check.txt:137` 打码 | ✅ | 夹具 DSN 去形 + 文末脱敏补记（断言含义不变） |
+| S0S.2.1 取指纹 | ✅ | 本机 git 模式 **156 commits / 8 leaks**；与 V0.10.0 的 11 条对账：8 条逐字符串相同，差 3 条来自 `798f263` |
+| S0S.2.2 写 `.gitleaksignore` | ✅ | 并集 **11 条**，每条上方注释"是什么/为何非真实凭据/来源提交"；D-12 逐指纹，无目录级豁免 |
+| S0S.2.3 全历史 0 命中 + 生效性 | ✅ | 有文件 → `no leaks found` rc=0；移开 → `leaks found: 8` rc=1；恢复 → 0（正反证都跑了） |
+| S0S.3.1 mako ≥1.4.2 | ✅ **但不是用 uv 做的** | `uv lock --upgrade-package mako` 实测重解析全锁（1379/1161 行、换索引源、新增 3 包）⇒ 改手抄 3 行，URL/sha256/size/upload-time 均有出处（镜像 simple 索引 + PyPI JSON + 本机下载件校验） |
+| S0S.3.2 `uv sync` + 全量 pytest | 🛑 @win 不做 | 无 PG/Redis，且全量 pytest 在本机 stall（05 U-20）；按 D-V4-01 由 `@ci ubuntu` 出读数 |
+| S0S.3.3 Security run success | ⚪ 待 push 后取 run id | 本机无 `gh`；私有库需只读 token（外部凭据） |
+
+顺带查实的一件事（写进 05 U-19）：**`uv.lock` 早就与 `pyproject.toml` 不同步**
+（`prometheus-client`/`pytest-cov`/`tomli` 有声明无解析项），对照实验证明在我改锁**之前** `uv lock --check` 就是 RC=1。
+不在安全卡里夹带依赖重解析。
+
+
 ## V0.9.0 → V0.10.0 本卡变更（基线 main@81cb997）
 
 - **阻塞解除**：本机有 gitleaks **8.21.2**（与 security.yml:53 同版），V0.9.0『不猜指纹、本机无二进制』这一 BLOCKING 消失；全历史指纹 11 条已产出（E-gitleaks）。
