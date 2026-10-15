@@ -96,7 +96,14 @@ class WorkListRow(BaseModel):
     id: Annotated[str, StringConstraints(min_length=1, max_length=128)] = Field(
         description="上游稳定文章 id；上游无稳定 id 时 = canonical_article_key(url)"
     )
-    url: Annotated[str, StringConstraints(min_length=8, max_length=512)]
+    url: Annotated[
+        str,
+        StringConstraints(min_length=8, max_length=512),
+        # 冻结稿声明 `format: uri`（draft 2020-12 里默认只是注记、不assert）。
+        # 这里显式把它带进生成物，而不是"登记一条差异然后放过"—— 形状对齐、校验强度不变，
+        # 少一条需要比对脚本记住的例外（第二轮验证正是抓到这条没人登记才暴露的）。
+        Field(json_schema_extra={"format": "uri"}),
+    ]
     title: Annotated[str, StringConstraints(max_length=512)]
     publish_time: AwareDatetime | None = Field(
         default=None, description="provider 内即转为带时区时间；上游无时间才允许 null"
@@ -305,12 +312,24 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "，漏了这一处 ⇒ 差异清单从叙述改成登记表就是为了让它没地方漏。",
     ),
     Divergence(
-        "WorkListRow / ArticleManifest / ManifestSyncReport / CollectionEvent",
-        "digest, author, content_hash, all_skipped_pages, idempotency_key, count",
+        "*（所有模型与所有属性）",
+        "title",
+        "structural",
+        "只有 def 级中文 title（如「发现渠道清单行…」），属性级无 title",
+        "Pydantic 给每个模型加类名 title、给每个属性加派生 title（`Url` / `Publish Time` …）",
+        "无法关闭：`ConfigDict(field_title_generator=…)` 实测要求返回 str，返回 None 直接"
+        " `TypeError: must return str`（本轮试出来的，不是查文档猜的）⇒ "
+        "**比对脚本统一剥离 `title` 后再比形状**，人读的描述走 `description`"
+        "（类 docstring 与 Field description 会自动进 `description`，实测 ChannelName 的说明就这么带上去了）。",
+    ),
+    Divergence(
+        "WorkListRow / ArticleManifest / ManifestSyncReport / CollectionEvent / DiscoveryChannelView",
+        "digest, author, content_hash, all_skipped_pages, idempotency_key, count,"
+        " contractVerifiedAt, verifiedScope, lastSuccessAt, lastError",
         "serialization",
-        "可选字段，无 default",
-        'default="" / 0 ⇒ model_dump() 会物化出来',
-        "接受集不变（缺省即可通过），但响应里会多出显式的空串/0。"
+        "可选字段，无 default（DiscoveryChannelView 四项还允许 null）",
+        'default="" / 0 / None ⇒ model_dump() 会物化出来',
+        "接受集不变（缺省即可通过），但响应里会多出显式的空串/0/null。"
         "前端按字段存在与否分支时会看到差异 ⇒ 比对脚本只比「接受集」，另设一条 dump 形状检查。",
     ),
     Divergence(

@@ -121,3 +121,27 @@ CI 侧分母取自 `@ci` backend job 日志（run 38717913012）：`TOTAL 8799 1
   `__future__ / enum / pydantic / typing`。
 - 三次语法自伤（写登记表时把中文引号写成嵌套直引号、忘 import `NamedTuple`），
   都是 `py_compile` 先报出来的 ⇒ 生成/改 Python 源后**先编译再声称绿**。
+
+## 9. 第二轮复核：四条修复确认，又抓到第五、第六条
+
+复核者对 §7/§8 的四条给 **CONFIRMED**（`next_cursor` required、登记表 9 条分布一致、
+`ChannelName` 口径改成集合比较、`ruff` / `mypy 109 files` / AST 无反向依赖），
+但它在"逐字段再查一遍"时抓到两条我仍然没登记的差异：
+
+| 抓到什么 | 我的处置 | 为什么这么处置 |
+|---|---|---|
+| `WorkListRow.url` 稿里声明 `format: uri`，模型只给 min/max ⇒ 生成物没这个键，**形状差异且未登记** | **消除它而不是登记它**：字段加 `Field(json_schema_extra={"format": "uri"})` | 登记一条差异 = 让比对脚本永远记住一个例外；而这条根本没有语义代价（稿里 format 默认不 assert，加上去只让形状对齐）。实测生成物变为 `{"format":"uri","maxLength":512,"minLength":8,"type":"string"}`，且 `http:/`、`x` 仍被 min_length 拒 ⇒ 校验强度没变 |
+| Pydantic 给**每个属性与模型**加 `title`（`Url`、`Publish Time`、类名），稿里只有 def 级中文 title | 登记为第 10 条 `structural`，规定"比对脚本剥离 `title` 后再比形状，人读描述走 `description`" | 我先试的是**关掉它**：`ConfigDict(field_title_generator=lambda …: None)` 实测抛 `TypeError: field_title_generator … must return str, not NoneType` ⇒ 关不掉，只能归一化。这条是试出来的，不是查文档猜的 |
+
+顺带把 §7 那条 serialization 记录的字段面补全（`DiscoveryChannelView` 的四个 `None` 默认也会在
+dump 里物化成 `null`，复核者说这条"arguable"——我同意它有争议，但既然稿允许 null、模型也接受 null，
+差异只在 dump 形状，那就写全，不靠"arguable"跳过）。
+
+**修复后读数（@win）**：`CONTRACT_DIVERGENCES` = **10 条**
+（`structural 5 / tightening 3 / serialization 1 / strictness 1`）；
+8 条键见证向量重跑仍逐条一致；`ruff check app tests` rc=0；`mypy app` 109 files rc=0。
+
+**这条流程值得记一句**：第一轮验证判 FAIL 之后我改了四条，第二轮又抓到两条——
+不是修得不干净，而是"差异清单是否完备"这件事**没法靠自审收敛**，只能靠"逐字段再查一遍"的外部视角。
+所以 S1.3.2 的比对脚本必须把"表里没有的差异 = 红"做成机械的：
+从第三轮起，完备性就该由门禁负责，而不是由谁又想起来一条负责。
