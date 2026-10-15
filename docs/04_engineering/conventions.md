@@ -110,6 +110,19 @@ docs(architecture): 更新系统架构设计文档
   - 原规范写 22（X-03）——按 22 跑 `pnpm install` 会被 engines 判定不满足。
 - 锁文件：pnpm-lock.yaml 必须提交
 
+### 5.3 跨平台入口与"文档 ≠ 实现"的一处更正
+- **命令实体的唯一源是 `scripts/entry.py`**（STEP-00X / D-V4-01）。`make <task>` 与
+  `python scripts/entry.py <task>` 同义：Makefile 的开发类目标只做薄转调，守卫类目标转调
+  `scripts/guards.py`。平台分支全仓只允许两处——`entry.py` 的 `dispatch()` 与 Makefile 变量块的
+  `ifeq ($(OS),Windows_NT)`。新增第三处要先改本条。
+- 一致性由 `scripts/check_entry_parity.py` 机检（Makefile 每个目标都能解析到实体、且 recipe 已转调）；
+  CI 的 `windows-dev` job 会跑它。
+- **更正 §5.1**：本条原写"包管理：uv（pyproject.toml + uv.lock）"，但 CI 的 backend job 实际执行的是
+  `pip install -e ".[dev]" pytest-cov`（`ci.yml:59`），`uv.lock` 只被 security job 的依赖审计读取。
+  两者并存是现状：装依赖以 **pip + pyproject** 为准，锁文件仍必须提交。跨平台脚本一律按 pip 口径实现。
+- Windows 侧两条硬提醒（都实测过，详见 `cross-platform.md`）：`python3` 是 Microsoft Store 空壳（什么都不做还返回 0）；
+  无 PG 时 `alembic upgrade head` **挂住不返回**，所以 `entry.py migrate` 先探端口，不可达即 `SKIP` + rc=3。
+
 ## 6. 环境变量规范
 
 ### 6.1 敏感信息

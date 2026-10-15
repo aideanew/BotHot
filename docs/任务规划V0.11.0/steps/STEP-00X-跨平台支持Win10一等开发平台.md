@@ -59,7 +59,10 @@
 ## 验收标准（Done 判据，全部标机器）
 - [ ] `@ci` `windows-latest` 与 `ubuntu-latest` 两个 job 均 success（run id/conclusion/head_sha 存证）
 - [ ] `@win` 干净机按 README 从零：`install → 起 PG/Redis → migrate → 起前后端 → lint → 单测 → build` 全绿，逐条命令与输出入 EVD（**开发烟测**，不替代 Ubuntu 验收）
-- [ ] `@win`+`@linux` `make <task>` 与 `python scripts/entry.py <task>` 退出码一致（至少覆盖 6 个任务，两平台各一次）
+- [ ] `@win`+`@linux` `make <task>` 与 `python scripts/entry.py <task>` **零/非零一致**（至少 6 个任务，两平台各一次）。
+      **判据按实测修正过一次**（S00X.1.3 执行时验出）：GNU make（4.4.1 Windows 实测，Linux 同语义）把 recipe 的任何失败折成 **2**，
+      所以 `entry.py docker-ps` 的 rc=3 经 `make docker-ps` 变成 2 —— 要求"退出码逐值相等"是错的判据；
+      正确判据是 **同为 0 或同为非 0**，且三态（0 通过 / 1 失败 / 3 没跑）只在 entry.py 层保留。做不到的那一类必须显式记为缺陷，不许把 2 当成 3
 - [ ] `@win` 缺工具场景退出码非 0（不得伪装通过）—— 至少 2 个任务有该读数
 - [ ] `@linux` `.gitattributes` 收敛后 `pnpm build` 仍绿（证明大小写/换行没有掩盖断链）
 - [ ] `@win` 判据"只降不升"：`grep -rn "open(" scripts | grep -vc encoding=` 前后两数记录在案
@@ -100,7 +103,35 @@ cd apps/web && pnpm build
 ## 建议档位 / 升级 / 规模
 `opus`（见上）；若仅做 README 与文档面 ⇒ 可降 sonnet，但一旦触碰 `ci.yml`/`.gitattributes`/`Makefile` 三者任一，不得降档。规模中、≈1.5 人日。
 
+## 执行记录（V0.11.0 第二增量 · 2026-10-15 · @win 实跑）
+读数全部在 `docs/06_validation/evidence/EVD-V5-00X/win_dev_platform_readings.md`。
+
+| 三级任务 | 状态 | 本轮事实 |
+|---|---|---|
+| S00X.1.1 现状测量 | ✅ | `make`=command-not-found(127)、`preflight.sh` 能跑且报 ruff/mypy 缺 + tsc 缺依赖、`python3` 是 Store 空壳（rc=0 无输出）、gitleaks/venv/node_modules 全缺 |
+| S00X.1.1.1 仅上线脚本 | ✅ | `rotate_keys.sh` 等标「仅 Linux」，见 `cross-platform.md` §7 |
+| S00X.1.2 `scripts/entry.py` | ✅ | 34 个任务；平台差异只在 `dispatch()`/`find_tool()`；缺工具 `SKIP(tool missing)` + **rc=3**（沿用 evidence-check 既有口径，不新造） |
+| S00X.1.2.2 缺工具非零退出 | ✅ 实测 | `docker-ps`→3、`migrate`（无 PG）→3、`scan-secrets`（工具在、有命中）→1 |
+| S00X.1.3 Makefile 薄转调 | ✅ | 26 开发目标 →`$(ENTRY)`、4 守卫目标 →`$(GUARDS)`、复合目标 `@:`；204→160 行 |
+| S00X.1.3.1 反证 | ✅ 但**判据改正过一次** | 见下方"卡面被实测推翻的两条" |
+| S00X.2.1 `.gitattributes` | ✅ | `* text=auto eol=lf` + 后缀钉死 + `/.project/** -text`；**没跑 renormalize**（共享工作树禁止），改用"含 CR 的 blob=3 且全二进制"作影响面证据 |
+| S00X.2.2 编码 | ✅ | `PYTHONUTF8=1` 注入 + README/cross-platform 写明 heredoc 坑；`open(` 无 encoding 判据实测 **0→0**（该判据在本仓是空的，如实记） |
+| S00X.3.1 pathlib / 大小写 | ⚠ 半边 | 新脚本全 `pathlib`；前端 import 大小写对齐**只能在 `@ci ubuntu` 上判**，待 run id |
+| S00X.3.2 依赖服务文档 | ✅（含一处降格） | `cross-platform.md` §5：本机无 Docker/WSL ⇒ 连库面退回 `@ci`；端口不改 |
+| S00X.4.1 windows job | ✅ 写入 | `ci.yml` 新增 `windows-dev`（16 步）；**ubuntu 两个 job 一行未改**（实测 CI 从不调用 make，故 Makefile 改动零 CI 风险） |
+| S00X.4.2 @ci 双 job 读数 | ⚪ 待 push 后 | 本机无 `gh` ⇒ 按 D-V6-02 用 REST 原始响应存证 |
+
+### 卡面被实测推翻的两条（改在本卡，不留在原判据里）
+1. **原写"make 与 entry.py 退出码一致"** ⇒ 错。GNU make 把 recipe 的任何失败折成 **2**，
+   `entry.py` 的 3（工具缺失）经 make 永远是 2。实测 6 个任务：dev 0/0、lint-backend 0/0、
+   fmt-check 2/1、docker-ps 2/3、guard-ports 2/3、migrate 2/3 ⇒ 判据改为**零/非零一致**，三态只存在于 entry.py 层。
+2. **原以为守卫类目标可以留在 Makefile**（"实体唯一源不复制"）⇒ 实测 GNU make 4.4.1 for Windows
+   跑不了那些多行 `; \` 续行 recipe（`unexpected EOF while looking for matching '"'`），改 LF 也没用。
+   守卫实体搬进 `scripts/guards.py`，Makefile 与 entry.py 双双转调它——仍是唯一源，只是换了宿主。
+   搬完后 `guard-ports`/`guard-versions`/`guard-structure` 在 @win **首次真跑出绿**（此前本机根本跑不了）。
+
 ## 本卡的存在理由（不是"再一张治理卡"）
+
 V0.9.0 的 F-10 与 V0.10.0 的 F-08 是**同一件事在两台机器上的两个真读数**，V0.11.0 为此立了 D-V6-01/D-V6-02。
 但标签只解决"说清在哪跑的"，不解决"Windows 上跑不了"。Ubuntu 是生产平台、Win10 是一等开发平台——
 这个目标此前从未有任何一张卡负责，所以每个版本的执行者都退回到"我这台能跑"的私有定义，

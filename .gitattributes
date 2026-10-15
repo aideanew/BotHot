@@ -1,1 +1,52 @@
-*.sh text eol=lf
+# 行尾策略（STEP-00X S00X.2.1）
+#
+# 为什么原来只有一行 `*.sh text eol=lf`：仓库里只有 shell 脚本会被 CRLF 直接打死，
+# 其余文件"看起来正常"是因为 Windows 端 core.autocrlf=true（来自 Git for Windows 的
+# 系统配置 C:/Program Files/Git/etc/gitconfig，不是本仓库设定）在检出时改了行尾。
+# 后果：同一份内容在两台机器上字节不同，diff 与 gitleaks 指纹都可能随平台漂移。
+#
+# 现在的策略：入库 LF、检出也 LF —— 两台机器拿到同一份字节。
+# 实测前提（evidence/17c5d28/crlf_impact.txt）：HEAD 里含 CR 的 blob 只有 3 个，
+# 全是二进制/vendored（2 个 svg + 1 个 pdf），因此本次收敛**不会**重写上千个已跟踪文件，
+# 也就不需要在共享工作树里跑 `git add --renormalize`（那条命令会把并发会话的在途改动一起stage）。
+
+* text=auto eol=lf
+
+# 关键执行面逐条钉死，不依赖 text=auto 的启发式判断
+*.sh    text eol=lf
+*.py    text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.toml  text eol=lf
+*.md    text eol=lf
+*.sql   text eol=lf
+Makefile    text eol=lf
+Dockerfile  text eol=lf
+*.nvmrc     text eol=lf
+
+# Windows 侧确实需要 CRLF 的只有这两类
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# 二进制：禁止任何换行改写
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.zip   binary
+*.svg   -text
+
+# vendored 子树（.project/ 下 LangBot / firecrawl / reclip）不是本项目的执行面，
+# 不参与行尾收敛——它们的 14 个 .sh 与自有文件保持原样，避免一次跨平台改动
+# 变成上千文件的噪音 diff。
+/.project/** -text

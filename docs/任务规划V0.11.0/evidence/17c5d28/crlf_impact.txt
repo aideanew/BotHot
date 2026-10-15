@@ -1,0 +1,54 @@
+# @win 行尾与 renormalize 影响面预估（STEP-00X S00X.2.1.1）
+采集机：win32 10.0.19045｜基线 main@17c5d28（00X 实现前）｜采集时间 2026-10-15 13:0x
+
+## 1. 机器上的换行策略来源
+```
+$ git config --show-origin --get core.autocrlf
+file:C:/Program Files/Git/etc/gitconfig	true
+$ git config --get core.eol
+(空)
+```
+⇒ `autocrlf=true` **不是本仓库的设定**，是 Git for Windows 的系统级配置。
+仓库里没有 `.git/info/attributes` 覆盖，`.gitattributes` 当时全文只有 1 行：`*.sh text eol=lf`。
+
+## 2. 工作树 vs 已提交内容：两件事必须分开数
+```
+工作树里含 CRLF 的被跟踪文件（python 逐文件读字节）：
+  tracked files seen: 5431 | binary-ish: 198 | CRLF-containing: 4184
+
+已提交内容（HEAD 的 blob）里含 CR 的文件：
+$ git grep -I -c $'\r' HEAD | wc -l
+3
+```
+那 3 个逐条列出：
+```
+HEAD:.project/LangBot/src/langbot/pkg/platform/sources/dingtalk.svg:5
+HEAD:.project/LangBot/src/langbot/pkg/platform/sources/discord.svg:5
+HEAD:.project/firecrawl/apps/test-site/public/example-long.pdf:10856
+```
+⇒ **仓库内容本身已经是 LF**；4184 个"工作树带 CRLF"只是这台机器检出时的转换结果。
+后缀分布：`grep -E "\.(sh|py|ts|tsx|yml|json|md):"` 在这 3 条里命中 **0**。
+
+## 3. 影响面预估结论（本步骤的判据）
+| 问题 | 读数 | 判定 |
+|---|---|---|
+| 改 `.gitattributes` 会不会重写大量**已提交**文件？ | 含 CR 的 blob = 3，且全在 vendored `.project/**` | 不会 |
+| 需要跑 `git add --renormalize .` 吗？ | 索引已是 LF ⇒ renormalize 对内容无增益 | **不需要，且禁止** |
+| 为什么禁止？ | renormalize 会写索引；本工作树是**共享**的，`git add --renormalize .` 会把并发会话的在途改动（EVD-V2-02/\*、任务规划V0.5.0/\*）一起 stage，违反硬规则第五节 | 硬规则 |
+| 新增 `/.project/** -text` 的作用 | 让 vendored 子树不参与行尾收敛 | 避免一次跨平台改动变成上千文件噪音 |
+| 实测改后状态 | `git status --porcelain \| wc -l` = 14（改前 12，差值就是我新增的 2 个改动文件）；`git diff --stat` 无风暴 | 收敛是**行为约定**的变更，不是内容重写 |
+
+## 4. 一个必须记录的假 M（不要误判成并发会话改了文件）
+```
+$ git status --porcelain apps/web/pnpm-lock.yaml
+ M apps/web/pnpm-lock.yaml
+$ git hash-object apps/web/pnpm-lock.yaml
+07203007e9a2cf3fbb93df09b7edbb1a803bb317
+$ git rev-parse HEAD:apps/web/pnpm-lock.yaml
+07203007e9a2cf3fbb93df09b7edbb1a803bb317        ← 同一对象
+$ git diff HEAD --stat -- apps/web/pnpm-lock.yaml
+(空)
+$ git update-index --refresh          # 之后仍是 M
+```
+⇒ `pnpm install --frozen-lockfile` 只 touch 了 mtime，blob 逐字相同；这是 stat-cache 的"假 M"。
+处置：**不 stage 它**（本卡不该改 lockfile），并在汇报里写明，避免下一位把它当成依赖漂移或并发会话改动。

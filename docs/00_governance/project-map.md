@@ -53,6 +53,7 @@ version: 1.2
 | [roadmap.md](../04_engineering/roadmap.md) | 路线图（v0.3 → v1.0） | active |
 | [backlog.md](../04_engineering/backlog.md) | 待办清单 | active |
 | [conventions.md](../04_engineering/conventions.md) | 工程规范 | active |
+| [cross-platform.md](../04_engineering/cross-platform.md) | 跨平台分工：CI ubuntu=正式验收面、CI windows=开发平台门、@win=烟测（STEP-00X / D-V4-01） | active |
 
 ## 05–09 分类
 

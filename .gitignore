@@ -19,3 +19,10 @@ apps/web/vitest-report/
 apps/api/pytest-report.xml
 _workspace/
 _workspace_audit/
+
+# Python 虚拟环境（STEP-00X）：此前无任何 venv 规则，而 scripts/preflight.sh 的修复提示
+# 要求 apps/api/.venv/Scripts/python.exe —— 照做就会在共享工作树里造出未跟踪目录，
+# 被下一次宽 add 扫进提交。规则先补上，环境才敢装。
+.venv/
+venv/
+env/

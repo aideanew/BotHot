@@ -93,9 +93,9 @@ docker compose -f docker/compose.yml ps
 > 推荐直接用 Makefile 目标，端口与依赖安装方式随之同源。
 
 ```bash
-# 依赖
-make install-backend   # cd apps/api && pip install -e ".[dev]"
-make install-frontend  # cd apps/web && pnpm install
+# 依赖（Linux/macOS）
+make install-backend   # 转调 scripts/entry.py install-backend（apps/api：pip install -e ".[dev]" pytest-cov）
+make install-frontend  # 转调 scripts/entry.py install-frontend（apps/web：pnpm install --frozen-lockfile）
 
 # 后端（3300）
 cd apps/api
@@ -107,8 +107,28 @@ cd apps/web
 pnpm install
 pnpm dev  # 自动在 3200 端口启动
 
-# 或一步到位：make dev-backend / make dev-frontend（Makefile:25、:29）
+# 或一步到位：make dev-backend / make dev-frontend
 ```
+
+### Windows 10 是一等开发平台（必读 `docs/04_engineering/cross-platform.md`）
+
+分工由 D-V4-01 定：**正式验收面 = CI `ubuntu-latest`**，CI `windows-latest` 是开发平台门，
+本机 `@win` 读数只算烟测。命令入口在 Windows 上用 `python scripts\entry.py <task>`（`make` 仍可用，需装 make）。
+
+```bat
+:: 版本必须与 CI 对齐：Python 3.12 / Node 按 apps\web\.nvmrc / pnpm 按 packageManager / gitleaks 8.21.2
+winget install -e --id Python.Python.3.12 --accept-package-agreements --accept-source-agreements --silent
+npm install -g pnpm@9.15.9
+set PYTHONUTF8=1                                  :: cp936 会把中文输出与 heredoc 源码打碎，硬要求
+python scripts\entry.py install
+python scripts\entry.py lint-backend
+python scripts\entry.py build-frontend           :: 内部注入 NEXT_PUBLIC_API_MOCK=false
+python scripts\entry.py migrate                  :: 本机没有 PG 时输出 SKIP 并以 rc=3 退出——那不是通过
+```
+
+两个 Windows 专属坑（都实测过，别踩）：
+`python3` 在 Windows 上是 Microsoft Store 的空壳 stub（什么都不做还返回 0）；
+无 PG 时 `alembic upgrade head` **挂住不返回**，所以 entry.py 先探端口再跑。
 
 ## 部署指南（Docker Compose）
 
