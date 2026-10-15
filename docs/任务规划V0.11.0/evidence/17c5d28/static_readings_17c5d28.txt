@@ -1,0 +1,78 @@
+# @win 静态读数 — 任务规划 V0.11.0 第二增量（基线 main@17c5d28）
+采集时间：2026-10-15（本地时区 Asia/Shanghai）
+采集机：win32 10.0.19045 / x64，shell = Git Bash，Python 3.x（`python -X utf8`）
+采集者：规划方会话（本增量同时是执行方，业务代码改动在后续卡内另行存证）
+机器标签口径：D-V6-01（@win / @linux / @ci）。本文件**全部读数是 @win 静态读数**，不含任何运行验证。
+
+## S-11 基线与并发会话交集
+```
+$ git rev-parse HEAD
+17c5d28f985795b6c1c697ed36947cd87257f3d5
+$ git rev-list --left-right --count origin/main...HEAD     # 拉取后
+0 0
+$ git log --oneline bad10d3..HEAD
+17c5d28 docs(任务规划V0.11.0): 独立验证 12/12 PASS 后自净一处继承卡矛盾——STEP-00E 仍写"本机实测"
+17bc00f docs(任务规划V0.11.0): 基线 bad10d3——读数必须说清在哪台机器上取的；并建 decision-log 登记 27 条裁决（签字栏留空）
+$ git diff --name-only bad10d3 HEAD -- apps/ | wc -l
+0                     # 两个提交都是规划提交，业务代码零改动
+```
+在途脏文件（属并发会话，本会话不写、不 add、不 stash、不 clean）：
+```
+docs/06_validation/evidence/EVD-V2-02/mutate_replay_r9.py
+docs/06_validation/evidence/EVD-V2-02/replay_s213.py
+docs/任务规划V0.5.0/evidence/S0T/判据迁移清单.md
+docs/任务规划V0.5.0/steps/STEP-00T-证明判据pytest化与脚本归档.md
++ 未跟踪：V0.4.0/evidence/b45777a/{STEP-00C_proposed.patch,evidence_check_b45777a.txt}
+          V0.5.0/evidence/65f508b/STEP-00C_simulated_65f508b.patch
+          V0.6.0/evidence/a9b194d/STEP-R0+00C_combined_simulated_a9b194d.patch
+```
+交集判定：本增量写入路径与上述清单 **0 重叠**（写入面只在 `docs/03_solution/decisions/**` 与 `docs/任务规划V0.11.0/**`）。
+
+## S-12 台账签署状态（机械计数）
+```
+$ awk -F'|' '/^\| \*?\*?D-/{c++; gsub(/^ +| +$/,"",$9); if($9!="") s++} END{printf "rows=%d signed=%d\n", c, s}' docs/03_solution/decisions/decision-log.md
+rows=27 signed=11
+```
+- 27 = 10 项 BLOCKING + 17 项 NON_BLOCKING（其中 1 项 D-V3-00 为"V0.10.0 已裁定授权"）。
+- 11 = 10 项 BLOCKING（签字列统一「用户授权代选 / 2026-10-15 / 所选方案」）+ D-V3-00（用**用户本人指令**签，不冒充代选）。
+- 生效时间：11 项 = 2026-10-15 12:04；其余 16 项 = 2026-10-16 21:40（登记 +24h 自动生效，未被人否决）。
+- 未改动任何历史行的 A/B/级别/登记时间列（只填签字与生效两列，这是台账的用途）。
+
+## S-13 大纲规模复算（两表互校）
+```
+$ python -X utf8 docs/任务规划V0.11.0/evidence/17c5d28/recount_04.py
+行数=30 任务=192 人日=29.75
+§7 小计: [4.0, 15.25, 10.5, 0.0] 之和= 29.75
+两表互校: PASS
+$ python -X utf8 docs/任务规划V0.11.0/evidence/17c5d28/tier_sum.py
+haiku/T1 cards= 6 sum= 4.0
+sonnet/T2 cards= 17 sum= 15.25
+opus/T3 cards= 6 sum= 10.5
+§2 未被任何档位覆盖: ['00C']        # 00C 人日=0，已在 §7"不计"行列出
+档位表里 §2 没有的: []
+§2 合计 人日= 29.75 任务= 192 卡= 30
+```
+> 两个脚本从 repo 根目录跑；都读同一张 §2 表，一个按档位映射求和、一个直接求和，故可互校。
+> **本增量纠正的算术缺陷**：§7 的 haiku/sonnet 小计在第一增量是 `5.0 / 15.75`，逐卡相加实为 `4.0 / 15.25`（多写 1.5）。加上 00X 的 1.5 后两表才第一次对上，所以此前该偏差不可见。
+
+## S-14 机器标签审计（D-V6-01）
+```
+$ grep -rn "@dep" docs/任务规划V0.11.0/ --include="*.md" | wc -l
+14
+$ grep -rn "@dep" docs/任务规划V0.11.0/ --include="*.md" | grep -vc "改写\|替换\|废除"
+0        # 即"功能位（验收标准/验证命令）里的 @dep"= 0
+$ grep -o "@linux" docs/任务规划V0.11.0/04-剩余可执行大纲体系.md | wc -l
+44
+```
+逐条核对：14 处**全部是说明行**（13 张卡各一条"本卡 `@dep` 已全部改写为 `@linux`/`@ci`"、00-README row 14、03 §2 D-V6-01 行的变更列），计数命令用"改写/替换/废除"三个词把它们排除后剩 **0**。
+`@linux` 在 04 出现 44 次（§2 总表主验收机列 + §2.5 机器 × 入口矩阵 + §4/§5/§9/§10 的验收面引用）；`@ci`、`@win` 同样每张卡都标。
+
+## S-15 00X 卡的 ID 命名缺陷（本增量自净）
+- 00X 初稿的四级执行步写成 `S1.2.1 / S2.1.1 / S3.1.1 / S4.1.1`，与 STEP-01/02/03/04 的 `Sx.y.z` 命名空间**冲突**（`S2.1.x` 在 V0.7.0 的 STEP-02 里已被使用到第十九轮复审；跨树同号不同义是已记录的事故形态）。
+- 机械改写：`S(\d\.\d\.\d)` → `S00X.\1`，命中 **10 处**（`S00X.1.1.1` 初稿即正确，未计入）；改写后 00X 的三级原子任务 = 9（S00X.1.1 … S00X.4.2），与 §2 表"任务 9"一致。
+
+## S-16 本增量落盘（详见 06 §第二增量）
+`decision-log.md`（11 行签字）／`adr-0011-canonical-article-key.md`（新建）／`adr-index.md`（ADR-0008/0009/0010 断链登记 + ADR-0011）／`steps/STEP-00X-*.md`（新建 9 任务）／13 张卡的"裁决已签"节＋`@dep`→`@linux`／00、01、02、03、04、05、06、07 八份主文档同步到已签口径。
+
+## S-17 本文件不含运行验证
+`@win` 现在（写这份增量时）仍**没有** `node_modules`、`pnpm`、`.venv`、`gitleaks`、`gh`。授权已给、动作未做。00X 的 S00X.1.1 起才是运行读数，届时另存 `win_smoke_17c5d28.txt`，**不并入本文件**，避免"计划已授权"被误读成"已跑通"。

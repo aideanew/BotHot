@@ -43,3 +43,11 @@
 - **状态：🟡 自动化一半已由 CI 满足**：CI 带 postgres service + skip 门（PG 不可达类 skip 判红、SKIP_BASELINE=6），CI success ⇒「真库全量 0 failed」读数已有（E-ci）。
 - 剩余 4 项：SRV.2.3（同一短链二次入库手测）、SRV.3.1（`/ready` 告警字段）、SRV.3.2（600s 宽限 / 1800s 冷却）、SRV.3.3（状态表更新）。它们不再被『依赖机』阻塞，任何能起 compose 的机器即可。
 - 由此 D-V5-01：上一轮岔口『先补 0 failed 读数』一支已被 CI 自然满足。
+
+## 裁决已签（V0.11.0 第四节第 2 步 · 2026-10-15 12:04）
+| 项 | 变化 |
+|---|---|
+| D-V6-02 | CI 状态认定放宽到 `gh` CLI **或** GitHub REST 原始响应（run id + conclusion + head_sha 存证）；只抄 run 号不算 ⇒ 本卡 `@ci` 复核项的合格标准由此明确 |
+| D-V4-01 | R0/16 的 Done 必须在 ubuntu-latest 上取 run id ⇒ 本版把「CI 半边已满足」从既成事实降格为**待 @ci 复核**，复核前 RV 不得判 Done |
+| 验收面 | 本卡 Done 只能由 `@ci` **ubuntu-latest** 判定；`@win` 读数只算开发烟测，`@linux` 为依赖机本地验证 |
+| 标签 | 依 D-V6-01，本卡 `@dep` 已全部改写为 `@linux`/`@ci` |

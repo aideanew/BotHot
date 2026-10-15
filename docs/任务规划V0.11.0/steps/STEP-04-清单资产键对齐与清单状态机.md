@@ -30,3 +30,11 @@
 ## V0.9.0 → V0.10.0 本卡变更（基线 main@81cb997）
 
 - 本版无实质变更；执行前现读行号（基线 81cb997，自 53ebc4a 起业务代码零改动）。
+
+## 裁决已签（V0.11.0 第四节第 2 步 · 2026-10-15 12:04）
+| 项 | 变化 |
+|---|---|
+| D-V2-02 | 已签 A：`article_key` 列 + `job_items.manifest_id` + 四态 `DISCOVERED→ENQUEUED→INGESTED/FAILED`（stale 回退 DISCOVERED）。**新增硬要求**：迁移必须带 `downgrade`，且在 CI ubuntu 上跑 `upgrade→downgrade→upgrade` 往返 |
+| D-V3-01 | Diff 判据改用 `article_key`，渠道 id 不参与跨层匹配 |
+| 验收面 | 本卡 Done 只能由 `@ci` **ubuntu-latest** 判定；`@win` 读数只算开发烟测，`@linux` 为依赖机本地验证 |
+| 标签 | 依 D-V6-01，本卡 `@dep` 已全部改写为 `@linux`/`@ci` |

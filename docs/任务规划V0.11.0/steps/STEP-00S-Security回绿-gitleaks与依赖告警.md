@@ -44,3 +44,10 @@
 - **新增 S0S.1.4**：HEAD 工作树仍含 `EVD-V2-00R/out_evidence_check.txt:137` 的占位口令 DSN（已跟踪）⇒ 先打码，再登记历史指纹。
 - **对账**：本机全历史 11 条 vs 61358c3 时 CI 报 8 条，差额 3 条全来自 `798f263`（ADR-0010 草稿、current-plan、TASK-004）。以 CI 的 `gitleaks.json` artifact 为准；两者并集写入 `.gitleaksignore`，每行附『占位、非真实凭据』注释。
 - 剩余 10 项（9 + S0S.1.4）。连续 4 次 Security 红（E-ci），这是 M0 唯一硬红。
+
+## 裁决已签（V0.11.0 第四节第 2 步 · 2026-10-15 12:04）
+| 项 | 变化 |
+|---|---|
+| D-V4-04 | 已签 A：指纹**只由真实 gitleaks 8.21.2 产出**（本机安装或 CI 产物均可），禁猜指纹、禁重写历史；按 D-12 逐条登记 `.gitleaksignore`，目标 Security 工作流转绿 |
+| 验收面 | 本卡 Done 只能由 `@ci` **ubuntu-latest** 判定；`@win` 读数只算开发烟测，`@linux` 为依赖机本地验证 |
+| 标签 | 依 D-V6-01，本卡 `@dep` 已全部改写为 `@linux`/`@ci` |

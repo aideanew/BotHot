@@ -20,6 +20,22 @@ updated: 2026-09-29
 | [ADR-0006](adr-0006-monorepo-apps-structure.md) | Monorepo apps/ 目录架构 | proposed | 2026-09-29 |
 | [ADR-0007](adr-0007-job-queue-postgres-skip-locked.md) | Job 队列用 PostgreSQL FOR UPDATE SKIP LOCKED | accepted | 2026-09-29 |
 
+## 断链登记（2026-10-15 补，来源 `docs/任务规划V0.9.0/07` §7 与 V0.11.0 03 §4）
+
+以下三份 ADR **确实存在但不在本目录**，只躺在 `docs/任务规划V0.1.0/03_solution/decisions/` 快照里，
+且不被本索引收录 ⇒ 任何引用「依据 ADR-0008」的规划都是不可验证引用。归位动作由 STEP-01 的 **S1.1.0** 执行
+（`git mv` 到本目录 + 快照处留指针说明，不改写历史结论）。在归位前，此处按实际路径登记，避免"看起来不存在"：
+
+| ADR | 标题 | 状态 | 当前位置 |
+|---|---|---|---|
+| [ADR-0008](../../任务规划V0.1.0/03_solution/decisions/adr-0008-contract-single-source.md) | 契约唯一源 = 后端 Python 代码 | proposed | V0.1.0 快照（待归位） |
+| [ADR-0009](../../任务规划V0.1.0/03_solution/decisions/adr-0009-guest-access-policy.md) | 访客访问策略（待裁决 D-01） | proposed | V0.1.0 快照（待归位） |
+| [ADR-0010](../../任务规划V0.1.0/03_solution/decisions/adr-0010-externalize-connection-strings.md) | 编排连接串外置 | proposed | V0.1.0 快照（待归位） |
+
+| ADR | 标题 | 状态 | 日期 |
+|---|---|---|---|
+| [ADR-0011](adr-0011-canonical-article-key.md) | 文章规范键格式（D-V2-01） | accepted | 2026-10-15 |
+
 ---
 
 ## ADR-0001：RAG 引擎选型

@@ -31,3 +31,12 @@
 ## V0.9.0 → V0.10.0 本卡变更（基线 main@81cb997）
 
 - 本版无实质变更；执行前现读行号（基线 81cb997，自 53ebc4a 起业务代码零改动）。
+
+## 裁决已签（V0.11.0 第四节第 2 步 · 2026-10-15 12:04）
+| 项 | 变化 |
+|---|---|
+| D-V2-01 | **已签 A 并落 ADR**：`docs/03_solution/decisions/adr-0011-canonical-article-key.md`；键形 `b:/s:/h:`，理由是自描述来源、不撞键 |
+| D-V3-01 | 新增 `article_manifests.article_key`，`external_id` 保留渠道 id；**新表引用文章一律用 `article_key`** |
+| D-V4-01 | 契约收编的验收面 = CI ubuntu-latest（`gen_contracts --check` + 契约测试） |
+| 验收面 | 本卡 Done 只能由 `@ci` **ubuntu-latest** 判定；`@win` 读数只算开发烟测，`@linux` 为依赖机本地验证 |
+| 标签 | 依 D-V6-01，本卡 `@dep` 已全部改写为 `@linux`/`@ci` |

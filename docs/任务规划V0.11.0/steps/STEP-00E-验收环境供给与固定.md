@@ -85,3 +85,10 @@ V0.6.0 把 STEP-00C 排第一是为了防"没跑就合"；V0.7.0 实测本机无
   - ⚠ 本行原写「本机实测」，与 D-V6-01（每条读数必须标执行机）冲突，V0.11.0 已加限定：**换一台机器（含这台 win32：`node_modules`/`pnpm`/`gitleaks`/`venv`/`gh` 全无，见 01 F-04/F-05）该半边即不成立**，验收前须在目标机重跑，不得引用本行。`build` 在未设 `NEXT_PUBLIC_API_MOCK=false` 时按生产守卫 rc=1，设后 rc=0（E-frontend）。
 - V0.9.0 F-10『node_modules 不存在』是另一台机器的读数，两者都真 ⇒ 工具链状态按机器记录，不跨机器继承。
 - 剩余 4 项：后端 testenv（compose.test.yml、Makefile 四目标中的 testenv-up/down/verify-backend）与 conventions 一节；`verify-frontend` 必须显式带 `NEXT_PUBLIC_API_MOCK=false` 跑 build。
+
+## 裁决已签（V0.11.0 第四节第 2 步 · 2026-10-15 12:04）
+| 项 | 变化 |
+|---|---|
+| D-V4-01 | 正式验收面 = CI ubuntu-latest（Python 3.12、Node 按 `.nvmrc`、PG service）；**新增 windows-latest 作开发平台门**；本地 Win10 仅算烟测 ⇒ 本卡「依赖机」具体化为「CI 两类 job + 一台 Win10 可复现」，与 STEP-00X 合流 |
+| 验收面 | 本卡 Done 只能由 `@ci` **ubuntu-latest** 判定；`@win` 读数只算开发烟测，`@linux` 为依赖机本地验证 |
+| 标签 | 依 D-V6-01，本卡 `@linux` 已全部改写为 `@linux`/`@ci` |
