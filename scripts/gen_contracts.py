@@ -1,23 +1,30 @@
 #!/usr/bin/env python3
 """
-gen_contracts.py — 从后端真实代码生成 TypeScript 契约 DTO（审查者重写版）
+gen_contracts.py — 从后端真实代码生成契约产物（TS DTO + JSON Schema）
 
-数据来源（两类，均可从仓库本身确定性推导，天然幂等）：
+数据来源（三类，均可从仓库本身确定性推导，天然幂等）：
 1. SQLAlchemy 模型内省：bothot_entities 的实体列名/类型/可空性 → interface
 2. OpenAPI 请求模型：create_app().openapi() 的 components.schemas（Pydantic 请求体）
+3. 契约包 Pydantic 模型：app/contracts/<域>.py → JSON Schema（STEP-01 S1.3.1）
+   这一类的存在理由就是 ADR-0008：唯一源是 Python 代码，schema 是产物；
+   手写 schema 会让"改了模型没人记得改稿"变成常态。
 
 用法：
-    python scripts/gen_contracts.py           # 生成/覆盖 packages/contracts/src/<域>/dto.ts
-    python scripts/gen_contracts.py --check   # 幂等校验（CI）：重新生成与磁盘 diff，不一致退出 1
+    python scripts/gen_contracts.py                    # 生成 packages/contracts/src/<域>/dto.ts 与 schemas/*.schema.json
+    python scripts/gen_contracts.py --check            # 幂等校验（CI）：重新生成与磁盘 diff，不一致退出 1
+    python scripts/gen_contracts.py --only-schemas     # 只处理 JSON Schema 面（本地调试用）
 
 注意：
-- 生成物带「请勿手动修改」头——手工编辑 dto.ts 会在 --check 下失败
+- 生成物带「请勿手动修改」头——手工编辑 dto.ts / *.schema.json 会在 --check 下失败
 - 分页双口径是冻结契约：bot/hot=page/page_size，knowledge/订阅/任务=limit/offset
+- JSON Schema 用 `sort_keys=True` 序列化：键序稳定 ⇒ diff 只反映真实变化；
+  **数组不按字典序排**（json.dumps 不动 list），所以 enum 与 required 的顺序仍由模型定义顺序决定
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -25,6 +32,9 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_DIR = PROJECT_ROOT / "apps" / "api"
 CONTRACTS_DIR = PROJECT_ROOT / "packages" / "contracts" / "src"
+SCHEMAS_DIR = PROJECT_ROOT / "packages" / "contracts" / "schemas"
+
+JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 # 域 → (模型模块, SQLAlchemy 实体)
 DOMAIN_ENTITIES: dict[str, tuple[str, list[str]]] = {
@@ -146,9 +156,92 @@ def generate() -> dict[str, str]:
     return out
 
 
+# ── JSON Schema 面（STEP-01 S1.3.1：app/contracts/*.py → packages/contracts/schemas/）──
+
+# 契约域名 → 契约模块（模块内每个公开 BaseModel 都会成为一个 $defs 条目）
+CONTRACT_SCHEMA_MODULES: dict[str, str] = {
+    "collection": "app.contracts.collection",
+}
+
+
+def _contract_models(module_name: str) -> dict[str, Any]:
+    """取该模块**自己定义**的公开 BaseModel 类（不含 import 进来的、不含下划线开头的）。
+
+    `obj.__module__ == 模块名` 这一条是刻意的：不加它就会把 `AwareDatetime` 之类的
+    依赖类型也算成契约形状，生成出根本不存在的"契约"。
+    """
+    import importlib
+    import inspect
+
+    from pydantic import BaseModel
+
+    if str(BACKEND_DIR) not in sys.path:
+        sys.path.insert(0, str(BACKEND_DIR))
+    module = importlib.import_module(module_name)
+    found: dict[str, Any] = {}
+    for name, obj in inspect.getmembers(module, inspect.isclass):
+        if name.startswith("_"):
+            continue
+        if not issubclass(obj, BaseModel) or obj is BaseModel:
+            continue
+        if obj.__module__ != module.__name__:
+            continue
+        found[name] = obj
+    if not found:
+        raise SystemExit(f"[error] 契约模块 {module_name} 里没有公开 BaseModel（配置错误）")
+    return dict(sorted(found.items()))
+
+
+def generate_schemas() -> dict[str, str]:
+    """返回 {契约域名: schema 文件内容}。"""
+    out: dict[str, str] = {}
+    for domain, module_name in CONTRACT_SCHEMA_MODULES.items():
+        models = _contract_models(module_name)
+        defs: dict[str, Any] = {}
+        for name, model in models.items():
+            sub = model.model_json_schema(ref_template="#/$defs/{model}")
+            for def_name, def_body in sub.pop("$defs", {}).items():
+                # 同名不同体 ⇒ 立刻响。静默覆盖会让两个域把同一个键写成两种形状而没人知道。
+                if def_name in defs and defs[def_name] != def_body:
+                    raise SystemExit(
+                        f"[error] {domain}: $defs 键冲突 {def_name}（来自 {name}）——"
+                        "同名不同体的契约形状必须改名，不能靠覆盖次序决定"
+                    )
+                defs[def_name] = def_body
+            if name in defs and defs[name] != sub:
+                raise SystemExit(f"[error] {domain}: 形状 {name} 自相冲突")
+            defs[name] = sub
+        doc = {
+            "$schema": JSON_SCHEMA_DIALECT,
+            "$id": f"bothot://contracts/{domain}/v1",
+            "title": f"BotHot {domain} 域契约（生成物）",
+            "description": (
+                f"由 scripts/gen_contracts.py 从 apps/api/app/contracts/{domain}.py 生成，请勿手动修改"
+                "（--check 幂等门禁）。唯一源是 Python 模型（ADR-0008）。"
+            ),
+            "x-generated-by": "scripts/gen_contracts.py",
+            "x-source-module": module_name,
+            "$defs": defs,
+        }
+        out[domain] = json.dumps(doc, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    return out
+
+
+def _schema_target(domain: str) -> Path:
+    return SCHEMAS_DIR / f"{domain}.schema.json"
+
+
 def write_all(contents: dict[str, str]) -> None:
     for domain, content in contents.items():
         target = CONTRACTS_DIR / domain / "dto.ts"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8", newline="\n")
+        print(f"[ok] 写出 {target.relative_to(PROJECT_ROOT)}")
+
+
+def write_schemas(schemas: dict[str, str]) -> None:
+    for domain, content in schemas.items():
+        target = _schema_target(domain)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8", newline="\n")
         print(f"[ok] 写出 {target.relative_to(PROJECT_ROOT)}")
@@ -171,17 +264,45 @@ def check(contents: dict[str, str]) -> int:
     return 1 if bad else 0
 
 
+def check_schemas(schemas: dict[str, str]) -> int:
+    """与 check() 同纪律：逐字节比较，不做"语义相同就行"的宽容。
+
+    这里故意严格——漂移门禁的价值在于"任何一处不一致都要有人来看"。
+    真要放宽，应该在 S1.3.2 的**语义比对**那一步放宽，而不是在这一步放宽。
+    """
+    bad = 0
+    for domain, content in schemas.items():
+        target = _schema_target(domain)
+        if not target.exists():
+            print(f"[error] 缺失 {target.relative_to(PROJECT_ROOT)}（运行生成模式补齐）")
+            bad += 1
+            continue
+        if target.read_text(encoding="utf-8") != content:
+            print(f"[error] {target.relative_to(PROJECT_ROOT)} 与生成结果不一致（非幂等）")
+            bad += 1
+        else:
+            print(f"[ok] {target.relative_to(PROJECT_ROOT)} 幂等一致")
+    return 1 if bad else 0
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="生成/校验 contracts 域 DTO")
+    parser = argparse.ArgumentParser(description="生成/校验 contracts 域 DTO 与 JSON Schema")
     parser.add_argument("--check", action="store_true", help="幂等校验（CI 门禁），不一致退出 1")
+    parser.add_argument("--only-schemas", action="store_true", help="只处理 JSON Schema 面")
     args = parser.parse_args()
 
-    contents = generate()
+    schemas = generate_schemas()
+    contents: dict[str, str] = {} if args.only_schemas else generate()
 
     if args.check:
-        sys.exit(check(contents))
-    write_all(contents)
-    print(f"\n[ok] 生成 {len(contents)} 个域，随后运行 --check 验证幂等")
+        # 两面都要跑完再判定：写成 `check(contents) or check_schemas(schemas)` 会在第一面
+        # 已经失败时**短路**，第二面的差异就再也打不出来——门禁只报一半问题等于误导。
+        rc = (0 if args.only_schemas else check(contents)) | check_schemas(schemas)
+        sys.exit(1 if rc else 0)
+    if contents:
+        write_all(contents)
+    write_schemas(schemas)
+    print(f"\n[ok] 生成 {len(contents)} 个 dto 域 + {len(schemas)} 个 schema 域，随后运行 --check 验证幂等")
 
 
 if __name__ == "__main__":

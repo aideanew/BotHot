@@ -1,0 +1,411 @@
+{
+  "$defs": {
+    "ArticleManifest": {
+      "description": "`article_manifests` 行的契约面（持久化形状）。\n\n`external_id` 与 `article_key` **不是一回事**（D-V3-01）：前者是渠道内幂等键\n（= `WorkListRow.id`，唯一约束 `(source_id, external_id)` 不变），后者是跨渠道的\n文章身份键（= `canonical_article_key(url)`，与 `content_assets.external_id` 同键空间）。\n`article_key` 列由 STEP-04 的迁移 `ab1006c1a` 引入，本契约先钉形状。",
+      "properties": {
+        "article_key": {
+          "description": "= canonical_article_key(url)；新列 ab1006c1a",
+          "maxLength": 128,
+          "minLength": 3,
+          "pattern": "^(?:b:[A-Za-z0-9+/=_-]{8,64}:[0-9]{1,12}:[0-9]{1,2}|s:[A-Za-z0-9_-]{8,64}|h:[0-9a-f]{32})$",
+          "title": "Article Key",
+          "type": "string"
+        },
+        "content_hash": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "external_id": {
+          "description": "= WorkListRow.id（渠道内幂等键）",
+          "maxLength": 128,
+          "title": "External Id",
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 36,
+          "title": "Id",
+          "type": "string"
+        },
+        "publish_time": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publish Time"
+        },
+        "source_id": {
+          "maxLength": 36,
+          "title": "Source Id",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ManifestStatus"
+        },
+        "title": {
+          "maxLength": 512,
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "maxLength": 512,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source_id",
+        "external_id",
+        "article_key",
+        "url",
+        "title",
+        "status"
+      ],
+      "title": "ArticleManifest",
+      "type": "object"
+    },
+    "ChannelName": {
+      "description": "发现渠道名，与 `registry.CHANNELS` 的键一一对应。\n\n新增渠道 = **契约变更**：这里加一个成员，`CHANNELS` 也得加一个 spec，两边由\n`tests/test_collection_contract.py` 钉住。比较口径（第一轮验证者指出我原来\"按顺序比较\"\n是错的耦合）：**与 `CHANNELS` 比集合**——dict 的插入序是实现细节，不该被契约依赖；\n**顺序只与冻结稿比**（`collection.schema.json` 的 enum 数组），那才是合同。\n数据库侧渠道字段仍是 `String(32)`（AGENTS.md 关键约束 3），本枚举只约束**契约面**。",
+      "enum": [
+        "redfox",
+        "rss",
+        "dajiala",
+        "justoneapi",
+        "tikhub",
+        "wellbyte"
+      ],
+      "title": "ChannelName",
+      "type": "string"
+    },
+    "CollectionEvent": {
+      "description": "采集域内部事件（结构化日志 + 指标标签）。\n\n不是 outbox、不跨进程——别把它当持久化事件总线用。`idempotency_key` 是 page 级\n去重键 `{source_id}:{channel}:{yyyymmdd}:{page}`，告警按它一天一次。",
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "channel": {
+          "$ref": "#/$defs/ChannelName"
+        },
+        "count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "event": {
+          "enum": [
+            "discovery.page_all_skipped",
+            "discovery.id_fallback",
+            "discovery.failed",
+            "manifest.enqueued",
+            "manifest.ingested",
+            "manifest.failed",
+            "manifest.stale_reverted"
+          ],
+          "title": "Event",
+          "type": "string"
+        },
+        "idempotency_key": {
+          "default": "",
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event",
+        "source_id",
+        "channel",
+        "at"
+      ],
+      "title": "CollectionEvent",
+      "type": "object"
+    },
+    "DiscoveryChannelView": {
+      "description": "`GET /api/v1/admin/discovery/channels` 的 `data.channels[i]`。\n\n字段名是 **camelCase**（HTTP 响应体口径，实测锚 `registry.py:333-340`），\nPython 属性保持 snake_case + alias；`model_json_schema()` 默认按 alias 出属性名。\n三个布尔**刻意不合并**成一个 available：`implemented`（功能做没做）、`enabled`\n（配没配进白名单）、`available`（凭据在不在）合并后无法区分\"功能没做\"和\"功能没配\"，\n配置缺失会被伪装成渠道故障——这是 R7.6 的原话，留在这里免得后人\"顺手简化\"。",
+      "properties": {
+        "available": {
+          "title": "Available",
+          "type": "boolean"
+        },
+        "contractVerifiedAt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Contractverifiedat"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "implemented": {
+          "title": "Implemented",
+          "type": "boolean"
+        },
+        "lastError": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "STEP-05 新增（COULD）；不得含凭据或上游响应原文",
+          "title": "Lasterror"
+        },
+        "lastSuccessAt": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "STEP-05 新增（COULD）",
+          "title": "Lastsuccessat"
+        },
+        "name": {
+          "$ref": "#/$defs/ChannelName"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "verifiedScope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Verifiedscope"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "implemented",
+        "enabled",
+        "available",
+        "reason"
+      ],
+      "title": "DiscoveryChannelView",
+      "type": "object"
+    },
+    "ManifestStatus": {
+      "description": "清单行状态机（STEP-04 实现，受 D-V2-02）。\n\n合法迁移只有这几条，**枚举本身不校验迁移**——迁移表由 STEP-04 的服务层与测试承担：\n  DISCOVERED → ENQUEUED\n  ENQUEUED   → INGESTED | FAILED | DISCOVERED（仅 stale 回退：Job 终态而行仍 ENQUEUED）\n  FAILED     → DISCOVERED（仅人工/重试接口）\n其余迁移非法。",
+      "enum": [
+        "DISCOVERED",
+        "ENQUEUED",
+        "INGESTED",
+        "FAILED"
+      ],
+      "title": "ManifestStatus",
+      "type": "string"
+    },
+    "ManifestSyncReport": {
+      "description": "单源单轮发现报告（`ManifestSyncService.sync_source` 返回值；日志/指标/告警共用）。\n\n两个计数有告警语义，不是普通整数：\n`id_fallback > 0` 记 WARNING（行缺 id、以规范键兜底，STEP-03.3.4）；\n`all_skipped_pages > 0` 记 ERROR + 告警（整页全跳 = 采集静默失败的形状，STEP-05）。",
+      "properties": {
+        "all_skipped_pages": {
+          "default": 0,
+          "description": "skipped == rows > 0 的页数；>0 记 ERROR + 告警",
+          "minimum": 0,
+          "title": "All Skipped Pages",
+          "type": "integer"
+        },
+        "channel": {
+          "$ref": "#/$defs/ChannelName"
+        },
+        "id_fallback": {
+          "description": "行缺 id、以 canonical key 兜底的次数；>0 记 WARNING",
+          "minimum": 0,
+          "title": "Id Fallback",
+          "type": "integer"
+        },
+        "new": {
+          "minimum": 0,
+          "title": "New",
+          "type": "integer"
+        },
+        "pages": {
+          "minimum": 0,
+          "title": "Pages",
+          "type": "integer"
+        },
+        "rows": {
+          "minimum": 0,
+          "title": "Rows",
+          "type": "integer"
+        },
+        "skipped": {
+          "minimum": 0,
+          "title": "Skipped",
+          "type": "integer"
+        },
+        "unchanged": {
+          "minimum": 0,
+          "title": "Unchanged",
+          "type": "integer"
+        },
+        "updated": {
+          "minimum": 0,
+          "title": "Updated",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "channel",
+        "pages",
+        "rows",
+        "new",
+        "updated",
+        "unchanged",
+        "skipped",
+        "id_fallback"
+      ],
+      "title": "ManifestSyncReport",
+      "type": "object"
+    },
+    "WorkListPage": {
+      "description": "发现分页壳（STEP-08 协议升级后启用；STEP-03 阶段 provider 仍返回 `list[WorkListRow]`）。\n\n`next_cursor` 是**必填可空**（冻结稿 `required: [rows, next_cursor, page_size]`）：\n\"到底了\"要显式写 `null`，不能靠缺字段表达——缺字段与\"末页\"在两方协议里是不同事实，\n混用会让上层把\"provider 忘了给游标\"读成\"已经没有下一页\"。",
+      "properties": {
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Cursor"
+        },
+        "page_size": {
+          "minimum": 1,
+          "title": "Page Size",
+          "type": "integer"
+        },
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/WorkListRow"
+          },
+          "title": "Rows",
+          "type": "array"
+        },
+        "total": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total"
+        }
+      },
+      "required": [
+        "rows",
+        "next_cursor",
+        "page_size"
+      ],
+      "title": "WorkListPage",
+      "type": "object"
+    },
+    "WorkListRow": {
+      "additionalProperties": true,
+      "description": "所有 provider `query_work_list` 的唯一输出形状。\n\n`extra=\"allow\"` 是有意的（冻结稿 `additionalProperties: true`）：渠道各自的上游字段\n差异很大，契约只钉\"三个必填 + 时间/正文的类型\"，其余透传。透传不等于无序扩张——\n新字段要被消费就得进契约，那时改这里。",
+      "properties": {
+        "author": {
+          "default": "",
+          "title": "Author",
+          "type": "string"
+        },
+        "digest": {
+          "default": "",
+          "title": "Digest",
+          "type": "string"
+        },
+        "id": {
+          "description": "上游稳定文章 id；上游无稳定 id 时 = canonical_article_key(url)",
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "publish_time": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "provider 内即转为带时区时间；上游无时间才允许 null",
+          "title": "Publish Time"
+        },
+        "title": {
+          "maxLength": 512,
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "format": "uri",
+          "maxLength": 512,
+          "minLength": 8,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "url",
+        "title"
+      ],
+      "title": "WorkListRow",
+      "type": "object"
+    }
+  },
+  "$id": "bothot://contracts/collection/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "由 scripts/gen_contracts.py 从 apps/api/app/contracts/collection.py 生成，请勿手动修改（--check 幂等门禁）。唯一源是 Python 模型（ADR-0008）。",
+  "title": "BotHot collection 域契约（生成物）",
+  "x-generated-by": "scripts/gen_contracts.py",
+  "x-source-module": "app.contracts.collection"
+}
