@@ -5,7 +5,7 @@ title: 架构决策记录索引
 status: active
 owner: architecture
 created: 2026-09-29
-updated: 2026-09-29
+updated: 2026-10-15
 ---
 
 # 架构决策记录（ADR）索引
@@ -19,22 +19,34 @@ updated: 2026-09-29
 | [ADR-0005](adr-0005-push-provider-adapter-pattern.md) | 多渠道推送 Provider 适配器模式 | accepted | 2026-09-29 |
 | [ADR-0006](adr-0006-monorepo-apps-structure.md) | Monorepo apps/ 目录架构 | proposed | 2026-09-29 |
 | [ADR-0007](adr-0007-job-queue-postgres-skip-locked.md) | Job 队列用 PostgreSQL FOR UPDATE SKIP LOCKED | accepted | 2026-09-29 |
-
-## 断链登记（2026-10-15 补，来源 `docs/任务规划V0.9.0/07` §7 与 V0.11.0 03 §4）
-
-以下三份 ADR **确实存在但不在本目录**，只躺在 `docs/任务规划V0.1.0/03_solution/decisions/` 快照里，
-且不被本索引收录 ⇒ 任何引用「依据 ADR-0008」的规划都是不可验证引用。归位动作由 STEP-01 的 **S1.1.0** 执行
-（`git mv` 到本目录 + 快照处留指针说明，不改写历史结论）。在归位前，此处按实际路径登记，避免"看起来不存在"：
-
-| ADR | 标题 | 状态 | 当前位置 |
-|---|---|---|---|
-| [ADR-0008](../../任务规划V0.1.0/03_solution/decisions/adr-0008-contract-single-source.md) | 契约唯一源 = 后端 Python 代码 | proposed | V0.1.0 快照（待归位） |
-| [ADR-0009](../../任务规划V0.1.0/03_solution/decisions/adr-0009-guest-access-policy.md) | 访客访问策略（待裁决 D-01） | proposed | V0.1.0 快照（待归位） |
-| [ADR-0010](../../任务规划V0.1.0/03_solution/decisions/adr-0010-externalize-connection-strings.md) | 编排连接串外置 | proposed | V0.1.0 快照（待归位） |
-
-| ADR | 标题 | 状态 | 日期 |
-|---|---|---|---|
+| [ADR-0008](adr-0008-contract-single-source.md) | 契约唯一源 = 后端 Python 代码，TypeScript 契约一律生成 | proposed | 2026-10-12 |
+| [ADR-0009](adr-0009-guest-access-policy.md) | 访客（未登录）访问策略 | proposed | 2026-10-12 |
+| [ADR-0010](adr-0010-externalize-connection-strings.md) | 编排中的数据库/缓存连接串一律来自环境变量 | proposed | 2026-10-12 |
 | [ADR-0011](adr-0011-canonical-article-key.md) | 文章规范键格式（D-V2-01） | accepted | 2026-10-15 |
+
+## 归位记录（STEP-01 S1.1.0 · 2026-10-15）
+
+ADR-0008 / 0009 / 0010 曾**只躺在** `docs/任务规划V0.1.0/03_solution/decisions/` 快照里，
+既不在本目录、也不被本索引收录（快照自带的 `adr-index.md` 也只列到 0007）⇒ 任何"依据 ADR-0008"
+的规划（含决策台账 D-09）当时都是**不可验证引用**。本节由 STEP-01 的 **S1.1.0** 关闭：
+
+- 三份文件 `git mv` 到本目录，历史保留（`git log --follow` 可追到 2026-10-12 的原提交）；
+- 快照目录留一份指针说明 `adr-relocated-2026-10-15.md`，**不改写**任何历史结论；
+- **status 仍是 `proposed`**：归位只解决"可发现性"，不等于裁决通过。ADR-0009 的标题本身就写着
+  "待裁决 D-01"，把它顺手改成 accepted 会伪造一次批准 ⇒ 明确不动；
+- 机检读数：活目录 `ls adr-*.md | grep -v index | wc -l` **8 → 11**；本索引内三份文件的
+  活链接行（Markdown 链接目标以本目录文件名开头，无 `../../` 前缀）**0 → 各 1**。
+  （卡面 S1.1.0.3 的反证写的是 `grep -c 'ADR-0008' …`，但那条**归位前就已经 ≥1**——旧的断链表里
+  就有这三个编号，用它当判据会假绿。判据锚因此换成"链接目标"而不是"编号字符串"。
+  顺带自报一次踩坑：我最初把新锚的字面形式直接写进本节说明文字里，结果**这条说明自己被计数**，
+  读数变成 2 ⇒ 判据锚的文本不能与被测文本同处一节，这里改用描述式写法。）
+- 卡面 S1.1.0.1 的期望值 **10** 也已过期：它写于 ADR-0011 尚不存在的年代（7+3=10），现实现算为
+  **11**（8+3，`adr-0011` 已于 2026-10-15 落档并 accepted）。按"判据不可满足 ⇒ 上报规划方"的纪律，
+  本卡由规划方自己执行，故在此重算并留痕，不改判据字面。
+
+仍过期、但**故意不改**的两处（改了就是重写历史）：`docs/任务规划V0.3.0/01-事实基线与上一步复核.md:54`
+的 F-18 仍写快照路径；决策台账 `decision-log.md:45`（D-09） rationale 里仍写"现 stranded 于…、
+归位见 STEP-01 S1.1.0"。台账纪律是"只追加、不改历史行"，归位完成后由下一次台账维护统一标注。
 
 ---
 
