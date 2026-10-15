@@ -39,3 +39,17 @@
 - **规划方自执行（核心 + 高难度 + UI）**：00W（P0 根因）、01（采集域契约冻结）、13（引擎能力面）、14a（管理端后端聚合）、14b 余项（通用表 S14b.2.1、告警横幅 S14b.2.3）、15 余项。
 - **执行 Agent（中等/简单）**：00X 余项、00E、RV、00T、00R、17、02、03、04、05、06、07、08、09、10、11、12、18、19、00G/00P 余项。
 - 判定一律由独立验证者看 diff + 运行结果，只出 PASS / FAIL / UNKNOWN（继承 V0.11.0 07 §4 的规则）。
+
+## 4. 执行段新查出的可立即认领小条目（发布给执行 Agent，不排队）
+
+都是我在 00W / 01 执行期间**现读**发现的，属于中等或简单，规划方不自执行（分工见 §3）。
+每条给"现读锚"和"出门判据"，认领者不必再定位。
+
+| # | 条目 | 现读锚 | 出门判据（机器） | 归属卡 |
+|---|---|---|---|---|
+| P-1 | `conventions.md` 仍写"CI 的 `windows-dev` job 会跑它"——`windows-dev` 自 D-V7-01 已拆到 `CI-Windows` 工作流 | `docs/04_engineering/conventions.md:119` | 该行不再出现 `windows-dev`；且新文本里的 job/步名与 `.github/workflows/ci-windows.yml` 的 step 名逐字一致 | 00X 余项（该文件不在 00W 允许清单，我改了又自行还原） |
+| P-2 | `glossary.md` 三处代码锚漂移 | `docs/00_governance/glossary.md:46` 引 `kb.py:554-557` 实际在 `apps/api/app/services/kb.py:587`（`def _article_key`）；同条引 `entities.py:99` 实际字段在 `:108`（`external_id`）；`:51-53`（幂等键 / 收件人可见性 / 过期回退）由**前一会话**已补入，本会话只确认了行在、**未复核其锚** | 每条锚指向的行含被引用的符号名（脚本逐条 grep 即可） | 01 S1.4.2（属简单核对，随 17 或 01 余项皆可） |
+| P-3 | **缺 ADR 链接存在性机械门**：`adr-index.md` 引用不存在的 ADR 文件时不会变红——0008/0009/0010 断链五版无人知，因为 `check_docs_consistency` 只校验 backlog 的路径与行号 | `scripts/guards.py`（守卫唯一源）、`docs/03_solution/decisions/adr-index.md` | 新增守卫：索引里每个 `](adr-NNNN-*.md)` 与每个 `**status:**` 值可对文件校验；故意删一个 ADR 文件 ⇒ 守卫必须红 | 00G（熔断/台账门）或 00P（机械门） |
+| P-4 | `.gitleaksignore` 第 57–60 行三条豁免**在本克隆内永不生效**（`798f2638…` 对象不存在；无前缀路径不在可达历史里），而不可生效的豁免不会让门禁红 ⇒ 没人会被绊 | `.gitleaksignore:55-60`；事实链见 `docs/任务规划V0.12.0/08-…md` §9.5 与 U-21 | 用 CI 的真实 `gitleaks.json` artifact 重导豁免集（D-V4-04 禁止猜指纹），并加一条"死豁免检测"：每条指纹的 commit 必须 `git cat-file -t` 可达 | 00S 余项 |
+| P-5 | **U-23**：`CI-Windows` 五个读数都在 ~20 分钟被 `--timeout=300` 打断（failure 非 cancelled，D-V7-02 生效）。栈指向**同步 `TestClient` 等 anyio blocking portal**，与 psycopg/启动探测无关 | `docs/06_validation/evidence/EVD-V7-00W/ciwin_e7e9f25_timeout_stack.txt`；`readings_ci_close.md` §3 | 先 `-v` 拿用例名，再 `--timeout=60 -k` 二分定位到单个用例/fixture；`CI-Windows` 结论变 success 或给出"该用例在 Windows 上结构性不可用"的裁决 | 新卡或 00R（测试域） |
+| P-6 | `pytest-timeout` 在 `pyproject.toml` dev extra 里，但**未进 `uv.lock`**（U-19 同族） | `apps/api/pyproject.toml` dev 段 | `uv lock` 后 `uv.lock` 含 `pytest-timeout==2.4.0` 且 `uv sync` + 全量 pytest 不回归 | U-19 / 00S S0S.3 |
