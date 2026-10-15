@@ -68,6 +68,7 @@ $ python3 --version              → 无输出、rc=0（Microsoft Store 空壳 s
 | 12 | scan-secrets | `gitleaks detect --source . --config .gitleaks.toml`（8.21.2，git 模式） | 1（预期：真有命中） | 见 §4.2 |
 | 13 | migrate（无 PG） | `entry.py migrate` | **3** | 1s 内 `SKIP(service unavailable) PostgreSQL localhost:5433`，**不再挂起** |
 | 14 | docker-ps（无 docker） | `entry.py docker-ps` | **3** | `SKIP(tool missing) docker` |
+| 15 | `make help`（改造后的 Makefile） | GNU make 4.4.1 @win | **0** | 列出 30 个目标；说明薄转调没有破坏 `## 描述` 约定，也说明 Windows make 确实找到了 Git 自带的 sh |
 
 ### 4.1 后端测试套件（@win，无 PG）
 - 收集：`pytest tests/ --collect-only -q` → **1063 tests collected in 262.65s**（异常慢，见下）。

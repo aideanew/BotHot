@@ -52,7 +52,7 @@
 | S0S.2.3 全历史 0 命中 + 生效性 | ✅ | 有文件 → `no leaks found` rc=0；移开 → `leaks found: 8` rc=1；恢复 → 0（正反证都跑了） |
 | S0S.3.1 mako ≥1.4.2 | ✅ **但不是用 uv 做的** | `uv lock --upgrade-package mako` 实测重解析全锁（1379/1161 行、换索引源、新增 3 包）⇒ 改手抄 3 行，URL/sha256/size/upload-time 均有出处（镜像 simple 索引 + PyPI JSON + 本机下载件校验） |
 | S0S.3.2 `uv sync` + 全量 pytest | 🛑 @win 不做 | 无 PG/Redis，且全量 pytest 在本机 stall（05 U-20）；按 D-V4-01 由 `@ci ubuntu` 出读数 |
-| S0S.3.3 Security run success | ⚪ 待 push 后取 run id | 本机无 `gh`；私有库需只读 token（外部凭据） |
+| S0S.3.3 Security run success | ✅ **达成** | run `38688133682` completed/success，head_sha `d2462e2b`；①pip-audit ②pnpm audit ③trivy ④gitleaks 与汇总门禁逐步 success（原始响应存 EVD-V5-00S/同级 evidence）。本机无 `gh`，用未认证 REST 取证——本仓库是 public，不需要向用户要 token |
 
 顺带查实的一件事（写进 05 U-19）：**`uv.lock` 早就与 `pyproject.toml` 不同步**
 （`prometheus-client`/`pytest-cov`/`tomli` 有声明无解析项），对照实验证明在我改锁**之前** `uv lock --check` 就是 RC=1。

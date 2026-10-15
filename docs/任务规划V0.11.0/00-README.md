@@ -53,7 +53,7 @@
 ## 3. 立即可做（第二增量口径，按依赖顺序，标机器）
 1. **[@win 已完成] 裁决签入 + ADR-0011 + STEP-00X 卡**：不需要任何环境的一步，先落地。
 2. **[@win STEP-00X]**：装齐与 CI 同版的工具链（Python 3.12 / Node 按 `apps/web/.nvmrc` / pnpm 9.15.9 / gitleaks 8.21.2）→ `scripts/entry.py` 入口 → `.gitattributes` → CI 加 `windows-latest`。这一步是"之后每张卡的验收命令能不能在这台机器上跑出真读数"的前置，**排在所有实现卡之前**。
-3. **[@win + @ci STEP-00S]**：Security 转绿。指纹必须在**本机用真 gitleaks 8.21.2 重跑**并与 V0.10.0 那 11 条对账取并集（D-V4-04：不猜、不改历史）；再写 `.gitleaksignore`、打码 `EVD-V2-00R/out_evidence_check.txt:137`、mako ≥1.4.2。
+3. **[@win + @ci STEP-00S] 已完成**：本机真 gitleaks 8.21.2 扫出 8 条、与 V0.10.0 的 11 条对账取并集写入 `.gitleaksignore`；`out_evidence_check.txt:137` 去形；mako→1.4.2 ⇒ **Security run `38688133682` = success（本项目首次转绿）**，取证用未认证 GitHub REST（仓库 public，无需 token）。
 4. **[@win 开发 / @ci 验收 UI 线]**：15 → 14a → 14b。前置由"依赖机可用"变成"00X 之后本机 `pnpm install --frozen-lockfile` 成功"。
 5. **[@ci RV]**：R0/16 的真库验收走 CI（PG service），读数必须带 run id + head_sha + 结论（D-V6-02），否则只能标"采信[REMOTE]"。
 6. **[@linux/@ci 采集域主线]**：01 → 02 → 04 → 07；07 的生产实跑按 D-V2-06 停在缺外部凭据处。

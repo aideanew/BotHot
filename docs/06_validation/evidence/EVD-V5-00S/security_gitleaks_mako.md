@@ -92,5 +92,5 @@ $ uv lock --check      → RC=1  同样
 | 项 | 状态 | 原因 |
 |---|---|---|
 | S0S.3.2 `uv sync` + 全量 pytest 不回归 | 🛑 @win 不做 | 本机无 PG/Redis，且全量 pytest 在本机 stall（EVD-V5-00X §4.1）；连库与全量按 D-V4-01 由 `@ci ubuntu` 出读数 |
-| S0S.3.3 推送后 Security run = success | ⚪ 待 push + CI 读数 | 本机无 `gh`，认定需按 D-V6-02 取 GitHub REST 原始响应；私有仓库需只读 token（属外部凭据） |
+| S0S.3.3 推送后 Security run = success | ✅ **success** | run `38688133682`（head_sha `d2462e2b`）：pip-audit / pnpm audit / trivy / gitleaks 四步 + 汇总门禁全 success。按 D-V6-02 用**未认证 GitHub REST** 取原始响应存证（仓库 public ⇒ 没有 `gh` 也能认定，不需要向用户要 token） |
 | S0S.1.2 改 prove_anchor_fallback.py | ❌ 不执行 | 并发会话路径；已用逐指纹登记覆盖同一条命中，门禁效果等价 |
