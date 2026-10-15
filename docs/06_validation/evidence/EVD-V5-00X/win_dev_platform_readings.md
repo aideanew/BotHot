@@ -142,3 +142,28 @@ $ python3 --version              → 无输出、rc=0（Microsoft Store 空壳 s
 按 job 的 `timeout-minutes: 35`，它很可能以超时收场。**不去调判据把它做绿**：windows-dev 的用途正是抓这种断裂，
 首跑就抓到，说明门禁有效而不是失败。后续动作（不属本卡，登记在 05 U-20）：用 `--collect-only` 逐文件 +
 `--durations` 定位卡住的模块，修完再看这个 job 转绿。
+
+## 8. windows-dev 终局与 U-20 的定位读数（同日 15:0x，`@win` + `@ci`）
+
+**job 级结论**（`runs/38688133750/jobs` 原始响应）：`windows-dev = completed / cancelled`，
+被取消的步是「Backend tests（全量 pytest）」；前 12 步全 **success**：
+建环境（pnpm 版本解析 / setup-python 3.12 / setup-node 按 .nvmrc / Tool fingerprint）、
+Install backend deps、Install frontend deps、**`entry.py 与 Makefile 目标面一致性`**、`ruff check app tests`、`mypy app`。
+后续三步（skip 门禁 / vitest+typecheck / build）因上一步被取消而 **skipped**，末步「取证行」`if: always()` 仍 success。
+⇒ **S00X.4.2 未达成**（要的是两个 job 都 success），本卡不写成达成；`@ci` 侧 ubuntu 五个 job 在同一提交全绿，主干不受影响。
+
+**U-20 的定位过程（全部 @win 实测，含被否证的假设）**
+
+| 探针 | 读数 | 结论 |
+|---|---|---|
+| 前 20 个测试文件逐个 `timeout 40 pytest <file> -q` | `test_alerting_default.py` 0、`test_alerting_drill.py` 0、`test_article_identity.py` 0、`test_asset_fragment_guard.py` 0、**`test_auth.py` 124**、**`test_backchannel_logout.py` 124** | 卡点收敛到 auth 域两个文件 |
+| `python -c "import test_auth"` | **2.2s 完成** | 不是模块导入的问题 |
+| `pytest tests/test_auth.py --collect-only -q -s`（无缓冲） | **90s 不返回**，输出停在 app.main 的 schema 告警之后 | 卡的是 **pytest 采集期** |
+| `socket.create_connection(('127.0.0.1',1), 8)` | `ConnectionRefusedError [WinError 10061]` **2.05s** | 否证「端口 1 拒连慢」；但注意它**不是 0s**——84 个文件各摊 2s 正好是收集 262s 的量级 |
+| `env \| grep -i proxy` | **空** | 否证「宿主代理劫持出站」（conftest 的 `_isolate_proxy_env` 在本机无事可做） |
+| `create_async_engine(refused).connect()` **不经 conftest** | `psycopg.InterfaceError: Psycopg cannot use the 'ProactorEventLoop'` 0.00s | **这个"发现"是我的探针自己造的假象**：conftest.py:26 已在 import 时设 `WindowsSelectorEventLoopPolicy`，测试进程里没有这个问题。记下以免下一位照着修 |
+| `-o asyncio_default_fixture_loop_scope=function` | 仍 **124** | 否证「pytest-asyncio 的 loop scope」 |
+| `-p no:asyncio` | 仍 **124** | 否证「pytest-asyncio 插件本身」 |
+
+**还剩下的下一步**（不属本卡，已写进 05 U-20 归属列）：拿栈而不是猜——`py-spy dump` 挂住的 pytest 进程，
+或把 `test_auth.py` 的 fixture 树剪到最小可复现段。

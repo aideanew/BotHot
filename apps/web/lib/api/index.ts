@@ -38,6 +38,7 @@ export * from "./subscriptions";
 export * from "./jobs";
 export * from "./engines";
 export * from "./admin";
+export * from "./admin-ops";
 export * from "./ingest";
 export * from "./batch";
 export * from "./ask";
