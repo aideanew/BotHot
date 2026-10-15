@@ -1,0 +1,80 @@
+# @linux 后端全量读数 · main@3a67e96 · 2026-10-15 17:2x CST
+机器：Debian GNU/Linux 13 (trixie) / Python 3.12.15 / PostgreSQL 16（/workspace/tools/pg16，端口 5547，库 bothot_test）
+命令：cd apps/api && AIDEANBOT_TEST_PG_DSN=postgresql+psycopg://postgres@127.0.0.1:5547/bothot_test alembic upgrade head && python -m pytest tests/ -q --no-header -p no:cacheprovider --cov=app --cov-report=term
+alembic：rc=0，升至 ab1005w5b（单头）
+
+app/providers/__init__.py                         0      0   100%
+app/providers/aidean/__init__.py                  2      0   100%
+app/providers/aidean/client.py                   96     22    77%
+app/providers/article_sources/__init__.py        31     17    45%
+app/providers/article_sources/base.py            30      0   100%
+app/providers/article_sources/dajiala.py        116     91    22%
+app/providers/article_sources/justoneapi.py     156    131    16%
+app/providers/article_sources/rss.py            145     31    79%
+app/providers/article_sources/tikhub.py         124    100    19%
+app/providers/article_sources/wellbyte.py       164    136    17%
+app/providers/discovery/__init__.py               0      0   100%
+app/providers/discovery/registry.py             101     32    68%
+app/providers/embedding.py                       58      4    93%
+app/providers/engine_port.py                    132     25    81%
+app/providers/langbot/__init__.py                 0      0   100%
+app/providers/langbot/client.py                 135     31    77%
+app/providers/push/__init__.py                   17      0   100%
+app/providers/push/base.py                       26      0   100%
+app/providers/push/dingtalk.py                   45      9    80%
+app/providers/push/feishu.py                     41      8    80%
+app/providers/push/web.py                        25      2    92%
+app/providers/push/webhook.py                    21      4    81%
+app/providers/push/wechat_clawbot.py             28     15    46%
+app/providers/push/wechat_work.py                30     19    37%
+app/providers/raw_store.py                       39      1    97%
+app/providers/redfox/__init__.py                  2      0   100%
+app/providers/redfox/client.py                   69      3    96%
+app/providers/reranker.py                        80      8    90%
+app/providers/source_resolver.py                154     16    90%
+app/repositories/__init__.py                      0      0   100%
+app/repositories/asset.py                       132     17    87%
+app/repositories/job.py                         154     10    94%
+app/repositories/space.py                       109     11    90%
+app/repositories/subscription.py                 14      0   100%
+app/repositories/user.py                         63     10    84%
+app/services/__init__.py                          0      0   100%
+app/services/article_detail_fallback.py          53     53     0%
+app/services/article_identity.py                 28      0   100%
+app/services/auth/__init__.py                     5      0   100%
+app/services/auth/logout_token.py               129     20    84%
+app/services/auth/service.py                    134      6    96%
+app/services/auth/session_store.py               94     15    84%
+app/services/auth/state_store.py                 27      3    89%
+app/services/batch_ingest.py                     71      2    97%
+app/services/categorizer.py                      19      0   100%
+app/services/cron_expr.py                        45      5    89%
+app/services/engine_keys.py                      74      1    99%
+app/services/extractor.py                       166      8    95%
+app/services/feed_service.py                    100      3    97%
+app/services/hot_cluster.py                     149      9    94%
+app/services/hot_scorer.py                       78      4    95%
+app/services/intent.py                           21      0   100%
+app/services/job_worker.py                      250     57    77%
+app/services/jobs.py                             80     15    81%
+app/services/kb.py                              316     44    86%
+app/services/llm_summary.py                      32     16    50%
+app/services/manifest.py                        163     10    94%
+app/services/normalizer.py                       29      1    97%
+app/services/process_heartbeat.py                83      7    92%
+app/services/public_library.py                   68     10    85%
+app/services/push.py                             58      3    95%
+app/services/push_events.py                      48      0   100%
+app/services/push_scheduler.py                  168     58    65%
+app/services/push_template.py                    27      1    96%
+app/services/quality.py                          63      0   100%
+app/services/resolver.py                         24      0   100%
+app/services/roles.py                            29      0   100%
+app/services/scheduler.py                       261     64    75%
+app/services/spaces.py                          309     71    77%
+app/services/state_machine.py                    15      0   100%
+app/services/subscription.py                    324     66    80%
+-----------------------------------------------------------------
+TOTAL                                          8791   1817    79%
+1058 passed, 5 skipped, 2 warnings in 77.36s (0:01:17)
+rc=0

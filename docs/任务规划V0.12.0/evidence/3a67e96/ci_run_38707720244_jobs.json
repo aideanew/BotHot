@@ -1,0 +1,460 @@
+[
+ {
+  "name": "windows-dev",
+  "conclusion": "cancelled",
+  "started_at": "2026-10-15T08:43:38Z",
+  "completed_at": "2026-10-15T09:18:55Z",
+  "steps": [
+   [
+    1,
+    "Set up job",
+    "success"
+   ],
+   [
+    2,
+    "Run actions/checkout@v4",
+    "success"
+   ],
+   [
+    3,
+    "Resolve pnpm version from packageManager",
+    "success"
+   ],
+   [
+    4,
+    "Run pnpm/action-setup@v4",
+    "success"
+   ],
+   [
+    5,
+    "Run actions/setup-python@v5",
+    "success"
+   ],
+   [
+    6,
+    "Run actions/setup-node@v4",
+    "success"
+   ],
+   [
+    7,
+    "Tool fingerprint（Windows 侧实际装到了什么）",
+    "success"
+   ],
+   [
+    8,
+    "Install backend deps（与 backend job 同口径 .[dev] + pytest-cov）",
+    "success"
+   ],
+   [
+    9,
+    "Install frontend deps（frozen lockfile）",
+    "success"
+   ],
+   [
+    10,
+    "entry.py 与 Makefile 目标面一致性",
+    "success"
+   ],
+   [
+    11,
+    "Lint backend（ruff check app tests）",
+    "success"
+   ],
+   [
+    12,
+    "Type check backend（mypy app）",
+    "success"
+   ],
+   [
+    13,
+    "Backend tests（连库用例在本平台会 skip，只记账不主张）",
+    "cancelled"
+   ],
+   [
+    14,
+    "Windows skip 门禁（阈值与 ubuntu 分开设定）",
+    "skipped"
+   ],
+   [
+    15,
+    "Frontend typecheck + unit（vitest）",
+    "skipped"
+   ],
+   [
+    16,
+    "Frontend build（NEXT_PUBLIC_API_MOCK=false 是生产守卫硬要求）",
+    "skipped"
+   ],
+   [
+    17,
+    "取证行（D-V6-02：run id + head_sha + 结论要能被下游引用）",
+    "success"
+   ],
+   [
+    31,
+    "Post Run actions/setup-node@v4",
+    "skipped"
+   ],
+   [
+    32,
+    "Post Run actions/setup-python@v5",
+    "skipped"
+   ],
+   [
+    33,
+    "Post Run pnpm/action-setup@v4",
+    "success"
+   ],
+   [
+    34,
+    "Post Run actions/checkout@v4",
+    "success"
+   ],
+   [
+    35,
+    "Complete job",
+    "success"
+   ]
+  ]
+ },
+ {
+  "name": "compose-smoke",
+  "conclusion": "success",
+  "started_at": "2026-10-15T08:43:38Z",
+  "completed_at": "2026-10-15T08:48:24Z",
+  "steps": [
+   [
+    1,
+    "Set up job",
+    "success"
+   ],
+   [
+    2,
+    "Run actions/checkout@v4",
+    "success"
+   ],
+   [
+    3,
+    "Validate compose config",
+    "success"
+   ],
+   [
+    4,
+    "Generate ephemeral master keys",
+    "success"
+   ],
+   [
+    5,
+    "Build backend image",
+    "success"
+   ],
+   [
+    6,
+    "Start core services",
+    "success"
+   ],
+   [
+    7,
+    "Smoke (health + scheduler/worker heartbeat)",
+    "success"
+   ],
+   [
+    8,
+    "Dump compose logs on failure",
+    "skipped"
+   ],
+   [
+    16,
+    "Post Run actions/checkout@v4",
+    "success"
+   ],
+   [
+    17,
+    "Complete job",
+    "success"
+   ]
+  ]
+ },
+ {
+  "name": "backend",
+  "conclusion": "success",
+  "started_at": "2026-10-15T08:43:39Z",
+  "completed_at": "2026-10-15T08:46:19Z",
+  "steps": [
+   [
+    1,
+    "Set up job",
+    "success"
+   ],
+   [
+    2,
+    "Initialize containers",
+    "success"
+   ],
+   [
+    3,
+    "Run actions/checkout@v4",
+    "success"
+   ],
+   [
+    4,
+    "Run actions/setup-python@v5",
+    "success"
+   ],
+   [
+    5,
+    "Install",
+    "success"
+   ],
+   [
+    6,
+    "Tool fingerprint",
+    "success"
+   ],
+   [
+    7,
+    "Lint (ruff)",
+    "success"
+   ],
+   [
+    8,
+    "Type check (mypy)",
+    "success"
+   ],
+   [
+    9,
+    "Migrate schema (alembic upgrade head)",
+    "success"
+   ],
+   [
+    10,
+    "Assert single alembic head",
+    "success"
+   ],
+   [
+    11,
+    "Contract drift gate (gen_contracts --check)",
+    "success"
+   ],
+   [
+    12,
+    "Docs reference consistency gate (check_docs_consistency)",
+    "success"
+   ],
+   [
+    13,
+    "Tests (pytest) + coverage + skip gate",
+    "success"
+   ],
+   [
+    24,
+    "Post Run actions/setup-python@v5",
+    "success"
+   ],
+   [
+    25,
+    "Post Run actions/checkout@v4",
+    "success"
+   ],
+   [
+    26,
+    "Stop containers",
+    "success"
+   ],
+   [
+    27,
+    "Complete job",
+    "success"
+   ]
+  ]
+ },
+ {
+  "name": "frontend",
+  "conclusion": "success",
+  "started_at": "2026-10-15T08:43:38Z",
+  "completed_at": "2026-10-15T08:46:39Z",
+  "steps": [
+   [
+    1,
+    "Set up job",
+    "success"
+   ],
+   [
+    2,
+    "Run actions/checkout@v4",
+    "success"
+   ],
+   [
+    3,
+    "Resolve pnpm version from packageManager",
+    "success"
+   ],
+   [
+    4,
+    "Run pnpm/action-setup@v4",
+    "success"
+   ],
+   [
+    5,
+    "Run actions/setup-node@v4",
+    "success"
+   ],
+   [
+    6,
+    "Runtime fingerprint & parity assert",
+    "success"
+   ],
+   [
+    7,
+    "Install",
+    "success"
+   ],
+   [
+    8,
+    "Type check",
+    "success"
+   ],
+   [
+    9,
+    "Contracts package strict check (tsc --noEmit)",
+    "success"
+   ],
+   [
+    10,
+    "TypeScript strict check (tsc --noEmit)",
+    "success"
+   ],
+   [
+    11,
+    "Unit tests (vitest)",
+    "success"
+   ],
+   [
+    12,
+    "Upload vitest diagnostics on failure",
+    "skipped"
+   ],
+   [
+    13,
+    "Build",
+    "success"
+   ],
+   [
+    14,
+    "Install Playwright browser (chromium)",
+    "success"
+   ],
+   [
+    15,
+    "Build (mock artifact, for UI e2e)",
+    "success"
+   ],
+   [
+    16,
+    "E2E (mock UI)",
+    "success"
+   ],
+   [
+    17,
+    "E2E (real backend, non-blocking)",
+    "skipped"
+   ],
+   [
+    18,
+    "Upload Playwright diagnostics on failure",
+    "skipped"
+   ],
+   [
+    34,
+    "Post Run actions/setup-node@v4",
+    "success"
+   ],
+   [
+    35,
+    "Post Run pnpm/action-setup@v4",
+    "success"
+   ],
+   [
+    36,
+    "Post Run actions/checkout@v4",
+    "success"
+   ],
+   [
+    37,
+    "Complete job",
+    "success"
+   ]
+  ]
+ },
+ {
+  "name": "compose",
+  "conclusion": "success",
+  "started_at": "2026-10-15T08:43:38Z",
+  "completed_at": "2026-10-15T08:43:46Z",
+  "steps": [
+   [
+    1,
+    "Set up job",
+    "success"
+   ],
+   [
+    2,
+    "Run actions/checkout@v4",
+    "success"
+   ],
+   [
+    3,
+    "Validate compose config",
+    "success"
+   ],
+   [
+    6,
+    "Post Run actions/checkout@v4",
+    "success"
+   ],
+   [
+    7,
+    "Complete job",
+    "success"
+   ]
+  ]
+ },
+ {
+  "name": "workflow-lint",
+  "conclusion": "success",
+  "started_at": "2026-10-15T08:43:39Z",
+  "completed_at": "2026-10-15T08:43:47Z",
+  "steps": [
+   [
+    1,
+    "Set up job",
+    "success"
+   ],
+   [
+    2,
+    "Run actions/checkout@v4",
+    "success"
+   ],
+   [
+    3,
+    "Install actionlint (pinned)",
+    "success"
+   ],
+   [
+    4,
+    "actionlint (all workflows)",
+    "success"
+   ],
+   [
+    8,
+    "Post Run actions/checkout@v4",
+    "success"
+   ],
+   [
+    9,
+    "Complete job",
+    "success"
+   ]
+  ]
+ }
+]

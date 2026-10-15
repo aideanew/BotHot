@@ -1,0 +1,38 @@
+# U-20 Windows 后端测试卡死：根因探针（@linux 复现同类机制）· main@3a67e96 · 2026-10-15
+机器：Debian 13 / Python 3.12.15 / anyio 4.15.1 / starlette 0.52.1 / fastapi 0.143.1
+
+## A. 调用链（静态，行号为 3a67e96）
+281:app = create_app()
+218:        current = asyncio.run(_probe_and_dispose())
+208:        engine, _ = create_engine_and_session(resolve_database_url(settings.database_url))
+app/db.py:     engine = create_async_engine(
+app/db.py:         database_url,
+app/db.py:         pool_pre_ping=True,
+app/db.py:         pool_size=_DB_POOL_SIZE,
+app/db.py:         max_overflow=_DB_MAX_OVERFLOW,
+app/db.py:         pool_recycle=_DB_POOL_RECYCLE,
+app/db.py:     )
+=> create_engine_and_session 未设 connect_timeout；app.main 在 import 期即调 create_app() -> _assert_schema_current -> 同步 asyncio.run(连库探测)
+
+## B. 运行探针（timeout 25s）
+DATABASE_URL=postgresql+psycopg://x@127.0.0.1:1/x  -> rc=0  elapsed_ms=1408
+DATABASE_URL=postgresql+psycopg://x@10.255.255.1:5432/x  -> rc=124  elapsed_ms=25010
+解释：拒连（立即 RST）秒回；黑洞地址（无 RST）import app.main 挂满 25s 被 timeout 杀（rc=124）。
+
+## C. 与 @win 读数对应（来源 docs/06_validation/evidence/EVD-V5-00X/win_dev_platform_readings.md §2/§5/§8）
+- @win 对未监听端口单次拒连 2.05s（非 0s），无 PG 时 alembic upgrade head 挂 150s；与本探针同一机制：连接期无超时。
+- @win 'python -c import test_auth' 2.2s 完成：不经 conftest 时为 ProactorEventLoop，psycopg 立即抛 InterfaceError 被 _assert_schema_current 的 except Exception 吞掉 -> 探测被跳过（快）。经 conftest（conftest.py:26 设 WindowsSelectorEventLoopPolicy）后探测真正发起连接 -> 慢/挂。这解释了'裸 import 快、pytest 采集慢'的矛盾。
+- 卡住的首个文件 test_auth.py 正是字母序第一个 import create_app/TestClient 的测试文件（前 4 个文件 TestClient=0 create_app=0，见 D 节）。
+
+## D. 前 7 个测试文件的 create_app/TestClient 引用数
+test_alerting_default TestClient=0 create_app=0
+test_alerting_drill TestClient=0 create_app=0
+test_article_identity TestClient=0 create_app=0
+test_asset_fragment_guard TestClient=0 create_app=0
+test_auth TestClient=5 create_app=3
+test_backchannel_logout TestClient=3 create_app=2
+test_be02_engine_routing TestClient=4 create_app=3
+
+## E. 结论等级
+- 已确认：import 期同步连库探测无超时（代码）；黑洞地址下 import 挂死（@linux 复现）。
+- 部分确认：@win 卡死由同一探测引起——时序与条件全部吻合，但尚无 @win 栈；需 STEP-00W S00W.1.1 用 faulthandler 取栈闭合。

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bothot/contracts/events.schema.json",
+  "title": "BotHot 异步事件与作业契约（冻结稿 V0.7.0 / 基线 main@13acacc）",
+  "description": "实测来源：apps/api/app/services/push_events.py:26（VALID_EVENT_TYPES）/:29-66（_hydrate_payload）/:70-80（emit_event）/:82-88（claim_pending_events SKIP LOCKED）、apps/api/app/services/push_scheduler.py:110-113/203-218（领取与退避/死信）、apps/api/app/services/scheduler.py:365-394（hot_rescore 每小时）、apps/api/app/services/subscription.py:329/743/828（幂等键前缀、Job/JobItem）、AGENTS.md 关键约束 4（队列在 PG，FOR UPDATE SKIP LOCKED，不引入 Redis 队列）。",
+  "type": "object",
+  "definitions": {
+    "EventName": {
+      "type": "string",
+      "enum": ["new_article", "hot_topic_update", "daily_report"],
+      "x-source-of-truth": "push_events.py:26 VALID_EVENT_TYPES 集合。新增事件名属契约变更，须同步本文件与该常量，并由契约测试断言二者相等（STEP-01 锚）。"
+    },
+    "EventPayloadRules": {
+      "type": "object",
+      "description": "payload 自足原则：emit 时就把模板变量快照进 payload（AGENTS.md「事件触发已实现且 payload 自足」），消费端不得回查库补全。",
+      "x-new_article": { "snapshotFrom": "ContentAsset + KnowledgeSpace（push_events.py:37-48）", "fields": ["title", "url", "spaceName", "publishedAt"] },
+      "x-hot_topic_update": { "snapshotFrom": "HotTopic（:49-54）", "fields": ["topicTitle", "score"] },
+      "x-daily_report": { "snapshotFrom": "DailyReport.title（:55-60）", "fields": ["title", "reportDate"] },
+      "x-known-defect": "查不到对象时**静默置空串**（push_events.py:31,45-46），不报错 ⇒ 推送文案可能出现空标题且无人察觉。转 STEP-05 计数与告警，不改语义前先可见。"
+    },
+    "IdempotencyKey": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "Job.idempotency_key。实测格式：'sync_account:{sourceId}…'（subscription.py:329 用前缀 LIKE 查活跃作业）、'hot_rescore:yyyyMMddHH'（scheduler.py:365-394）。",
+      "x-rule": "键必须由「业务日界 Asia/Shanghai 的定宽时间戳 + 资源 id」构成，禁止用随机 uuid 当幂等键（则幂等失效，重复入队）。",
+      "x-forbidden": "禁止把用户可控字符串原样拼进幂等键（前缀 LIKE 匹配会被越权命中他人作业）。"
+    },
+    "PushRetryState": {
+      "type": "object",
+      "required": ["delivered", "reason", "retryable"],
+      "properties": {
+        "delivered": { "type": "boolean" },
+        "reason": { "type": "string", "maxLength": 512, "description": "失败必有可读原因，不伪造回执（AGENTS.md 关键约束 6）" },
+        "responseData": { "type": ["object", "null"] },
+        "retryable": { "type": "boolean" }
+      },
+      "x-retry-policy": { "maxRetries": 3, "backoffSeconds": [60, 240, 960], "formula": "60 * 4^(n-1)（push_scheduler.py:203-218，与 :13 注释一致）", "deadLetter": "第 4 次仍失败 ⇒ log_status='dead' + task.status='failed' + 清 next_retry_at（:205-208）；成功则清零 retry_count（:219-224）" },
+      "x-contract-gap": "契约层现状：PushResult 定义在 providers/push/base.py:38-51，含 retryable；但前端无 admin/push 消费面（coverage §3），投递终态用户/运营都看不到。"
+    },
+    "QueueMechanism": {
+      "type": "object",
+      "x-mechanism": "PostgreSQL + FOR UPDATE SKIP LOCKED 短锁领取（AGENTS.md 约束 4）。实测领取点：push_scheduler.py:113（cron 到期 ∪ 重试到期 :110）、push_events.py:82-88。",
+      "x-prohibited": "禁止引入 Redis 队列。Redis 在本项目只做站内通知 pub/sub 投递与限流计数，不做任务队列。",
+      "x-redis-absent-behaviour": "Redis 不可达：站内通知 provider 返回 delivered=False（web.py:31）；SSE 降级为 service_unavailable 帧后返回，不 500（system.py:232-242）；限流 fail-open（security.py:141-153,205）。"
+    },
+    "ManifestTransition": {
+      "type": "object",
+      "description": "D-V2-02 目标状态机（现状只有 DISCOVERED 一个状态在用，入列后不回写 ⇒ P0-2 重复入列）。",
+      "enumStatus": ["DISCOVERED", "ENQUEUED", "INGESTED", "FAILED"],
+      "legalEdges": [
+        "DISCOVERED → ENQUEUED（_populate_job_items 与入列同事务，写 job_items.manifest_id）",
+        "ENQUEUED → INGESTED（worker 终态 SUCCEEDED）",
+        "ENQUEUED → FAILED（永久失败，非限流/可重试）",
+        "ENQUEUED → DISCOVERED（recover_stale：超过 manifest_enqueued_ttl 且无活动 Job）"
+      ],
+      "illegalEdgesMustBeRejected": ["INGESTED → ENQUEUED", "FAILED → INGESTED"],
+      "x-test-anchor": "每条合法边 1 个用例 + 上述 2 条非法边各 1 个用例（STEP-04 S4.4.2.1）"
+    }
+  },
+  "x-eventing-surface": {
+    "producer": "kb.py:464 on_article_indexed（文章入库后写 FeedItem(article) + 发 new_article 事件）",
+    "feeder": "feed_service.py:132/:150/:168 三类 Feed 生产者；Semaphore(3) 并发日报 LLM 摘要（:40,266-273）",
+    "consumer": "PushScheduler 60s tick（默认 60、下限 5s，push_scheduler.py:42,77）领取 PushEvent 并派发"
+  },
+  "x-observability-pairing": "每个事件名必须同时产出三族指标：bothot_*_emitted_total{name}、bothot_push_result_total{channel,delivered}、bothot_discovery_*（STEP-05 S5.2.1）。事件发了但无人消费、或消费全失败，必须能在 /metrics 上一眼看出。"
+}
