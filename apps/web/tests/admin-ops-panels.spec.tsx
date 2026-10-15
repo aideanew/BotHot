@@ -175,15 +175,15 @@ describe("引擎密钥屏", () => {
           envConfigured: false,
           decryptFailed: false,
           keyEnv: "DAJIALA_TOKEN",
-          keyId: "abcd1234efgh5678",
+          keyId: "k-demo-0001",
           registeredBy: "u-9",
           updatedAt: "2026-10-15T06:00:00Z",
         },
       ],
     });
     render(<EngineKeysPanel />);
-    await waitFor(() => expect(screen.getByText("abcd…5678")).toBeTruthy());
-    expect(screen.queryByText("abcd1234efgh5678")).toBeNull();
+    await waitFor(() => expect(screen.getByText("k-de…0001")).toBeTruthy());
+    expect(screen.queryByText("k-demo-0001")).toBeNull();
     expect(screen.getByText("有登记行")).toBeTruthy();
   });
 });
