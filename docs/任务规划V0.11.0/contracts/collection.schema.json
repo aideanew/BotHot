@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bothot://contracts/collection/v1",
+  "title": "BotHot 采集域契约冻结稿 v1（V0.2.1）",
+  "description": "冻结稿。STEP-01 将其落为 Pydantic 唯一源（apps/api/app/contracts/collection.py），再由 scripts/gen_contracts.py 生成 packages/contracts/schemas/collection.schema.json 并纳入 --check 漂移门禁；生成物与本稿语义比对一致后，本稿退役，仓库内只保留生成物。字段命名：持久化实体沿用 snake_case（与 gen_contracts 现有输出一致），HTTP 响应体沿用 camelCase（与 admin.py 现有 discovery/channels 输出一致）。时间一律 ISO 8601 带时区；存储 UTC，业务日界 Asia/Shanghai。",
+  "$defs": {
+    "ArticleKey": {
+      "description": "文章规范键。格式受 D-V2-01 裁决：方案 A 带前缀（pattern_A），方案 B 无前缀（pattern_B）。STEP-01 按裁决保留其一，删除另一条。",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "oneOf": [
+        { "title": "pattern_A.biz_mid_idx", "pattern": "^b:[A-Za-z0-9+/=_-]{8,64}:[0-9]{1,12}:[0-9]{1,2}$" },
+        { "title": "pattern_A.short_token", "pattern": "^s:[A-Za-z0-9_-]{8,64}$" },
+        { "title": "pattern_A.hash", "pattern": "^h:[0-9a-f]{32}$" }
+      ],
+      "x-not": "禁止单字符或纯 's'（P0-1 回归锚）"
+    },
+    "ChannelName": {
+      "type": "string",
+      "enum": ["redfox", "rss", "dajiala", "justoneapi", "tikhub", "wellbyte"],
+      "description": "与 app/providers/discovery/registry.py 的 CHANNELS 键一一对应；新增渠道 = 契约变更（STEP-01 契约测试比对 CHANNELS.keys()）。"
+    },
+    "WorkListRow": {
+      "title": "发现渠道清单行（所有 provider.query_work_list 的唯一输出形状）",
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "url", "title"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "description": "上游稳定文章 id；上游无稳定 id 时 = canonical_article_key(url)。" },
+        "url": { "type": "string", "minLength": 8, "maxLength": 512, "format": "uri" },
+        "title": { "type": "string", "maxLength": 512 },
+        "publish_time": { "type": ["string", "null"], "format": "date-time", "description": "provider 内即转为带时区时间；上游无时间才允许 null。" },
+        "digest": { "type": "string" },
+        "author": { "type": "string" }
+      }
+    },
+    "WorkListPage": {
+      "title": "发现分页（STEP-08 协议升级后启用；STEP-03 阶段 provider 仍返回 list[WorkListRow]）",
+      "type": "object",
+      "required": ["rows", "next_cursor", "page_size"],
+      "properties": {
+        "rows": { "type": "array", "items": { "$ref": "#/$defs/WorkListRow" } },
+        "next_cursor": { "type": ["string", "null"] },
+        "page_size": { "type": "integer", "minimum": 1 },
+        "total": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "ManifestStatus": {
+      "type": "string",
+      "enum": ["DISCOVERED", "ENQUEUED", "INGESTED", "FAILED"],
+      "description": "清单状态机（STEP-04，受 D-V2-02）。合法迁移：DISCOVERED→ENQUEUED；ENQUEUED→INGESTED|FAILED|DISCOVERED（仅 stale 回退：Job 终态且行仍 ENQUEUED）；FAILED→DISCOVERED（仅人工/重试接口）。其他迁移非法。"
+    },
+    "ArticleManifest": {
+      "title": "article_manifests 行（持久化）",
+      "type": "object",
+      "required": ["id", "source_id", "external_id", "article_key", "url", "title", "status"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 36 },
+        "source_id": { "type": "string", "maxLength": 36 },
+        "external_id": { "type": "string", "maxLength": 128, "description": "= WorkListRow.id（渠道内幂等键，唯一约束 (source_id, external_id) 不变）" },
+        "article_key": { "$ref": "#/$defs/ArticleKey", "description": "新增列（STEP-04 迁移 ab1006c1a），= canonical_article_key(url)；与 content_assets.external_id 同一键空间。" },
+        "url": { "type": "string", "maxLength": 512 },
+        "title": { "type": "string", "maxLength": 512 },
+        "publish_time": { "type": ["string", "null"], "format": "date-time" },
+        "content_hash": { "type": "string", "maxLength": 64 },
+        "status": { "$ref": "#/$defs/ManifestStatus" }
+      }
+    },
+    "ManifestSyncReport": {
+      "title": "单源单轮发现报告（ManifestSyncService.sync_source 返回值；日志/指标/告警共用）",
+      "type": "object",
+      "required": ["channel", "pages", "rows", "new", "updated", "unchanged", "skipped", "id_fallback"],
+      "properties": {
+        "channel": { "$ref": "#/$defs/ChannelName" },
+        "pages": { "type": "integer", "minimum": 0 },
+        "rows": { "type": "integer", "minimum": 0 },
+        "new": { "type": "integer", "minimum": 0 },
+        "updated": { "type": "integer", "minimum": 0 },
+        "unchanged": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "id_fallback": { "type": "integer", "minimum": 0, "description": "行缺 id、以 canonical key 兜底的次数（STEP-03.3.4）。>0 记 WARNING。" },
+        "all_skipped_pages": { "type": "integer", "minimum": 0, "description": "skipped==rows>0 的页数（STEP-05）。>0 记 ERROR + 告警。" }
+      }
+    },
+    "DiscoveryChannelView": {
+      "title": "GET /api/v1/admin/discovery/channels 的 data.channels[i]（现有接口，STEP-05 只增字段不改既有字段）",
+      "type": "object",
+      "required": ["name", "description", "implemented", "enabled", "available", "reason"],
+      "properties": {
+        "name": { "$ref": "#/$defs/ChannelName" },
+        "description": { "type": "string" },
+        "implemented": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "available": { "type": "boolean" },
+        "reason": { "type": "string" },
+        "contractVerifiedAt": { "type": ["string", "null"] },
+        "verifiedScope": { "type": ["string", "null"] },
+        "lastSuccessAt": { "type": ["string", "null"], "format": "date-time", "description": "STEP-05 新增（COULD）" },
+        "lastError": { "type": ["string", "null"], "description": "STEP-05 新增（COULD）；不得含凭据或上游响应原文" }
+      }
+    },
+    "CollectionEvent": {
+      "title": "采集域内部事件（结构化日志 + 指标标签；非 outbox，不跨进程）",
+      "type": "object",
+      "required": ["event", "source_id", "channel", "at"],
+      "properties": {
+        "event": { "type": "string", "enum": ["discovery.page_all_skipped", "discovery.id_fallback", "discovery.failed", "manifest.enqueued", "manifest.ingested", "manifest.failed", "manifest.stale_reverted"] },
+        "source_id": { "type": "string" },
+        "channel": { "$ref": "#/$defs/ChannelName" },
+        "at": { "type": "string", "format": "date-time" },
+        "idempotency_key": { "type": "string", "description": "page 级：{source_id}:{channel}:{yyyymmdd}:{page}；告警按此键去重，一天一次" },
+        "count": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

@@ -1,0 +1,65 @@
+# V0.11.0 静态读数 @ main@bad10d3
+# 采集机：win32（本机）。凡"另一台机器"的读数一律标 [REMOTE]，不并入本机事实。
+
+## S-01 同步（先拉代码）
+- `git fetch origin main` → `81cb997..bad10d3`；`git pull --ff-only origin main` 成功。
+- 拉取前安全检查：入站 41 个文件 ∩ 工作树 4 个在途脏文件 = **0 交集** ⇒ 快进不会覆盖并发会话的在途工作。
+- 拉取后：`HEAD == origin/main == bad10d3`，`--left-right --count` = `0 0`；4 个在途脏文件仍在、未被 add/stash/revert。
+- 远端身份：`https://github.com/aideanew/BotHot.git`，分支 `main`（与指令一致）。
+
+## S-02 本版基线增量（81cb997 → bad10d3）
+- 1 个提交：`bad10d3 docs(任务规划V0.10.0)`，41 文件全部落在 `docs/任务规划V0.10.0/**`。
+- `git diff --name-only 61358c3 HEAD -- apps/` → **仅 `apps/api/tests/test_asset_fragment_guard.py`**；`apps/api/app/**` 零改动。
+  ⇒ V0.7.0 落的 R0（kb.py 第三条锚）与 16（compose/alerting/system）自落地后**从未被任何提交改动**。
+
+## S-03 本版核心发现：「本机」是两台不同的机器（[本机] vs [REMOTE]）
+V0.10.0 的 00-README §0 写「**本机**前端依赖本就就绪」「**本机**有 gitleaks 8.21.2，与 CI 同版」。
+但其证据件 `frontend_readings_81cb997.txt:23` 的落盘路径是：
+
+    JUNIT report written to /workspace/work/BotHot/apps/web/vitest-report/junit.xml
+
+⇒ 产出该读数的是 **Linux 沙箱 `/workspace/work/BotHot`**，不是这台 win32。同一份 README 的 row 4 其实已写明原则
+（"V0.9.0 F-10 是另一台机器的读数，按机器记录，不跨机继承"），但 §3「立即可做」与卡片里的验收命令仍写"本机"，
+两处自相矛盾。本表把这些断言按机器拆开：
+
+| 断言 | [本机 win32] 实测 | [REMOTE 沙箱] V0.10.0 记录 |
+|---|---|---|
+| `apps/web/node_modules` | **ABSENT** | 存在 |
+| `pnpm` | **MISSING** | 9.15.9 |
+| `gitleaks` | **MISSING** | 8.21.2（11 条指纹已产出） |
+| `apps/api/.venv` | **ABSENT** | 未记（R0/16 仍缺真库读数） |
+| `gh` | **MISSING**（CI 读数不可自取） | 有（run 38570541936 success、连续 4 绿） |
+| node | v24.21.0 | 22 |
+
+⇒ 后果：**V0.10.0 §3.1「规划方今天开 STEP-15，本机前端依赖本就就绪」在这台机器上不可执行**。
+执行者若按字面在本机跑 `pnpm typecheck`，得到的是 command-not-found，不是"通过/失败"——这正是指令 §0 说的"只能自己猜"。
+
+## S-04 [REMOTE] 断言的可核性
+- CI 连续 4 绿、run 38570541936 success、"含 PG service 与 skip 门"：本机无 `gh`、未认证 API 403 ⇒ **本机不可核**，记为 `采信[REMOTE]`，不升格为本机事实。
+- Security 连续 4 红、唯一阻断 = gitleaks：同上。
+- `.gitleaksignore` 在本机仍 **ABSENT**；`docs/03_solution/decisions/decision-log.md` 仍 **ABSENT** ⇒ 两件事与机器无关，都是确定事实。
+
+## S-05 指纹件与合计数复核
+- `evidence/81cb997/gitleaks_fingerprints_81cb997.txt`：15 行、含 11 条 `commit:path:rule:line` 形指纹（[REMOTE] 产出）。
+  ⇒ 00S 的执行不再需要 gitleaks 二进制，但**写入 `.gitleaksignore` 前必须逐条核语义**（禁整目录豁免，D-12）。
+- V0.10.0 的 04 表按位置复算（第 6/7 列）：**29 行 / 183 任务 / 28.25 人日**，与其"合计"行自报值一致 ⇒ 本版沿用其计数，不重排。
+- 00C 已被 V0.10.0 记为 0 任务（✅）；RV 4、00E 4、00S 10。
+
+## S-06 未变的缺口（与 V0.9.0/V0.10.0 一致，本轮复测）
+- `grep -c NotImplementedError apps/api/app/providers/engine_port.py` = **16**（未实接，未退化）。
+- 管理端 6 组端点在 `apps/web/**` 消费数 **全 0**（admin/push、admin/ops/liveness、admin/discovery/channels、admin/engines/keys、backchannel-logout、admin/alerts）。
+- Alembic 单头仍 `ab1005w5b`（无文件以它为 down_revision）⇒ 本版规划仍不占迁移号。
+- 需求目录 `features/ non-functional/ constraints/` 仍只有 `.gitkeep`（STEP-17 未做）。
+
+## S-07 本会话动作面
+- 只写：`docs/任务规划V0.11.0/**`、`docs/00_governance/glossary.md`（如需）、`docs/03_solution/decisions/decision-log.md`（仅登记，不代签）。
+- 未写：`apps/**`、`packages/**`、`docker/**`、`Makefile`、`.github/**`、任何历史规划版本正文。
+
+## S-08 本机 NOT_MEASURED（禁止当读数引用）
+| 项 | 原因 | 命令 |
+|---|---|---|
+| 真库全量 pytest / 覆盖率 | 无 venv、无 PG | `cd apps/api && .venv/bin/python -m pytest tests/ -q -rs --cov=app` |
+| ruff / mypy | 工具缺失 | `ruff check app tests`（0.12.12） |
+| CI/Security run 状态与"4 绿"复核 | 无 `gh`，API 403 | `gh run list --repo aideanew/BotHot --branch main --limit 20` |
+| 前端 typecheck / vitest / build | `node_modules` 与 `pnpm` 均无 | `cd apps/web && pnpm install --frozen-lockfile && pnpm typecheck` |
+| gitleaks 真实命中数 | 无二进制（仓内近似器不替代） | `gitleaks git --log-opts=origin/main --config .gitleaks.toml .` |

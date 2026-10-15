@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bothot/contracts/api.envelope.schema.json",
+  "title": "BotHot HTTP 响应信封与分页契约（冻结稿 V0.7.0 / 基线 main@13acacc）",
+  "description": "唯一源规则见 03 §5。本文件是并行执行者之间的中间语言：后端按此产出，前端按此消费，不得各自臆测字段。实测来源：apps/api/app/core/response.py:12-24（Envelope/success/failure）、apps/api/app/main.py:118-127（异常转信封）、apps/api/app/api/v1/{admin,spaces,subscriptions}.py（limit/offset 风格 9 处）、apps/api/app/api/v1/{bots,hot}.py（page/page_size 风格 6 处）。",
+  "type": "object",
+  "required": ["code", "message", "requestId"],
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "type": "integer",
+      "description": "0 = 成功；非 0 必须是 errors.global.schema.json 中已登记的错误码。禁止使用 HTTP 状态码充当业务码。",
+      "enumReference": "errors.global.schema.json#/definitions/ErrorCode"
+    },
+    "message": { "type": "string", "maxLength": 512, "description": "人类可读；成功固定 'ok'。不得含堆栈。" },
+    "data": {
+      "description": "成功时为资源对象或分页壳；失败时为 null。",
+      "oneOf": [{ "type": "null" }, { "type": "object" }, { "type": "array" }]
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "由 RequestIdMiddleware 注入，必须与 X-Request-ID 响应头和 structlog 日志三处一致（core/request_context.py）。前端错误上报必须带此值。"
+    }
+  },
+  "x-conventions": {
+    "fieldNaming": {
+      "envelope": "camelCase（requestId）",
+      "dataPayload": "snake_case（实测 bots.py:245 page_size、admin.py:338 masterKeyConfigured 例外）",
+      "decision": "D-V3-02：新契约一律 data 内 snake_case；envelope 保持 camelCase 不动（已发布面）。admin.py:338 的 masterKeyConfigured 属违规存量，只读兼容、不再新增。",
+      "status": "默认值已定，待 decision-log 登记（24h 生效）"
+    },
+    "timeFormat": "所有时间字段为 ISO 8601 带时区偏移字符串（实测 hot.py:359 created_at.isoformat()）。业务日界 Asia/Shanghai（AGENTS.md 热点段）。null 表示未知，禁止用 0 或空串表示未知。",
+    "idStyle": "主键为 VARCHAR(36) UUID 字符串；users 的外部身份锚是 sub（见 identity.schema.json），两者不得混用。",
+    "emptyList": "空集合返回 []，不得返回 null 或缺省字段。"
+  },
+  "x-pagination": {
+    "status": "BLOCKING→已给默认裁决 D-V3-01（见 03 §6）：并存两种风格是真实缺陷，实测 9 处 offset 风格 vs 6 处 page 风格。",
+    "styleA_current": {
+      "title": "limit/offset（admin/spaces/subscriptions，9 处）",
+      "type": "object",
+      "required": ["items", "total", "limit", "offset"],
+      "additionalProperties": false,
+      "properties": {
+        "items": { "type": "array" },
+        "total": { "type": "integer", "minimum": 0 },
+        "limit": { "type": "integer", "minimum": 1 },
+        "offset": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "styleB_current": {
+      "title": "page/page_size（bots/hot，6 处）",
+      "type": "object",
+      "required": ["items", "total", "page", "page_size"],
+      "additionalProperties": false,
+      "properties": {
+        "items": { "type": "array" },
+        "total": { "type": "integer", "minimum": 0 },
+        "page": { "type": "integer", "minimum": 1 },
+        "page_size": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "targetUnified": {
+      "title": "V0.7.0 目标唯一分页壳（新接口强制；存量两壳只读兼容到 STEP-14/15 收敛）",
+      "type": "object",
+      "required": ["items", "page", "pageSize", "total", "hasMore"],
+      "properties": {
+        "items": { "type": "array" },
+        "page": { "type": "integer", "minimum": 1, "default": 1 },
+        "pageSize": { "type": "integer", "minimum": 1, "maximum": 200, "default": 20 },
+        "total": { "type": "integer", "minimum": 0 },
+        "hasMore": { "type": "boolean", "description": "由服务端算，前端不得自行用 total/pageSize 猜（避免越界请求）" }
+      },
+      "queryParams": { "page": "1-based", "pageSize": "别名 size；上限 200，超限截到 200 而非报错" }
+    }
+  },
+  "x-idempotency": {
+    "requirement": "写接口必须声明幂等语义，取值三选一并在契约里标注。",
+    "values": {
+      "idempotent-key": "客户端传 Idempotency-Key；服务端去重。用于入库/入列类（实测 Job.idempotency_key，services/subscription.py:329 前缀 'sync_account:'）。",
+      "natural-unique": "靠唯一键天然幂等（实测 uq_source_type_external、uq_asset_source_external、uq_manifest_source_external）。",
+      "non-idempotent": "无幂等保证，重试会产生新资源；必须在契约里显式标注并在前端禁自动重试。"
+    }
+  },
+  "x-auth": {
+    "cookie": "SSO 会话走 HttpOnly Cookie（withCredentials）；实测前端 SSE 用 new EventSource(url,{withCredentials:true})（apps/web/lib/api/notifications.ts:106）。",
+    "unauthenticatedBehaviour": "受保护端点缺会话 ⇒ 10001/401，不是 403；本地无 users 行 ⇒ require_role 抛 10001（services/roles.py:72-82），前端不得把 401 当「权限不足」展示。",
+    "adminBoundary": "见 identity.schema.json 的角色梯与 x-permission-matrix。"
+  }
+}
