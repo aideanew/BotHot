@@ -9,18 +9,11 @@
 `ChannelName` 与 `app/providers/discovery/registry.py` 的 `CHANNELS` 键**相等**这一事实
 由 `tests/test_collection_contract.py` 单向核对（测试可以同时 import 两侧，模型不行）。
 
-与冻结稿的三处**结构性**差异（语义等价，S1.3.2 的比对脚本按此归一，且每条都有见证向量兜底）：
-1. 冻结稿 `ArticleKey` 用 `oneOf` 三条 pattern；本模块合成一条带锚定 alternation
-   （`b:` / `s:` / `h:` 三个前缀互斥，`^(?:A|B|C)$` 与 oneOf 的接受集相同）。
-2. 冻结稿可空写成 `"type": ["string", "null"]`；Pydantic 生成 `anyOf[..., {"type":"null"}]`。
-3. 冻结稿 `ChannelName` / `ManifestStatus` 是 `$defs` 条目，本模块用 `str` 枚举（仍生成 `$defs`）；
-   `CollectionEvent.event` 与 `ArticleKey` 在 Pydantic 里是内联字面量/约束别名，会被就地展开。
-
-一处**故意的收紧**：`publish_time` / `at` 用 `AwareDatetime`，而 JSON Schema 的
-`format: date-time` 默认只是注记、不校验。冻结稿自己的字段说明写着"provider 内即转为带时区时间"
-"时间一律 ISO 8601 带时区"，所以"能解析成带时区时间"本来就是契约意图——把它从注记升成真校验。
-代价：一个返回 `"2024-01-01"`（无时区）的 provider 以前过 schema、现在被拒。这是要的效果，
-不是回归，故在此写明而不是藏进 diff。
+与冻结稿的差异**不在本 docstring 里维护**，而在文件末尾的 `CONTRACT_DIVERGENCES`
+（机器可读；S1.3.2 的比对脚本按它放行，表里没有的差异 = 比对必须红）。四类：
+`structural` 等价写法、`tightening` 模型比 JSON Schema 严（故意的）、
+`serialization` 接受集相同但 dump 形状不同、`strictness` 多余字段丢弃 vs 透传。
+第一轮独立验证正是拿"docstring 的叙述清单不全"判我 FAIL 的——叙述会漏项，登记表少一项就红。
 
 一处命名差异（卡面对象叫 `DiscoveryReport`，冻结稿里没有这个形状）：
 卡面 S1.2.1 的 `DiscoveryReport` 在冻结稿对应**两个** `$defs`——`ManifestSyncReport`
@@ -30,7 +23,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, NamedTuple
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
 
@@ -57,7 +50,9 @@ class ChannelName(str, Enum):
     """发现渠道名，与 `registry.CHANNELS` 的键一一对应。
 
     新增渠道 = **契约变更**：这里加一个成员，`CHANNELS` 也得加一个 spec，两边由
-    `tests/test_collection_contract.py` 的等值断言钉住（顺序也一致，故用有序比较）。
+    `tests/test_collection_contract.py` 钉住。比较口径（第一轮验证者指出我原来"按顺序比较"
+    是错的耦合）：**与 `CHANNELS` 比集合**——dict 的插入序是实现细节，不该被契约依赖；
+    **顺序只与冻结稿比**（`collection.schema.json` 的 enum 数组），那才是合同。
     数据库侧渠道字段仍是 `String(32)`（AGENTS.md 关键约束 3），本枚举只约束**契约面**。
     """
 
@@ -111,10 +106,15 @@ class WorkListRow(BaseModel):
 
 
 class WorkListPage(BaseModel):
-    """发现分页壳（STEP-08 协议升级后启用；STEP-03 阶段 provider 仍返回 `list[WorkListRow]`）。"""
+    """发现分页壳（STEP-08 协议升级后启用；STEP-03 阶段 provider 仍返回 `list[WorkListRow]`）。
+
+    `next_cursor` 是**必填可空**（冻结稿 `required: [rows, next_cursor, page_size]`）：
+    "到底了"要显式写 `null`，不能靠缺字段表达——缺字段与"末页"在两方协议里是不同事实，
+    混用会让上层把"provider 忘了给游标"读成"已经没有下一页"。
+    """
 
     rows: list[WorkListRow]
-    next_cursor: str | None = None
+    next_cursor: str | None
     page_size: Annotated[int, Field(ge=1)]
     total: Annotated[int | None, Field(ge=0)] = None
 
@@ -219,3 +219,108 @@ class CollectionEvent(BaseModel):
     at: AwareDatetime
     idempotency_key: str = ""
     count: Annotated[int, Field(ge=0)] = 0
+
+
+# ── 与冻结稿的差异登记表（S1.3.2 的比对脚本消费它）────────────────────────────
+
+
+class Divergence(NamedTuple):
+    """一条"模型 vs 冻结稿"的已知差异。
+
+    `kind` 四值：
+      `structural`   等价写法，接受集不变；
+      `tightening`   模型比 JSON Schema 严（冻结稿自己说明里的意图），接受集**收窄**；
+      `serialization` 接受集不变，但 `model_dump()` 会物化冻结稿没有的默认值；
+      `strictness`   接受集不变，但多余字段被丢弃而非透传。
+    比对脚本的纪律：**表里没有的差异一律算违规**（红），而不是"看起来无害就放过"——
+    放过一次的代价是这条差异下次没人记得，正是第一轮验证者判我 docstring 清单不全的那个坑。
+    """
+
+    ref: str
+    field: str
+    kind: str
+    draft: str
+    model: str
+    reason: str
+
+
+CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
+    Divergence(
+        "ArticleKey",
+        "*",
+        "structural",
+        "oneOf 三条 pattern（^b:…$ / ^s:…$ / ^h:…$）",
+        "单条带锚 alternation ^(?:b:…|s:…|h:…)$",
+        "三支前缀互斥（b:/s:/h:），且 pattern 均自带 ^…$ ⇒ 接受集相同。"
+        "换行注入探针实测：Pydantic-core 用 ECMA-strict 的 $，`h:<32hex>\\n` 被拒，等价性成立。",
+    ),
+    Divergence(
+        "*（所有可空字段）",
+        "*",
+        "structural",
+        '"type": ["string", "null"]',
+        '"anyOf": […, {"type": "null"}]',
+        "Pydantic 生成器的固定写法，语义相同；比对脚本按此归一。",
+    ),
+    Divergence(
+        "ArticleKey / CollectionEvent.event",
+        "*",
+        "structural",
+        "两者都在 $defs 里（ArticleKey 被 $ref 引用）",
+        "ChannelName / ManifestStatus 仍生成 $defs；ArticleKey 是约束别名、event 是 Literal ⇒ 就地展开",
+        "Pydantic 不为类型别名建 $defs。语义等价；比对脚本按「属性落点」归一而不是按 $defs 目录归一。",
+    ),
+    Divergence(
+        "ArticleKey",
+        "minLength/maxLength",
+        "structural",
+        "minLength 3 / maxLength 128",
+        "同样声明 3 / 128，但对 pattern 而言是冗余约束",
+        "实测最短可通过串 `s:12345678`（10 字符）、最长分支 ≤ 82 ⇒ 两条边界都不会先于 pattern 生效。"
+        "保留是为了与稿一致，不是因为它有用。",
+    ),
+    Divergence(
+        "WorkListRow / ArticleManifest",
+        "publish_time",
+        "tightening",
+        "format: date-time（默认只是注记，不校验）",
+        "AwareDatetime：无时区串被拒（实测 `timezone_aware`）",
+        "稿内字段说明自己写「provider 内即转为带时区时间」⇒ 把意图从注记升成真校验。",
+    ),
+    Divergence(
+        "CollectionEvent",
+        "at",
+        "tightening",
+        "format: date-time（注记）",
+        "AwareDatetime",
+        "同上，且这是「时间一律 ISO 8601 带时区；存储 UTC，业务日界 Asia/Shanghai」的落点。",
+    ),
+    Divergence(
+        "DiscoveryChannelView",
+        "lastSuccessAt",
+        "tightening",
+        'format: date-time + ["string","null"]',
+        "AwareDatetime | None：无时区串被拒",
+        "与 publish_time 同一口径。**第一轮验证者抓到我在 docstring 里只写了 publish_time/at 两处**"
+        "，漏了这一处 ⇒ 差异清单从叙述改成登记表就是为了让它没地方漏。",
+    ),
+    Divergence(
+        "WorkListRow / ArticleManifest / ManifestSyncReport / CollectionEvent",
+        "digest, author, content_hash, all_skipped_pages, idempotency_key, count",
+        "serialization",
+        "可选字段，无 default",
+        'default="" / 0 ⇒ model_dump() 会物化出来',
+        "接受集不变（缺省即可通过），但响应里会多出显式的空串/0。"
+        "前端按字段存在与否分支时会看到差异 ⇒ 比对脚本只比「接受集」，另设一条 dump 形状检查。",
+    ),
+    Divergence(
+        "*（除 WorkListRow 外所有模型）",
+        "*",
+        "strictness",
+        "未声明 additionalProperties（= 允许）",
+        'Pydantic 默认 extra="ignore" ⇒ 多余字段静默丢弃',
+        "有意不对称：WorkListRow 是上游透传面（各渠道字段差异大，`additionalProperties: true` 明写在稿里），"
+        "其余是落库/视图形状，不该让未知字段穿过。差异体现在「丢弃」而不是「拒绝」，"
+        "所以记为 strictness 而不是 tightening。",
+    ),
+)
