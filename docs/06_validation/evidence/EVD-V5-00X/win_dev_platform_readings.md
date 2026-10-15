@@ -121,3 +121,24 @@ $ python3 --version              → 无输出、rc=0（Microsoft Store 空壳 s
 | Playwright e2e | 🛑 @win 不跑 | `--with-deps` 在 Windows 无 sudo 语义；e2e 的门禁一直在 ubuntu job |
 | `scripts/rotate_keys.sh` 等上线脚本 | 标「仅 Linux」，不改造 | 本卡 S00X.1.1.1 明示 |
 | `S00X.2.2.1` 的"只降不升"判据 | 0 → 0（**该判据在本仓是空的**） | HEAD 里两个 .py 早已用 `Path.read_text(encoding="utf-8")`；没有可降的对象。如实记空，不谎报改进 |
+
+## 7. `@ci` 的 windows-dev 首跑（写这节时仍在跑）
+`https://github.com/aideanew/BotHot/actions/runs/38688133750/job/116267611775`（head_sha `d2462e2b`，取 job steps 原始响应）
+
+| 步 | 结论 |
+|---|---|
+| 1–7 建环境（checkout / pnpm 版本解析 / pnpm-action / setup-python **3.12** / setup-node **按 .nvmrc** / Tool fingerprint） | **success** |
+| 8 Install backend deps（`.[dev]` + pytest-cov） | **success** |
+| 9 Install frontend deps（`--frozen-lockfile`） | **success** |
+| 10 `entry.py 与 Makefile 目标面一致性`（`scripts/check_entry_parity.py`） | **success** |
+| 11 `ruff check app tests`　12 `mypy app` | **success / success** |
+| 13 Backend tests（全量 pytest） | **in_progress**（写入本行时） |
+| 14 skip 门禁 / 15 vitest+typecheck / 16 build / 17 取证行 | 未开始 |
+
+⇒ **S00X.4.2「两个 job 都 success」尚未达成，不写成达成。**
+但 step 13 的卡住已经是这条新门禁抓到的第一个东西：**全量 pytest 在 `windows-latest` 上同样不动**，
+与 §4.1 本机 @win 的 stall 同形（本机：收集 1063 条 262s、35 分钟只推进 35 项；定向 5 条 0.78s 全过）
+⇒ U-20 不是"我这台机器的毛病"，是 **Windows + 这套测试** 的平台级事实。
+按 job 的 `timeout-minutes: 35`，它很可能以超时收场。**不去调判据把它做绿**：windows-dev 的用途正是抓这种断裂，
+首跑就抓到，说明门禁有效而不是失败。后续动作（不属本卡，登记在 05 U-20）：用 `--collect-only` 逐文件 +
+`--durations` 定位卡住的模块，修完再看这个 job 转绿。
