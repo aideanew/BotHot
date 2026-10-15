@@ -25,10 +25,14 @@ Windows 上它还有一个更隐蔽的形态：psycopg 只在 Selector 事件循
      子自报 1.33s、**两条结论日志一条都没有** ⇒ 旧版用例会在这里绿，新版红。这条正中靶心。
 
 `FLOOR_SECONDS=3.0` 取自 `connect_timeout=3`：黑洞地址下探测必然至少占用这么久，
-短于它又没有超时日志，就说明上界没生效或探测根本没走网络。地址本身也在用例里复检
-（`_blackhole_state`）——若它哪天不再无响应，用例 skip 记账而不是冒充"计时已证"。
-注意 @win 实测 `127.0.0.1:1` 与 `:5` 都是 unresponsive@2.00s（本机不产生"秒拒"形态），
-所以 skip 分支在本地**不可达、未经证明**，只有代码路径为凭。
+短于它就是上界没生效或探测根本没走网络 ⇒ fail。地址本身也在用例里复检（`_blackhole_state`），
+且复检**在计时之前**（第二轮独立验证的要求）：只要它不是"无响应黑洞"就 skip——
+不看耗时。否则"import 本身就要 3s+ 的慢机器"会在什么都没测的情况下绿。
+skip 分支已实跑证明可达：`BOTHOT_PROBE_BLACKHOLE=…@bothot-does-not-exist.invalid:5432/…`
+⇒ `1 skipped in 3.53s`，原因串里带着"实测为 unresolvable / 子自报 2.33s / 结论日志已命中"。
+（@win 本机造不出"秒拒"形态：`127.0.0.1:1` 与 `:5` 实测都是 unresponsive@2.00s，
+所以 fast-fail 那一支仍只有代码路径为凭。）
+head 解析不到时先 skip（`_alembic_head`）：守卫两条日志都不会打，那不是缺陷。
 
 Windows 下必须换 Selector 策略，否则测的是"psycopg 拒绝在 Proactor 上连接"而不是"连接无上界"。
 """
@@ -83,7 +87,29 @@ def _blackhole_state() -> str:
         return "fast-fail"
 
 
+def _alembic_head() -> str | None:
+    """父进程里读 alembic head（只读迁移脚本目录，不连库）。
+
+    为什么要读它：守卫只在 `head is not None and current != head` 时打"版本不一致"日志
+    （`main.py:251`）。head 解析不到时**两条结论日志都不会出现**，那不是缺陷，
+    而本用例会因此假红 ⇒ 先 skip 把它和"探测被短路"区分开。
+    """
+    api_dir = str(API_DIR)
+    added = api_dir not in sys.path
+    if added:
+        sys.path.insert(0, api_dir)
+    try:
+        from app.core import schema_guard
+
+        return schema_guard.get_alembic_head()
+    finally:
+        if added:
+            sys.path.remove(api_dir)
+
+
 def test_import_time_schema_probe_is_bounded_against_blackhole_db() -> None:
+    if _alembic_head() is None:
+        pytest.skip("alembic head 解析不到 ⇒ 守卫两条结论日志都不会打，结论断言失去判据（非缺陷）")
     env = dict(os.environ)
     env["DATABASE_URL"] = BLACK_HOLE_DSN
     env["APP_ENV"] = "development"   # 生产语义（拒启）由另一条断言管，这里只测"有没有上界"
@@ -127,13 +153,17 @@ def test_import_time_schema_probe_is_bounded_against_blackhole_db() -> None:
         f"子进程没自报 import 耗时（期望 `PROBE_SECONDS <秒>`）⇒ 它没跑到最后一行。输出尾部：{combined[-600:]}"
     )
     probe_seconds = float(reported.group(1))
-    state = _blackhole_state()  # 放在取值之后，这 2s 不吃本用例的计时
+    # 复检顺序有意放在"计时"之前（第二轮独立验证的要求）：地址若不是真黑洞，计时断言在这台机器上
+    # 就没有测量对象——**不看 probe_seconds 也要 skip**，否则"import 本身 ≥3s 的慢机器"会在
+    # 什么都没测的情况下绿。结论日志断言在上面已经跑过，短路类假通过仍然红。
+    state = _blackhole_state()
+    if state != "unresponsive":
+        pytest.skip(
+            f"地址 {BLACK_HOLE_DSN} 实测为 {state}（不是无响应黑洞）⇒ 本机复现不了「丢包式挂起」，"
+            f"计时判据（下界 {FLOOR_SECONDS}s / 上界 {LIMIT_SECONDS}s）没有测量对象；"
+            f"探测本身跑过（结论日志已命中），子自报 {probe_seconds:.2f}s。按 skip 记账，不冒充已证"
+        )
     if probe_seconds < FLOOR_SECONDS:
-        if state != "unresponsive":
-            pytest.skip(
-                f"地址 {BLACK_HOLE_DSN} 实测为 {state}（不是无响应黑洞），探测只花 {probe_seconds:.2f}s"
-                f"（墙钟 {wall_seconds:.2f}s）⇒ 计时断言没有测量对象，按 skip 记账不冒充已证"
-            )
         pytest.fail(
             f"地址实测无响应（真黑洞）而探测只花 {probe_seconds:.2f}s < 下界 {FLOOR_SECONDS}s"
             f"（= connect_timeout）⇒ 超时上界未生效或探测根本没走网络。输出尾部：{combined[-400:]}"

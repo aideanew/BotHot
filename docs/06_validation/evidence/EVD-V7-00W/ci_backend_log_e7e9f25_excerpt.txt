@@ -1,0 +1,28 @@
+# @ci `CI` 工作流 / backend job（ubuntu-latest）日志片段，逐字含时间戳
+# run_id=38717913012  job_id=116365009382  conclusion=success
+# head_sha=e7e9f25b6bf463735d5518ab8f931926781c7c97  2026-10-15T10:06:45Z → 2026-10-15T10:08:41Z
+# 取法：GET /repos/aideanew/BotHot/actions/jobs/116365009382/logs（Actions 自身已把 token 打成 ***）
+# 用途：本卡提交（含新用例）⇒ 分子
+
+## pytest 命令
+2026-10-15T10:07:43.1671363Z [36;1mpytest tests/ -q -rs --junitxml=pytest-report.xml --cov=app --cov-report=term-missing --cov-fail-under="$COV_BASELINE" 2>&1 | tee pytest-output.log[0m
+
+## 汇总行
+2026-10-15T10:08:37.0868202Z 1058 passed, 6 skipped, 1 warning in 52.43s
+
+## SKIPPED 明细（这几行决定「新用例在 Linux 上是 pass 还是 skip」能不能被证伪）
+2026-10-15T10:08:37.0864798Z SKIPPED [1] tests/test_chat_sse.py:1130: LangBot :5300 不可达或未注入管理员凭据，跳过真实冒烟
+2026-10-15T10:08:37.0865285Z SKIPPED [1] tests/test_chat_sse.py:1208: LangBot :5300 不可达或未注入管理员凭据，跳过全链冒烟
+2026-10-15T10:08:37.0865823Z SKIPPED [1] tests/test_env_isolation.py:77: 宿主未设这 6 个待清代理变量，本条对照在此环境下无判定力（①②仍有）
+2026-10-15T10:08:37.0866391Z SKIPPED [1] tests/test_session_store_redis.py:47: 测试 Redis 不可达（ConnectionError），拉起容器后复跑
+2026-10-15T10:08:37.0867038Z SKIPPED [1] tests/test_session_store_redis.py:71: 测试 Redis 不可达（ConnectionError），拉起容器后复跑
+2026-10-15T10:08:37.0867734Z SKIPPED [1] tests/test_we_notifications.py:247: Redis 不可达（redis://localhost:6379/0，ConnectionError），恢复后复跑本用例
+
+## skip 门禁与退出码
+2026-10-15T10:08:38.7695871Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+2026-10-15T10:08:38.7725026Z pytest_status=0 gate_status=0
+
+## 本日志内的字符串计数（机读，避免口头主张）
+- `pytest-timeout`：3
+- `test_startup_probe_timeout`：0（`-q` 不打印用例名，0 是正常的，不代表没跑）
+- `SKIPPED [1]`：6
