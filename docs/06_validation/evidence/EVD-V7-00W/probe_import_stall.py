@@ -21,7 +21,7 @@ WATCHDOG_SECONDS = float(os.environ.get("PROBE_WATCHDOG_SECONDS", "20"))
 api_dir = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "apps/api")
 sys.path.insert(0, api_dir)
 
-# PROBE_SELECTOR=1 复刻 **pytest 的真实条件**：tests/conftest.py:26 在 import 期把 Windows
+# PROBE_SELECTOR=1 复刻 **pytest 的真实条件**：tests/conftest.py:27 在 import 期把 Windows
 # 事件循环策略换成 Selector。不换位时 psycopg 直接抛 "cannot use the ProactorEventLoop" 而
 # **根本不发起连接**（实测 import 1.67s 就"不可判定"放行），于是黑洞地址也测不出挂死——
 # 这正是上一轮"裸 import 很快、pytest 采集很慢"这对矛盾的解。取栈必须带着这个变量跑。

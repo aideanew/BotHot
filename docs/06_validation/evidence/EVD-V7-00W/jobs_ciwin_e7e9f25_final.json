@@ -1,0 +1,209 @@
+{
+ "total_count": 1,
+ "jobs": [
+  {
+   "id": 116365008740,
+   "run_id": 38717912956,
+   "workflow_name": "CI-Windows",
+   "head_branch": "main",
+   "run_url": "https://api.github.com/repos/aideanew/BotHot/actions/runs/38717912956",
+   "run_attempt": 1,
+   "node_id": "CR_kwDOUxwS-M8AAAAbF-UfZA",
+   "head_sha": "e7e9f25b6bf463735d5518ab8f931926781c7c97",
+   "url": "https://api.github.com/repos/aideanew/BotHot/actions/jobs/116365008740",
+   "html_url": "https://github.com/aideanew/BotHot/actions/runs/38717912956/job/116365008740",
+   "status": "completed",
+   "conclusion": "failure",
+   "created_at": "2026-10-15T10:06:43Z",
+   "started_at": "2026-10-15T10:06:45Z",
+   "completed_at": "2026-10-15T10:27:07Z",
+   "name": "windows-dev",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 1,
+     "started_at": "2026-10-15T10:06:46Z",
+     "completed_at": "2026-10-15T10:06:48Z"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 2,
+     "started_at": "2026-10-15T10:06:48Z",
+     "completed_at": "2026-10-15T10:06:58Z"
+    },
+    {
+     "name": "Resolve pnpm version from packageManager",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 3,
+     "started_at": "2026-10-15T10:06:58Z",
+     "completed_at": "2026-10-15T10:07:05Z"
+    },
+    {
+     "name": "Run pnpm/action-setup@v4",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 4,
+     "started_at": "2026-10-15T10:07:05Z",
+     "completed_at": "2026-10-15T10:07:12Z"
+    },
+    {
+     "name": "Run actions/setup-python@v5",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 5,
+     "started_at": "2026-10-15T10:07:12Z",
+     "completed_at": "2026-10-15T10:07:19Z"
+    },
+    {
+     "name": "Run actions/setup-node@v4",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 6,
+     "started_at": "2026-10-15T10:07:19Z",
+     "completed_at": "2026-10-15T10:07:31Z"
+    },
+    {
+     "name": "Tool fingerprint（Windows 侧实际装到了什么）",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 7,
+     "started_at": "2026-10-15T10:07:31Z",
+     "completed_at": "2026-10-15T10:07:32Z"
+    },
+    {
+     "name": "Install backend deps（与 backend job 同口径 .[dev] + pytest-cov）",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 8,
+     "started_at": "2026-10-15T10:07:32Z",
+     "completed_at": "2026-10-15T10:08:16Z"
+    },
+    {
+     "name": "Install frontend deps（frozen lockfile）",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 9,
+     "started_at": "2026-10-15T10:08:16Z",
+     "completed_at": "2026-10-15T10:08:27Z"
+    },
+    {
+     "name": "entry.py 与 Makefile 目标面一致性",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 10,
+     "started_at": "2026-10-15T10:08:27Z",
+     "completed_at": "2026-10-15T10:08:27Z"
+    },
+    {
+     "name": "Lint backend（ruff check app tests）",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 11,
+     "started_at": "2026-10-15T10:08:27Z",
+     "completed_at": "2026-10-15T10:08:28Z"
+    },
+    {
+     "name": "Type check backend（mypy app）",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 12,
+     "started_at": "2026-10-15T10:08:28Z",
+     "completed_at": "2026-10-15T10:08:40Z"
+    },
+    {
+     "name": "Backend tests（连库用例在本平台会 skip，只记账不主张）",
+     "status": "completed",
+     "conclusion": "failure",
+     "number": 13,
+     "started_at": "2026-10-15T10:08:40Z",
+     "completed_at": "2026-10-15T10:27:03Z"
+    },
+    {
+     "name": "Windows skip 门禁（阈值与 ubuntu 分开设定）",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 14,
+     "started_at": "2026-10-15T10:27:03Z",
+     "completed_at": "2026-10-15T10:27:03Z"
+    },
+    {
+     "name": "Frontend typecheck + unit（vitest）",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 15,
+     "started_at": "2026-10-15T10:27:03Z",
+     "completed_at": "2026-10-15T10:27:03Z"
+    },
+    {
+     "name": "Frontend build（NEXT_PUBLIC_API_MOCK=false 是生产守卫硬要求）",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 16,
+     "started_at": "2026-10-15T10:27:03Z",
+     "completed_at": "2026-10-15T10:27:03Z"
+    },
+    {
+     "name": "取证行（D-V6-02：run id + head_sha + 结论要能被下游引用）",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 17,
+     "started_at": "2026-10-15T10:27:03Z",
+     "completed_at": "2026-10-15T10:27:03Z"
+    },
+    {
+     "name": "Post Run actions/setup-node@v4",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 31,
+     "started_at": "2026-10-15T10:27:03Z",
+     "completed_at": "2026-10-15T10:27:03Z"
+    },
+    {
+     "name": "Post Run actions/setup-python@v5",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 32,
+     "started_at": "2026-10-15T10:27:03Z",
+     "completed_at": "2026-10-15T10:27:03Z"
+    },
+    {
+     "name": "Post Run pnpm/action-setup@v4",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 33,
+     "started_at": "2026-10-15T10:27:03Z",
+     "completed_at": "2026-10-15T10:27:03Z"
+    },
+    {
+     "name": "Post Run actions/checkout@v4",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 34,
+     "started_at": "2026-10-15T10:27:03Z",
+     "completed_at": "2026-10-15T10:27:05Z"
+    },
+    {
+     "name": "Complete job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 35,
+     "started_at": "2026-10-15T10:27:05Z",
+     "completed_at": "2026-10-15T10:27:05Z"
+    }
+   ],
+   "check_run_url": "https://api.github.com/repos/aideanew/BotHot/check-runs/116365008740",
+   "labels": [
+    "windows-latest"
+   ],
+   "runner_id": 1000001135,
+   "runner_name": "GitHub Actions 1000001135",
+   "runner_group_id": 0,
+   "runner_group_name": "GitHub Actions"
+  }
+ ]
+}

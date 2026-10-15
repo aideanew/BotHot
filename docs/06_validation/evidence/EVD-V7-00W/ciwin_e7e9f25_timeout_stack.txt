@@ -1,0 +1,151 @@
+# @ci CI-Windows 卡死用例的带栈读数（D-V7-02 生效证据）
+# run_id=38717912956  run_number=2  job=windows-dev  job_id=116365008740
+# head_sha=e7e9f25b6bf463735d5518ab8f931926781c7c97  conclusion=failure（不是 cancelled）
+# 取段：pytest 命令行 / 进度 / 三次 faulthandler 120s dump 的时刻 / 300s --timeout 命中块
+# 完整日志由 `GET /actions/jobs/116365008740/logs` 取得，本片段 1:1 逐字（含时间戳）
+
+## pytest 命令（ci-windows.yml 的 S00W.2.2 步）
+2026-10-15T10:08:40.7815525Z ##[group]Run python -m pytest tests/ -q --no-header -o faulthandler_timeout=120 --timeout=300 --timeout-method=thread --junitxml=pytest-report-win.xml
+
+## pytest-timeout 确实装上了（否则 --timeout 会被忽略、退回 35min cancelled）
+2026-10-15T10:08:15.6855787Z Successfully installed Mako-1.4.3 MarkupSafe-3.0.4 alembic-1.20.0 annotated-doc-0.0.5 annotated-types-0.8.0 anyio-4.15.1 ast-serialize-0.13.0 bothot-backend-0.1.0 certifi-2026.7.22 cffi-2.1.1 coverage-7.16.2 croniter-6.2.4 cryptography-50.0.2 fastapi-0.143.1 greenlet-3.5.6 h11-0.16.0 httpcore-1.0.9 httptools-0.9.0 httpx-0.28.1 idna-3.20 iniconfig-2.3.1 librt-0.16.0 myp
+
+## 进度（%）与三次 120s faulthandler dump 的时刻
+2026-10-15T10:10:59.7400096Z .....ss...............................s....s............................ [  6%]
+2026-10-15T10:11:21.2525187Z ...........................ss...ssssss.....sssssssssss.sssss............ [ 13%]
+2026-10-15T10:12:13.5671585Z .......ss.ss.....................sssssssssssssssssssssssss.............. [ 20%]
+2026-10-15T10:14:15.7385767Z Timeout (0:02:00)!
+2026-10-15T10:18:45.2065506Z Timeout (0:02:00)!
+2026-10-15T10:24:03.4300577Z Timeout (0:02:00)!
+
+## 取证行 + 退出码
+2026-10-15T10:27:03.5473177Z [36;1mecho "head_sha=${GITHUB_SHA}  conclusion=failure  job=windows-dev"[0m
+2026-10-15T10:27:03.5830569Z head_sha=e7e9f25b6bf463735d5518ab8f931926781c7c97  conclusion=failure  job=windows-dev
+2026-10-15T10:27:03.5265133Z ##[error]Process completed with exit code 1.
+
+## 300s `--timeout=300 --timeout-method=thread` 命中块（逐字）
+2026-10-15T10:27:03.5021368Z ......s.............+++++++++++++++++++++++++++++++++++ Timeout +++++++++++++++++++++++++++++++++++
+2026-10-15T10:27:03.5022198Z ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Captured stdout ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2026-10-15T10:27:03.5023529Z 2026-10-15T10:26:32.843616 [info     ] HTTP Request: GET http://testserver/api/v1/system/health "HTTP/1.1 200 OK" [httpx]
+2026-10-15T10:27:03.5024433Z ~~~~~~~~~~~~~~~~~~~~~~~~~~ Stack of asyncio_0 (2000) ~~~~~~~~~~~~~~~~~~~~~~~~~~
+2026-10-15T10:27:03.5025236Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1032, in _bootstrap
+2026-10-15T10:27:03.5025964Z     self._bootstrap_inner()
+2026-10-15T10:27:03.5026665Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1075, in _bootstrap_inner
+2026-10-15T10:27:03.5027274Z     self.run()
+2026-10-15T10:27:03.5028138Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1012, in run
+2026-10-15T10:27:03.5028775Z     self._target(*self._args, **self._kwargs)
+2026-10-15T10:27:03.5029539Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\concurrent\futures\thread.py", line 90, in _worker
+2026-10-15T10:27:03.5030218Z     work_item = work_queue.get(block=True)
+2026-10-15T10:27:03.5030805Z ~~~~~~~~~~~~~~~~~ Stack of asyncio-portal-1aba689ab10 (8124) ~~~~~~~~~~~~~~~~~~
+2026-10-15T10:27:03.5031577Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1032, in _bootstrap
+2026-10-15T10:27:03.5032210Z     self._bootstrap_inner()
+2026-10-15T10:27:03.5032856Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1075, in _bootstrap_inner
+2026-10-15T10:27:03.5033455Z     self.run()
+2026-10-15T10:27:03.5033975Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1012, in run
+2026-10-15T10:27:03.5034620Z     self._target(*self._args, **self._kwargs)
+2026-10-15T10:27:03.5035791Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\anyio\from_thread.py", line 538, in run_blocking_portal
+2026-10-15T10:27:03.5036502Z     run_eventloop(
+2026-10-15T10:27:03.5037154Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\anyio\_core\_eventloop.py", line 83, in run
+2026-10-15T10:27:03.5037967Z     return async_backend.run(func, args, {}, backend_options)
+2026-10-15T10:27:03.5038838Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\anyio\_backends\_asyncio.py", line 2548, in run
+2026-10-15T10:27:03.5039606Z     return runner.run(wrapper())
+2026-10-15T10:27:03.5040492Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\asyncio\runners.py", line 118, in run
+2026-10-15T10:27:03.5041249Z     return self._loop.run_until_complete(task)
+2026-10-15T10:27:03.5042085Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\asyncio\base_events.py", line 678, in run_until_complete
+2026-10-15T10:27:03.5042818Z     self.run_forever()
+2026-10-15T10:27:03.5043499Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\asyncio\base_events.py", line 645, in run_forever
+2026-10-15T10:27:03.5044124Z     self._run_once()
+2026-10-15T10:27:03.5044776Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\asyncio\base_events.py", line 2000, in _run_once
+2026-10-15T10:27:03.5045674Z     handle = None  # Needed to break cycles when an exception occurs.
+2026-10-15T10:27:03.5046412Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\selectors.py", line 338, in select
+2026-10-15T10:27:03.5047002Z     return ready
+2026-10-15T10:27:03.5047576Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\selectors.py", line 315, in _select
+2026-10-15T10:27:03.5048211Z     return r, w + x, []
+2026-10-15T10:27:03.5048704Z ~~~~~~~~~~~~~~~~~~~~~~~~~ Stack of MainThread (7100) ~~~~~~~~~~~~~~~~~~~~~~~~~~
+2026-10-15T10:27:03.5049275Z   File "<frozen runpy>", line 198, in _run_module_as_main
+2026-10-15T10:27:03.5049783Z   File "<frozen runpy>", line 88, in _run_code
+2026-10-15T10:27:03.5050551Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pytest\__main__.py", line 9, in <module>
+2026-10-15T10:27:03.5051260Z     raise SystemExit(_console_main())
+2026-10-15T10:27:03.5052047Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\config\__init__.py", line 253, in _console_main
+2026-10-15T10:27:03.5052830Z     code = _main(prog=_get_prog_name(sys.argv))
+2026-10-15T10:27:03.5053609Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\config\__init__.py", line 229, in _main
+2026-10-15T10:27:03.5054431Z     ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+2026-10-15T10:27:03.5055561Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_caller.py", line 197, in __call__
+2026-10-15T10:27:03.5056392Z     return self._hookexec(
+2026-10-15T10:27:03.5057413Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_manager.py", line 183, in _hookexec
+2026-10-15T10:27:03.5058243Z     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+2026-10-15T10:27:03.5058868Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_execution.py", line 147, in _multicall
+2026-10-15T10:27:03.5059401Z     res = hook_impl.function(*args)
+2026-10-15T10:27:03.5059965Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\main.py", line 377, in pytest_cmdline_main
+2026-10-15T10:27:03.5060494Z     return wrap_session(config, _main)
+2026-10-15T10:27:03.5061237Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\main.py", line 330, in wrap_session
+2026-10-15T10:27:03.5061752Z     session.exitstatus = doit(config, session) or 0
+2026-10-15T10:27:03.5062263Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\main.py", line 384, in _main
+2026-10-15T10:27:03.5062758Z     config.hook.pytest_runtestloop(session=session)
+2026-10-15T10:27:03.5063323Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_caller.py", line 197, in __call__
+2026-10-15T10:27:03.5063787Z     return self._hookexec(
+2026-10-15T10:27:03.5064268Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_manager.py", line 183, in _hookexec
+2026-10-15T10:27:03.5064825Z     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+2026-10-15T10:27:03.5065448Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_execution.py", line 147, in _multicall
+2026-10-15T10:27:03.5065939Z     res = hook_impl.function(*args)
+2026-10-15T10:27:03.5067215Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\main.py", line 408, in pytest_runtestloop
+2026-10-15T10:27:03.5067897Z     item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)
+2026-10-15T10:27:03.5068522Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_caller.py", line 197, in __call__
+2026-10-15T10:27:03.5068999Z     return self._hookexec(
+2026-10-15T10:27:03.5069503Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_manager.py", line 183, in _hookexec
+2026-10-15T10:27:03.5070103Z     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+2026-10-15T10:27:03.5070742Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_execution.py", line 147, in _multicall
+2026-10-15T10:27:03.5071600Z     res = hook_impl.function(*args)
+2026-10-15T10:27:03.5072227Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\runner.py", line 118, in pytest_runtest_protocol
+2026-10-15T10:27:03.5072785Z     runtestprotocol(item, nextitem=nextitem)
+2026-10-15T10:27:03.5073519Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\runner.py", line 139, in runtestprotocol
+2026-10-15T10:27:03.5074067Z     reports.append(call_and_report(item, "call", log))
+2026-10-15T10:27:03.5074650Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\runner.py", line 249, in call_and_report
+2026-10-15T10:27:03.5075141Z     call = CallInfo.from_call(
+2026-10-15T10:27:03.5075626Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\runner.py", line 361, in from_call
+2026-10-15T10:27:03.5076132Z     result: TResult | None = func()
+2026-10-15T10:27:03.5076625Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\runner.py", line 250, in <lambda>
+2026-10-15T10:27:03.5077111Z     lambda: runtest_hook(item=item, **kwds),
+2026-10-15T10:27:03.5077613Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_caller.py", line 197, in __call__
+2026-10-15T10:27:03.5078103Z     return self._hookexec(
+2026-10-15T10:27:03.5078570Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_manager.py", line 183, in _hookexec
+2026-10-15T10:27:03.5079251Z     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+2026-10-15T10:27:03.5079847Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_execution.py", line 147, in _multicall
+2026-10-15T10:27:03.5080359Z     res = hook_impl.function(*args)
+2026-10-15T10:27:03.5080880Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\runner.py", line 184, in pytest_runtest_call
+2026-10-15T10:27:03.5081368Z     item.runtest()
+2026-10-15T10:27:03.5081835Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\python.py", line 1707, in runtest
+2026-10-15T10:27:03.5082341Z     self.ihook.pytest_pyfunc_call(pyfuncitem=self)
+2026-10-15T10:27:03.5082872Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_caller.py", line 197, in __call__
+2026-10-15T10:27:03.5083336Z     return self._hookexec(
+2026-10-15T10:27:03.5083844Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_manager.py", line 183, in _hookexec
+2026-10-15T10:27:03.5084400Z     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+2026-10-15T10:27:03.5085017Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_execution.py", line 147, in _multicall
+2026-10-15T10:27:03.5085520Z     res = hook_impl.function(*args)
+2026-10-15T10:27:03.5086070Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\python.py", line 167, in pytest_pyfunc_call
+2026-10-15T10:27:03.5086564Z     result = testfunction(**testargs)
+2026-10-15T10:27:03.5087162Z   File "D:\a\BotHot\BotHot\apps\api\tests\test_envelope.py", line 166, in test_request_id_context_isolated_between_requests
+2026-10-15T10:27:03.5087745Z     second = client.get("/api/v1/system/health").json()["requestId"]
+2026-10-15T10:27:03.5088284Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\httpx\_client.py", line 1053, in get
+2026-10-15T10:27:03.5088742Z     return self.request(
+2026-10-15T10:27:03.5089226Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\starlette\testclient.py", line 457, in request
+2026-10-15T10:27:03.5089727Z     return super().request(
+2026-10-15T10:27:03.5090186Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\httpx\_client.py", line 825, in request
+2026-10-15T10:27:03.5090738Z     return self.send(request, auth=auth, follow_redirects=follow_redirects)
+2026-10-15T10:27:03.5091467Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\httpx\_client.py", line 914, in send
+2026-10-15T10:27:03.5091928Z     response = self._send_handling_auth(
+2026-10-15T10:27:03.5092456Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\httpx\_client.py", line 942, in _send_handling_auth
+2026-10-15T10:27:03.5092966Z     response = self._send_handling_redirects(
+2026-10-15T10:27:03.5093679Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\httpx\_client.py", line 979, in _send_handling_redirects
+2026-10-15T10:27:03.5094208Z     response = self._send_single_request(request)
+2026-10-15T10:27:03.5094750Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\httpx\_client.py", line 1014, in _send_single_request
+2026-10-15T10:27:03.5095261Z     response = transport.handle_request(request)
+2026-10-15T10:27:03.5095829Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\starlette\testclient.py", line 351, in handle_request
+2026-10-15T10:27:03.5096342Z     portal.call(self.app, scope, receive, send)
+2026-10-15T10:27:03.5096859Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\anyio\from_thread.py", line 340, in call
+2026-10-15T10:27:03.5097412Z     return cast(T_Retval, self.start_task_soon(func, *args).result())
+2026-10-15T10:27:03.5097947Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\concurrent\futures\_base.py", line 451, in result
+2026-10-15T10:27:03.5098495Z     self._condition.wait(timeout)
+2026-10-15T10:27:03.5098917Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 355, in wait
+2026-10-15T10:27:03.5099355Z     waiter.acquire()
+2026-10-15T10:27:03.5099693Z +++++++++++++++++++++++++++++++++++ Timeout +++++++++++++++++++++++++++++++++++

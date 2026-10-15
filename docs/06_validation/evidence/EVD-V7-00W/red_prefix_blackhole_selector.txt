@@ -1,0 +1,29 @@
+[probe] PROBE_SELECTOR=1 → 已换成 WindowsSelectorEventLoopPolicy（与 conftest 同）
+[probe] cwd=D:\Code\bothot-00w-red\apps\api api_dir=D:\Code\bothot-00w-red\apps\api
+[probe] DATABASE_URL='postgresql+psycopg://x@10.255.255.1:5432/x'
+[probe] watchdog=15.0s  platform=win32  py=3.12.10
+2026-10-15T18:11:59.844122 [info     ] setup plugin alembic.autogenerate.schemas [alembic.runtime.plugins]
+2026-10-15T18:11:59.844122 [info     ] setup plugin alembic.autogenerate.tables [alembic.runtime.plugins]
+2026-10-15T18:11:59.844122 [info     ] setup plugin alembic.autogenerate.types [alembic.runtime.plugins]
+2026-10-15T18:11:59.844892 [info     ] setup plugin alembic.autogenerate.constraints [alembic.runtime.plugins]
+2026-10-15T18:11:59.844892 [info     ] setup plugin alembic.autogenerate.defaults [alembic.runtime.plugins]
+2026-10-15T18:11:59.844892 [info     ] setup plugin alembic.autogenerate.comments [alembic.runtime.plugins]
+2026-10-15T18:11:59.844892 [info     ] setup plugin alembic.ext.checkconstraint_byname [alembic.runtime.plugins]
+Timeout (0:00:15)!
+Thread 0x00002060 (most recent call first):
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\selectors.py", line 314 in _select
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\selectors.py", line 323 in select
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 1961 in _run_once
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 645 in run_forever
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 678 in run_until_complete
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py", line 118 in run
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py", line 195 in run
+  File "D:\Code\bothot-00w-red\apps\api\app\main.py", line 218 in _assert_schema_current
+  File "D:\Code\bothot-00w-red\apps\api\app\main.py", line 252 in create_app
+  File "D:\Code\bothot-00w-red\apps\api\app\main.py", line 281 in <module>
+  File "<frozen importlib._bootstrap>", line 488 in _call_with_frames_removed
+  File "<frozen importlib._bootstrap_external>", line 999 in exec_module
+  File "<frozen importlib._bootstrap>", line 935 in _load_unlocked
+  File "<frozen importlib._bootstrap>", line 1331 in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1360 in _find_and_load
+  File "D:\Code\AideanBotHot\docs\06_validation\evidence\EVD-V7-00W\probe_import_stall.py", line 43 in <module>
