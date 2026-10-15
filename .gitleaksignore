@@ -42,7 +42,18 @@ de78125b91434caa3ef711e5382d6e955d8557af:docs/06_validation/evidence/EVD-V2-00R/
 1af68fc7e0ba4f9cf3851eca34af4f66240ef411:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:206
 1af68fc7e0ba4f9cf3851eca34af4f66240ef411:docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py:connection-string-embedded-password:209
 
-# ── 6) 798f263 三条：ADR-0010 草稿 / current-plan / TASK-004 ─────────────
+# ── 6) STEP-14b 测试句柄与规划记录里的同形状（2026-10-15 第二次续做，@win 本机复跑产出）──
+# 背景：14b 的渲染单测用一个演示用的 keyId 字符串（引擎 Key 的"句柄"，不是密钥；后端从不回显明文）。
+# 形状命中 generic-api-key。第一版修法是"改掉内容再推"，无效——git 模式扫历史，
+# 23be03a 那个 commit 的 blob 永久存在（D-V4-04 禁止重写历史），所以按 D-12 逐指纹登记：
+#   · 第 1 条 = 测试文件当时的形态（HEAD 里该行已换成明显演示用的短句柄，命中只存在于历史）；
+#   · 第 2 条 = 07-执行过程记录.md 在 03516351 时抄写了那个字面量用于说明自己的错判 ⇒
+#     该行现已改为中文描述（工作树不再含该形状），历史命中在此登记。
+# 两条都不是真实凭据：值是本项目自造的演示句柄，没有任何服务会接受它。
+23be03a08c0d51c74f9865fde5a2276a6af04ae4:apps/web/tests/admin-ops-panels.spec.tsx:generic-api-key:178
+03516351d7215b7e367964885f11d0c590749871:docs/任务规划V0.11.0/07-执行过程记录.md:generic-api-key:151
+
+# ── 7) 798f263 三条：ADR-0010 草稿 / current-plan / TASK-004 ─────────────
 # 这批来自"把连接串外置"的 ADR 草稿与其计划引用，全是 `<user>:<pass>@<host>` 形状的示例，
 # 无真实凭据。本机扫描没覆盖到它们（差集正好是这三条），依 V0.10.0 同版产物 + 卡面"取并集"登记。
 798f2638124b75ab164855c6d16d69be545dbcdf:docs/03_solution/decisions/adr-0010-externalize-connection-strings.md:connection-string-embedded-password:15
