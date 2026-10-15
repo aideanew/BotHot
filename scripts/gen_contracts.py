@@ -10,7 +10,7 @@ gen_contracts.py — 从后端真实代码生成契约产物（TS DTO + JSON Sch
    手写 schema 会让"改了模型没人记得改稿"变成常态。
 
 用法：
-    python scripts/gen_contracts.py                    # 生成 packages/contracts/src/<域>/dto.ts 与 schemas/*.schema.json
+    python scripts/gen_contracts.py                    # 生成 src/<域>/dto.ts 与 schemas/<域>.schema.json
     python scripts/gen_contracts.py --check            # 幂等校验（CI）：重新生成与磁盘 diff，不一致退出 1
     python scripts/gen_contracts.py --only-schemas     # 只处理 JSON Schema 面（本地调试用）
 
@@ -255,9 +255,13 @@ def check(contents: dict[str, str]) -> int:
             print(f"[error] 缺失 {target.relative_to(PROJECT_ROOT)}（运行生成模式补齐）")
             bad += 1
             continue
-        on_disk = target.read_text(encoding="utf-8")
-        if on_disk != content:
-            print(f"[error] {target.relative_to(PROJECT_ROOT)} 与生成结果不一致（非幂等）")
+        # **逐字节**比较（不是逐字符）：`read_text()` 会把行尾归一，
+        # 于是一个 CRLF 版的生成物也能 rc=0——门禁声称"字节一致"却做不到，比放宽更糟。
+        # 写侧统一 `newline="\n"`，`.gitattributes` 又钉了 `* text=auto eol=lf`，所以字节比较在
+        # 干净检出上等价于字符比较；差别只会在"有人本地用 CRLF 编辑器改过产物"时现形——那正是该抓的。
+        payload = content.encode("utf-8")
+        if target.read_bytes() != payload:
+            print(f"[error] {target.relative_to(PROJECT_ROOT)} 与生成结果不一致（非幂等，字节比较）")
             bad += 1
         else:
             print(f"[ok] {target.relative_to(PROJECT_ROOT)} 幂等一致")
@@ -277,8 +281,8 @@ def check_schemas(schemas: dict[str, str]) -> int:
             print(f"[error] 缺失 {target.relative_to(PROJECT_ROOT)}（运行生成模式补齐）")
             bad += 1
             continue
-        if target.read_text(encoding="utf-8") != content:
-            print(f"[error] {target.relative_to(PROJECT_ROOT)} 与生成结果不一致（非幂等）")
+        if target.read_bytes() != content.encode("utf-8"):
+            print(f"[error] {target.relative_to(PROJECT_ROOT)} 与生成结果不一致（非幂等，字节比较）")
             bad += 1
         else:
             print(f"[ok] {target.relative_to(PROJECT_ROOT)} 幂等一致")

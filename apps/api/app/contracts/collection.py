@@ -10,9 +10,10 @@
 由 `tests/test_collection_contract.py` 单向核对（测试可以同时 import 两侧，模型不行）。
 
 与冻结稿的差异**不在本 docstring 里维护**，而在文件末尾的 `CONTRACT_DIVERGENCES`
-（机器可读；S1.3.2 的比对脚本按它放行，表里没有的差异 = 比对必须红）。四类：
+（机器可读；S1.3.2 的比对脚本按它放行，表里没有的差异 = 比对必须红）。五类：
 `structural` 等价写法、`tightening` 模型比 JSON Schema 严（故意的）、
-`serialization` 接受集相同但 dump 形状不同、`strictness` 多余字段丢弃 vs 透传。
+`serialization` 接受集相同但 dump 形状不同、`strictness` 多余字段丢弃 vs 透传、
+`documentation` 只动人读文本（description / x-* 注释）不动校验。
 第一轮独立验证正是拿"docstring 的叙述清单不全"判我 FAIL 的——叙述会漏项，登记表少一项就红。
 
 一处命名差异（卡面对象叫 `DiscoveryReport`，冻结稿里没有这个形状）：
@@ -234,11 +235,12 @@ class CollectionEvent(BaseModel):
 class Divergence(NamedTuple):
     """一条"模型 vs 冻结稿"的已知差异。
 
-    `kind` 四值：
+    `kind` 五值：
       `structural`   等价写法，接受集不变；
       `tightening`   模型比 JSON Schema 严（冻结稿自己说明里的意图），接受集**收窄**；
       `serialization` 接受集不变，但 `model_dump()` 会物化冻结稿没有的默认值；
-      `strictness`   接受集不变，但多余字段被丢弃而非透传。
+      `strictness`   接受集不变，但多余字段被丢弃而非透传；
+      `documentation` 只影响人读文本（description / x-* 注释），不影响校验。
     比对脚本的纪律：**表里没有的差异一律算违规**（红），而不是"看起来无害就放过"——
     放过一次的代价是这条差异下次没人记得，正是第一轮验证者判我 docstring 清单不全的那个坑。
     """
@@ -270,12 +272,35 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "Pydantic 生成器的固定写法，语义相同；比对脚本按此归一。",
     ),
     Divergence(
-        "ArticleKey / CollectionEvent.event",
-        "*",
+        "ArticleKey",
+        "article_key（所有引用处）",
         "structural",
-        "两者都在 $defs 里（ArticleKey 被 $ref 引用）",
-        "ChannelName / ManifestStatus 仍生成 $defs；ArticleKey 是约束别名、event 是 Literal ⇒ 就地展开",
-        "Pydantic 不为类型别名建 $defs。语义等价；比对脚本按「属性落点」归一而不是按 $defs 目录归一。",
+        "是 9 个 $defs 之一，被 `$ref: #/$defs/ArticleKey` 引用",
+        "生成物 $defs 只有 8 个：ArticleKey 是约束类型别名 ⇒ 在使用处内联 pattern，生成物里没有任何 ref 指向它",
+        "Pydantic 不为类型别名建 $defs（只为 BaseModel/Enum 建）。实测生成物里不存在指向 ArticleKey 的 $ref。"
+        "⇒ 比对脚本按「属性落点」归一，而不是按 $defs 目录归一。**第二版更正**：本条第一版还写着"
+        "`CollectionEvent.event` 也在稿的 $defs 里——那是错的，稿里 event 本来就是内联 enum（验证者复核），"
+        "所以它根本不构成差异，已从本条删掉。",
+    ),
+    Divergence(
+        "*（所有模型）",
+        "description",
+        "documentation",
+        "只有 3 个 def 带 description（ArticleKey / ChannelName / ManifestStatus）",
+        "每个模型都带 description（来自类 docstring），每个属性都带 description（来自 Field description）",
+        "文本不同不构成契约差异：描述是人读面，不是约束面。比对脚本**剥离 description 文本**，"
+        "只要求「稿里有 ⇒ 生成物里也得有」。文字内容改由 S1.4.1 的测试断言约束语义，而不是比字符。",
+    ),
+    Divergence(
+        "ArticleKey",
+        "x-not",
+        "documentation",
+        '有注释性禁令 `x-not: "禁止单字符或纯 s（P0-1 回归锚）"`',
+        "生成物无对应键",
+        "`x-not` 不是 JSON Schema 关键字、也不参与校验 ⇒ 若只把它删了就算对齐，那条 P0-1 回归锚就无主了。"
+        "它由见证向量承担：`ArticleKey` 拒绝裸 `s`（实测报 `string_too_short`），且该向量进 "
+        "`tests/test_collection_contract.py`。比对脚本要求稿里每个 `x-*` 都能在登记表里找到归宿，"
+        "否则红——**注释也要有责任人**。",
     ),
     Divergence(
         "ArticleKey",
