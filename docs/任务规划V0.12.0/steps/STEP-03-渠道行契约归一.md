@@ -13,7 +13,11 @@
 > "靠调用方记得 pop"（插入路径有声、更新路径无声）——现改由 `_row_identity` 单点判。
 > 另有一项**只登记不改**：RFC 822 无时区按 GMT、ISO 无时区按 `Asia/Shanghai`，
 > 这是两套上游各自的规范，改哪一边都要活体样本或真库来判。
-> 两条被改到的连库用例（`test_manifest_sync.py` 的 skipped 语义）本机只 skip ⇒ 判定在 `@ci`。
+> 两条被改到的连库用例（`test_manifest_sync.py` 的 skipped 语义）本机只 skip，判定面在 `@ci`：
+> **已回读**（run 38904912095 = success，backend `1303 passed / 6 skipped`、覆盖率 81.61%、
+> `skip 门禁 total_skipped=6 baseline=6 pg_unreachable=0` ⇒ 连库真跑），
+> `Security` run 38904912113 = success，`CI-Windows` run 38904912154 红在同点 U-23。
+> **本卡状态：S3.1–S3.3 ✅ 已确认，S3.4.1 ⚪ 未达（P-14）** ⇒ 卡头保持 🟡 直到覆盖率门过线。
 > 三处口径更正：所有权表里的 `article_sources/redfox.py` **不存在**（RedFox 在
 > `app/providers/redfox/client.py`，且它的行是上游原样透传，本卡不改它的键名）。
 
