@@ -16,7 +16,9 @@
 
 > **2026-10-16 更正本段最后一句**（写在原句之后、不覆盖它，因为原句是 3a67e96 时点的真实读数）：
 > 采集域 01 卡已推进到「四域契约收编完成 + S1.4.3 前半批」——`collection / identity / events / resources`
-> 四域的稿-源比对与登记门在位（`179 passed @win`，其中 `test_collection_contract.py` 169 条），
+> 四域的稿-源比对与登记门在位（**`183 passed` `@win`** = `test_collection_contract.py` 169 条
+> + `test_idor_matrix.py` 14 条，2026-10-16 17:56 现读；此前本行写 `179` 是第十轮锚之前的数；
+> STEP-02 的 `test_article_identity.py` 另有 26 条），
 > `api` 一域仍 blocked 在 **D-V8-08（BLOCKING，未签）**；S1.4.3 的静态底线抓到并修好两条真实越权
 > （`EVD-V2-01/s143_idor_floor.md`），逐端点连库矩阵发布为 **P-11**、稿面清单扩面发布为 **P-12**。
 > 本卡的判据"比对器注入必红"经十轮独立验证仍不成立，出口条件 **D-V8-05**（BLOCKING，未签）等人判。
@@ -30,7 +32,7 @@
 | 2 | **CI 工作流最近 10 次全部 `cancelled`**；同一批 run 中 ubuntu 五个 job（backend / frontend / compose / compose-smoke / workflow-lint）全部 success，windows-dev 在「Backend tests」步被取消 | evidence/3a67e96/*.json |
 | 3 | **U-20 根因定位**：import 期同步连库探测无超时；@linux 黑洞地址复现挂死；与 @win 读数（拒连 2.05s、alembic 挂 150s、裸 import 快、pytest 采集慢）逐条吻合 | win_stall_rootcause_probe.txt |
 | 4 | 新增 **STEP-00W**（8 个三级任务 / 1.0 人日 / opus / 规划方执行） | steps/STEP-00W-*.md |
-| 5 | 新增裁决 **D-V7-01～D-V7-03**（按用户授权代选，见 03 §1） | 03 |
+| 5 | 新增裁决 **D-V7-01～D-V7-04**（按用户授权代选，见 03 §1。本行原写「～D-V7-03」少一条：台账与 `03-裁决与契约.md` 都是四条，`steps/STEP-00W-*.md` 亦写 `D-V7-01～04`） | 03 |
 | 6 | 纠正历史口径「管理端 6 组接口无前端消费」：push、ops/liveness、discovery/channels、engines/keys **4 组已被 `lib/api/admin-ops.ts` 消费**；backchannel-logout 是 IdP→本服务的服务间回调，**按设计不需要前端**；`admin/alerts` **后端并无此路由**（告警状态只在 `/system` 就绪聚合里以 `alerting: enabled/disabled` 出现） | 01 F-07 |
 | 7 | @linux 读数首次与 CI ubuntu 对齐：1058/5/0、79%、收集 1063 条 1.23s（@win 同一收集 262.65s） | pytest_linux_3a67e96.txt |
 | 8 | 规模：**31 卡 / 200 三级任务 / 30.75 人日**（继承 30 卡 192/29.75 + 00W 8/1.0）；剩余数逐卡见 04 §2 | 04 §2.1 复算脚本 |
@@ -68,3 +70,4 @@
 | P-10 | **同一个 `sub` 在两域有两种形状**：identity 域有 `Sub`（1..64，DB 列 `users.sub String(64) UNIQUE`），而 resources 域稿面的 `InAppNotification.sub` 是裸 `string`。收编时**没有**替它套 `Sub`——那等于给这份合同加它没声明的边界；但让两域各自表述也不是解决 | `docs/任务规划V0.12.0/contracts/resources.schema.json` 的 `definitions.InAppNotification`；`apps/api/app/contracts/resources.py` 的 `sub-not-aliased-to-identity` 登记；`apps/api/app/contracts/identity.py` 的 `Sub` | 一次裁决后两域产物对 `sub` 给出同一形状（要么都带 1..64，要么稿面明写不设界）；改完 `test_inapp_notification_sub_is_deliberately_unbounded` 必须红或按新形状更新，不许留绿 | 01 余项（S1.2.2 第五域 `api` 收编时一并判最省） |
 | P-11 | **IDOR 连库矩阵未落地**：S1.4.3 的两层静态面已交付（枚举完整性 + "身份不许被丢掉"的 AST 底线，本机 `@win` 可跑，并据此抓到、修好了两条真洞——见 `EVD-V2-01/s143_idor_floor.md`），但**逐端点的 A-vs-B 请求**要播种两个用户 + 空间 + 文档 + 作业，必须连 PG；本机 5432/5433 现读拒连，且 31 条全 skip 的"绿"是 U-20 明令禁止的形状，所以没塞进 CI | 端点清单**已生成**在 `apps/api/tests/test_idor_matrix.py`（`CHECKLIST_OPERATIONS`，31 条：9 条 `/api/v1/admin/**` 走角色门、22 条走属主门；期望码取自 `contracts/identity.schema.json#/x-idor-checklist`）；播种助手锚 `tests/test_r11_admin_routes.py:48-105`、`tests/test_r04_jobs.py:48-78`；`db_session` 的 skip 判据 `tests/conftest.py:100-128` | 31 条参数化用例在 `@ci` ubuntu 全绿：每条要么 403/10004 或 404/30004，要么入参层先拒**且** B 的行逐字未变；再加 S1.4.3.3 的反证——临时摘掉任一属主校验 ⇒ 至少一条必须红，全绿说明矩阵没接上真路由 | 01 S1.4.3（余项） |
 | P-12 | **稿面清单比路由表窄**：`x-idor-checklist` 只点名 `space_id/job_id/doc_id`，而路由表另有 16 个带 `channel_id`(5) / `source_id`(3) / `task_id`(3) / `subscription_id`(1) / `topic_id`(1) 的操作同样按 id 定位资源、却没有属主规则——`engine`(2) 与 `report_date`(1) 不是属主键，留在规则外 | 现读枚举见 `apps/api/tests/test_idor_matrix.py` 的 `UNLISTED_OPERATIONS`（守卫 `test_owner_ids_outside_the_frozen_checklist_are_visible` 钉住 16 这个数）；规则文本在 `docs/任务规划V0.12.0/contracts/identity.schema.json#/x-idor-checklist` | 一次裁决：要么把这几类 id 写进 `x-idor-checklist`（则 P-11 的矩阵随之变长，守卫会红着要求更新数字），要么在稿面显式声明"这些 id 不属主"并给出理由。**不许**由实现者顺手在枚举里加参数名——那是替合同加面 | 01 余项 / 规划方裁决 |
+| P-13 | **`04-剩余可执行大纲体系.md` 的状态列与卡头不一致（8 张卡）**：现读已能判掉两张——00S 与 00C 的卡头仍写 🔴「门禁失败待修」，而 `@ci` 今日读数显示 `Security`（run 38879020766）与 `CI`（run 38879020888，含 ruff/mypy/alembic 单头/`gen_contracts --check`/文档一致门/pytest+覆盖率+skip 门）均 **success** ⇒ 卡头是 `3a67e96` 快照的过期读数、04 的 ✅ 才对。余下 00G / 00E / 02 / 15 / 14b / RV 六张需逐卡现读，本段不猜 | `docs/任务规划V0.12.0/04-剩余可执行大纲体系.md:13-35`（状态列）vs 各 `steps/STEP-*.md:3`（卡头）；判据与命令面锚 `.github/workflows/ci.yml:68,72,84,98,105,127`；证据链见 `09-执行过程-独立执行段第二批.md` §4.2 | 每张卡：卡头状态与 04 状态列**一致**，且不一致的那一方必须给出当日 `@ci`/`@win` 读数后才能改；改完 `00-README.md` 的 31 卡 / 200 三级 / 30.75 人日三项总数仍须与 04 §2.1 复算脚本相符（现读一致，勿在修状态时把它撞歪） | 规划方（04 表由规划方维护）/ 00G 余项 |
