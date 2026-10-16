@@ -161,17 +161,24 @@ def generate() -> dict[str, str]:
 # 契约域名 → 契约模块（模块内每个公开 BaseModel 都会成为一个 $defs 条目）
 CONTRACT_SCHEMA_MODULES: dict[str, str] = {
     "collection": "app.contracts.collection",
+    "identity": "app.contracts.identity",
 }
 
 
-def _contract_models(module_name: str) -> dict[str, Any]:
-    """取该模块**自己定义**的公开 BaseModel 类（不含 import 进来的、不含下划线开头的）。
+def _contract_symbols(module_name: str) -> dict[str, Any]:
+    """取该模块**自己声明**的公开契约符号：BaseModel 与 Enum 两类。
 
-    `obj.__module__ == 模块名` 这一条是刻意的：不加它就会把 `AwareDatetime` 之类的
-    依赖类型也算成契约形状，生成出根本不存在的"契约"。
+    两条判据都是刻意的：
+    - `obj.__module__ == 模块名` —— 不加就会把 `AwareDatetime` 之类的依赖类型也算成契约形状，
+      生成出根本不存在的"契约"；
+    - **枚举即使还没被任何模型引用也要出 def** —— `identity.Role` 就是这种情况：
+      冻结稿把它当独立 def（带 x-rank 注释），"当前没人引用"是实现状态，不是契约状态。
+      第一版只收 BaseModel，于是 Role 从生成物里消失，只能靠登记"它不该消失"来蒙过门禁
+      ——那是拿登记遮住生成器的缺口。
     """
     import importlib
     import inspect
+    from enum import Enum
 
     from pydantic import BaseModel
 
@@ -180,15 +187,14 @@ def _contract_models(module_name: str) -> dict[str, Any]:
     module = importlib.import_module(module_name)
     found: dict[str, Any] = {}
     for name, obj in inspect.getmembers(module, inspect.isclass):
-        if name.startswith("_"):
+        if name.startswith("_") or obj.__module__ != module.__name__:
             continue
-        if not issubclass(obj, BaseModel) or obj is BaseModel:
-            continue
-        if obj.__module__ != module.__name__:
-            continue
-        found[name] = obj
+        if obj is BaseModel or (issubclass(obj, BaseModel) and hasattr(obj, "model_fields")):
+            found[name] = obj
+        elif issubclass(obj, Enum) and obj is not Enum:
+            found[name] = obj
     if not found:
-        raise SystemExit(f"[error] 契约模块 {module_name} 里没有公开 BaseModel（配置错误）")
+        raise SystemExit(f"[error] 契约模块 {module_name} 里没有公开 BaseModel/Enum（配置错误）")
     return dict(sorted(found.items()))
 
 
@@ -196,11 +202,22 @@ def generate_schemas() -> dict[str, str]:
     """返回 {契约域名: schema 文件内容}。"""
     out: dict[str, str] = {}
     for domain, module_name in CONTRACT_SCHEMA_MODULES.items():
-        models = _contract_models(module_name)
+        models = _contract_symbols(module_name)
         defs: dict[str, Any] = {}
         for name, model in models.items():
-            sub = model.model_json_schema(ref_template="#/$defs/{model}")
+            if not hasattr(model, "model_json_schema"):
+                from pydantic import TypeAdapter
+
+                sub = TypeAdapter(model).json_schema(ref_template="#/$defs/{model}")
+            else:
+                sub = model.model_json_schema(ref_template="#/$defs/{model}")
+            # title 一律剥掉：Pydantic 给每个 def 生成 title=类名，稿里那些 title 是中文说明。
+            # 统一在生成侧剥（而不是留给比对脚本归一）还有个副作用是必要的——
+            # 枚举既作为顶层符号出现、又被模型的 $defs 嵌套引用，两处唯一的不同就是 title；
+            # 不剥的话冲突守卫会把这种"同一形状的两种写法"误判成两个不同契约。
+            sub.pop("title", None)
             for def_name, def_body in sub.pop("$defs", {}).items():
+                def_body = {k: v for k, v in def_body.items() if k != "title"}
                 # 同名不同体 ⇒ 立刻响。静默覆盖会让两个域把同一个键写成两种形状而没人知道。
                 if def_name in defs and defs[def_name] != def_body:
                     raise SystemExit(

@@ -69,7 +69,6 @@
         "title",
         "status"
       ],
-      "title": "ArticleManifest",
       "type": "object"
     },
     "ChannelName": {
@@ -82,7 +81,6 @@
         "tikhub",
         "wellbyte"
       ],
-      "title": "ChannelName",
       "type": "string"
     },
     "CollectionEvent": {
@@ -117,6 +115,7 @@
         },
         "idempotency_key": {
           "default": "",
+          "description": "page 级去重键 {source_id}:{channel}:{yyyymmdd}:{page}；告警按此键一天一次",
           "title": "Idempotency Key",
           "type": "string"
         },
@@ -131,7 +130,6 @@
         "channel",
         "at"
       ],
-      "title": "CollectionEvent",
       "type": "object"
     },
     "DiscoveryChannelView": {
@@ -220,7 +218,6 @@
         "available",
         "reason"
       ],
-      "title": "DiscoveryChannelView",
       "type": "object"
     },
     "ManifestStatus": {
@@ -231,7 +228,6 @@
         "INGESTED",
         "FAILED"
       ],
-      "title": "ManifestStatus",
       "type": "string"
     },
     "ManifestSyncReport": {
@@ -294,7 +290,6 @@
         "skipped",
         "id_fallback"
       ],
-      "title": "ManifestSyncReport",
       "type": "object"
     },
     "WorkListPage": {
@@ -342,7 +337,6 @@
         "next_cursor",
         "page_size"
       ],
-      "title": "WorkListPage",
       "type": "object"
     },
     "WorkListRow": {
@@ -398,7 +392,6 @@
         "url",
         "title"
       ],
-      "title": "WorkListRow",
       "type": "object"
     }
   },

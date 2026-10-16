@@ -24,9 +24,11 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Annotated, Literal, NamedTuple
+from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
+
+from . import Divergence
 
 # ── ArticleKey ────────────────────────────────────────────────────────────────
 # 键形由 ADR-0011（D-V2-01 方案 A：带前缀，自描述来源）：
@@ -225,39 +227,14 @@ class CollectionEvent(BaseModel):
     source_id: str
     channel: ChannelName
     at: AwareDatetime
-    idempotency_key: str = ""
+    idempotency_key: str = Field(
+        default="",
+        description="page 级去重键 {source_id}:{channel}:{yyyymmdd}:{page}；告警按此键一天一次",
+    )
     count: Annotated[int, Field(ge=0)] = 0
 
 
 # ── 与冻结稿的差异登记表（S1.3.2 的比对脚本消费它）────────────────────────────
-
-
-class Divergence(NamedTuple):
-    """一条"模型 vs 冻结稿"的已知差异，**带责任人**。
-
-    `kind` 五值：
-      `structural`   等价写法，接受集不变；
-      `tightening`   模型比 JSON Schema 严（冻结稿自己说明里的意图），接受集**收窄**；
-      `serialization` 接受集不变，但 `model_dump()` 会物化冻结稿没有的默认值；
-      `strictness`   接受集不变，但多余字段被丢弃而非透传；
-      `documentation` 只影响人读文本（description / x-* 注释），不影响校验。
-
-    `rule` 是这条差异的**消费者标识**，不是注释：`tests/test_collection_contract.py` 里的
-    元测试要求每条登记都真的被消费掉——要么被比对器实际用到（出现在 `used` 集合里），
-    要么有一个可执行断言替它兑现在 `reason` 里许的诺。
-    第三轮独立验证就是拿这个打的："x-not 由比对器强制""dump 形状另设检查"
-    当时都是**没有实现者的承诺**。没有 rule 字段，登记表就会长这种条目。
-
-    比对脚本的纪律仍是：**表里没有的差异一律算违规**（红）。
-    """
-
-    ref: str
-    field: str
-    kind: str
-    rule: str
-    draft: str
-    model: str
-    reason: str
 
 
 CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
@@ -282,6 +259,26 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "同样声明 3 / 128，但对 pattern 而言是冗余约束",
         "最短可通过串是 `s:12345678`（10 字符）、最长分支 ≤ 82 ⇒ 两条边界永远先不到。"
         "由 `test_article_key_bounds_are_redundant` 断言「三支分支各自能过的极值都在 3/128 之内」。",
+    ),
+    Divergence(
+        "*（所有 def）",
+        "required",
+        "structural",
+        "required-order",
+        "required 是作者手写的顺序",
+        "生成物按模型字段顺序，比对时排序后比集合",
+        "JSON Schema 里 required 是集合，顺序无语义；但**归一必须被登记**，"
+        "否则「排序再比」就是无人负责的宽松化。消费者：比对器的 _note_rule 记账 + 本条存在性核对。",
+    ),
+    Divergence(
+        "*（文档根）",
+        "x-generated-by, x-source-module",
+        "documentation",
+        "generated-provenance-keys",
+        "稿里没有这两个键",
+        "生成物根层带这两个溯源键",
+        "产物必须能回答「是谁生成的、源模块是谁」，否则有人手改产物时无从判断。"
+        "比对器允许它存在，但**必须**有本条登记（见 compare_defs 里的 generated-provenance-keys 检查）。",
     ),
     Divergence(
         "*（所有可空字段）",

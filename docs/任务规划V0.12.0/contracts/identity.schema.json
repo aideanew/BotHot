@@ -4,6 +4,11 @@
   "title": "BotHot 身份与权限边界契约（冻结稿 V0.7.0 / 基线 main@13acacc）",
   "description": "实测来源：apps/api/app/models/entities.py:17-28（users 表）、apps/api/app/services/roles.py:29（ROLE_RANK）、apps/api/app/api/deps.py:52/72-84（get_current_sub / require_roles）、AGENTS.md 关键约束 2（SSO 身份锚点 = users.sub，余额/等级从不持久化）。",
   "type": "object",
+  "x-not-in-single-source": {
+    "x-permission-matrix": "端点 × 角色的授权矩阵不是字段形状，Pydantic 无对应表达；真源在 api/deps.py 的 require_roles 与各端点的角色参数。治理面由 S1.4.3 的 IDOR 用例生成器逐端点核对，而不是抄一份第二表进来。",
+    "x-idor-checklist": "越权清单是「哪些端点必须被生成用例」的清单，不是形状。",
+    "x-never-persisted": "balance/level/credits 永不落库属持久化纪律，由 grep 型守卫与评审承担。"
+  },
   "definitions": {
     "Sub": {
       "type": "string",

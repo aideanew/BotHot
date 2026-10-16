@@ -1,0 +1,52 @@
+{
+  "$defs": {
+    "Role": {
+      "description": "角色取值集。DB 侧仍是 `String(32)`（新增角色零迁移的项目惯例）。\n\n授权走等级比较而不是等值，比较表住在 `app/services/roles.py` 的 `ROLE_RANK`；\n本枚举与它的键集**必须相等**，由契约测试钉住。",
+      "enum": [
+        "user",
+        "operator",
+        "admin"
+      ],
+      "type": "string"
+    },
+    "SessionClaims": {
+      "additionalProperties": false,
+      "description": "会话声明的最小集：只有 `sub` 是必填。\n\n`iss` / `aud` 在生产必须校验（REQ-NF-002），但**不在契约里设必填**——\n开发/测试链路的 stub IdP 不签发它们，设必填会让本地跑不起来而逼人绕过校验。\n这条选择是有意的，不是漏写。",
+      "properties": {
+        "aud": {
+          "default": "",
+          "description": "受众；与 iss 一并在生产侧校验",
+          "title": "Aud",
+          "type": "string"
+        },
+        "exp": {
+          "title": "Exp",
+          "type": "integer"
+        },
+        "iss": {
+          "default": "",
+          "description": "签发者；生产必须校验 iss/aud（REQ-NF-002）",
+          "title": "Iss",
+          "type": "string"
+        },
+        "sub": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Sub",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sub",
+        "exp"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "bothot://contracts/identity/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "由 scripts/gen_contracts.py 从 apps/api/app/contracts/identity.py 生成，请勿手动修改（--check 幂等门禁）。唯一源是 Python 模型（ADR-0008）。",
+  "title": "BotHot identity 域契约（生成物）",
+  "x-generated-by": "scripts/gen_contracts.py",
+  "x-source-module": "app.contracts.identity"
+}

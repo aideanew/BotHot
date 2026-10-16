@@ -13,7 +13,7 @@
 
 | 纪律 | 做法 | 为什么 |
 |---|---|---|
-| **归一不免费** | 每条归一化（剥 title / 剥 description / 剥 default / 可空写法 / `$ref` 内联 / `oneOf`→pattern 集 / `required` 顺序）都必须在 `CONTRACT_DIVERGENCES` 里有对应 kind 的登记，`test_normalizations_are_all_backed_by_registry` 逐条断言 | 没登记就归一 = 把差异藏起来 |
+| **归一不免费** | 每条归一化（剥 title / 剥 description / 剥 default / 可空写法 / `$ref` 内联 / `oneOf`→pattern 集 / `required` 顺序）都必须在 `CONTRACT_DIVERGENCES` 里有对应 kind 的登记，`test_normalizations_used_are_all_backed_by_registry` 逐条断言 | 没登记就归一 = 把差异藏起来 |
 | **未知关键词直接红** | 稿里出现比对器没实现的关键字 ⇒ 报"比对器不认识 {key}"，不忽略 | 静默少比一项比报错危险（`jsonschema` 库本机没装，也**不装**——按纪律不装依赖，比对器只实现稿实际用到的子集） |
 | **pattern 比接受集不比文本** | `oneOf` 三支与单条 alternation 用 11 条见证语料的**布尔向量**比相等 | 文本不等而语义等价正是登记过的 structural；比文本会把合法归一变成噪音 |
 
@@ -40,10 +40,10 @@
 卡面 §5 估"约 12 条"，实际 44 条是因为参数化（键见证 3+7、9 个 def 各一条比对、WorkListRow 接受集 5 条）。
 
 分组：
-- 结构：`test_both_contract_files_exist`、`test_draft_has_no_keyword_the_comparator_does_not_understand`、
+- 结构：`test_both_contract_files_exist`、`test_neither_side_uses_a_keyword_the_comparator_does_not_implement`（后已扩成两侧、并按域参数化）、
   `test_each_draft_def_is_explained_or_equal[9]`、`test_whole_domain_has_no_unexplained_divergence`
-- 登记表：`test_normalizations_are_all_backed_by_registry`、
-  `test_comparator_bites_when_a_registry_entry_is_removed`
+- 登记表：`test_normalizations_used_are_all_backed_by_registry`、
+  `test_registry_rules_are_all_consumed`
 - 键不变量（ADR-0011 的 1/4 两条）：接受 3 支、拒 `"s"`（P0-1 回归锚）、拒大写 hex、拒未知前缀、
   **拒尾随换行**（`h:<32hex>\n`——Python 的 `$` 会放过它，Pydantic-core 用 ECMA-strict 不放过）
 - 渠道：与 `CHANNELS` 比**集合**、顺序只与**冻结稿**比（第一轮验证者指出的错耦合，已改口径）
@@ -138,3 +138,15 @@ B007 那条修得值得记：我原来写 `for rule, need in _NORMALIZATION_TO_K
 - `CI-Windows` run 38743100542 = **failure**（第八个同形态读数，仍非 cancelled；U-23 未变）
 - `Security` run 38743100163 = **success**
 
+
+## 12. 引用勘误（第四轮验证点名，2026-10-16）
+
+- 本文 §2/§3/§8 曾引用三个**不存在的测试名**（`test_normalizations_are_all_backed_by_registry`、
+  `test_draft_has_no_keyword_the_comparator_does_not_understand`、
+  `test_comparator_bites_when_a_registry_entry_is_removed`）。已全文替换为真实函数名。
+  错因是我按"意图"记名字而不是按代码记名字——这类错误只有 grep 能治，已经并进 P-3 那条守卫需求里。
+- 文中 `mypy 109 files` 是**当时**的读数（identity 域收编前）。现为 110；不改写旧读数，只在此加一句。
+- 跨证据目录引用：`ci_backend_log_e7e9f25_excerpt.txt` 在 `EVD-V7-00W/`（不是 `EVD-V2-01/`）。
+- "净增 61 pass、0 新 skip ⇒ 没有一条靠 skip 蒙过"——这句只在**聚合与 test_collection_contract.py
+  这一文件**两个粒度上成立；该 run 的 6 条 SKIPPED 明细未逐条重新核对（核对过的是 e7e9f25 那一份）。
+  把聚合读数说成文件级结论，是我这一轮又犯的一次"外推"。
