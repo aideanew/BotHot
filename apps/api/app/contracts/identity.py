@@ -109,6 +109,27 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
     ),
     Divergence(
         "*（文档根）",
+        "type",
+        "structural",
+        "root-is-a-container",
+        "稿根声明 `type: object`",
+        "生成物根层没有 `type`（它是一份 `$defs` 容器文档）",
+        "不同层：稿根那句 `type: object` 只是「本文描述一个对象文档」的占位说法，产物把每个契约形状都放在 "
+        "`$defs` 里、根层不声明单一形状。这条不等价必须**登记**，不能靠「比对器没看根层」（第六轮验证 G6）。"
+        "登记只解释「稿声明而产物不声明」这一个方向。消费者：`test_document_root_divergences_are_named`。",
+    ),
+    Divergence(
+        "*（文档根）",
+        "$id",
+        "conflict",
+        "root-identifier-conflict",
+        "`$id` 是文件位址式 `https://bothot/contracts/identity.schema.json`",
+        "`$id` 是标识符式 `bothot://contracts/identity/v1`",
+        "两侧都声明而值不同，就不是等价改写 ⇒ 按 conflict 登记。台账行：**D-V8-03**"
+        "（默认统一到产物侧写法）。由 `test_conflict_entries_cite_a_live_decision_id` 反向核验该 ID 在台账里。",
+    ),
+    Divergence(
+        "*（文档根）",
         "x-generated-by, x-source-module",
         "documentation",
         "generated-provenance-keys",

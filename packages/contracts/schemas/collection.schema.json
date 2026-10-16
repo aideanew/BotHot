@@ -8,24 +8,20 @@
           "maxLength": 128,
           "minLength": 3,
           "pattern": "^(?:b:[A-Za-z0-9+/=_-]{8,64}:[0-9]{1,12}:[0-9]{1,2}|s:[A-Za-z0-9_-]{8,64}|h:[0-9a-f]{32})$",
-          "title": "Article Key",
           "type": "string"
         },
         "content_hash": {
           "default": "",
           "maxLength": 64,
-          "title": "Content Hash",
           "type": "string"
         },
         "external_id": {
           "description": "= WorkListRow.id（渠道内幂等键）",
           "maxLength": 128,
-          "title": "External Id",
           "type": "string"
         },
         "id": {
           "maxLength": 36,
-          "title": "Id",
           "type": "string"
         },
         "publish_time": {
@@ -38,12 +34,10 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Publish Time"
+          "default": null
         },
         "source_id": {
           "maxLength": 36,
-          "title": "Source Id",
           "type": "string"
         },
         "status": {
@@ -51,12 +45,10 @@
         },
         "title": {
           "maxLength": 512,
-          "title": "Title",
           "type": "string"
         },
         "url": {
           "maxLength": 512,
-          "title": "Url",
           "type": "string"
         }
       },
@@ -88,7 +80,6 @@
       "properties": {
         "at": {
           "format": "date-time",
-          "title": "At",
           "type": "string"
         },
         "channel": {
@@ -97,7 +88,6 @@
         "count": {
           "default": 0,
           "minimum": 0,
-          "title": "Count",
           "type": "integer"
         },
         "event": {
@@ -110,17 +100,14 @@
             "manifest.failed",
             "manifest.stale_reverted"
           ],
-          "title": "Event",
           "type": "string"
         },
         "idempotency_key": {
           "default": "",
           "description": "page 级去重键 {source_id}:{channel}:{yyyymmdd}:{page}；告警按此键一天一次",
-          "title": "Idempotency Key",
           "type": "string"
         },
         "source_id": {
-          "title": "Source Id",
           "type": "string"
         }
       },
@@ -136,7 +123,6 @@
       "description": "`GET /api/v1/admin/discovery/channels` 的 `data.channels[i]`。\n\n字段名是 **camelCase**（HTTP 响应体口径，实测锚 `registry.py:333-340`），\nPython 属性保持 snake_case + alias；`model_json_schema()` 默认按 alias 出属性名。\n三个布尔**刻意不合并**成一个 available：`implemented`（功能做没做）、`enabled`\n（配没配进白名单）、`available`（凭据在不在）合并后无法区分\"功能没做\"和\"功能没配\"，\n配置缺失会被伪装成渠道故障——这是 R7.6 的原话，留在这里免得后人\"顺手简化\"。",
       "properties": {
         "available": {
-          "title": "Available",
           "type": "boolean"
         },
         "contractVerifiedAt": {
@@ -148,19 +134,15 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Contractverifiedat"
+          "default": null
         },
         "description": {
-          "title": "Description",
           "type": "string"
         },
         "enabled": {
-          "title": "Enabled",
           "type": "boolean"
         },
         "implemented": {
-          "title": "Implemented",
           "type": "boolean"
         },
         "lastError": {
@@ -173,8 +155,7 @@
             }
           ],
           "default": null,
-          "description": "STEP-05 新增（COULD）；不得含凭据或上游响应原文",
-          "title": "Lasterror"
+          "description": "STEP-05 新增（COULD）；不得含凭据或上游响应原文"
         },
         "lastSuccessAt": {
           "anyOf": [
@@ -187,14 +168,12 @@
             }
           ],
           "default": null,
-          "description": "STEP-05 新增（COULD）",
-          "title": "Lastsuccessat"
+          "description": "STEP-05 新增（COULD）"
         },
         "name": {
           "$ref": "#/$defs/ChannelName"
         },
         "reason": {
-          "title": "Reason",
           "type": "string"
         },
         "verifiedScope": {
@@ -206,8 +185,7 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Verifiedscope"
+          "default": null
         }
       },
       "required": [
@@ -237,7 +215,6 @@
           "default": 0,
           "description": "skipped == rows > 0 的页数；>0 记 ERROR + 告警",
           "minimum": 0,
-          "title": "All Skipped Pages",
           "type": "integer"
         },
         "channel": {
@@ -246,37 +223,30 @@
         "id_fallback": {
           "description": "行缺 id、以 canonical key 兜底的次数；>0 记 WARNING",
           "minimum": 0,
-          "title": "Id Fallback",
           "type": "integer"
         },
         "new": {
           "minimum": 0,
-          "title": "New",
           "type": "integer"
         },
         "pages": {
           "minimum": 0,
-          "title": "Pages",
           "type": "integer"
         },
         "rows": {
           "minimum": 0,
-          "title": "Rows",
           "type": "integer"
         },
         "skipped": {
           "minimum": 0,
-          "title": "Skipped",
           "type": "integer"
         },
         "unchanged": {
           "minimum": 0,
-          "title": "Unchanged",
           "type": "integer"
         },
         "updated": {
           "minimum": 0,
-          "title": "Updated",
           "type": "integer"
         }
       },
@@ -303,19 +273,16 @@
             {
               "type": "null"
             }
-          ],
-          "title": "Next Cursor"
+          ]
         },
         "page_size": {
           "minimum": 1,
-          "title": "Page Size",
           "type": "integer"
         },
         "rows": {
           "items": {
             "$ref": "#/$defs/WorkListRow"
           },
-          "title": "Rows",
           "type": "array"
         },
         "total": {
@@ -328,8 +295,7 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Total"
+          "default": null
         }
       },
       "required": [
@@ -345,19 +311,16 @@
       "properties": {
         "author": {
           "default": "",
-          "title": "Author",
           "type": "string"
         },
         "digest": {
           "default": "",
-          "title": "Digest",
           "type": "string"
         },
         "id": {
           "description": "上游稳定文章 id；上游无稳定 id 时 = canonical_article_key(url)",
           "maxLength": 128,
           "minLength": 1,
-          "title": "Id",
           "type": "string"
         },
         "publish_time": {
@@ -371,19 +334,16 @@
             }
           ],
           "default": null,
-          "description": "provider 内即转为带时区时间；上游无时间才允许 null",
-          "title": "Publish Time"
+          "description": "provider 内即转为带时区时间；上游无时间才允许 null"
         },
         "title": {
           "maxLength": 512,
-          "title": "Title",
           "type": "string"
         },
         "url": {
           "format": "uri",
           "maxLength": 512,
           "minLength": 8,
-          "title": "Url",
           "type": "string"
         }
       },

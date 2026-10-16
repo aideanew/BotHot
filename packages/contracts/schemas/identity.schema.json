@@ -16,23 +16,19 @@
         "aud": {
           "default": "",
           "description": "受众；与 iss 一并在生产侧校验",
-          "title": "Aud",
           "type": "string"
         },
         "exp": {
-          "title": "Exp",
           "type": "integer"
         },
         "iss": {
           "default": "",
           "description": "签发者；生产必须校验 iss/aud（REQ-NF-002）",
-          "title": "Iss",
           "type": "string"
         },
         "sub": {
           "maxLength": 64,
           "minLength": 1,
-          "title": "Sub",
           "type": "string"
         }
       },

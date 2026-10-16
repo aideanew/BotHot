@@ -13,22 +13,18 @@
       "description": "一次投递的回执与重试判据（运行时形状来自 `providers/push/base.py:39-51` 的 `PushResult`）。\n\n与 `PushResult` 的已知不等写在登记表 `response-data-type-conflict` 里，\n两边对应关系由契约测试单向核对——这里复制那份 dataclass 就是第二个真源。",
       "properties": {
         "delivered": {
-          "title": "Delivered",
           "type": "boolean"
         },
         "reason": {
           "description": "失败必有可读原因，不伪造回执（AGENTS.md 关键约束 6）",
           "maxLength": 512,
-          "title": "Reason",
           "type": "string"
         },
         "responseData": {
           "default": "",
-          "title": "Responsedata",
           "type": "string"
         },
         "retryable": {
-          "title": "Retryable",
           "type": "boolean"
         }
       },

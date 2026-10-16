@@ -199,6 +199,32 @@ def _contract_symbols(module_name: str) -> dict[str, Any]:
     return dict(sorted(found.items()))
 
 
+def _strip_titles(node: Any) -> Any:
+    """递归剥掉生成物里的 `title` **关键词**（不是名叫 title 的字段）。
+
+    Pydantic 会给每个字段派生一个 title（`response_data` → `"Responsedata"`），那是 UI 文案、
+    不是契约事实；第六轮验证点名它被比对器当"strip-title 归一"放过，等于产物长期带着一批
+    没人声明、也没人读的键。
+    但 `properties` 这张表的键是**字段名**——collection 稿里就真有一个叫 `title` 的字段
+    （文章标题，`maxLength: 512`）。第一版把这颗键当关键词一起删了，门禁立刻报
+    `ArticleManifest: properties.title 生成=（无此键）`——**我自己写的一刀切，被自己的守卫当场抓住**。
+    所以 `properties` 的容器本身不能当 schema 节点处理，只有它的每个值才是。
+    """
+    if isinstance(node, list):
+        return [_strip_titles(x) for x in node]
+    if not isinstance(node, dict):
+        return node
+    out: dict[str, Any] = {}
+    for key, value in node.items():
+        if key == "title":
+            continue
+        if key == "properties" and isinstance(value, dict):
+            out[key] = {name: _strip_titles(schema) for name, schema in value.items()}
+        else:
+            out[key] = _strip_titles(value)
+    return out
+
+
 def generate_schemas() -> dict[str, str]:
     """返回 {契约域名: schema 文件内容}。"""
     out: dict[str, str] = {}
@@ -212,13 +238,14 @@ def generate_schemas() -> dict[str, str]:
                 sub = TypeAdapter(model).json_schema(ref_template="#/$defs/{model}")
             else:
                 sub = model.model_json_schema(ref_template="#/$defs/{model}")
-            # title 一律剥掉：Pydantic 给每个 def 生成 title=类名，稿里那些 title 是中文说明。
+            # title 一律剥掉：Pydantic 给每个 def 生成 title=类名、给每个字段生成派生 title
+            # （`response_data` → `"Responsedata"`），稿里那些 title 是作者写的中文说明。
             # 统一在生成侧剥（而不是留给比对脚本归一）还有个副作用是必要的——
             # 枚举既作为顶层符号出现、又被模型的 $defs 嵌套引用，两处唯一的不同就是 title；
             # 不剥的话冲突守卫会把这种"同一形状的两种写法"误判成两个不同契约。
-            sub.pop("title", None)
+            sub = _strip_titles(sub)
             for def_name, def_body in sub.pop("$defs", {}).items():
-                def_body = {k: v for k, v in def_body.items() if k != "title"}
+                def_body = _strip_titles(def_body)
                 # 同名不同体 ⇒ 立刻响。静默覆盖会让两个域把同一个键写成两种形状而没人知道。
                 if def_name in defs and defs[def_name] != def_body:
                     raise SystemExit(

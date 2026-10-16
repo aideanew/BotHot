@@ -1,10 +1,13 @@
 # STEP-01 采集域契约冻结与契约收编
 
 > 基线 main@61358c3（本版卡面）｜状态：🟡 进行中——已过 S1.1.0 / S1.1.1 / S1.1.2 / S1.2.1 / S1.3.1 / S1.4.1；
-> S1.3.2 第五轮验证判 **FAIL**（三类比对器盲区）后已返工并钉反证，现扩到 **3 域**（collection/identity/events）
-> `109 passed` `@win`，**待第六轮复验**；S1.2.2 余 resources / api 两域；S1.4.3（IDOR 生成器）未做。
-> 逐次读数与六轮验证攻防见 `08` §9–§20；events 域的 `responseData` 类型冲突已登记为
-> **待裁决的冻结稿缺陷**（`response-data-type-conflict`），裁决前不收尾。
+> S1.3.2 已跑过**六轮**独立验证：第四轮抓到 5 类绕过、第五轮判 FAIL（三类比对器盲区）、
+> 第六轮又判 FAIL（我第五轮的修复本身可被七类注入击败）——七类已全部堵住并钉成永久反证，
+> **待第七轮复验**。域面：collection / identity / events 三域，`127 passed` `@win`。
+> S1.2.2 余 resources / api 两域；S1.4.3（IDOR 生成器）未做。
+> 逐次读数与攻防见 `08` §9–§21 与 `EVD-V2-01/s132_round5_hardening.md`、`s132_round6_hardening.md`；
+> events 的 `responseData` 类型不相交已按 `conflict` 类登记并引台账 **D-V8-01**，裁决前不收尾；
+> `$id` 两套写法登记为 **D-V8-03**，`ArticleKey` 跨域边界登记为 **D-V8-02**（均未执行）。
 
 | 字段 | 内容 |
 |---|---|

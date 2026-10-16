@@ -94,9 +94,14 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "由 `ALIAS_WITNESSES` 点名 `test_idempotency_key_alias_witness` 直接跑 TypeAdapter——"
         "不许再写一句「会被内联到使用处」把它讲圆，那句话在这里没有指代对象。"
         "`x-rule`（定宽时间戳 + 资源 id，禁随机 uuid）与 `x-forbidden`（禁拼用户可控串，"
-        "否则前缀 LIKE 会越权命中他人作业）都不是形状：前者的实测键形状"
-        "（`sync_account:{sourceId}…` / `hot_rescore:yyyyMMddHH`）由见证测试覆盖，"
-        "后者属写入侧纪律，转 STEP-03 的作业创建路径评审，不在这里假装 schema 能挡住。",
+        "否则前缀 LIKE 会越权命中他人作业）都不是形状。**而且 `x-rule` 今天就被违反着**："
+        "`api/v1/hot.py:192` 往幂等键里塞 `uuid4().hex[:8]`，它自己的注释说动机是"
+        "「已终结 job 不阻塞重跑」——与稿令直接对立，所以这里不能写「以后由 STEP-03 评审」"
+        "（第一版就是这么写的，第六轮验证点名）。落点是一条闭合清单："
+        "`test_random_uuid_idempotency_keys_are_a_closed_list`，新增 uuid 幂等键必红、"
+        "清单里的旧项若被修掉也必须更新。128 这个上界的真正执法者是 "
+        "`entities.py:202` 的 `String(128) unique=True`，由 "
+        "`test_idempotency_key_bound_matches_the_column_that_enforces_it` 核对。",
     ),
     Divergence(
         "*（所有 def）",
@@ -152,16 +157,41 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "在这里补一份字段等于凭空造契约面。消费者：`test_retry_policy_constants_match_frozen_draft`。",
     ),
     Divergence(
+        "*（文档根）",
+        "type",
+        "structural",
+        "root-is-a-container",
+        "稿根声明 `type: object`",
+        "生成物根层没有 `type`（它是一份 `$defs` 容器文档）",
+        "稿根那句 `type: object` 是「本文描述一个对象文档」的占位说法，产物把每个契约形状都放在 "
+        "`$defs` 里、根层不声明单一形状。这条不等价必须是**登记出来的**，不能是「比对器没看根层」"
+        "（第六轮验证 G6）。登记只解释「稿声明而产物不声明」这一个方向；"
+        "产物往根层塞 `type`、或两侧都声明而值不同，都要另立 conflict 并引台账。"
+        "消费者：`test_document_root_divergences_are_named`。",
+    ),
+    Divergence(
+        "*（文档根）",
+        "$id",
+        "conflict",
+        "root-identifier-conflict",
+        "`$id` 是文件位址式 `https://bothot/contracts/events.schema.json`",
+        "`$id` 是标识符式 `bothot://contracts/events/v1`",
+        "两套写法都是合法 URI，但**两侧都声明而值不同**就不是等价改写，所以按 conflict 登记而不是"
+        "structural。台账行：**D-V8-03**（默认把三份稿统一到产物侧写法；collection 稿已被另一会话"
+        "先改成标识符式，这正说明「由比对器静默择一」迟早会把不一致讲成已解决）。"
+        "本条由 `test_conflict_entries_cite_a_live_decision_id` 反向核验该 ID 确实在台账里。",
+    ),
+    Divergence(
         "PushRetryState",
         "properties.responseData.types, properties.responseData.nullable",
-        "tightening",
+        "conflict",
         "response-data-type-conflict",
         '`"type": ["object", "null"]`（对象或 null）',
         '`"type": "string"`（实测生产端形状，默认空串）',
         "两侧**类型不相交**，不是宽严关系：稿说 object|null，而 `providers/push/base.py:50` 是 "
         '`response_data: str = ""`，六个 Provider 无一例外把上游回执原文按字符串塞进来。'
-        "本条取实测，同时把它标成**待裁决的冻结稿缺陷**：出路是裁决「改 PushResult 成结构化」"
-        "还是「改稿」，而不是让契约与实现悄悄分家——那正是这条门禁要防的事。"
+        "取实测，同时把它标成待裁决的冻结稿缺陷：出路是裁决「改 PushResult 成结构化」还是「改稿」。"
+        "台账行：**D-V8-01**（本条由 `test_conflict_entries_cite_a_live_decision_id` 反向核验该 ID 在台账里）。"
         "消费者：`test_push_retry_state_tracks_runtime_push_result`（钉住两边当前真实形状与差集）。",
     ),
     Divergence(

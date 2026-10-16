@@ -27,7 +27,7 @@ related: [D-V2-02, D-V3-01, D-V2-01, ADR-0011, STEP-01, STEP-04, STEP-07]
 | `job_items.external_id`（`entities.py:216`） | 从清单行**原样透传**的渠道 id | `subscription.py:849`、`repositories/job.py:197` |
 
 > 干扰项（第五轮验证踩过）：`sources.external_id`（`entities.py:62`，注释 `# 公众号 biz`，
-> 写点 `subscription.py:130`、查询点 `:125`）是**账号级**键空间，与上面三行的**文章级**键空间
+> 写点 `subscription.py:130`、查询点 `:124`）是**账号级**键空间，与上面三行的**文章级**键空间
 > 不同层，也不是本 ADR 要对齐的对象。它和 `article_manifests.external_id` 同名不同义，
 > 拿它当清单写入点会把"三层无共同键"这个结论讲错。
 

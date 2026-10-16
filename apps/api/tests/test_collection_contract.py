@@ -372,26 +372,206 @@ _NORMALIZATION_TO_KIND = {
 
 # 登记表 `kind` 的合法取值（`app/contracts/__init__.py` 的 Divergence 文档注释里就这五种）。
 # 第五轮验证点名"kind 从来没被校验过"：写个 `kind="magic"` 等于给这条登记凭空造第六种放行能力。
-DIVERGENCE_KINDS = frozenset({"structural", "tightening", "serialization", "strictness", "documentation"})
-
-# 一个 def 只要含这些关键词之一，它就在**声明约束**，不许被"它不是形状"的理由退出比对。
-_SHAPE_BEARING_KEYWORDS = frozenset(
-    {"properties", "required", "enum", "const", "pattern", "items", "anyOf", "oneOf", "allOf", "additionalProperties"}
+# `conflict` 是第六轮验证之后加的**第六种**：稿与实测类型不相交（不是等价写法、也不是宽严关系），
+# 只能靠"取实测 + 引一条台账裁决号"过关，见 `test_conflict_entries_cite_a_live_decision_id`。
+DIVERGENCE_KINDS = frozenset(
+    {"structural", "tightening", "serialization", "strictness", "documentation", "conflict"}
 )
 
+# 声明"这个 def 不是形状"时，**允许**出现的校验关键词只有这两个：
+# 纯注释块也总要写个 `type`，而 `$ref` 由 `_referenced_by` 单独管。
+# 其余每一个校验关键词都是真约束——带了它还想退出比对，等于把约束静默删掉。
+# 第六轮验证 G1 正是这样让 `IdempotencyKey.maxLength=128` 凭空消失的：
+# 那条 def 被标成非形状之后，不仅约束离开了产物，连"必须有见证测试"的强制也不再触发。
+_MARK_FORBIDDEN_KEYWORDS = frozenset(SUPPORTED_VALIDATING_KEYWORDS - {"type", "$ref"})
 
-def _not_a_shape_names(frozen: dict[str, Any]) -> set[str]:
-    """稿子自己声明"这些条目不在唯一源（Python 模型）里"的 def 名集合。
+# 归一之后的**叶子事实名**。一条登记的 `field` 不许直接写这些词——
+# 写了就等于"这个 def 里这类差异我全权解释"，而登记的意义必须是**点名到契约字段**。
+# 第六轮验证的 D5：identity 的 `exp-required` 用 `field="exp, required"` 解释了
+# `SessionClaims.required=[]`（把必填 `sub` 删掉），一句"exp 变必填"买到了整类放行。
+_BARE_FACT_KEYS = frozenset(
+    {
+        "type",
+        "types",
+        "nullable",
+        "required",
+        "default",
+        "enum",
+        "const",
+        "pattern",
+        "format",
+        "minLength",
+        "maxLength",
+        "minimum",
+        "maximum",
+        "minItems",
+        "items",
+        "properties",
+        "additionalProperties",
+        "branches",
+        "unmapped",
+    }
+)
 
-    读的是稿根 `x-not-in-single-source` 的键，**只取确实是 def 的那些**
-    （identity 用它列根层治理注释，events 用它列三个注释性 def——同名不同层，各管各的）。
-    被点名的 def 退出 `_walk` 与逐 def 比对，代价由 `test_not_a_shape_claims_are_narrow` 付：
-    它必须真的不含任何形状关键词、必须不在生成物里、必须有 structural 登记点名接手。
+# 每一类事实**允许**由哪种 kind 解释。空集 = 永远不可解释（未知关键词）。
+# 这一张表是第六轮验证 D4/D8 的直接回应：`kind` 过去在 `_explains` 里完全不参与判定，
+# 所以一条 `kind="documentation"` 的登记可以解释"类型改了"。
+FACT_ALLOWED_KINDS: dict[str, frozenset[str]] = {
+    "types": frozenset({"structural", "conflict"}),
+    "nullable": frozenset({"structural", "conflict"}),
+    "required": frozenset({"structural", "tightening"}),
+    "enum": frozenset({"structural"}),
+    "pattern": frozenset({"structural"}),
+    "items": frozenset({"structural"}),
+    "branches": frozenset({"structural"}),
+    "const": frozenset({"structural"}),
+    "minItems": frozenset({"structural"}),
+    "format": frozenset({"structural", "tightening"}),
+    "additionalProperties": frozenset({"structural", "strictness"}),
+    "maxLength": frozenset({"structural", "tightening"}),
+    "minLength": frozenset({"structural", "tightening"}),
+    "maximum": frozenset({"structural", "tightening"}),
+    "minimum": frozenset({"structural", "tightening"}),
+    "default": frozenset({"serialization"}),
+    "properties": frozenset({"structural"}),
+    "unmapped": frozenset(),
+}
+
+
+def _is_empty_value(value: Any) -> bool:
+    """"物化出来的默认值确实是空值"——`False` 不算（它是一个语义决定，不是"缺失即空"）。"""
+    if value is None or value == "":
+        return True
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int | float):
+        return value == 0
+    return isinstance(value, list | dict | set) and len(value) == 0
+
+
+class _Missing:
+    """"这一侧根本没有这个键"的哨兵。必须在 `_explains` 之前定义——
+    它同时是那两个参数的默认值，而默认值在 import 期求值。"""
+
+    def __repr__(self) -> str:
+        return "（无此键）"
+
+
+MISSING = _Missing()
+
+
+def _direction_ok(leaf: str, fa: Any, fb: Any, entry: Divergence, fields: set[str]) -> bool:
+    """同样被"允许"的 kind，还得**方向对**：登记说的是收紧，实际就必须是收紧。
+
+    没有这一层，kind 表只是一份更漂亮的词表——第六轮验证的 D5/D4 都是"kind 对了、方向反了"：
+    把必填删掉被 `tightening` 解释、把 maxLength 放宽被 `tightening` 解释。
+    （两侧的 MISSING 情形由 `_explains` 在第 6 道闸处理，不会走到这里。）
     """
+    if leaf == "required":
+        if entry.kind == "structural":
+            return True
+        # tightening 只接受"产物比稿更严且增量都在点名字段里"
+        return isinstance(fa, list) and isinstance(fb, list) and set(fa) <= set(fb) and set(fb) - set(fa) <= fields
+    if leaf in {"maxLength", "maximum"}:
+        tighter = isinstance(fb, int | float) and isinstance(fa, int | float) and fb <= fa
+        return entry.kind == "structural" or tighter
+    if leaf in {"minLength", "minimum"}:
+        tighter = isinstance(fb, int | float) and isinstance(fa, int | float) and fb >= fa
+        return entry.kind == "structural" or tighter
+    if leaf == "additionalProperties":
+        # strictness 的方向只有一个：稿没说话（或明说允许）而产物**禁止**多余键。
+        return entry.kind == "structural" or (fb is False and (fa is MISSING or fa in (None, True)))
+    return True
+
+
+
+def _raw_marks(frozen: dict[str, Any]) -> set[str]:
+    """稿根 `x-not-in-single-source` 里**确实是 def** 的那些键（根层治理注释不在此列）。"""
     mark = frozen.get("x-not-in-single-source") or {}
     if not isinstance(mark, dict):
         return set()
     return {str(k) for k in mark if k in _defs_of(frozen)}
+
+
+def _constraint_bearing(node: Any) -> set[str]:
+    """这个 def 带了真约束吗？带了就不许声明「自己不是形状」。
+
+    第六轮验证 G1：`IdempotencyKey` 的 `{type, maxLength:128}` 里只有 `type` 被我原来的
+    `_SHAPE_BEARING_KEYWORDS` 认下来，于是「它不是形状」这句话**通过了所有检查**，
+    128 这条约束无声离开产物，连"消失的 def 必须有见证测试"那条强制也不再触发
+    （因为它已经不在「消失的 def」那张表里了）。判据必须是「除 type/$ref 外无任何校验关键词」。
+    """
+    if not isinstance(node, dict):
+        return set()
+    return {k for k in node if k in _MARK_FORBIDDEN_KEYWORDS}
+
+
+def _not_a_shape_names(frozen: dict[str, Any]) -> tuple[set[str], list[str]]:
+    """返回 (合法退出的注释性 def 名, 非法标记的差异说明)。
+
+    非法标记不进 `excluded`——它不会让那个 def 消失，只会额外产出一条差异；
+    这样「想靠一句声明删约束」从**放行**变成**必红**。
+    """
+    defs = _defs_of(frozen)
+    ok: set[str] = set()
+    bad: list[str] = []
+    for name in _raw_marks(frozen):
+        offending = _constraint_bearing(defs[name])
+        if offending:
+            bad.append(
+                f"{name}: 稿把它标成「不在唯一源里」，但它带着校验关键词 {sorted(offending)} "
+                "⇒ 那是约束不是注释，必须收编或点名见证测试"
+            )
+            continue
+        if not str(frozen["x-not-in-single-source"][name]).strip():
+            bad.append(f"{name}: 标了「不在唯一源里」却没写理由/责任人")
+            continue
+        ok.add(name)
+    return ok, bad
+
+
+# 文档根层要比的校验键（第六轮验证 G6：过去只比 `$defs`，根层整片没人管）。
+_ROOT_VALIDATING_KEYS = ("type", "required", "additionalProperties", "$id", "$schema")
+
+
+def _explains_root(divergences: tuple[Divergence, ...], key: str, fa: Any, fb: Any) -> Divergence | None:
+    """根层差异的解释：`ref` 写明是文档根、`field` 点名该键，**并且方向要合法**。
+
+    第一版我只做了前两条，第六轮验证的 G6a/b/c 立刻证明这不够：一条同时点名 `type` 与 `$id`
+    的宽登记，把"往产物根塞 `type: string`"也一起洗白了——和 def 层那条 `field="*"` 是同一种病。
+    - 稿声明、产物没声明（`fb is MISSING`）⇒ `structural` 可以解释：容器文档根层不声明单一形状；
+    - 产物声明、稿没声明（`fa is MISSING`）⇒ 源在凭空加约束，必须 `conflict`；
+    - 两侧都声明但值不同 ⇒ 不是等价写法，必须 `conflict`，并由
+      `test_conflict_entries_cite_a_live_decision_id` 要求它引一条真实台账行。
+    """
+    for d in divergences:
+        if "文档根" not in d.ref or key not in _field_tokens(d.field):
+            continue
+        if fb is MISSING and d.kind == "structural":
+            return d
+        if d.kind == "conflict":
+            return d
+    return None
+
+
+def _stale_root_entries(divergences: tuple[Divergence, ...], frozen: dict, generated: dict) -> list[str]:
+    """登记了根层某个键的不等价，但现在两侧一致 ⇒ 这条登记已经过期，必须红。
+
+    没有这一条，"把稿根的 `type` 删掉"（G6b）会让差异**消失**而不是变红：
+    宽登记继续挂在那里，谁也不会发现契约面被偷偷改过。
+    """
+    out: list[str] = []
+    for d in divergences:
+        if "文档根" not in d.ref:
+            continue
+        for token in _field_tokens(d.field):
+            if token not in _ROOT_VALIDATING_KEYS:
+                continue
+            if frozen.get(token, MISSING) == generated.get(token, MISSING):
+                out.append(f"*: 登记（{d.rule}）声称根层 {token} 不等价，但两侧现在一致 ⇒ 过期登记")
+    return out
+
+
 
 
 def _default_explainer(divergences: tuple[Divergence, ...], def_name: str, prop: str) -> Divergence | None:
@@ -416,14 +596,30 @@ def _default_explainer(divergences: tuple[Divergence, ...], def_name: str, prop:
 
 
 def _referenced_by(node: Any, name: str) -> bool:
-    """稿侧某个**已收编** def 里是否真的 `$ref` 指向 name（别名内联的证据）。"""
-    if isinstance(node, dict):
-        ref = node.get("$ref")
-        if isinstance(ref, str) and ref.rsplit("/", 1)[-1] == name:
-            return True
-        return any(_referenced_by(v, name) for v in node.values())
+    """稿侧某个 def 里是否**在形状位**上 `$ref` 指向 name。
+
+    只走形状位（def 根本身、`properties` 的值、`items`、`additionalProperties`、
+    `oneOf/anyOf/allOf` 的分支、`$ref` 的兄弟位）。第六轮验证 G3 的打法是往
+    `x-fake` 这种**注释位**塞一条 `{"$ref": "#/definitions/IdempotencyKey"}`：
+    `_canon`/`_resolve` 从不比较注释位，所以那条引用没有任何约束落点，
+    却把"别名已内联"讲成了事实——见证测试从此不再被触发。
+    """
     if isinstance(node, list):
         return any(_referenced_by(x, name) for x in node)
+    if not isinstance(node, dict):
+        return False
+    ref = node.get("$ref")
+    if isinstance(ref, str) and ref.rsplit("/", 1)[-1] == name:
+        return True
+    for sub in (node.get("properties") or {}).values():
+        if _referenced_by(sub, name):
+            return True
+    for key in ("items", "additionalProperties"):
+        if _referenced_by(node.get(key), name):
+            return True
+    for key in ("oneOf", "anyOf", "allOf"):
+        if _referenced_by(node.get(key), name):
+            return True
     return False
 
 
@@ -436,18 +632,23 @@ def _field_tokens(field: str) -> set[str]:
     return {x.strip() for x in field.replace(",", " ").split() if x.strip()}
 
 
-def _explains(entry: Divergence, def_name: str, path: str) -> bool:
-    """这条登记能否解释这个位置的差异。
+def _explains(entry: Divergence, def_name: str, path: str, fa: Any = MISSING, fb: Any = MISSING) -> bool:
+    """这条登记能否解释这个位置的差异。**七道闸，缺一道就退化成橡皮章**：
 
-    收紧过的四条规则，缺一条就会退化成橡皮章：
-    - `path == ""`（整个 def 在生成物里缺席）只接受 **structural 且 ref 点名叫到该 def** 的登记；
-    - `field == "*"` **在任何非空 path 上一律不解释**（第五轮验证点名：`ref="WorkListRow"` +
-      `field="*"` + `kind="structural"` 能把该 def 的 five 类真实漂移一次性吞掉，
-      还顺手把它自己的 rule 洗进 `_USED_EXPLAINERS` 让"必须有消费者"那条也变绿。
-      整片放行没有任何语义价值——真要放行一片，就点名到每个具体字段，写不出来就说明它不该放行）；
-    - 登记可以把 `field` 写成**完整叶子路径**（`properties.responseData.types`），
-      这是比"字段名"更窄的一档，用于"只解释这一个位置这一件事"；
-    - 其余情况必须叶子字段名对得上，且 def 被点名。
+    1. `path == ""`（整个 def 在产物里缺席）只接受 **structural 且 ref 点名叫到该 def**；
+    2. `field == "*"` 在任何非空 path 上一律不解释（第五轮：一条 `*` 吞掉整 def 五类漂移）；
+    3. `field` 里**不许出现 def 名**，也不许出现裸事实名（`required`/`types`/`default`…）——
+       这两种写法都是"整类放行"：第六轮验证 D4 用 `field="PushRetryState"` 吞掉五处真漂移，
+       D5 用 `field="exp, required"` 把"删掉必填 sub"解释成"exp 变必填"；
+    4. `kind` 必须落在该**事实类**允许的档位里（`FACT_ALLOWED_KINDS`）——
+       第六轮验证 D8 就是 `kind="documentation"` 解释了"类型改了"，因为 kind 过去完全不参与判定；
+    5. **方向**必须与登记说的一致（`_direction_ok`）：说收紧就得真的更严，
+       `required` 只允许"产物比稿多必填、且增量全在被点名字段里"；
+    6. 产物**丢掉**稿里已有的东西（`fb is MISSING`）除 structural 外一律不放行，
+       而 structural 也只许在"完整路径点名"时解释新增（`fa is MISSING`）。
+
+    窄的一档仍然保留：登记可以把 `field` 写成完整叶子路径
+    （`properties.responseData.types`），那是"只解释这一个位置这一件事"。
     """
     tokens = _ref_tokens(entry.ref)
     if path == "":
@@ -455,11 +656,26 @@ def _explains(entry: Divergence, def_name: str, path: str) -> bool:
     if entry.field.strip() == "*":
         return False
     fields = _field_tokens(entry.field)
-    scoped = entry.ref.strip() == def_name or def_name in tokens
-    if path in fields:
-        return scoped
+    if def_name in fields:
+        return False
+    if entry.ref.strip() != def_name and def_name not in tokens:
+        return False
     leaf = path.rsplit(".", 1)[-1].split(":", 1)[0] if path else ""
-    return (leaf in fields or def_name in fields) and scoped
+    exact = path in fields
+    if fields & _BARE_FACT_KEYS and not exact:
+        return False  # 裸事实名只接受"完整路径点名"这一档：叶子匹配等于整类事实放行
+    if fb is MISSING:
+        return False  # 产物丢掉稿里已有的东西：没有任何「等价写法」能替一次删除说话
+    if fa is MISSING and not exact:
+        return False  # 产物凭空多出事实：必须有一条把该完整路径点名的登记接住
+    if leaf == "required":
+        licensed = fields - _BARE_FACT_KEYS
+        return entry.kind == "tightening" and _direction_ok("required", fa, fb, entry, licensed)
+    if entry.kind not in FACT_ALLOWED_KINDS.get(leaf, frozenset({"structural"})):
+        return False
+    if not (exact or leaf in fields):
+        return False
+    return _direction_ok(leaf, fa, fb, entry, fields)
 
 
 def compare_defs(domain: str = "collection") -> tuple[list[str], set[str]]:
@@ -476,7 +692,7 @@ def compare_defs(domain: str = "collection") -> tuple[list[str], set[str]]:
     frozen = load_cached(frozen_path)
     generated = load_cached(generated_path)
     fdefs, gdefs = _defs_of(frozen), _defs_of(generated)
-    excluded = _not_a_shape_names(frozen)
+    excluded, invalid_marks = _not_a_shape_names(frozen)
     if "definitions" in frozen:
         _note_rule("definitions-vs-refs-dialect")  # 只有稿真用了 draft-07 方言才记账
 
@@ -490,14 +706,17 @@ def compare_defs(domain: str = "collection") -> tuple[list[str], set[str]]:
     if problems:
         return problems, set(_USED_RULES)
 
-    # 根层：生成物允许比稿多出**已登记的**溯源键，其它一律报
+    # 根层：第六轮验证 G6 点名"只比 `$defs`、整篇文档根没比过"——
+    # 于是生成物根 `type: object→string`、稿根删 `type`、稿根加 `additionalProperties:false`
+    # 三种改动全部读绿，而 `$id` 两边本来就长得不一样却无人记账（实测：collection 稿已被
+    # 会话说成 `bothot://contracts/collection/v1`，identity/events 稿仍是
+    # `https://bothot/contracts/<域>.schema.json`，产物一律 `bothot://contracts/<域>/v1`）。
+    # 现在根层的**校验事实**逐键比：每个不一致都必须由一条 `ref` 含"文档根"、
+    # 且 `field` 点名该键的登记解释；溯源键仍按 generated-provenance-keys 走。
     provenance = {"x-generated-by", "x-source-module"}
     containers = {"$defs", "definitions"}  # 方言差异由 definitions-vs-refs-dialect 那条登记负责
     extra_root = sorted(set(generated) - set(frozen) - provenance - containers)
-    if extra_root:
-        diffs_root = [f"*: 生成物根层多出键 {extra_root}"]
-    else:
-        diffs_root = []
+    diffs_root = [f"*: 生成物根层多出键 {extra_root}"] if extra_root else []
     if set(generated) & provenance:
         if any(d.rule == "generated-provenance-keys" for d in divergences):
             # 这是"某条登记解释了一处差异"，不是归一 ⇒ 记进 explainers，
@@ -505,8 +724,21 @@ def compare_defs(domain: str = "collection") -> tuple[list[str], set[str]]:
             _note_explainer("generated-provenance-keys")
         else:
             diffs_root.append("*: 生成物带溯源键，但登记表里没有 generated-provenance-keys 条目")
+    for key in _ROOT_VALIDATING_KEYS:
+        fa, fb = frozen.get(key, MISSING), generated.get(key, MISSING)
+        if fa == fb:
+            continue
+        hit = _explains_root(divergences, key, fa, fb)
+        if hit is None:
+            diffs_root.append(
+                f"*: 根层 {key} 稿={fa} 生成={fb}"
+                "（没有「文档根 + 点名该键 + 方向合法」的登记；两侧都声明而值不同 ⇒ 需 conflict 类并引台账）"
+            )
+            continue
+        _note_explainer(hit.rule)
+    diffs_root.extend(_stale_root_entries(divergences, frozen, generated))
 
-    diffs: list[str] = []
+    diffs: list[str] = list(invalid_marks)
     for name in sorted(set(fdefs) | set(gdefs)):
         if name in excluded:
             hit = next((d for d in divergences if d.kind == "structural" and _explains(d, name, "")), None)
@@ -519,12 +751,22 @@ def compare_defs(domain: str = "collection") -> tuple[list[str], set[str]]:
             continue
         if name not in gdefs:
             hit = next((d for d in divergences if d.kind == "structural" and _explains(d, name, "")), None)
-            if hit is not None:
-                # 缺席原因写进登记：别名内联（约束在使用处现形）用 alias-inlining 记账，
-                # 别的（注释性 def）用它自己的 rule——不再一律写成"别名内联"那种半真话。
-                _note_rule(hit.rule if hit.rule in _NORMALIZATION_TO_KIND else "alias-inlining")
+            if hit is None:
+                diffs.append(f"{name}: 生成物缺这个 def（没有任何 structural 登记点名它）")
                 continue
-            diffs.append(f"{name}: 生成物缺这个 def（且没有能解释它的 structural 登记）")
+            # 第六轮验证 G1/G2：光有一条 structural 登记就能让一个 def 无声消失。
+            # 现在"登记 + 可核验的去处"两件事都必须成立：
+            # 要么它**真的**被某个已收编 def 在形状位 `$ref` 走了（约束在使用处现形，由逐 def 比对验），
+            # 要么它在 `ALIAS_WITNESSES` 里点名了一个可执行见证测试（约束只在源模块与测试里）。
+            inlined = any(_referenced_by(fdefs[k], name) for k in set(fdefs) & set(gdefs))
+            witnessed = name in ALIAS_WITNESSES.get(domain, {})
+            if not (inlined or witnessed):
+                diffs.append(
+                    f"{name}: 有 structural 登记，但它既没被任何已收编 def 在形状位引用、"
+                    "也没在 ALIAS_WITNESSES 里点名见证测试 ⇒ 缺席无据（登记不能凭空让约束退场）"
+                )
+                continue
+            _note_rule(hit.rule if hit.rule in _NORMALIZATION_TO_KIND else "alias-inlining")
             continue
         if name not in fdefs:
             diffs.append(f"{name}: 生成物多出一个 def（稿里没有 ⇒ 谁加的？）")
@@ -541,15 +783,16 @@ def compare_defs(domain: str = "collection") -> tuple[list[str], set[str]]:
                 if tail == "default" or tail.endswith(".default"):
                     prop = tail.rsplit(".", 2)[-2] if "." in tail else tail
                     dhit = _default_explainer(divergences, name, prop)
-                    if fa is MISSING and fb is not MISSING and dhit is not None:
+                    if fa is MISSING and fb is not MISSING and dhit is not None and _is_empty_value(fb):
                         _note_explainer(dhit.rule)
                         continue
                     diffs.append(
-                        f"{name}: {tail} 稿={fa} 生成={fb}（default 只放行「稿没写、模型物化，"
-                        "且该属性被 serialization 登记点名」这一个方向）"
+                        f"{name}: {tail} 稿={fa} 生成={fb}（default 只放行「稿没写、模型物化出一个**空值**、"
+                        "且该属性被 serialization 登记点名」这一个方向；把默认值改成非空值不是「物化」，"
+                        "是改契约——第六轮验证 G7）"
                     )
                     continue
-                hit = next((d for d in divergences if _explains(d, name, tail)), None)
+                hit = next((d for d in divergences if _explains(d, name, tail, fa, fb)), None)
                 if hit is not None:
                     _note_explainer(hit.rule)
                     continue
@@ -586,16 +829,6 @@ def _extra_x_keys(draft_node: Any, gen_node: Any, path: str) -> list[str]:
         for prop in sorted(set(dprops) & set(gprops)):
             out.extend(_extra_x_keys(dprops[prop], gprops[prop], f"{path}.{prop}"))
     return out
-
-
-class _Missing:
-    """"这一侧根本没有这个键"的哨兵。"""
-
-    def __repr__(self) -> str:
-        return "（无此键）"
-
-
-MISSING = _Missing()
 
 
 def _flat_diff(a: Any, b: Any, path: str) -> list[tuple[str, Any, Any]]:
@@ -652,7 +885,7 @@ def test_neither_side_uses_a_keyword_the_comparator_does_not_implement(domain: s
     """两侧都查未知关键词：漏一侧 = 那一侧可以随便加约束而门禁不响。"""
     doc = load_cached(path)
     defs = _defs_of(doc)
-    excluded = _not_a_shape_names(doc) if side == "稿" else set()
+    excluded = _not_a_shape_names(doc)[0] if side == "稿" else set()
     problems: list[str] = []
     for name, node in defs.items():
         if name in excluded:
@@ -709,11 +942,17 @@ RULE_CONSUMERS: dict[str, str] = {
     "push-retry-annotations": "test_retry_policy_constants_match_frozen_draft",
     "response-data-type-conflict": "test_push_retry_state_tracks_runtime_push_result",
     "events-dump-materializes-defaults": "test_push_retry_default_materializes_on_dump",
+    "root-is-a-container": "test_document_root_divergences_are_named",
+    "root-identifier-conflict": "test_conflict_entries_cite_a_live_decision_id",
 }
 
 # 稿里有、生成物里**没有**、又没被任何已收编 def 引用的约束型条目 ⇒ 必须点名一个见证测试。
 # 这类条目过去只靠一句"别名会被内联到使用处"过关，而 identity 的 `UserId` 根本没有使用处
 # （第五轮验证抓到）：约束在产物里彻底不存在，登记表的解释却是假的。
+# 已登记在册的「随机 uuid 幂等键」违规点（唯一一条，带行号锚）。
+# 修掉它就把它从这份清单里删除；往里加新项等于承认新增一处违反 events 稿的 x-rule。
+KNOWN_UUID_IDEMPOTENCY_SITES = {"apps/api/app/api/v1/hot.py:192"}
+
 ALIAS_WITNESSES: dict[str, dict[str, str]] = {
     "identity": {"UserId": "test_user_id_pattern_witnesses"},
     "events": {"IdempotencyKey": "test_idempotency_key_alias_witness"},
@@ -781,7 +1020,7 @@ def test_absent_draft_defs_are_accounted_for() -> None:
         witnesses = ALIAS_WITNESSES.get(domain, {})
         unaccounted: list[str] = []
         for name in sorted(set(fdefs) - set(gdefs)):
-            if name in _not_a_shape_names(load_cached(frozen_path)):
+            if name in _not_a_shape_names(load_cached(frozen_path))[0]:
                 continue
             if any(_referenced_by(fdefs[k], name) for k in absorbed):
                 continue
@@ -806,13 +1045,13 @@ def test_not_a_shape_claims_are_narrow() -> None:
     for domain, (frozen_path, generated_path, divergences) in DOMAINS.items():
         frozen = load_cached(frozen_path)
         fdefs, gdefs = _defs_of(frozen), _defs_of(load_cached(generated_path))
-        mark = frozen.get("x-not-in-single-source") or {}
-        for name in sorted(_not_a_shape_names(frozen)):
+        ok, bad = _not_a_shape_names(frozen)
+        assert not bad, f"{domain}: 有非法的非形状声明：\n  " + "\n  ".join(bad)
+        for name in sorted(ok):
             body = fdefs[name]
-            shape_keys = sorted(set(body) & _SHAPE_BEARING_KEYWORDS) if isinstance(body, dict) else []
-            assert not shape_keys, f"{domain}/{name}: 含形状关键词 {shape_keys} ⇒ 它是形状，不许声明「不是形状」"
+            shape_keys = sorted(_constraint_bearing(body))
+            assert not shape_keys, f"{domain}/{name}: 带真约束 {shape_keys} ⇒ 它是形状，不许声明「不是形状」"
             assert name not in gdefs, f"{domain}/{name}: 稿说不是形状，生成物却有这个 def"
-            assert mark[name].strip(), f"{domain}/{name}: 退出理由写空"
             hit = next((d for d in divergences if d.kind == "structural" and _explains(d, name, "")), None)
             assert hit is not None, f"{domain}/{name}: 没有 structural 登记点名接手注释"
 
@@ -1484,8 +1723,8 @@ def test_idempotency_key_alias_witness() -> None:
     """`IdempotencyKey` 在本域**没有使用处** ⇒ 约束只能由本测试见证（ALIAS_WITNESSES 强制它存在）。
 
     实测两个键形状必须能过（`hot_rescore:yyyyMMddHH` / `sync_account:{sourceId}`），
-    长度上界与稿一致（String(128)）。稿里另外两条（禁随机 uuid、禁拼用户可控串）
-    不是形状，登记表已把责任人写清，这里不假装 TypeAdapter 能判。
+    长度上界与稿一致（String(128)）。稿里另外两条（禁随机 uuid、禁拼用户可控串）不是形状，
+    由 `test_random_uuid_idempotency_keys_are_a_closed_list` 与登记表点名的评审各自负责。
     """
     adapter: TypeAdapter[events_contract.IdempotencyKey] = TypeAdapter(events_contract.IdempotencyKey)
     assert adapter.validate_python("hot_rescore:2026101601")
@@ -1574,7 +1813,7 @@ def test_comparator_bites_when_a_real_shape_is_declared_not_a_shape() -> None:
     frozen = load_cached(DOMAINS["events"][0])
     marked = copy.deepcopy(frozen)
     marked["x-not-in-single-source"]["PushRetryState"] = "我想让它消失"
-    shape_keys = set(_defs_of(marked)["PushRetryState"]) & _SHAPE_BEARING_KEYWORDS
+    shape_keys = _constraint_bearing(_defs_of(marked)["PushRetryState"])
     assert shape_keys, "narrow 判据找不到形状关键词 ⇒ 这条声明其实放得过去"
 
 
@@ -1604,6 +1843,268 @@ def test_default_materialization_must_be_named_property_by_property() -> None:
 
     diffs = _compare_with_mutated_generated(mutate, domain="events")
     assert any("default" in d for d in diffs), f"未点名的默认物化被放走：{diffs}"
+
+
+def test_document_root_divergences_are_named() -> None:
+    """兑现 `root-is-a-container`：根层每一处不等价都必须有一条"文档根 + 点名该键"的登记。
+
+    第六轮验证 G6 之前，比对器只看 `$defs`——往产物根塞 `type: string`、把稿根 `type` 删掉、
+    给稿根加 `additionalProperties: false` 三种改动全部读绿，而且 `$id` 两边本来就不一样却无人记账
+    （实测：collection 稿 `bothot://contracts/collection/v1`、identity/events 稿
+    `https://bothot/contracts/<域>.schema.json`、产物一律 `bothot://contracts/<域>/v1`）。
+    """
+    for domain, (frozen_path, generated_path, divergences) in DOMAINS.items():
+        frozen, generated = load_cached(frozen_path), load_cached(generated_path)
+        for key in _ROOT_VALIDATING_KEYS:
+            fa, fb = frozen.get(key, MISSING), generated.get(key, MISSING)
+            if fa == fb:
+                continue
+            hit = _explains_root(divergences, key, fa, fb)
+            assert hit is not None, f"{domain}: 根层 {key} 不等价（稿={fa} 生成={fb}）却没有方向合法的登记"
+            if fa is not MISSING and fb is not MISSING:
+                assert hit.kind == "conflict", (
+                    f"{domain}: 根层 {key} 两侧都声明而值不同，用 {hit.kind} 解释等于把冲突写成等价写法"
+                )
+        assert not _stale_root_entries(divergences, frozen, generated)
+
+
+def test_conflict_entries_cite_a_live_decision_id() -> None:
+    """`conflict` 是第六种 kind，它**必须引一条台账行**——否则它只是"我不改了"的另一种写法。
+
+    与 `structural`（等价写法）和 `tightening`（更严）都不同：`conflict` 承认稿与实测不相交。
+    这种状态不能长期挂在比对器里而不带责任人，所以要求 reason 里写明的 `D-V<n>-<nn>`
+    确实存在于 `decision-log.md`。台账行被删掉 ⇒ 本测试红 ⇒ 冲突重新变成待办。
+    """
+    ledger = (REPO_ROOT / "docs" / "03_solution" / "decisions" / "decision-log.md").read_text(encoding="utf-8")
+    live = set(re.findall(r"D-V\d+-\d\d", ledger))
+    assert live, "台账里一个裁决 ID 都找不到——文件路径或格式变了，本测试失去意义"
+    for domain, (_f, _g, divergences) in DOMAINS.items():
+        for d in divergences:
+            if d.kind != "conflict":
+                continue
+            cited = set(re.findall(r"D-V\d+-\d\d", d.reason))
+            assert cited, f"{domain}/{d.rule}: conflict 类登记没引台账裁决号"
+            missing = sorted(cited - live)
+            assert not missing, f"{domain}/{d.rule}: 引了台账里不存在的裁决号 {missing}"
+
+
+def test_idempotency_key_bound_matches_the_column_that_enforces_it() -> None:
+    """契约里那条 `maxLength: 128` 的真正执法者是 DB 列，不是 JSON Schema。
+
+    第六轮验证点名：这个别名没有任何模型引用 ⇒ 128 在**线上形状**上无人执行，
+    唯一硬约束是 `entities.py:202` 的 `String(128) unique=True`。
+    长度与唯一性都必须与本条别名一致，否则契约写的是一个没人守的数。
+    """
+    from app.models.entities import Job
+
+    column = Job.__table__.columns["idempotency_key"]
+    assert column.type.length == 128, f"DB 列长度 {column.type.length} 与契约 maxLength 不一致"
+    assert column.unique is True, "幂等靠这个键去重；列上的 unique 若被删，幂等语义整体失效"
+
+
+def test_random_uuid_idempotency_keys_are_a_closed_list() -> None:
+    """稿的 `x-rule` 禁止用随机 uuid 当幂等键——实测今天就有一处违反，而且是有意的。
+
+    我第一版把这条注释的责任人写成「转 STEP-03 的作业创建路径评审」，那是把
+    「现在就与契约冲突」讲成「以后再看」（第六轮验证点名）。实测锚：
+    `apps/api/app/api/v1/hot.py:192` 用 `f"hot_cluster:{today}:{days}:{uuid4().hex[:8]}"`，
+    它自己的注释解释动机是「已终结 job 不阻塞重跑」——与稿的规则直接对立。
+    所以把它钉成一份**闭合清单**：新增一处 uuid 幂等键就红；
+    而这处现存违规要么改代码、要么改稿并登记台账，不能靠「以后再说」隐身。
+    """
+    offenders: list[str] = []
+    for path in sorted((REPO_ROOT / "apps" / "api" / "app").rglob("*.py")):
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if "idempotency_key=" in line and "uuid" in line:
+                offenders.append(f"{path.relative_to(REPO_ROOT).as_posix()}:{lineno}")
+    unexpected = sorted(set(offenders) - KNOWN_UUID_IDEMPOTENCY_SITES)
+    assert not unexpected, (
+        f"新增的随机 uuid 幂等键：{unexpected}（稿 events.IdempotencyKey.x-rule 明令禁止："
+        "随机键等于没有幂等，重复入队）"
+    )
+    assert sorted(offenders) == sorted(KNOWN_UUID_IDEMPOTENCY_SITES), (
+        f"闭合清单过期：实测 {offenders}，登记的是 {sorted(KNOWN_UUID_IDEMPOTENCY_SITES)}"
+        "——违规被修掉就从清单里删掉它，留着是把历史当现状"
+    )
+
+
+
+# ── 13. 第六轮验证的击败方式，逐条钉成永久反证 ────────────────────────────────
+# 验证者用下面这些注入把我的四条新机制全打穿过（它给的判据是 FAIL）。
+# 每一条都在这里重生：**下一次谁把判定改松，CI 会替那位验证者再问一遍。**
+
+
+def _swap_real_ref_for_fake(doc: dict[str, Any]) -> None:
+    """identity：把 `SessionClaims.properties.sub` 的真 `$ref` 换成裸 `type`，假引用藏进注释位。
+
+    验证者的 G3 原版（只加假引用）在修复后仍然是绿——那是**正确**的：
+    `IdempotencyKey` 本来就靠 `ALIAS_WITNESSES` 那条合法去处过关，假引用没换来任何新放行。
+    真正能证伪机制的是这个变体：撤掉真引用位，"已内联"就再也站不住，
+    `Sub` 的 min/maxLength 必须当场变成三条差异。
+    """
+    claims = doc["definitions"]["SessionClaims"]
+    claims["properties"]["sub"] = {"type": "string"}
+    claims["x-note"] = {"$ref": "#/definitions/Sub"}
+
+
+def _with_extra_entry(domain: str, entry: Divergence):
+    """临时往某域的登记表里塞一条登记（用完必须还原，否则后面的测试读到脏域表）。"""
+    original = DOMAINS[domain]
+
+    class _Patched:
+        def __enter__(self):
+            DOMAINS[domain] = (original[0], original[1], original[2] + (entry,))
+            return self
+
+        def __exit__(self, *exc):
+            DOMAINS[domain] = original
+            compare_defs(domain)
+            return False
+
+
+    return _Patched()
+
+
+@pytest.mark.parametrize(
+    "label,domain,side,mutate",
+    [
+        (
+            "G1 给带约束的别名发「不是形状」许可证",
+            "events",
+            "稿",
+            lambda d: d["x-not-in-single-source"].__setitem__("IdempotencyKey", "想要它消失"),
+        ),
+        (
+            "G2a 删掉 QueueMechanism 的非形状声明",
+            "events",
+            "稿",
+            lambda d: d["x-not-in-single-source"].pop("QueueMechanism", None),
+        ),
+        (
+            "G2b 删掉 EventPayloadRules 的非形状声明",
+            "events",
+            "稿",
+            lambda d: d["x-not-in-single-source"].pop("EventPayloadRules", None),
+        ),
+        (
+            "G3 把真引用位换成注释位里的假 $ref（别名『已内联』是编的）",
+            "identity",
+            "稿",
+            _swap_real_ref_for_fake,
+        ),
+        (
+            "G5a 产物丢掉稿点名的可选属性",
+            "events",
+            "生成物",
+            lambda g: g["$defs"]["PushRetryState"]["properties"].pop("responseData", None),
+        ),
+        (
+            "G5b 产物丢掉 collection 的可选属性",
+            "collection",
+            "生成物",
+            lambda g: g["$defs"]["WorkListRow"]["properties"].pop("digest", None),
+        ),
+        (
+            "G5c 产物清空 required（把必填 sub 删掉）",
+            "identity",
+            "生成物",
+            lambda g: g["$defs"]["SessionClaims"].__setitem__("required", []),
+        ),
+        (
+            "G6a 生成物根层 type 改成 string",
+            "events",
+            "生成物",
+            lambda g: g.__setitem__("type", "string"),
+        ),
+        (
+            "G6b 稿根层 type 被删（登记随即过期）",
+            "events",
+            "稿",
+            lambda d: d.pop("type", None),
+        ),
+        (
+            "G6c 稿根新增 additionalProperties:false 而产物没做",
+            "events",
+            "稿",
+            lambda d: d.__setitem__("additionalProperties", False),
+        ),
+        (
+            "G7 把物化默认值从空串改成别的值",
+            "identity",
+            "生成物",
+            lambda g: g["$defs"]["SessionClaims"]["properties"]["iss"].__setitem__("default", "PWNED"),
+        ),
+    ],
+    ids=lambda v: str(v),
+)
+def test_sixth_round_bypasses_are_now_blocked(label: str, domain: str, side: str, mutate: Any) -> None:
+    """每一条都必须在 `compare_defs` 里留下差异——"红"是唯一可接受的读数。"""
+    if side == "稿":
+        diffs = _compare_with_mutated_draft(mutate, domain=domain)
+    else:
+        diffs = _compare_with_mutated_generated(mutate, domain=domain)
+    assert diffs, f"比对器被绕过：注入「{label}」仍然 0 条差异"
+
+
+
+def test_field_named_after_the_def_is_not_a_license() -> None:
+    """第六轮 D4：`field` 写成 def 名 = 给整个 def 买免检票。五类漂移必须逐一仍红。"""
+    swallower = Divergence(
+        "PushRetryState", "PushRetryState", "tightening", "adv-def-name-swallower", "", "", "复现用"
+    )
+    def prs(g: dict[str, Any]) -> dict[str, Any]:
+        return g["$defs"]["PushRetryState"]
+
+    drifts = [
+        ("required 变短", lambda g: prs(g).__setitem__("required", ["delivered"])),
+        ("reason.maxLength 放宽", lambda g: prs(g)["properties"]["reason"].__setitem__("maxLength", 999)),
+        ("delivered 改类型", lambda g: prs(g)["properties"]["delivered"].__setitem__("type", "string")),
+        ("retryable 删除", lambda g: prs(g)["properties"].pop("retryable", None)),
+        ("私加 additionalProperties", lambda g: prs(g).__setitem__("additionalProperties", False)),
+    ]
+    with _with_extra_entry("events", swallower):
+        for label, mutate in drifts:
+            diffs = _compare_with_mutated_generated(mutate, domain="events")
+            assert diffs, f"登记写 def 名就能吞差异：「{label}」读 0 条"
+            # 这条登记也必须过"必须有消费者"那关：它解释过差异不算兑现承诺
+            assert "adv-def-name-swallower" not in compare_defs("events")[1], "恶意登记靠解释差异自证消费"
+
+
+def test_bare_fact_token_cannot_explain_a_property_level_drift() -> None:
+    """第六轮 D8：`kind="documentation" + field="types"` 曾解释掉属性级类型改动。
+
+    裸事实名现在只许"完整路径点名"，而 `documentation` 也不在 `types` 这一档的允许集合里，
+    所以两道闸任意一道都能拦住它。这里两条分别验，免得日后有人只修一半。
+    """
+    for kind in ("documentation", "tightening"):
+        evil = Divergence("PushRetryState", "types", kind, f"adv-bare-{kind}", "", "", "复现用")
+        with _with_extra_entry("events", evil):
+            diffs = _compare_with_mutated_generated(
+                lambda g: g["$defs"]["PushRetryState"]["properties"]["delivered"].__setitem__("type", "string"),
+                domain="events",
+            )
+            assert diffs, f"裸事实名 + kind={kind} 仍能解释属性级类型改动"
+
+
+def test_conflict_kind_needs_a_live_ledger_row() -> None:
+    """`conflict` 不是"我不改了"的另一种写法：它必须引一条真实存在的台账裁决号。"""
+    from app.contracts.events import CONTRACT_DIVERGENCES as EV
+
+    forged = tuple(
+        d._replace(reason="台账行：**D-V9-99**（并不存在）") if d.kind == "conflict" else d for d in EV
+    )
+    original = DOMAINS["events"]
+    try:
+        DOMAINS["events"] = (original[0], original[1], forged)
+        module = sys.modules[__name__]
+        try:
+            module.test_conflict_entries_cite_a_live_decision_id()
+        except AssertionError:
+            return
+        raise AssertionError("引了不存在的裁决号却没红——conflict 的台账链接是装饰")
+    finally:
+        DOMAINS["events"] = original
+        compare_defs("events")
 
 
 # ── 9. 产物与模型的即时一致性（把 CI 那条链拉进本地测试）───────────────────────

@@ -191,6 +191,14 @@ FAILED …[多支 anyOf：两支都不是 pattern 包装-both]
 
 ### 12.1 新机制自己也被反证钉住（四条）
 
+> **更正（第六轮验证后追加，不覆盖原文）**：下面第 1 条我写的因果是错的。
+> "删掉 `x-not-in-single-source` 里的 `ManifestTransition` ⇒ 红"成立，但
+> `QueueMechanism` / `EventPayloadRules` 删标记后 `compare_defs` 仍然**绿**——
+> 让它们变红的是另一条测试（缺席归属 `test_absent_draft_defs_are_accounted_for`），
+> 不是我以为的"关键词不认识所以吵"。机制本身可被击败，修复与读数见
+> `s132_round6_hardening.md` §1 的 G1/G2。同样被推翻的还有 §12.2 的"8 条新测试"
+> （实测 9 个 `def test_` / 17 条收集项）与 `1.52s` 计时（复跑 `2.14s`，计时不作证据）。
+
 - 删掉 `x-not-in-single-source` 里的 `ManifestTransition` ⇒ 红：它的 `enumStatus`/`legalEdges`
   是比对器不认识的关键词，退出比对必须有**稿侧**声明，不能只靠登记表。
 - 把**真形状** `PushRetryState` 标成"不是形状" ⇒ 红两处（`compare_defs` 见它仍在生成物里、
