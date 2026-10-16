@@ -38,6 +38,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from app.contracts import events as events_contract
 from app.contracts import identity as identity_contract
+from app.contracts import resources as resources_contract
 from app.contracts.collection import (
     ARTICLE_KEY_PATTERN,
     CONTRACT_DIVERGENCES,
@@ -79,6 +80,11 @@ DOMAINS: dict[str, tuple[Path, Path, tuple[Divergence, ...]]] = {
         CONTRACT_DIR / "events.schema.json",
         SCHEMA_DIR / "events.schema.json",
         events_contract.CONTRACT_DIVERGENCES,
+    ),
+    "resources": (
+        CONTRACT_DIR / "resources.schema.json",
+        SCHEMA_DIR / "resources.schema.json",
+        resources_contract.CONTRACT_DIVERGENCES,
     ),
 }
 
@@ -314,13 +320,21 @@ def _canon(node: Any) -> dict[str, Any]:
     pf = _pattern_fact(node)
     if pf:
         facts["pattern"] = pf
+    enum = node.get("enum")
+    if isinstance(enum, list) and len(enum) == 1:
+        # 单值 enum 与 const 表达同一个接受集 ⇒ 在**事实层**合流，而不是各记一条登记。
+        # 但合流必须记账（`single-value-enum-to-const` 是归一，不是"我看顺眼"）：
+        # 两支以上就和不值——多值 enum 与 const 不是同一种约束。
+        facts["const"] = enum[0]
+        _note_rule("single-value-enum-to-const")
+    elif enum is not None:
+        facts["enum"] = enum
     for key in (
         "minLength",
         "maxLength",
         "minimum",
         "maximum",
         "format",
-        "enum",
         "additionalProperties",
         "const",
         "minItems",
@@ -369,6 +383,7 @@ _NORMALIZATION_TO_KIND = {
     "required-order": "structural",
     "alias-inlining": "structural",
     "not-a-shape": "structural",
+    "single-value-enum-to-const": "structural",
     "definitions-vs-refs-dialect": "structural",
 }
 
@@ -459,6 +474,31 @@ FACT_ALLOWED_KINDS: dict[str, frozenset[str]] = {
 
 # 比对器没登记过的叶子事实名一律不接受任何解释（宁可吵一次，也不要宽松默认）。
 DEFAULT_ALLOWED_KINDS: frozenset[str] = frozenset()
+
+
+def _dig_facts(facts: Any, dotted: str) -> Any:
+    node = facts
+    for part in dotted.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node
+
+
+def _default_restates_domain(node: Any, value: Any) -> bool:
+    """"默认值只是复述唯一取值"时不算新增契约事实。
+
+    `content_type` 这类字段在稿里是**单值 enum**（`["article"]`），产物因 Pydantic 的
+    "Literal 单值 + 默认值"写法多出 `const: article` 与 `default: article`。
+    这个 default 没有携带任何独立信息——可选值只有一个，默认只能是它。
+    反过来（默认值不等于唯一取值）就不是复述，而是真的改契约 ⇒ 必红。
+    """
+    if not isinstance(node, dict):
+        return False
+    if "const" in node:
+        return node["const"] == value
+    enum = node.get("enum")
+    return isinstance(enum, list) and len(enum) == 1 and enum[0] == value
 
 
 def _is_empty_value(value: Any) -> bool:
@@ -893,8 +933,16 @@ def compare_defs(domain: str = "collection") -> tuple[list[str], set[str]]:
                 tail = path[len(name) + 1 :] if path.startswith(f"{name}.") else path
                 if tail == "default" or tail.endswith(".default"):
                     prop = tail.rsplit(".", 2)[-2] if "." in tail else tail
+                    if _inert_default(fdefs[name], prop):
+                        # required 已经保证这个键必然存在 ⇒ 稿里那句 default 不参与校验，
+                        # 产物不写它不算差异。只对"稿有、产物无"这一个方向开，
+                        # 且必须是该 def 的必填字段（`test_inert_default_rule_does_not_cover_optional_fields`）。
+                        _note_explainer("default-on-required-is-inert")
+                        continue
                     dhit = _default_explainer(divergences, name, prop)
-                    if fa is MISSING and fb is not MISSING and dhit is not None and _is_empty_value(fb):
+                    if fa is MISSING and fb is not MISSING and dhit is not None and (
+                        _is_empty_value(fb) or _default_restates_domain(_dig_facts(b, tail.rsplit(".", 1)[0]), fb)
+                    ):
                         _note_explainer(dhit.rule)
                         continue
                     diffs.append(
@@ -940,6 +988,23 @@ def _extra_x_keys(draft_node: Any, gen_node: Any, path: str) -> list[str]:
         for prop in sorted(set(dprops) & set(gprops)):
             out.extend(_extra_x_keys(dprops[prop], gprops[prop], f"{path}.{prop}"))
     return out
+
+
+
+def _inert_default(draft_def: Any, prop: str) -> bool:
+    """稿里某个**必填**字段带的 default 是惰性事实：required 已经保证它必然存在。
+
+    只用于「稿有 default、产物没有」这一个方向。反过来（可选字段的默认值被丢）不在此列——
+    那个默认值是稿真的声明过的接受语义。
+    """
+    if not isinstance(draft_def, dict):
+        return False
+    props = draft_def.get("properties") or {}
+    if not isinstance(props, dict) or prop not in props:
+        return False
+    if "default" not in props[prop]:
+        return False
+    return prop in (draft_def.get("required") or [])
 
 
 def _flat_diff(a: Any, b: Any, path: str) -> list[tuple[str, Any, Any]]:
@@ -1027,8 +1092,12 @@ def test_normalizations_used_are_all_backed_by_registry() -> None:
     for domain in DOMAINS:
         _diffs, used = compare_defs(domain)
         kinds = {d.kind for d in DOMAINS[domain][2]}
+        rules = {d.rule for d in DOMAINS[domain][2]}
         for rule in used:
             need = _NORMALIZATION_TO_KIND[rule]
+            # 第六轮验证 T3 的第二半：只查 kind 的话，任何一条 documentation 登记都能替
+            # `strip-title` 这类归一发通行证。必须**按 rule 名**认领。
+            assert rule in rules, f"{domain}: 归一 {rule} 被用到，但登记表里没有**同名**条目认领它"
             assert need in kinds, f"{domain}: 归一 {rule} 用到，但登记表里没有 {need} 类支撑"
         assert used, f"{domain}: 一个归一都没用到 ⇒ 要么域太薄，要么归一表是摆设"
 
@@ -1055,6 +1124,13 @@ RULE_CONSUMERS: dict[str, str] = {
     "events-dump-materializes-defaults": "test_push_retry_default_materializes_on_dump",
     "root-is-a-container": "test_document_root_divergences_are_named",
     "root-identifier-conflict": "test_conflict_entries_cite_a_live_decision_id",
+    "resources-pattern-not-validated-in-draft": "test_resources_pattern_matches_adr_0011_shape",
+    "sub-not-aliased-to-identity": "test_inapp_notification_sub_is_deliberately_unbounded",
+    "resources-annotations-have-owners": "test_resources_annotations_name_real_anchors",
+    "resources-dump-materializes-defaults": "test_resources_defaults_materialize_on_dump",
+    "single-value-literal-is-enum": "test_content_type_single_value_enum_is_equivalent",
+    "article-key-min-length-unified": "test_article_key_min_length_is_the_unified_value",
+    "default-on-required-is-inert": "test_inert_default_rule_does_not_cover_optional_fields",
 }
 
 # 稿里有、生成物里**没有**、又没被任何已收编 def 引用的约束型条目 ⇒ 必须点名一个见证测试。
@@ -2421,6 +2497,120 @@ def test_citation_must_be_about_the_licensed_fields() -> None:
             diffs = _required_diff_for("WorkListRow")
         assert diffs, f"引 {cited} 就能把稿侧删必填洗白——引用必须『说的就是这件事』"
 
+
+# ── 15. resources 域的锚定与两条新归一的自证 ─────────────────────────────────
+
+
+def test_article_key_min_length_is_the_unified_value() -> None:
+    """D-V8-02 的兑现：两稿 3 vs 8，产物取 8，且**证明它不排任何合法键**。
+
+    只说"反正冗余"是不够的——判据是三支分支各自最短可过串都 >8：
+    `s:`+8 字符 = 10、`b:` 支最短 13、`h:` 支 34。
+    """
+    import re
+
+    col_draft = _defs_of(load_cached(DOMAINS["collection"][0]))["ArticleKey"]["minLength"]
+    res_draft = _defs_of(load_cached(DOMAINS["resources"][0]))["ArticleKey"]["minLength"]
+    artifact = _defs_of(load_cached(DOMAINS["collection"][1]))["ArticleManifest"]["properties"]["article_key"]
+    assert (col_draft, res_draft) == (3, 8), "两稿的下界就是不一致，这条登记才有意义"
+    assert artifact["minLength"] == 8, "唯一源必须取更严者（D-V8-02 的默认值）"
+    shortest = min(
+        len("s:" + "a" * 8),
+        len("b:" + "A" * 8 + ":1:1"),
+        len("h:" + "0" * 32),
+    )
+    assert shortest == 10 and shortest >= 8
+    for sample in ("s:" + "a" * 8, "b:" + "A" * 8 + ":1:1", "h:" + "0" * 32):
+        assert re.fullmatch(artifact["pattern"][1:-1], sample), f"合法键被新下界排除了：{sample}"
+
+
+def test_content_type_single_value_enum_is_equivalent() -> None:
+    """`enum: [article]` 与 `const: article` 是同一接受集的两种写法——**只在单值时成立**。"""
+    draft = _defs_of(load_cached(DOMAINS["resources"][0]))["ContentAsset"]["properties"]["contentType"]
+    artifact = _defs_of(load_cached(DOMAINS["resources"][1]))["ContentAsset"]["properties"]["contentType"]
+    assert draft["enum"] == ["article"]
+    assert artifact.get("const") == "article" and "enum" not in artifact
+    assert not [d for d in compare_defs("resources")[0] if d.startswith("ContentAsset: properties.contentType")]
+
+
+def test_single_value_enum_normalization_cannot_hide_a_second_value() -> None:
+    """新归一的边界：稿里把 enum 加成两支时，合流必须失效并立刻报。"""
+
+    def mutate(doc: dict[str, Any]) -> None:
+        _defs_of(doc)["ContentAsset"]["properties"]["contentType"]["enum"] = ["article", "video"]
+
+    diffs = _compare_with_mutated_draft(mutate, domain="resources")
+    assert any("contentType" in d for d in diffs), "两支 enum 被当成单值合流了——接受集其实变了"
+
+
+def test_inert_default_rule_does_not_cover_optional_fields() -> None:
+    """惰性 default 只覆盖**必填**字段：给可选字段加的默认值不能这样隐身。"""
+
+    def mutate(doc: dict[str, Any]) -> None:
+        _defs_of(doc)["ContentAsset"]["properties"]["title"]["default"] = "untitled"
+
+    diffs = _compare_with_mutated_draft(mutate, domain="resources")
+    assert any("title" in d for d in diffs), "可选字段的 default 被惰性规则放过了"
+
+
+def test_inapp_notification_sub_is_deliberately_unbounded() -> None:
+    """`sub` 在这里**不套** identity 的 `Sub`——同一概念两域形状不同，先让分歧可见。"""
+    res_art = _defs_of(load_cached(DOMAINS["resources"][1]))["InAppNotification"]["properties"]["sub"]
+    idt_art = _defs_of(load_cached(DOMAINS["identity"][1]))["SessionClaims"]["properties"]["sub"]
+    assert "minLength" not in res_art and "maxLength" not in res_art
+    assert (idt_art["minLength"], idt_art["maxLength"]) == (1, 64)
+    assert not [d for d in compare_defs("resources")[0] if "sub" in d], "分歧没被登记，只是被忽略"
+
+
+def test_resources_defaults_materialize_on_dump() -> None:
+    """兑现 `resources-dump-materializes-defaults`：稿里没默认的可选字段，dump 会物化出空串。"""
+    dumped = resources_contract.ContentAsset.model_validate(
+        {"id": "a1", "sourceId": "s1", "externalId": "s:abcDEF12", "contentHash": "0" * 64, "status": "READY"}
+    ).model_dump(by_alias=True)
+    assert dumped["url"] == "" and dumped["title"] == "" and dumped["author"] == ""
+    assert dumped["rawUri"] == "" and dumped["contentMarkdown"] == "" and dumped["contentType"] == "article"
+    assert dumped["status"] == "READY"
+
+
+def test_resources_annotations_name_real_anchors() -> None:
+    """`resources-annotations-have-owners` 的消费者：注释里点名的代码锚**现在还在那儿**。
+
+    注释一旦没人核就会烂成传说——这里逐条去源码里找被点名的符号。
+    """
+    anchors = {
+        "app/models/entities.py": ["uq_asset_source_external", "# article_key"],
+        "app/repositories/asset.py": ["MIN_FRAGMENT_LEN"],
+        "app/services/kb.py": ["final_key", "short_key", "_save_short_link"],
+        "app/services/push_scheduler.py": ["persist_web_notification"],
+        "app/models/bothot_entities.py": ["class Notification"],
+    }
+    for rel, needles in anchors.items():
+        text = (REPO_ROOT / "apps" / "api" / rel).read_text(encoding="utf-8")
+        for needle in needles:
+            assert needle in text, f"{rel} 里找不到 {needle!r}——登记表点名的锚已失效"
+
+
+def test_resources_pattern_matches_adr_0011_shape() -> None:
+    """conflict 那条的消费者：规范键形状在 ADR、两域产物里必须是同一条 pattern。"""
+    adr = (REPO_ROOT / "docs" / "03_solution" / "decisions" / "adr-0011-canonical-article-key.md").read_text(
+        encoding="utf-8"
+    )
+    assert "b:" in adr and "s:" in adr and "h:" in adr, "ADR-0011 的三支形状文本变了，登记需同步"
+    res_draft = _defs_of(load_cached(DOMAINS["resources"][0]))["ArticleKey"]["x-target-pattern"]
+    col_art = _defs_of(load_cached(DOMAINS["collection"][1]))["ArticleManifest"]["properties"]["article_key"]["pattern"]
+    res_art = _defs_of(load_cached(DOMAINS["resources"][1]))["ShortLinkMap"]["properties"]["articleKey"]["pattern"]
+    assert res_art == col_art == ARTICLE_KEY_PATTERN, "两域产物对同一个键写了不同 pattern ⇒ 第二个真源出现了"
+    # 两支 pattern 的**主体**必须逐字符相同：稿写 `^(A|B|C)$`（捕获组），源写 `^(?:A|B|C)$`
+    # （非捕获组）。两者接受集相同；除了这个 `?:` 再多差一个字符都算不一致。
+    def _body(pattern: str) -> str:
+        inner = pattern[1:-1] if pattern.startswith("^") and pattern.endswith("$") else pattern
+        if inner.startswith("(?:") and inner.endswith(")"):
+            inner = inner[3:-1]
+        elif inner.startswith("(") and inner.endswith(")"):
+            inner = inner[1:-1]
+        return inner
+
+    assert _body(res_draft) == _body(col_art) == _body(res_art), "同一键在稿注释与两域产物里不是同一个形状"
 
 # ── 9. 产物与模型的即时一致性（把 CI 那条链拉进本地测试）───────────────────────
 

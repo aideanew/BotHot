@@ -99,6 +99,16 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "不是形状，由 roles.py 与前端各自负责。",
     ),
     Divergence(
+        "*（本域全部 def 与属性）",
+        "description",
+        "documentation",
+        "strip-description",
+        "稿里部分 def/属性带中文说明（Sub、UserId、Role、SessionClaims.sub/iss）",
+        "模型 docstring 与 Field description 会在每个位置生成 description",
+        "描述文本不是约束面，不参与相等判定；但保留一条单向断言：**稿里某处有说明 ⇒ 生成物对应位置也得有**"
+        "（`_description_losses`）。没有这一条，『唯一源把话弄丢了』就没人管——第四轮验证正是这么抓到我的。",
+    ),
+    Divergence(
         "*（所有 def）",
         "required",
         "structural",

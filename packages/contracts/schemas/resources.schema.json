@@ -1,0 +1,187 @@
+{
+  "$defs": {
+    "ContentAsset": {
+      "additionalProperties": false,
+      "description": "内容资产（运行时形状来自 `models/entities.py:118-146` 的 `ContentAsset` 表）。\n\n属性名用 camelCase 别名（稿面如此），Python 侧保持 snake_case；\n`external_id` 装的是**规范文章键**，不是渠道上游 id——那两层键空间的区别见 ADR-0012 §1。",
+      "properties": {
+        "author": {
+          "default": "",
+          "maxLength": 128,
+          "type": "string"
+        },
+        "category": {
+          "default": "",
+          "maxLength": 32,
+          "type": "string"
+        },
+        "contentHash": {
+          "description": "幂等三元组之一",
+          "maxLength": 64,
+          "minLength": 64,
+          "type": "string"
+        },
+        "contentMarkdown": {
+          "default": "",
+          "description": "标准化正文；大正文不得进列表响应（x-projection-rules）",
+          "type": "string"
+        },
+        "contentType": {
+          "const": "article",
+          "default": "article",
+          "description": "String(16) 默认 article；新增取值属契约变更",
+          "type": "string"
+        },
+        "externalId": {
+          "maxLength": 128,
+          "minLength": 8,
+          "pattern": "^(?:b:[A-Za-z0-9+/=_-]{8,64}:[0-9]{1,12}:[0-9]{1,2}|s:[A-Za-z0-9_-]{8,64}|h:[0-9a-f]{32})$",
+          "type": "string"
+        },
+        "hitCount": {
+          "default": 0,
+          "description": "命中即 +0 微信请求（AB-P004）",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "maxLength": 36,
+          "type": "string"
+        },
+        "publishedAt": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "null = 上游未给时间，禁止用抓取时间伪造（P-1：RSS RFC 822 解析失败即属此类）"
+        },
+        "qualityScore": {
+          "default": 0.0,
+          "maximum": 100,
+          "minimum": 0,
+          "type": "number"
+        },
+        "rawUri": {
+          "default": "",
+          "maxLength": 512,
+          "type": "string"
+        },
+        "sourceId": {
+          "description": "FK sources.id ON DELETE CASCADE",
+          "maxLength": 36,
+          "type": "string"
+        },
+        "status": {
+          "description": "实测代码只用到 READY 与 stale 语义，后四值是目标枚举",
+          "enum": [
+            "READY",
+            "PENDING",
+            "FAILED",
+            "STALE",
+            "SUPERSEDED"
+          ],
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "maxLength": 512,
+          "type": "string"
+        },
+        "url": {
+          "default": "",
+          "description": "原文 URL。片段反查靠 url LIKE '%fragment%'（repositories/asset.py:66），故必须含可定位末段",
+          "maxLength": 512,
+          "type": "string"
+        },
+        "version": {
+          "default": 1,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "sourceId",
+        "externalId",
+        "contentHash",
+        "status"
+      ],
+      "type": "object"
+    },
+    "InAppNotification": {
+      "description": "站内通知（`models/bothot_entities.py:265` 的 `Notification`）。\n\n`sub` 是可见性锚：定向与广播共用同一谓词（`api/v1/system.py:297` 注释），\n广播落库时 `sub=\"\"` 且 `is_broadcast=True`——那个位标志不在本域稿里，故不进视图。",
+      "properties": {
+        "body": {
+          "default": "",
+          "type": "string"
+        },
+        "createdAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 36,
+          "type": "string"
+        },
+        "readAt": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sub": {
+          "description": "可见性锚。定向 + 广播共用同一谓词",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 256,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "sub",
+        "title",
+        "createdAt"
+      ],
+      "type": "object"
+    },
+    "ShortLinkMap": {
+      "description": "短链 key → 长链 article_key 的映射（`entities.py:148+`）。\n\n视图形状只带稿声明的两个字段：DB 行还有 `id` 与 `biz`，把它们收进来就是\n**吸收步骤擅自新增契约面**（identity 域那次 `SpaceAccessRow` 的错我不再犯第二次）。",
+      "properties": {
+        "articleKey": {
+          "maxLength": 128,
+          "minLength": 8,
+          "pattern": "^(?:b:[A-Za-z0-9+/=_-]{8,64}:[0-9]{1,12}:[0-9]{1,2}|s:[A-Za-z0-9_-]{8,64}|h:[0-9a-f]{32})$",
+          "type": "string"
+        },
+        "shortKey": {
+          "maxLength": 128,
+          "type": "string"
+        }
+      },
+      "required": [
+        "shortKey",
+        "articleKey"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "bothot://contracts/resources/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "由 scripts/gen_contracts.py 从 apps/api/app/contracts/resources.py 生成，请勿手动修改（--check 幂等门禁）。唯一源是 Python 模型（ADR-0008）。",
+  "title": "BotHot resources 域契约（生成物）",
+  "x-generated-by": "scripts/gen_contracts.py",
+  "x-source-module": "app.contracts.resources"
+}

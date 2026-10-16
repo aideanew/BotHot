@@ -4,6 +4,11 @@
   "title": "BotHot 资源（内容资产 / 短链 / 密钥 / 站内通知）契约（冻结稿 V0.7.0 / 基线 main@13acacc）",
   "description": "实测来源：apps/api/app/models/entities.py:118-146（ContentAsset）、:148+（ShortLinkMap）、apps/api/app/repositories/asset.py:22（MIN_FRAGMENT_LEN=8）/:66（url LIKE 片段查）、apps/api/app/services/article_identity.py:54（parse_wechat_url）、apps/api/app/core/secret_crypto.py（AES-256-GCM fail-closed）、apps/api/app/models/bothot_entities.py:265（Notification）。",
   "type": "object",
+  "x-not-in-single-source": {
+    "ChannelSecret": "AES-256-GCM、AAD 绑定渠道 id、fail-closed、生产双主密钥守卫、管理面只回显掩码——全是加密实现与运维纪律，没有一条是字段形状；且 x-projection-rules 明令任何响应都不得包含密文或解密材料，做成可实例化模型反而诱导有人去序列化它。",
+    "x-projection-rules": "投影纪律（列表不得带正文、响应不得带密文、管理端日志须掩码 tracking 参数）是输出面规则，不是任何一次响应的形状。真源在端点投影与 structlog 处理器。",
+    "x-resource-lifecycle": "生命周期是状态机叙述，值集与边已由 collection.ManifestStatus 与 ADR-0012 承担。"
+  },
   "definitions": {
     "ArticleKey": {
       "type": "string",
@@ -33,7 +38,7 @@
         "qualityScore": { "type": "number", "minimum": 0, "maximum": 100, "default": 0 },
         "status": { "type": "string", "enum": ["READY", "PENDING", "FAILED", "STALE", "SUPERSEDED"], "default": "READY", "description": "DB 层 String(16) 默认 READY（:138）。实测代码只用到 READY（kb.py:430-432）与 stale 语义（kb.py:281-288）；后四值为本次冻结的目标枚举，取值扩展零迁移是本项目的既有惯例（AGENTS.md 关键约束 3）。" },
         "hitCount": { "type": "integer", "minimum": 0, "default": 0, "description": "复用命中计数，命中即 +0 微信请求（:139-140 AB-P004）" },
-        "category": { "type": "string", "maxLength": 32, "default": "", "index": true }
+        "category": { "type": "string", "maxLength": 32, "default": "", "x-index": true }
       },
       "x-unique": ["uq_asset_source_external = (source_id, external_id)（entities.py:146）"],
       "x-index-strategy": [

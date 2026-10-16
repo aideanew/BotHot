@@ -104,6 +104,26 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "`test_idempotency_key_bound_matches_the_column_that_enforces_it` 核对。",
     ),
     Divergence(
+        "*（本域全部 def 与属性）",
+        "description",
+        "documentation",
+        "strip-description",
+        "稿里 PushRetryState.reason 与 IdempotencyKey 带说明",
+        "模型 docstring / Field description 会在更多位置生成 description",
+        "文本不同不构成契约差异；但「稿里有 ⇒ 产物也得有」由 `_description_losses` 钉住。"
+        "同名条目必须存在（第六轮之后按 rule 名认领归一，蹭别的条目不给通行证）。",
+    ),
+    Divergence(
+        "*（本域所有可空字段）",
+        "*",
+        "structural",
+        "nullable-form",
+        '写成 "type": ["object", "null"] 或 ["string", "null"]',
+        '写成 "anyOf": [ …, {"type": "null"}]',
+        "Pydantic 的可空固定写法，语义相同；比对器在事实层合流（types/nullable 两个事实位）。"
+        "同名条目必须存在：归一被用到就要有人认领（第六轮之后按 rule 名核对）。",
+    ),
+    Divergence(
         "*（所有 def）",
         "required",
         "structural",

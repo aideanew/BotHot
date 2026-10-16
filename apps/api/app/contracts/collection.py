@@ -43,7 +43,8 @@ ARTICLE_KEY_PATTERN = (
 
 ArticleKey = Annotated[
     str,
-    StringConstraints(pattern=ARTICLE_KEY_PATTERN, min_length=3, max_length=128),
+    StringConstraints(pattern=ARTICLE_KEY_PATTERN, min_length=8, max_length=128),  # D-V8-02：两稿取更严者
+
 ]
 
 # ── 枚举 ──────────────────────────────────────────────────────────────────────
@@ -259,6 +260,41 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "同样声明 3 / 128，但对 pattern 而言是冗余约束",
         "最短可通过串是 `s:12345678`（10 字符）、最长分支 ≤ 82 ⇒ 两条边界永远先不到。"
         "由 `test_article_key_bounds_are_redundant` 断言「三支分支各自能过的极值都在 3/128 之内」。",
+    ),
+    Divergence(
+        "ArticleManifest",
+        "properties.article_key.minLength",
+        "tightening",
+        "article-key-min-length-unified",
+        "`minLength: 3`",
+        "`minLength: 8`（与 resources 稿对齐后的唯一源取值）",
+        "两稿对同一个键写了不同的冗余下界（3 vs 8），而唯一源只能有一个别名 ⇒ 台账行 **D-V8-02** 取更严者。"
+        "取 8 不排任何合法键：三支分支各自最短可过串是 `s:`+8=10、`b:` 支 13、`h:` 支 34，全部 >8，"
+        "所以这一档收紧对接受集是**恒等变换**——由 `test_article_key_bounds_are_redundant` 算给看，"
+        "不是嘴上说一句「反正冗余」。",
+    ),
+    Divergence(
+        "ArticleKey",
+        "minLength, maxLength, oneOf",
+        "structural",
+        "alias-inlining",
+        "是 $defs 条目，被 `$ref: #/$defs/ArticleKey` 引用",
+        "生成物 $defs 里没有它：约束内联到使用处（`ArticleManifest.properties.article_key` 三件套齐全）",
+        "Pydantic 不为类型别名建 $defs，只为 BaseModel/Enum 建 ⇒ 这是生成器的固定行为，不是漏项。"
+        "第六轮验证之后这条必须**自己存在**而不是蹭 `pattern-equivalence` 那一条：比对器用到哪个归一，"
+        "就要有一条同名登记认领它（否则任何一条 documentation 登记都能替归一发通行证）。"
+        "内联是否真的发生，由逐 def 比对在使用处验：`test_article_key_pattern_text_is_derivable_from_draft`。",
+    ),
+    Divergence(
+        "ArticleKey",
+        "oneOf",
+        "structural",
+        "oneOf-to-pattern-set",
+        "三条带锚的 pattern 分支写在 `oneOf` 里",
+        "折成一条带锚 alternation `^(?:A|B|C)$`",
+        "折叠本身是归一，必须被同名条目认领（第六轮之后 `test_normalizations_used_are_all_backed_by_registry`"
+        "按 rule 名核对，蹭别的条目不给通行证）。等价性由文本推导证明而不是语料抽样，"
+        "见 `pattern-equivalence` 与 `test_article_key_pattern_text_is_derivable_from_draft`。",
     ),
     Divergence(
         "*（所有 def）",

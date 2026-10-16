@@ -6,7 +6,7 @@
         "article_key": {
           "description": "= canonical_article_key(url)；新列 ab1006c1a",
           "maxLength": 128,
-          "minLength": 3,
+          "minLength": 8,
           "pattern": "^(?:b:[A-Za-z0-9+/=_-]{8,64}:[0-9]{1,12}:[0-9]{1,2}|s:[A-Za-z0-9_-]{8,64}|h:[0-9a-f]{32})$",
           "type": "string"
         },
