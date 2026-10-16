@@ -541,7 +541,10 @@ def _is_noop_invention(leaf: str, value: Any) -> bool:
     if leaf == "pattern":
         return str(value).split("#")[0] in {"", ".*", "^.*$", "(?s).*", "(?:.*)"}
     if leaf == "format":
-        return not str(value).strip()
+        # 第十轮验证 B：draft 2020-12 里 `format` 默认只是**注解**（assertion 是可选行为），
+        # 稿没写、产物单方面加一个 `format` 并不改变接受集——所以它**永远**不是"新增约束"，
+        # 任何 kind（含 conflict）都不该为它放行。真要让某个 format 生效，得先在冻结稿里声明它。
+        return True
     if leaf == "enum":
         return isinstance(value, list) and not value
     return False
@@ -736,10 +739,16 @@ _LIVE_DECISIONS: set[str] | None = None
 
 
 def live_decision_ids() -> set[str]:
-    """台账里真实存在的裁决号（读一次，缓存住）。"""
+    """台账里真实存在的裁决号（读一次，缓存住）。
+
+    **只认表格行**：一条裁决的存在就等于表格里那一行有人能看见。
+    第十轮 C 抓到全文件扫的后果——被粘行/脱离表格吞掉的号仍然"live"，
+    于是登记可以引用一条渲染上不存在的裁决，正是这条门禁要防的"登记了但没人看得见"。
+    """
     global _LIVE_DECISIONS
     if _LIVE_DECISIONS is None:
-        _LIVE_DECISIONS = set(re.findall(r"D-V\d+-\d\d", LEDGER_PATH.read_text(encoding="utf-8")))
+        registered = set(_decision_rows(_ledger_lines()))
+        _LIVE_DECISIONS = {i for i in registered if re.fullmatch(r"D-V\d+-\d\d", i)}
     return _LIVE_DECISIONS
 
 
@@ -756,27 +765,42 @@ def cites_live_decision(entry: Divergence) -> bool:
     return bool(cited) and cited <= live_decision_ids()
 
 
+_DECISION_ID = re.compile(r"\bD-(?:V\d+-\d\d|\d+)\b")
+_ID_CELL = re.compile(r"\*{0,2}D-(?:V\d+)?-\d{2}\*{0,2}|D-\d+\*{0,2}")
+
+
 def _is_ledger_row(line: str) -> bool:
-    """台账表格行（`| D-12 |` / `| **D-V8-06** |`）。正文里的自由叙述不算。"""
-    return bool(re.match(r"^\|\s*\*?\*?D-", line))
+    """台账表格行 = 以 `|` 开头**且**含裁决号。正文里的自由叙述不算答复。
+
+    判据不写成"行首必须是号"（`^\\|\\s*D-`）：那正好是守卫的失明面——
+    第十轮 C 证明给表格加一列编号，整片裁决行就从列数与粘行两条守卫里消失，
+    而 `live_decision_ids()` 仍把被吞掉的号算成 live（登记于是买到一条渲染上不存在的裁决）。
+    "第一格必须是裸号"改由 `_malformed_id_rows` **正面要求**，两条合起来才不靠行首形状。
+    """
+    return line.startswith("|") and bool(_DECISION_ID.search(line))
+
+
+def _cited_ledger_rows(entry: Divergence) -> list[str]:
+    """这条登记所引的**表格行**，逐行返回（保留行边界，不拼块）。
+
+    两条历史洗白路径都源自"把来源揉成一块"：
+    - 第九轮 T3c：散文段落里提到过同一个裁决号，散文还顺口提了字段名 ⇒ 拼块把散文也当答复；
+      ⇒ 本函数只收 `_is_ledger_row` 为真的行。
+    - 第十轮 A1：**两条各自不相干**的号一起引——`D-V8-04` 供 def+字段、`D-V8-06` 供事实词
+      `pattern`，拼块后"三样齐全"，实测仍读 0 条差异 ⇒ 所以行边界必须保住，
+      由 `citation_covers` 要求**同一行**同时说到全部要素。
+    """
+    cited = set(re.findall(r"D-V\d+-\d\d", " ".join((entry.draft, entry.model, entry.reason))))
+    return [
+        line
+        for line in _ledger_lines()
+        if _is_ledger_row(line) and set(re.findall(r"D-V\d+-\d\d", line)) & cited
+    ]
 
 
 def _ledger_row_texts(entry: Divergence) -> str:
-    """这条登记所引台账行的**原文**拼在一起（用来检查"引用是不是在说这件事"）。
-
-    只取表格里的那几行：正文段落里出现同一个裁决号不算答复。
-    第九轮验证 T3c 的洗白路径之一就是"引用落在散文里"——散文提到过 `sub`，
-    登记表却在说另一件事， substring 判据把两者当成同一件事。
-    """
-    cited = set(re.findall(r"D-V\d+-\d\d", " ".join((entry.draft, entry.model, entry.reason))))
-    blob = []
-    for line in _ledger_lines():
-        if not _is_ledger_row(line):
-            continue
-        ids = set(re.findall(r"D-V\d+-\d\d", line))
-        if ids & cited:
-            blob.append(line)
-    return "\n".join(blob)
+    """所引台账行原文的拼接（只给"来源范围"类核对用；**放行判据走 `_cited_ledger_rows`**）。"""
+    return "\n".join(_cited_ledger_rows(entry))
 
 
 _LEDGER_LINES: list[str] | None = None
@@ -829,22 +853,24 @@ def _ledger_mentions(text: str, token: str) -> bool:
 def citation_covers(
     entry: Divergence, names: set[str], *, def_name: str | None = None, fact: str | None = None
 ) -> bool:
-    """被点名的字段**和这个 def、这一类事实**都必须真的出现在所引台账行里。
+    """**某一条**台账行必须同时说到 def、字段、这一类事实。
 
-    这是 T2b 隔离测量逼出来的第二道闸，第九轮 T3c 又把它的两个漏洞补上了：
-    ①只比字段名 ⇒ 「`sub` 在这条号里出现过」就能给 `sub` 加任何约束；
-    ②不比事实类 ⇒ 一条裁「必填与否」的号可以顺带裁掉「格式（pattern）」。
-    现在登记要买到放行，台账那一行必须同时说到 **def、字段、事实类**三样。
+    这是 T2b 隔离测量逼出来的第二道闸，之后每轮都证明"来源"这件事会被更窄地绕过：
+    ①第九轮 T3c：只比字段名（substring）⇒「`sub` 在这条号里出现过」就能给 `sub` 加任何约束；
+    ②第九轮 T3c：不比事实类 ⇒ 一条裁「必填与否」的号顺带裁掉「格式（pattern）」；
+    ③**第十轮 A1**：把所引的几行拼成一块比 ⇒ `D-V8-04` 供 def+字段、`D-V8-06` 供事实词，
+      两条各自毫不相干的号合起来"要素齐全"，实测 0 条差异（三种 kind 全过）。
+    所以判据的量词是 **exists 一行**，不是 all over 拼块：一次裁决才买一次放行，
+    拼两条裁决不等于第三条裁决存在。
     """
-    text = _ledger_row_texts(entry)
-    if not text:
-        return False
-    wanted = set(names)
+    wanted = {n for n in names if n}
     if def_name:
         wanted.add(def_name)
     if fact:
         wanted.add(fact)
-    return all(_ledger_mentions(text, name) for name in wanted if name)
+    return any(
+        all(_ledger_mentions(row, name) for name in wanted) for row in _cited_ledger_rows(entry)
+    )
 
 
 def _ref_tokens(ref: str) -> set[str]:
@@ -2665,19 +2691,24 @@ def test_plan_docs_restate_the_verified_minima() -> None:
     assert not offenders, "文档里的可过串长度与测试断言不一致：\n" + "\n".join(offenders)
 
 
-_WRONG_TRIPLE = re.compile(r"10\s*/\s*13\s*/\s*34")
+_WRONG_TRIPLE = re.compile(r"(?<!\d)10[^\d\n]{0,4}13[^\d\n]{0,4}34(?!\d)")
 
 
 def test_the_wrong_minima_triple_is_not_restated() -> None:
-    """那个"比实算小 1"的旧三元组不许以任何间距形式再出现在 `docs/` 里。
+    """那个"比实算小 1"的旧三元组不许以任何分隔形式再出现在**任何文本载体**里。
 
-    上一条守卫只在含「最短可过串」的行上生效——于是"复述旧错数"这种写法天然逃得过它
-    （我自己就在更正注里复述了一次，首跑被上一条抓红）。这条按**内容**拦，不看措辞。
-    已知残留：已推送的提交 `4427fd1` 的 message 正文里也有它——历史消息不改写。
+    三条都来自第十轮验证 D 的实测：①只认斜杠 ⇒ 我用逗号形式复述了它，它就一直活在仓库里；
+    ②只扫 `docs/任务规划V0.12.0/**` ⇒ 证据目录 `docs/06_validation/**` 不在面内；
+    ③不扫 `.py` ⇒ `app/contracts/*.py` 的注释是同一族重抄位，植进去两条守卫全绿。
+    现在按**内容**拦（不看措辞、不认分隔符），md 与 py 都扫，也扫本文件自己。
+    已知残留：已推送提交 `4427fd1` 的 message 正文里仍有它——历史消息不改写。
     """
+    roots = [REPO_ROOT / "docs", REPO_ROOT / "apps" / "api" / "app" / "contracts"]
+    files = [p for root in roots for p in root.rglob("*") if p.suffix in {".md", ".py"}]
+    files.append(Path(__file__))
     offenders = [
         f"{p.relative_to(REPO_ROOT)}:{n}"
-        for p in sorted((REPO_ROOT / "docs").rglob("*.md"))
+        for p in sorted(files)
         for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), start=1)
         if _WRONG_TRIPLE.search(line)
     ]
@@ -2871,6 +2902,66 @@ def test_borrowed_citation_does_not_license_an_invented_constraint() -> None:
         )
 
 
+def test_two_off_point_citations_do_not_launder_an_invention() -> None:
+    """第十轮验证 A1：把**两条各自不相干**的号一起引，仍然不许放行。
+
+    实测过的绕过：`reason="见 D-V8-04 与 D-V8-06"` —— `D-V8-04` 供 `SessionClaims`+`sub`
+    （它在描述里顺口写了「required 只有 `sub`」），`D-V8-06` 供事实词 `pattern`
+    （那条裁的是另一域 `ArticleKey` 的 pattern）。第一版把所引各行拼成一块再 `all(...)`，
+    于是"要素齐全"成立、读 0 条差异。
+    判据的量词从此是 **exists 一行**：一次裁决买一次放行，两条毫不相干的裁决加不出第三条。
+    """
+    for kind in ("tightening", "strictness", "conflict"):
+        row = Divergence(
+            "SessionClaims",
+            "properties.sub.pattern",
+            kind,
+            f"probe-pair-{kind}",
+            "无",
+            "1",
+            "见 D-V8-04 与 D-V8-06",
+        )
+
+        def mutate(gen: dict[str, Any]) -> None:
+            gen["$defs"]["SessionClaims"]["properties"]["sub"]["pattern"] = "^PROBE2$"
+
+        diffs = _compare_with_extra_row(row, mutate, "identity")
+        assert any("pattern" in d for d in diffs), f"kind={kind}：两条不相干号拼块仍然洗白了 {diffs}"
+
+
+def test_annotation_only_inventions_are_never_constraints() -> None:
+    """`_is_noop_invention` 必须逐值覆盖"写了等于没写"这一类，而不是一类一条特例。
+
+    第十轮验证 B 抓的是 `format`：draft 2020-12 里未识别的 `format` 只是注解，
+    接受集不变，却被判成"新增约束"可以登记放行。
+    这张表把可机械判定的恒真写法列全；**不在表里的写法默认可放行**（保守方向），
+    所以这里的断言只钉"表内每一个都必须被拦"，不假装表覆盖了全部语义空转。
+    """
+    noop_cases = [
+        ("additionalProperties", True),
+        ("additionalProperties", {}),
+        ("minLength", 0),
+        ("minItems", 0),
+        ("pattern", ".*#1#1"),
+        ("pattern", "^.*$"),
+        ("enum", []),
+        ("format", "x-unasserted"),
+        ("format", ""),
+        ("type", MISSING),
+    ]
+    for leaf, value in noop_cases:
+        assert _is_noop_invention(leaf, value), f"{leaf}={value!r} 是恒真/空注解，必须拦"
+    narrowing_cases = [
+        ("additionalProperties", False),
+        ("minLength", 8),
+        ("pattern", "^(?:b:|s:|h:).*$#1#10"),
+        ("enum", ["article"]),
+        ("maxLength", 512),
+    ]
+    for leaf, value in narrowing_cases:
+        assert not _is_noop_invention(leaf, value), f"{leaf}={value!r} 真的在收窄，不该被当空转"
+
+
 def test_invented_noop_constraint_is_not_licensable() -> None:
     """第九轮验证 T3e：登记声称在收紧，产物新增的却是**恒真约束** ⇒ 必须红。
 
@@ -2915,18 +3006,29 @@ def _ledger_split(line: str) -> list[str]:
 
 
 def _table_interrupts(lines: list[str]) -> list[str]:
-    """表格中间夹空行 ⇒ 后半截脱离表格（渲染上等于没登记）。
+    """表格内部出现**任何**空行 ⇒ 表格被切断（渲染上其后各行脱离表格，等于没登记）。
 
-    新起一张表不算打断：紧跟表头行或 `|---|` 分隔行的空行是正常段落边界。
+    按"空行游程"判，不按"紧邻一行"判：第十轮验证 C 用**连续两个**空行绕过了上一版
+    （那版要求空行的下一行直接是 `|`），而 GFM 在第一个空行就把表格切断了，
+    空几行只是让缺陷更难看见。
     """
     bad: list[str] = []
-    for i, line in enumerate(lines):
-        if line.strip():
+    i = 0
+    while i < len(lines):
+        if lines[i].strip():
+            i += 1
             continue
-        prev = lines[i - 1] if i > 0 else ""
-        nxt = lines[i + 1] if i + 1 < len(lines) else ""
-        if prev.startswith("|") and nxt.startswith("|") and not _starts_new_table(nxt):
-            bad.append(f"第 {i + 1} 行是空行，夹在表格中间 ⇒ 其后各行脱离表格（前一行：{prev[:24].strip()}…）")
+        j = i
+        while j < len(lines) and not lines[j].strip():
+            j += 1
+        back = lines[i - 1] if i > 0 else ""
+        fwd = lines[j] if j < len(lines) else ""
+        if back.startswith("|") and fwd.startswith("|") and not _starts_new_table(fwd):
+            bad.append(
+                f"第 {i + 1}–{j} 行是空行（{j - i} 行），夹在表格中间 ⇒ 其后各行脱离表格"
+                f"（前一行：{back[:24].strip()}…）"
+            )
+        i = j
     return bad
 
 
@@ -2934,39 +3036,54 @@ def _starts_new_table(line: str) -> bool:
     return bool(re.match(r"^\|\s*:?-{2,}", line)) or line.startswith("| ID |")
 
 
-def test_decision_log_tables_are_well_formed() -> None:
-    """台账必须渲染得出来：行内不许有未转义的竖线，表格中间不许夹空行。
+def _decision_rows(lines: list[str]) -> dict[str, int]:
+    """规范形态的裁决行 ⇒ `{裸裁决号: 行号}`。第一格必须是号（`D-12` / `**D-V8-07**`）。"""
+    out: dict[str, int] = {}
+    for i, line in enumerate(lines, start=1):
+        if not line.startswith("|"):
+            continue
+        cells = _ledger_split(line)
+        if len(cells) > 1 and _ID_CELL.fullmatch(cells[1]):
+            out.setdefault(cells[1].strip("*"), i)
+    return out
 
-    第八轮验证抓到两个真实缺陷，都是**我插行时造的**：
-    ①`D-V8-05`（那条要你签的 BLOCKING）与 `D-V8-06` 被一个空行挤出表格，渲染上等于不存在；
-    ②`D-V8-06` 与 `D-V8-07` 被粘在同一行（少一个换行），一行里塞了两条裁决。
-    登记动作本身没错，错在「登记了但没人看得见」。这条守卫让它下次一定红。
+
+def _invisible_decision_ids(lines: list[str]) -> list[str]:
+    """被**提到**、却没有任何一行以规范形态登记它的裁决号。
+
+    第十轮 C 的第三条：给表格加一列编号（或把第二行的号粘在第一行尾部），
+    "看行首"的判据就整片失明——列数与粘行两条守卫同时抓不到，
+    而引用侧 `live_decision_ids()` 仍把那条号算成 live，登记于是买到一条渲染上不存在的裁决。
+    所以这里问反向的问题：被说到的每个号，是否都有一行当得了它？
     """
-    lines = LEDGER_PATH.read_text(encoding="utf-8").splitlines()
+    mentioned = {found for line in lines for found in re.findall(r"D-V\d+-\d\d", line)}
+    return sorted(mentioned - set(_decision_rows(lines)))
+
+
+def _ledger_table_problems(lines: list[str]) -> list[str]:
+    """台账卫生三类判据里的前两类（纯函数，反证可喂构造数据）。"""
     header_cells = 0
     problems: list[str] = []
     for i, line in enumerate(lines, start=1):
         if line.startswith("| ID |"):
             header_cells = len(_ledger_split(line))
             continue
-        if re.match(r"^\|\s*\*?\*?D-", line):
+        if _is_ledger_row(line):
             cells = len(_ledger_split(line))
             if header_cells and cells != header_cells:
                 problems.append(
                     f"第 {i} 行有 {cells} 列，当前表头是 {header_cells} 列"
-                    "（多半是单元格里有未转义的竖线）"
+                    "（多半是单元格里有未转义的竖线，或两行被粘成一行）"
                 )
-    problems += _table_interrupts(lines)
-    assert not problems, "台账表格有问题：\n" + "\n".join(problems)
+    problems = problems + _table_interrupts(lines)
+    invisible = _invisible_decision_ids(lines)
+    if invisible:
+        problems.append(f"这些号被提到却没有规范登记行（渲染上可能不存在）：{invisible}")
+    return problems
 
 
-def test_decision_log_has_no_glued_rows() -> None:
-    """一条物理行只能登记一条裁决（第八轮抓到两行被粘成一行，一行 21 列）。
-
-    判据取「ID 单元格个数」而不是「全文出现几次 `D-V8-06`」：
-    推翻记录里引用别的裁决号是合法叙述，按字符串计数会把正常行误判成粘行。
-    """
-    lines = LEDGER_PATH.read_text(encoding="utf-8").splitlines()
+def _glued_rows(lines: list[str]) -> list[tuple[int, list[str]]]:
+    """一行里出现**两个裸裁决号格** ⇒ 两条裁决被粘在同一物理行。"""
     glued = []
     for i, line in enumerate(lines, start=1):
         if not _is_ledger_row(line):
@@ -2974,10 +3091,67 @@ def test_decision_log_has_no_glued_rows() -> None:
         id_cells = [c for c in _ledger_split(line) if _ID_CELL.fullmatch(c)]
         if len(id_cells) > 1:
             glued.append((i, id_cells))
-    assert not glued, f"这些行里粘了多条裁决：{glued}"
+    return glued
 
 
-_ID_CELL = re.compile(r"\*{0,2}D-(?:V\d+)?-\d{2}\*{0,2}|D-\d+\*{0,2}")
+# 反证用的最小台账：与真台账同形（表头 9 个数据格 ⇒ split 出 11 段）。
+_MINI_LEDGER = [
+    "| ID | 问题 | 默认值(A) | 备选(B) | 级别 | 登记时间 | 生效时间 | 签字 | 推翻记录 |",
+    "|---|---|---|---|---|---|---|---|---|",
+    "| **D-V8-05** | 熔断 | A | B | **BLOCKING** | t | 待签，不自动生效 | | |",
+    "| **D-V8-06** | pattern | A | B | NON | t | e | | |",
+]
+
+
+def test_ledger_guards_fire_on_the_two_real_defects_they_were_written_for() -> None:
+    """这两条守卫必须先能对我**真的造过**的缺陷红——否则它们只是装饰。
+
+    判据不绑真文件：喂构造数据，红/绿都可复现，且**没有**豁免关键词。
+    """
+    assert _ledger_table_problems(_MINI_LEDGER) == [], "最小台账本身不干净，反证失去基准"
+
+    one_blank = _MINI_LEDGER[:2] + [""] + _MINI_LEDGER[2:]
+    assert _table_interrupts(one_blank), "空一行打断表格没被抓"
+    two_blanks = _MINI_LEDGER[:2] + ["", ""] + _MINI_LEDGER[2:]
+    assert _table_interrupts(two_blanks), "空两行打断表格没被抓（第十轮 C 的绕过面）"
+
+    glued_line = (
+        "| **D-V8-06** | pattern | A | B | NON | t | e | | "
+        "|| **D-V8-07** | forbid | A | B | NON | t | e | | |"
+    )
+    glued = _MINI_LEDGER[:3] + [glued_line]
+    assert _glued_rows(glued), "粘行没被按『两个裸号格』抓到"
+    assert _ledger_table_problems(glued), "粘行的列数算术没被抓到"
+    assert "D-V8-07" in _invisible_decision_ids(glued), "被粘进第二格的号应当算『没有登记行』"
+
+    numbered = [
+        "| # | ID | 问题 | 默认值(A) | 备选(B) | 级别 | 登记时间 | 生效时间 | 签字 | 推翻记录 |",
+        "|---|---|---|---|---|---|---|---|---|---|",
+        "| 1 | **D-V8-05** | 熔断 | A | B | **BLOCKING** | t | 待签 | | |",
+    ]
+    assert _invisible_decision_ids(numbered) == ["D-V8-05"], "加一列编号就令整片行不可见 ⇒ 必须红"
+    assert _ledger_table_problems(numbered), "编号列表述没进入总判据"
+
+
+def test_decision_log_tables_are_well_formed() -> None:
+    """台账必须渲染得出来：行内不许有未转义的竖线、表格中间不许夹空行、第一格必须是裸号。
+
+    第八轮验证抓到两个真实缺陷，都是**我插行时造的**：
+    ①`D-V8-05`（那条要你签的 BLOCKING）与 `D-V8-06` 被一个空行挤出表格，渲染上等于不存在；
+    ②`D-V8-06` 与 `D-V8-07` 被粘在同一行（少一个换行），一行里塞了两条裁决。
+    登记动作本身没错，错在「登记了但没人看得见」。这条守卫让它下次一定红。
+    """
+    problems = _ledger_table_problems(_ledger_lines())
+    assert not problems, "台账表格有问题：\n" + "\n".join(problems)
+
+
+def test_decision_log_has_no_glued_rows() -> None:
+    """一条物理行只能登记一条裁决（第八轮抓到两行被粘成一行，一行 21 列）。
+
+    判据取「裸 ID 单元格个数」而不是「全文出现几次 `D-V8-06`」：
+    推翻记录里引用别的裁决号是合法叙述，按字符串计数会把正常行误判成粘行。
+    """
+    assert not _glued_rows(_ledger_lines()), f"这些行里粘了多条裁决：{_glued_rows(_ledger_lines())}"
 
 
 # ── 9. 产物与模型的即时一致性（把 CI 那条链拉进本地测试）───────────────────────
