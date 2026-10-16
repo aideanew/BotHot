@@ -189,18 +189,8 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "产物往根层塞 `type`、或两侧都声明而值不同，都要另立 conflict 并引台账。"
         "消费者：`test_document_root_divergences_are_named`。",
     ),
-    Divergence(
-        "*（文档根）",
-        "$id",
-        "conflict",
-        "root-identifier-conflict",
-        "`$id` 是文件位址式 `https://bothot/contracts/events.schema.json`",
-        "`$id` 是标识符式 `bothot://contracts/events/v1`",
-        "两套写法都是合法 URI，但**两侧都声明而值不同**就不是等价改写，所以按 conflict 登记而不是"
-        "structural。台账行：**D-V8-03**（默认把三份稿统一到产物侧写法；collection 稿已被另一会话"
-        "先改成标识符式，这正说明「由比对器静默择一」迟早会把不一致讲成已解决）。"
-        "本条由 `test_conflict_entries_cite_a_live_decision_id` 反向核验该 ID 确实在台账里。",
-    ),
+    # root-identifier-conflict 已随 D-V8-03 的默认值 A 执行而**删除**：三份稿的 $id 统一到产物侧标识符式，两侧一致，
+    # 留着一条讲不符的登记就是过期登记（`_stale_root_entries` 会红）。
     Divergence(
         "PushRetryState",
         "properties.responseData.types, properties.responseData.nullable",

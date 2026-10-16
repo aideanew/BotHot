@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bothot/contracts/identity.schema.json",
+  "$id": "bothot://contracts/identity/v1",
   "title": "BotHot 身份与权限边界契约（冻结稿 V0.7.0 / 基线 main@13acacc）",
   "description": "实测来源：apps/api/app/models/entities.py:17-28（users 表）、apps/api/app/services/roles.py:29（ROLE_RANK）、apps/api/app/api/deps.py:52/72-84（get_current_sub / require_roles）、AGENTS.md 关键约束 2（SSO 身份锚点 = users.sub，余额/等级从不持久化）。",
   "type": "object",

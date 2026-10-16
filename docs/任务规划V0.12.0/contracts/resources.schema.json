@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bothot/contracts/resources.schema.json",
+  "$id": "bothot://contracts/resources/v1",
   "title": "BotHot 资源（内容资产 / 短链 / 密钥 / 站内通知）契约（冻结稿 V0.7.0 / 基线 main@13acacc）",
   "description": "实测来源：apps/api/app/models/entities.py:118-146（ContentAsset）、:148+（ShortLinkMap）、apps/api/app/repositories/asset.py:22（MIN_FRAGMENT_LEN=8）/:66（url LIKE 片段查）、apps/api/app/services/article_identity.py:54（parse_wechat_url）、apps/api/app/core/secret_crypto.py（AES-256-GCM fail-closed）、apps/api/app/models/bothot_entities.py:265（Notification）。",
   "type": "object",

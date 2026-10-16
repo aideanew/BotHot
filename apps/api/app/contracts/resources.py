@@ -46,7 +46,11 @@ class ContentAsset(BaseModel):
 
     id: str = Field(max_length=36)
     source_id: str = Field(max_length=36, alias="sourceId", description="FK sources.id ON DELETE CASCADE")
-    external_id: ArticleKey = Field(alias="externalId")
+    external_id: ArticleKey = Field(
+        alias="externalId",
+        description="文章身份键。实测 ContentAsset.external_id = _article_key(url)（kb.py:432），"
+        "而 ArticleManifest.external_id 装渠道上游 id——两个键空间不相交即 P0-2/P-2 根因（ADR-0012 §1）",
+    )
     url: str = Field(
         default="",
         max_length=512,
@@ -86,7 +90,9 @@ class ShortLinkMap(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     short_key: str = Field(max_length=128, alias="shortKey")
-    article_key: ArticleKey = Field(alias="articleKey")
+    article_key: ArticleKey = Field(
+        alias="articleKey", description="长链形态的规范文章键（全仓唯一在用它的位置之一）"
+    )
 
 
 class InAppNotification(BaseModel):
@@ -202,6 +208,18 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "同名条目必须存在：归一被用到就要有人认领（第六轮之后按 rule 名核对）。",
     ),
     Divergence(
+        "ContentAsset",
+        "status",
+        "structural",
+        "default-on-required-is-inert",
+        "status 同时出现在 `required` 与带 `default: READY` 的位置",
+        "产物里 status 是必填、**不写** default",
+        "required 已经保证这个键必然存在 ⇒ 稿那句 default 不参与校验，产物不写它不算差异。"
+        "只开「稿有、产物不写」一个方向：第八轮验证 T3(b) 打穿的就是我把方向写漏了——"
+        "产物把默认值改成 PENDING 也曾读绿，那已经是改接受语义而不是省略惰性事实，"
+        "现由 `test_inert_default_rule_does_not_cover_a_changed_value` 钉住。",
+    ),
+    Divergence(
         "*（所有 def）",
         "required",
         "structural",
@@ -229,16 +247,7 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "同 collection/events：稿根那句是「本文描述一个对象文档」的占位，产物把每个形状放 `$defs`。"
         "只解释「稿声明而产物不声明」这一个方向。消费者：`test_document_root_divergences_are_named`。",
     ),
-    Divergence(
-        "*（文档根）",
-        "$id",
-        "conflict",
-        "root-identifier-conflict",
-        "`$id` 是文件位址式 `https://bothot/contracts/resources.schema.json`",
-        "`$id` 是标识符式 `bothot://contracts/resources/v1`",
-        "两侧都声明而值不同 ⇒ conflict。台账行：**D-V8-03**。见 "
-        "`test_conflict_entries_cite_a_live_decision_id`。",
-    ),
+    # root-identifier-conflict 不再需要：三份稿的 $id 已按 D-V8-03 的默认值 A 统一到产物侧标识符式。
     Divergence(
         "*（本域全部 def）",
         "*",

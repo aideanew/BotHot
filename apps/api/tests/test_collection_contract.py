@@ -376,7 +376,6 @@ def _canon(node: Any) -> dict[str, Any]:
 _NORMALIZATION_TO_KIND = {
     "strip-title": "documentation",
     "strip-description": "documentation",
-    "dump-materializes-defaults": "serialization",
     "nullable-form": "structural",
     "oneOf-to-pattern-set": "structural",
     "ref-inlining": "structural",
@@ -384,6 +383,7 @@ _NORMALIZATION_TO_KIND = {
     "alias-inlining": "structural",
     "not-a-shape": "structural",
     "single-value-enum-to-const": "structural",
+    "default-on-required-is-inert": "structural",
     "definitions-vs-refs-dialect": "structural",
 }
 
@@ -753,6 +753,23 @@ def _ledger_lines() -> list[str]:
     return _LEDGER_LINES
 
 
+def _path_property(path: str) -> str | None:
+    parts = path.split(".")
+    if len(parts) >= 2 and parts[0] == "properties":
+        return parts[1]
+    return None
+
+
+def cited_tokens(entry: Divergence, path: str) -> set[str]:
+    """这条登记在**说哪些字段**——用来判断台账引用是不是相关，而不是蹭了个相邻号。"""
+    out: set[str] = set()
+    for token in _field_tokens(entry.field):
+        if token in _BARE_FACT_KEYS:
+            continue
+        out.add(_path_property(token) or token)
+    out.add(_path_property(path) or (path.rsplit(".", 1)[-1] if path else ""))
+    return {t for t in out if t}
+
 def citation_covers(entry: Divergence, names: set[str]) -> bool:
     """被点名的字段必须真的出现在所引台账行里。
 
@@ -808,8 +825,16 @@ def _explains(entry: Divergence, def_name: str, path: str, fa: Any = MISSING, fb
         return False  # 裸事实名只接受"完整路径点名"这一档：叶子匹配等于整类事实放行
     if fb is MISSING:
         return False  # 产物丢掉稿里已有的东西：没有任何「等价写法」能替一次删除说话
-    if fa is MISSING and not exact:
-        return False  # 产物凭空多出事实：必须有一条把该完整路径点名的登记接住
+    if fa is MISSING:
+        # 产物**单方面新增**一条约束（稿没写）。第八轮验证 D2/D3 打穿的就是这一档：
+        # 原来只要 `exact`（完整路径点名）+ 一条 structural 登记，就能凭空造出
+        # `pattern: "^x$"` 或 `maxLength: 1` 这样的接受集收窄——连一条引用都不必引。
+        # 现在必须同时满足：①完整路径点名；②kind 是"新增约束"的三档之一
+        # （tightening/strictness/conflict——structural 不在此列，它声称的是等价写法）；
+        # ③引一条**存在**的台账号；④那行号说的就是这些字段（token 相关，不是蹭相邻号）。
+        if not exact or entry.kind not in {"tightening", "strictness", "conflict"}:
+            return False
+        return cites_live_decision(entry) and citation_covers(entry, cited_tokens(entry, path))
     if leaf == "required":
         licensed = fields - _BARE_FACT_KEYS
         # 引台账这一条不是形式主义：登记点名 `url` 之后，第七轮验证把**稿侧**的 required
@@ -819,7 +844,7 @@ def _explains(entry: Divergence, def_name: str, path: str, fa: Any = MISSING, fb
         return (
             entry.kind == "tightening"
             and cites_live_decision(entry)
-            and citation_covers(entry, licensed)
+            and citation_covers(entry, cited_tokens(entry, path) | licensed)
             and _direction_ok("required", fa, fb, entry, licensed)
         )
     if entry.kind not in FACT_ALLOWED_KINDS.get(leaf, DEFAULT_ALLOWED_KINDS):
@@ -924,7 +949,9 @@ def compare_defs(domain: str = "collection") -> tuple[list[str], set[str]]:
             continue
         a = _canon(_resolve(fdefs[name], fdefs))
         b = _canon(_resolve(gdefs[name], gdefs))
-        for path in _description_losses(fdefs[name], gdefs[name], name):
+        # 先展开 `$ref` 再查说明：第八轮 T1 指出走原始节点时，别名背后的散文永不参与检查，
+        # "唯一源把话弄丢了"这条断言对被引用的键是空转的。
+        for path in _description_losses(_resolve(fdefs[name], fdefs), _resolve(gdefs[name], gdefs), name):
             diffs.append(f"{path} 稿有说明、生成物没有（唯一源把话弄丢了）")
         for path in _extra_x_keys(fdefs[name], gdefs[name], name):
             diffs.append(f"{path} 生成物私带稿里没有的注释键")
@@ -933,11 +960,11 @@ def compare_defs(domain: str = "collection") -> tuple[list[str], set[str]]:
                 tail = path[len(name) + 1 :] if path.startswith(f"{name}.") else path
                 if tail == "default" or tail.endswith(".default"):
                     prop = tail.rsplit(".", 2)[-2] if "." in tail else tail
-                    if _inert_default(fdefs[name], prop):
-                        # required 已经保证这个键必然存在 ⇒ 稿里那句 default 不参与校验，
-                        # 产物不写它不算差异。只对"稿有、产物无"这一个方向开，
-                        # 且必须是该 def 的必填字段（`test_inert_default_rule_does_not_cover_optional_fields`）。
-                        _note_explainer("default-on-required-is-inert")
+                    if fb is MISSING and _inert_default(fdefs[name], prop):
+                        # 只开「稿有、产物不写」这一个方向。第八轮验证 T3(b) 打穿的就是我漏了方向：
+                        # 原来只要该字段是必填、稿带 default，产物把默认值**改成另一个值**也读绿——
+                        # 那已经不是"惰性事实没写"，那是把稿声明过的接受语义改掉。
+                        _note_rule("default-on-required-is-inert")
                         continue
                     dhit = _default_explainer(divergences, name, prop)
                     if fa is MISSING and fb is not MISSING and dhit is not None and (
@@ -1123,7 +1150,6 @@ RULE_CONSUMERS: dict[str, str] = {
     "response-data-type-conflict": "test_push_retry_state_tracks_runtime_push_result",
     "events-dump-materializes-defaults": "test_push_retry_default_materializes_on_dump",
     "root-is-a-container": "test_document_root_divergences_are_named",
-    "root-identifier-conflict": "test_conflict_entries_cite_a_live_decision_id",
     "resources-pattern-not-validated-in-draft": "test_resources_pattern_matches_adr_0011_shape",
     "sub-not-aliased-to-identity": "test_inapp_notification_sub_is_deliberately_unbounded",
     "resources-annotations-have-owners": "test_resources_annotations_name_real_anchors",
@@ -1161,12 +1187,27 @@ def test_registry_rules_are_all_consumed() -> None:
     for domain, (_f, _g, divergences) in DOMAINS.items():
         _diffs, used_norms = compare_defs(domain)
         unclaimed: list[str] = []
+        # 第八轮 D1：一条**蹭名字**的装饰行——rule 与本域真归一同名，于是"被用到"是别人替它挣的。
+        # 归一在一个域里只登记一次；第二条同名行要么是复制粘贴要么是假陈述。
+        seen: dict[str, int] = {}
+        for d in divergences:
+            seen[d.rule] = seen.get(d.rule, 0) + 1
+        dupes = sorted(r for r, c in seen.items() if c > 1)
+        assert not dupes, f"{domain} 登记表里有同名重复行：{dupes}——一条归一只能有人认领一次"
         for d in divergences:
             fn_name = RULE_CONSUMERS.get(d.rule)
             if d.rule not in used_norms and fn_name is None:
                 unclaimed.append(
                     f"{d.rule}（{d.ref} / {d.field}）既没被比对器当归一用到，也没登记消费者"
                     f"（它解释过 {len(_USED_EXPLAINERS & {d.rule})} 处差异，但那不算兑现承诺）"
+                )
+                continue
+            # 第八轮验证 D1：反向的门也没关——**蹭**一个真归一的 rule 名、自己从不生效的行，
+            # 在上一版会因为"这名字被用到了"算作已消费。归一行必须在**本域**真的被用到。
+            if d.rule in _NORMALIZATION_TO_KIND and d.rule not in used_norms:
+                unclaimed.append(
+                    f"{d.rule}（{d.ref}）挂着归一的名字但本域从未用到 ⇒ 装饰行："
+                    "要么删掉，要么它声称的归一确实发生"
                 )
                 continue
             if fn_name is None:
@@ -2505,7 +2546,7 @@ def test_article_key_min_length_is_the_unified_value() -> None:
     """D-V8-02 的兑现：两稿 3 vs 8，产物取 8，且**证明它不排任何合法键**。
 
     只说"反正冗余"是不够的——判据是三支分支各自最短可过串都 >8：
-    `s:`+8 字符 = 10、`b:` 支最短 13、`h:` 支 34。
+    `s:`+8 字符 = 10、`b:…:1:1` 支最短 14、`h:` 支 34。
     """
     import re
 
@@ -2514,11 +2555,15 @@ def test_article_key_min_length_is_the_unified_value() -> None:
     artifact = _defs_of(load_cached(DOMAINS["collection"][1]))["ArticleManifest"]["properties"]["article_key"]
     assert (col_draft, res_draft) == (3, 8), "两稿的下界就是不一致，这条登记才有意义"
     assert artifact["minLength"] == 8, "唯一源必须取更严者（D-V8-02 的默认值）"
-    shortest = min(
-        len("s:" + "a" * 8),
-        len("b:" + "A" * 8 + ":1:1"),
-        len("h:" + "0" * 32),
-    )
+    # 逐支断言，不只是 min()：第八轮验证 T2 指出我散文里把 `b:` 支写成 13（实为 14），
+    # 而测试只断言 min(...)==10 ⇒ 第二个数写错没人抓。数字进了断言才不会烂在散文里。
+    per_branch = {
+        "s": len("s:" + "a" * 8),
+        "b": len("b:" + "A" * 8 + ":1:1"),
+        "h": len("h:" + "0" * 32),
+    }
+    assert per_branch == {"s": 10, "b": 14, "h": 34}, per_branch
+    shortest = min(per_branch.values())
     assert shortest == 10 and shortest >= 8
     for sample in ("s:" + "a" * 8, "b:" + "A" * 8 + ":1:1", "h:" + "0" * 32):
         assert re.fullmatch(artifact["pattern"][1:-1], sample), f"合法键被新下界排除了：{sample}"
@@ -2611,6 +2656,66 @@ def test_resources_pattern_matches_adr_0011_shape() -> None:
         return inner
 
     assert _body(res_draft) == _body(col_art) == _body(res_art), "同一键在稿注释与两域产物里不是同一个形状"
+
+
+def test_inert_default_rule_does_not_cover_a_changed_value() -> None:
+    """第八轮 T3(b)：必填字段的 default 被**改掉**时必须红——惰性只适用于"不写"。
+
+    我第一版把这条方向写漏，`status.default` 从 READY 改成 PENDING 读绿：
+    那不是省略一个惰性事实，那是把稿声明过的接受语义换掉。
+    """
+    diffs = _compare_with_mutated_generated(
+        lambda g: g["$defs"]["ContentAsset"]["properties"]["status"].__setitem__("default", "PENDING"),
+        domain="resources",
+    )
+    assert any("status" in d for d in diffs), "改掉必填字段的默认值被惰性规则洗白了"
+
+
+def test_invented_constraint_costs_a_relevant_citation() -> None:
+    """第八轮 D2/D3：产物**单方面新增**约束，必须付出"引对台账"的代价，不能靠 structural 白拿。"""
+    # ① 无登记 ⇒ 红
+    assert _compare_with_mutated_generated(
+        lambda g: g["$defs"]["ContentAsset"]["properties"]["title"].__setitem__("pattern", "^x$"), domain="resources"
+    )
+    # ② 只引一条**存在但说的是别的事**的号 ⇒ 仍要红（引用必须与字段相关）
+    unrelated = Divergence(
+        "ContentAsset", "properties.title.pattern", "conflict", "d3-unrelated", "无 pattern", "有 pattern",
+        "台账行 **D-V8-02**（讲的是 ArticleKey 的界，与 title 无关）",
+    )
+    with _with_extra_entry("resources", unrelated):
+        diffs = _compare_with_mutated_generated(
+            lambda g: g["$defs"]["ContentAsset"]["properties"]["title"].__setitem__("pattern", "^x$"),
+            domain="resources",
+        )
+    assert diffs, "引了不相干的台账号就能给产物凭空加的约束发通行证"
+    # ③ structural 这一档根本不该解释"新增约束"
+    structural = Divergence("ContentAsset", "properties.title.pattern", "structural", "d3-structural", "", "", "")
+    with _with_extra_entry("resources", structural):
+        assert _compare_with_mutated_generated(
+            lambda g: g["$defs"]["ContentAsset"]["properties"]["title"].__setitem__("pattern", "^x$"),
+            domain="resources",
+        ), "structural 解释了产物单方面新增的约束"
+
+
+def test_junk_normalization_row_is_a_dead_claim() -> None:
+    """第八轮 D1：蹭一个真归一的名字、自己从不生效的行，也算 dead claim。
+
+    方向与第三轮那条相反：那时抓的是"有承诺没实现者"，这里抓"名字被别的行用到了就算消费"。
+    """
+    junk = Divergence("ContentAsset", "*", "structural", "nullable-form", "", "", "装饰行复现用")
+    original = DOMAINS["resources"]
+    try:
+        DOMAINS["resources"] = (original[0], original[1], original[2] + (junk,))
+        module = sys.modules[__name__]
+        try:
+            module.test_registry_rules_are_all_consumed()
+        except AssertionError:
+            return
+        raise AssertionError("装饰性归一行被算作已消费——D1 那扇门还开着")
+    finally:
+        DOMAINS["resources"] = original
+        compare_defs("resources")
+
 
 # ── 9. 产物与模型的即时一致性（把 CI 那条链拉进本地测试）───────────────────────
 

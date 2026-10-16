@@ -12,7 +12,7 @@
 - **`ArticleKey` 在两稿里同名不同约束**：`collection` 稿 `minLength: 3`，`resources` 稿 `minLength: 8`，
   而唯一源只能有一个别名。这不是"挑一个"的事——挑错方向就是给一域产物改事实。
   我先算清再动（不是"反正冗余"）：三支分支各自**最短可过串**是
-  `s:`+8 = 10、`b:` 支 13、`h:` 支 34，全部 >8 ⇒ 取更严的 8 对接受集是**恒等变换**。
+  `s:`+8 = 10、`b:…:1:1` 支 14、`h:` 支 34，全部 >8 ⇒ 取更严的 8 对接受集是**恒等变换**。
   这条算式钉在 `test_article_key_min_length_is_the_unified_value` 里，且它同时断言
   两稿的界（3 与 8）与产物的取值（8）——**将来谁把两稿对齐了，这条会红，逼他更新登记**。
 - **规范 pattern 在 `collection` 稿里是校验（三条 `oneOf`），在 `resources` 稿里只是注释
@@ -50,8 +50,9 @@
 
 - `test_normalizations_used_are_all_backed_by_registry` 从"查 kind"改成**按 rule 名认领**：
   任何一条 `documentation` 登记都能替 `strip-title` 发通行证，是第六轮 T3 点名的。
-  改完立刻暴露四处缺行（identity/events/resources 缺 `strip-description`、events/resources 缺
-  `nullable-form`、collection 缺 `alias-inlining` 与 `oneOf-to-pattern-set`）——全部补齐，
+  改完立刻暴露**七处**缺行（(域, rule) 组合逐一数：identity / events / resources 各缺一条
+  `strip-description`＝3，events / resources 各缺一条 `nullable-form`＝2，collection 缺
+  `alias-inlining` 与 `oneOf-to-pattern-set`＝2，合计 7）——全部补齐，
   每条都写清"归一发生在哪一层、边界在哪、谁验它"。
   **这条的意义**：登记表不再是"解释差异的自由文本"，而是一份必须与比对器实际行为逐名对齐的账。
 - 生成物侧不再带 Pydantic 派生的 `title`（第六轮 T3 的另一半）；

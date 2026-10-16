@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bothot/contracts/events.schema.json",
+  "$id": "bothot://contracts/events/v1",
   "title": "BotHot 异步事件与作业契约（冻结稿 V0.7.0 / 基线 main@13acacc）",
   "description": "实测来源：apps/api/app/services/push_events.py:26（VALID_EVENT_TYPES）/:29-66（_hydrate_payload）/:70-80（emit_event）/:82-88（claim_pending_events SKIP LOCKED）、apps/api/app/services/push_scheduler.py:110-113/203-218（领取与退避/死信）、apps/api/app/services/scheduler.py:365-394（hot_rescore 每小时）、apps/api/app/services/subscription.py:329/743/828（幂等键前缀、Job/JobItem）、AGENTS.md 关键约束 4（队列在 PG，FOR UPDATE SKIP LOCKED，不引入 Redis 队列）。",
   "type": "object",

@@ -57,7 +57,7 @@ class SessionClaims(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    sub: Sub
+    sub: Sub = Field(description="主平台 OIDC subject，全项目唯一身份锚点；DB 列 users.sub String(64) UNIQUE NOT NULL")
     iss: str = Field(default="", description="签发者；生产必须校验 iss/aud（REQ-NF-002）")
     aud: str = Field(default="", description="受众；与 iss 一并在生产侧校验")
     exp: int
@@ -128,16 +128,8 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "`$defs` 里、根层不声明单一形状。这条不等价必须**登记**，不能靠「比对器没看根层」（第六轮验证 G6）。"
         "登记只解释「稿声明而产物不声明」这一个方向。消费者：`test_document_root_divergences_are_named`。",
     ),
-    Divergence(
-        "*（文档根）",
-        "$id",
-        "conflict",
-        "root-identifier-conflict",
-        "`$id` 是文件位址式 `https://bothot/contracts/identity.schema.json`",
-        "`$id` 是标识符式 `bothot://contracts/identity/v1`",
-        "两侧都声明而值不同，就不是等价改写 ⇒ 按 conflict 登记。台账行：**D-V8-03**"
-        "（默认统一到产物侧写法）。由 `test_conflict_entries_cite_a_live_decision_id` 反向核验该 ID 在台账里。",
-    ),
+    # root-identifier-conflict 已随 D-V8-03 的默认值 A 执行而**删除**：三份稿的 $id 统一到产物侧标识符式，两侧一致，
+    # 留着一条讲不符的登记就是过期登记（`_stale_root_entries` 会红）。
     Divergence(
         "*（文档根）",
         "x-generated-by, x-source-module",
@@ -187,7 +179,7 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "identity-extra-forbid",
         "未声明 additionalProperties（= 允许）",
         'extra="forbid" ⇒ 多余键直接拒绝（比 collection 域的 ignore 更严）',
-        "会话声明是安全边界，多一个未知 claim 不该被静默吞掉；这里选 forbid 而不是 ignore，"
+        "台账行 **D-V8-07**。会话声明是安全边界，多一个未知 claim 不该被静默吞掉；这里选 forbid 而不是 ignore，"
         "并与 `x-never-persisted`（balance/level/credits）形成合力：就算有人塞进来也会被拒。"
         "消费者：`test_session_claims_rejects_unknown_claim`。",
     ),

@@ -27,6 +27,7 @@
           "type": "string"
         },
         "sub": {
+          "description": "主平台 OIDC subject，全项目唯一身份锚点；DB 列 users.sub String(64) UNIQUE NOT NULL",
           "maxLength": 64,
           "minLength": 1,
           "type": "string"
