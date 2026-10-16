@@ -167,3 +167,40 @@ Install backend deps、Install frontend deps、**`entry.py 与 Makefile 目标�
 
 **还剩下的下一步**（不属本卡，已写进 05 U-20 归属列）：拿栈而不是猜——`py-spy dump` 挂住的 pytest 进程，
 或把 `test_auth.py` 的 fixture 树剪到最小可复现段。
+
+## 补记（2026-10-16 14:42 完成）：本机 `pytest -q` **全量跑完了**，82 分钟、0 失败
+
+| 读数 | 值 |
+|---|---|
+| 命令 | `cd apps/api && .venv/Scripts/python.exe -X utf8 -m pytest -q -p no:cacheprovider`（输出写文件、不经管道） |
+| 结果 | `769 passed, 422 skipped, 1 warning in 4904.92s (1:21:44)` `@win` |
+| 失败 | **0** |
+| 起点时刻对应的树 | 约 `2df0f88`（13:21 启动，故**含** `c966a34` 的第六轮返工，**不含**其后的 `7baded8`/`4427fd1`/`81e1f4f`） |
+
+### 这条读数能证明什么、不能证明什么
+
+**能证明**：
+- 本机 Windows 上全量收集与执行**可以跑完**——之前两次尝试分别栽在"管道到 `tail` 取不到中间读数"
+  与我在 45 分钟无输出时手动中止（那是取证方式的问题，不是用例的问题）。
+- 契约面那批改动（`app/contracts/*` 与比对器）没有把后端整体打红。
+
+**不能证明**：
+- **422 条 skip 说明本机没有真库**（PG 不可达时按项目纪律 skip 而不是 fail）。所以这条
+  `769 passed` 与 AGENTS.md 里 `@linux` 的 `1058 passed / 6 skipped` **不是同一个覆盖面**，
+  两个读数不可互换引用，也不该拿前者去更新后者的基线。
+- 起点在 13:21，pytest 在收集期就把模块 import 完了 ⇒ 我 14:0x 之后的提交**不在这次跑动的覆盖里**。
+  本批全量结论仍以 `@ci` 为准（`4427fd1`：CI run 38860866657 completed/success；
+  Security run 38860866667 completed/success；CI-Windows run 38860866656 取数时 in_progress）。
+
+### 与 U-20/U-23 的关系（别把这条读成"卡死已解决"）
+
+这次能跑完，不等于 auth 域那两个文件的**收集期挂起**（124s 超时）已解决——单文件级别的现象还在：
+本次是在**没有** `--timeout` 的情况下整批跑完的，说明"挂起"更像是**特定文件 + 超时参数**的组合，
+而不是全库普遍卡死。下一步仍然是拿栈不是猜（`py-spy dump` 或把 `test_auth.py` 的 fixture 剪到最小可复现段），
+归属没变（05 的 U-20/U-23）。
+
+### 在跑的后续取证
+
+`pytest -q -rs` 的第二次全量已启动（输出 `.staging/full_run_rs.txt`），目的是把 **422 条 skip 的构成**
+逐条打出来——S00X.4.1 要求 windows job "在 summary 里打印 skip 构成"，现在我只有条数、没有分类。
+它覆盖的是 `81e1f4f` 起的树；跑完前我不再改 `apps/api` 下的文件，免得读数与代码错位。
