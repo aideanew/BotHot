@@ -68,9 +68,23 @@ DELIVERABLES: dict[str, tuple[str, ...]] = {
     "解析与 host 解耦的当前口径被钉住（本步补充，S2.2 待定项）": (
         "test_wechat_params_on_foreign_host_are_still_parsed",
     ),
+    # ── S2.2.1（ADR-0011 规范键，STEP-02 本卡后续步）：逐条口径必须落到真实用例名 ──
+    "不变量①任何输入≠裸 s 且长度≥8（P-3 的退化键）": ("test_every_input_yields_a_usable_key",),
+    "裸 /s 末段不再是字母 s（P-3 根因正身）": ("test_bare_short_path_is_no_longer_the_letter_s",),
+    "不变量②同篇长链带不带追踪参数/乱序同键": ("test_same_article_with_tracking_or_fragment_shares_the_key",),
+    "不变量③同 biz 不同 mid 必须异键（b: 分支形状）": ("test_same_biz_different_mid_diverges",),
+    "s:/h: 两分支形状与确定性": ("test_short_link_and_offsite_branches",),
+    "畸形长链降级 h:（b: 条件不成立时不硬造身份）": ("test_malformed_long_link_falls_back_to_hash_branch",),
+    "b: 键内 idx 缺省 '1'": ("test_idx_defaults_to_one_inside_the_b_key",),
+    "normalize_url 去追踪参数、排序、脏输入不折叠": ("test_normalize_url_drops_tracking_and_sorts_params",),
+    "不变量⑤规范键委托唯一解析源（AST）": ("test_canonical_key_does_not_reparse_the_url",),
+    "非 str 抛 TypeError 而非退化成常量键": ("test_non_string_input_raises_instead_of_a_constant_key",),
 }
 
-ALLOWED_IMPORTS = {"__future__", "dataclasses", "urllib.parse"}
+#: 白名单加 `hashlib`：S2.2（ADR-0011 §2）的 `h:` 降级分支**定义上**就是
+#: `"h:" + sha256(normalize_url(url)).hexdigest()[:32]`，而本项的判据是"无三方、无 IO"——
+#: `hashlib` 是纯计算的标准库，不加就必须靠函数体内 import 来绕开这条守卫（那是规避不是合规）。
+ALLOWED_IMPORTS = {"__future__", "dataclasses", "hashlib", "urllib.parse"}
 #: 裸名（Load 语境出现即算 IO）
 IO_NAMES = {"open", "input", "session", "requests", "httpx", "socket", "urlopen", "asyncio"}
 #: 挂在任意对象上的方法名——`s.execute()` 与 `session.execute()` 是同一个漏洞的两种写法，
@@ -564,9 +578,13 @@ _JUDGES: list[tuple[str, object, str, str]] = [
 # 每条要求：改完后 PI-* 判据仍真、且 14 条用例仍全绿。
 EQUIV_REFACTORINGS: list[tuple[str, str, list[tuple[str, str]]]] = [
     (
-        "PI-6 允许把 _DEFAULT_IDX 内联成字面量（常量删除 + 用法改写，两步一起才等价）",
+        "PI-6 允许把 _DEFAULT_IDX 内联成字面量（常量删除 + **每一处**用法改写，两步一起才等价）",
         "impl",
-        [('_DEFAULT_IDX = "1"\n\n', ""), ('or _DEFAULT_IDX,', 'or "1",')],
+        [
+            ('_DEFAULT_IDX = "1"\n\n', ""),
+            ('or _DEFAULT_IDX,', 'or "1",'),
+            ('or _DEFAULT_IDX}', 'or "1"}'),
+        ],
     ),
     (
         "PI-2 允许把短链切片写成 removeprefix",

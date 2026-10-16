@@ -27,7 +27,9 @@ CI 侧走 `uv run pytest`（有 conftest、有依赖），两条通道跑的是�
 
 from __future__ import annotations
 
+import ast
 import dataclasses
+from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import quote
 
@@ -43,7 +45,13 @@ from fixtures.wechat_urls import (
     SHORT_WITH_FAKE_BIZ_PARAM,
 )
 
-from app.services.article_identity import WechatUrlParts, parse_wechat_url
+from app.services import article_identity
+from app.services.article_identity import (
+    WechatUrlParts,
+    canonical_article_key,
+    normalize_url,
+    parse_wechat_url,
+)
 
 WECHAT_HOST = "mp.weixin.qq.com"
 
@@ -172,3 +180,148 @@ def test_wechat_params_on_foreign_host_are_still_parsed():
         f"查询参数解析与 host 解耦的口径被破：{parts!r}"
     )
     assert parts.short_token == "", "路径不是 /s/ 前缀时不应造出 short_token"
+
+
+# ── S2.2.1：规范键用例（ADR-0011 §3 的三条不变量逐条对应）──────────────────────
+
+
+def test_same_article_with_tracking_or_fragment_shares_the_key():
+    """不变量②：同一篇长链的多种书写（追踪参数、片段、参数乱序）必须得到**同一个** `b:` 键。"""
+    assert canonical_article_key(LONG_A_TRACKING) == canonical_article_key(LONG_A), (
+        "追踪参数改变了规范键 ⇒ 同一篇文章会裂成两条资产"
+    )
+    reordered = LONG_A.replace("__biz=", "zz=1&__biz=", 1)
+    assert canonical_article_key(reordered) == canonical_article_key(LONG_A), (
+        "多带一个无关参数就换键 ⇒ 键不该依赖参数顺序或无关项"
+    )
+
+
+def test_same_biz_different_mid_diverges():
+    """不变量③，也是 P-3 的正身：同 `__biz` 只差 `mid` 的两篇**必须异键**。"""
+    key_a, key_b = canonical_article_key(LONG_A), canonical_article_key(LONG_B)
+    assert key_a != key_b, f"同号两篇文章坍缩成同一个键：{key_a}"
+    assert key_a == f"b:{BIZ_A}:2650000001:1", f"b: 分支形状不符：{key_a}"
+
+
+def test_bare_short_path_is_no_longer_the_letter_s():
+    """`https://mp.weixin.qq.com/s`（无 query、无 token）旧算法返回字母 `s`——本卡的 P-3 根因。
+
+    新算法必须把它降级成 `h:` 分支：既不是 `s`，也不会与任何真实文章键碰撞。
+    """
+    key = canonical_article_key(f"https://{WECHAT_HOST}/s")
+    assert key != "s", "长链退化键回来了"
+    assert key.startswith("h:") and len(key) == 34, f"降级分支形状不符：{key}"
+
+
+def test_short_link_and_offsite_branches():
+    """`s:` 分支保留 token 自描述性；非微信（含外链带伪微信参数）一律走 `h:`。"""
+    assert canonical_article_key(SHORT_1) == f"s:{SHORT_TOKEN_1}"
+    off = canonical_article_key(OFFSITE)
+    assert off.startswith("h:") and len(off) == 34, off
+    assert off == canonical_article_key(OFFSITE), "哈希分支不确定 ⇒ 同一 URL 两次入库算两条资产"
+    assert canonical_article_key(SHORT_WITH_FAKE_BIZ_PARAM) == "s:p0-cache-001", (
+        "短链上有伪 biz 参数时应当仍走 s: 分支（mid 缺失 ⇒ b: 条件不成立）"
+    )
+
+
+def test_malformed_long_link_falls_back_to_hash_branch():
+    """有 `__biz` 却没有 `mid` 的畸形长链：`b:` 条件不成立、又没有 token ⇒ 降级 `h:`。"""
+    key = canonical_article_key(MALFORMED_LONG)
+    assert key.startswith("h:") and len(key) == 34, f"畸形长链未降级：{key}"
+
+
+def test_every_input_yields_a_usable_key():
+    """不变量①：任何输入都 ≠ `s` 且长度 ≥ 8（`ArticleKey` 的 pattern/minLength 也这么要求）。"""
+    corpus = [
+        LONG_A,
+        LONG_A_TRACKING,
+        LONG_B,
+        SHORT_1,
+        SHORT_WITH_FAKE_BIZ_PARAM,
+        MALFORMED_LONG,
+        OFFSITE,
+        f"https://{WECHAT_HOST}/s",
+        f"https://{WECHAT_HOST}/s/",
+        "",
+        "/",
+        "not a url at all",
+    ]
+    for url in corpus:
+        key = canonical_article_key(url)
+        assert key != "s", f"退化键回来了：{url!r}"
+        assert len(key) >= 8, f"键短于 8：{url!r} → {key!r}"
+    # 唯一性只对"确实是不同文章"的输入主张：LONG_A_TRACKING 与 LONG_A **本该同键**（不变量②），
+    # 把它一起放进集合去比长度，等于用一条守卫悄悄否定另一条。
+    distinct = [u for u in corpus if u != LONG_A_TRACKING]
+    keys = {canonical_article_key(u) for u in distinct}
+    assert len(keys) == len(distinct), "两种不同输入得到同一个键（碰撞）"
+
+
+def test_idx_defaults_to_one_inside_the_b_key():
+    no_idx = f"https://{WECHAT_HOST}/s?__biz={BIZ_A}&mid=2650000001&sn=eeee"
+    assert canonical_article_key(no_idx).endswith(":1"), canonical_article_key(no_idx)
+
+
+def test_normalize_url_drops_tracking_and_sorts_params():
+    """`h:` 分支的归一口径：去 fragment、去追踪参数（含 `utm_*`）、其余按键排序。"""
+    messy = "https://ExAMPLE.com/Article?b=2&a=1#frag&chksm=xyz&utm_source=weixin&scene=27"
+    assert normalize_url(messy) == "https://example.com/Article?a=1&b=2", normalize_url(messy)
+    shuffled = normalize_url("https://example.com/a?z=1&a=0&a=0")
+    assert shuffled == "https://example.com/a?a=0&a=0&z=1", shuffled
+    assert normalize_url("https://example.com/a?a=0&z=1&a=0") == shuffled, (
+        "同一组参数换个顺序，归一后不同 ⇒ 哈希分支会裂成两个身份"
+    )
+    assert normalize_url("") != normalize_url("/"), (
+        "脏输入被归一折叠成同一个串 ⇒ 两种无关脏输入会得到同一个文章身份"
+    )
+
+
+def test_canonical_key_does_not_reparse_the_url():
+    """不变量⑤：规范键**不许**自己再解析一遍 URL——必须委托 `parse_wechat_url`（单一来源）。
+
+    判据写在源码文本上而不是行为上：行为等价但自己解析的实现，会在下一次改解析口径时
+    悄悄与 `kb._biz_from_url`（同样委托本模块）分家——那正是本卡反复处理的双源病。
+
+    读文件而不是 `inspect.getsource`：证明通道（`EVD-V2-02/prove_article_identity.py`）
+    是把实现 exec 进内存的，那时 `getsource` 抛 `OSError: source code not available`，
+    这条用例会**因为运行方式**而不是因为实现有缺陷而红——实测踩过（self-test 的等价重构
+    PI-6 报它假红）。按 `__file__` 取源码在两条通道下都成立。
+    """
+    src = Path(article_identity.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    fn = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == "canonical_article_key"
+    )
+    body_src = ast.get_source_segment(src, fn) or ""
+    called = {
+        node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+        for node in ast.walk(ast.parse(body_src))
+        if isinstance(node, ast.Call)
+    }
+    assert "parse_wechat_url" in called, f"规范键没有委托唯一解析源，实际调用：{sorted(called)}"
+    for forbidden in ("urlparse", "urlsplit", "parse_qs", "parse_qsl"):
+        assert forbidden not in called, f"规范键里出现了第二次解析：{forbidden}"
+
+
+def test_non_string_input_raises_instead_of_a_constant_key():
+    """脏输入必须抛，不能退化成某个固定键：常量键会让所有脏输入共享一个身份（静默碰撞）。
+
+    与 `parse_wechat_url` 的"归零返回"口径**故意不同**：解析层归零是把判断交给调用方，
+    而身份键层若归零成常量，就是在伪造身份。
+    """
+    for bad in (None, b"https://mp.weixin.qq.com/s/x", 42):
+        try:
+            canonical_article_key(bad)  # type: ignore[arg-type]
+        except TypeError:
+            continue
+        raise AssertionError(f"非 str 入参未抛 TypeError：{bad!r}")
+    # `normalize_url` 也是导出的公开面（ADR-0011 §2 把它单列），它自己的那道闸必须单独钉一次：
+    # 只靠 canonical_article_key 先抛，等于把 normalize_url 的守卫留给"恰好没人直接调它"。
+    for bad in (None, 42):
+        try:
+            normalize_url(bad)  # type: ignore[arg-type]
+        except TypeError:
+            continue
+        raise AssertionError(f"normalize_url 非 str 入参未抛：{bad!r}")
