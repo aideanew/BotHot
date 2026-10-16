@@ -35,6 +35,7 @@ from app.repositories.asset import AssetRepository
 from app.repositories.space import SpaceRepository
 from app.repositories.user import SqlAlchemyUserStore
 from app.services.article_identity import canonical_article_key
+from app.services.kb import _short_link_key
 from app.services.public_library import PublicLibraryService
 from app.services.resolver import ResolvedArticle
 
@@ -47,6 +48,9 @@ LONG_KEY = canonical_article_key(LONG_URL)
 # `short_link_maps.short_key` 与 S2.2.4 的只读兜底锚都用**裸 token**（`_short_link_key` 不经
 # 规范键，迁移前后同形），所以这一条保持字面量才是对的，不是漏改。
 SHORT_KEY = "short-key-t27"
+# 映射表里 LONG_URL 那一支的 short_key：`_is_short_link` 是 `/s/` 子串判，所以形态上像长链的
+# 夹具 URL 也会被当短链并落一行映射——键一律现取自生产函数，免得测试里再养一份形状判断。
+LONG_MAP_KEY = _short_link_key(LONG_URL)
 
 # T2.7 自身命名空间（清理夹具按此收敛，绝不触碰命名空间外数据）
 # DSN 允许环境变量覆盖：CI 无 PG 时走 skip 分支，本地/CI service container 可指向他处
@@ -94,7 +98,10 @@ def _purge_t27() -> None:
         return
     try:
         with engine.begin() as conn:
-            conn.execute(text("DELETE FROM short_link_maps WHERE short_key = :k"), {"k": SHORT_KEY})
+            conn.execute(
+                text("DELETE FROM short_link_maps WHERE short_key = ANY(:ks)"),
+                {"ks": [SHORT_KEY, LONG_MAP_KEY]},
+            )
             conn.execute(
                 text("DELETE FROM content_assets WHERE external_id = ANY(:ks)"),
                 {"ks": list(_T27_ASSET_KEYS)},
@@ -413,3 +420,88 @@ async def test_concurrent_same_url_converges(db_session) -> None:  # type: ignor
     assert final_assets == 1, f"并发应收敛单 asset，实际 {final_assets}"
     assert final_docs == 1, f"并发应收敛单 doc，实际 {final_docs}"
     assert not errors, f"并发竞态不得未捕获异常冒泡（应被生产兜底收敛），实际 {errors}"
+
+
+class _BarrieredResolver(_ShortToLongResolver):
+    """两条并发各自 resolve 完之后才继续——把"都还查不到映射行"的那一刻钉住。
+
+    `test_concurrent_same_url_converges` 判的是 asset/doc 收敛，是否踩到映射双写取决于时序，
+    它在 `@ci` 上就是间歇红的（run 38908795127 红在这里）。对齐之后两条都会 select 到空、
+    然后各自 insert ⇒ 后发者**必然**撞 `uq_shortlink_key`，兜底在不在位一测就分得开。
+    带 timeout 是因为对手若在中途炸掉，没有超时的 wait 会把用例挂成 CI 超时（U-23 那种形状）。
+    """
+
+    def __init__(self, gate: asyncio.Barrier) -> None:
+        super().__init__()
+        self._gate = gate
+
+    async def resolve(self, raw_url: str) -> ResolvedArticle:
+        article = await super().resolve(raw_url)
+        await asyncio.wait_for(self._gate.wait(), timeout=25)
+        return article
+
+
+async def test_concurrent_short_link_map_write_is_absorbed(db_session) -> None:  # type: ignore[no-untyped-def]
+    """同 URL 并发首抓时，短链映射的后写者必须被 savepoint 吞掉，不得把 IntegrityError 冒到调用面。
+
+    真实缺陷（`@ci` run 38908795127，`test_concurrent_same_url_converges` 实测）：
+    `_save_short_link` 是"先查后插"而无并发兜底，两个事务都查到空 ⇒ 后发者撞
+    `uq_shortlink_key`，异常冒泡成 HTTP 500。S2.2.3 之后写入条件恒真（规范键带 `s:` 前缀，
+    永不等于裸 token），每个短链首抓都落一行，这条路径的并发量从偶发变常态。
+
+    与 `test_concurrent_same_url_converges` 的分工：那条判 asset/doc 收敛（时序相关，
+    间歇暴露本洞），这条判**映射写入的兜底**（barrier 对齐，确定性暴露）。
+    """
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    map_key = LONG_MAP_KEY
+    assert map_key, "LONG_URL 取不到 short_key，本用例的写入点就不存在"
+
+    engine = create_async_engine(PG_DSN, pool_pre_ping=True, connect_args={"connect_timeout": 3})
+    RaceSession = async_sessionmaker(bind=engine, expire_on_commit=False)
+
+    setup = RaceSession()
+    try:
+        store = SqlAlchemyUserStore(setup)
+        user = await store.upsert_by_sub("sub-t27-idem", "t27@test.local", "T27")
+        space = (
+            await setup.execute(
+                select(KnowledgeSpace).where(
+                    KnowledgeSpace.user_id == user.id, KnowledgeSpace.name == "T27映射竞态空间"
+                )
+            )
+        ).scalar_one_or_none()
+        if space is None:
+            space = await SpaceRepository(setup).create(user_id=user.id, name="T27映射竞态空间")
+        await setup.commit()
+        space_id = space.id
+    finally:
+        await setup.close()
+
+    gate = asyncio.Barrier(2)
+    resolver = _BarrieredResolver(gate)
+
+    async def _one(tag: str) -> tuple[str, str]:
+        try:
+            session = RaceSession()
+            try:
+                svc = _svc(session, resolver)
+                out = await svc.ingest_url(space_id, LONG_URL)
+            finally:
+                await session.close()
+            return tag, str(out.get("docId") or "")
+        except BaseException as exc:  # noqa: BLE001 竞态面如实上报，不掩盖
+            return tag, f"__ERROR__ {type(exc).__name__}: {str(exc)[:140]}"
+
+    results = await asyncio.gather(_one("A"), _one("B"))
+    errors = [r for r in results if "__ERROR__" in r[1]]
+    await engine.dispose()
+
+    assert not errors, (
+        f"并发写短链映射把异常冒了出来（应被 _save_short_link 的 savepoint 兜底吸收）：{errors}"
+    )
+    with create_engine(PG_DSN, connect_args={"connect_timeout": 3}).connect() as conn:
+        maps = conn.execute(
+            select(func.count()).select_from(ShortLinkMap).where(ShortLinkMap.short_key == map_key)
+        ).scalar_one()
+    assert maps == 1, f"映射行应收敛为单行，实际 {maps}（0 表示两边都没写进行）"

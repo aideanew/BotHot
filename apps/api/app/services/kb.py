@@ -435,7 +435,15 @@ class KnowledgeBaseService:
         return row or ""
 
     async def _save_short_link(self, short_key: str, article_key: str, biz: str = "") -> None:
-        """短链映射幂等落库（uq_shortlink_key：同短链重复入库不重插）。"""
+        """短链映射落库：先查后插，**并发后发者由 savepoint 兜底**（与 `_ensure_source` 的 T2.7 兜底同形）。
+
+        旧 docstring 只写"幂等落库（同短链重复入库不重插）"——那是**串行**成立的说法：
+        两个并发事务都查不到既有行时，后发者会撞 `uq_shortlink_key`，IntegrityError 一路冒到
+        HTTP 面（`@ci` run 38908795127 的 `test_concurrent_same_url_converges` 实测抓到的就是它）。
+        而且 S2.2.3 之后写入条件 `final_key != short_key` **恒真**（规范键带 `s:` 前缀，与裸
+        token 永不相等，见 09 执行记录 §6.3），每个短链首抓都要落一行 ⇒ 这条路径的并发量
+        从偶发变成常态，兜底不再是可选项。
+        """
         from app.models.entities import ShortLinkMap
 
         if not short_key or not article_key:
@@ -443,9 +451,19 @@ class KnowledgeBaseService:
         exists = (
             await self._session.execute(select(ShortLinkMap.id).where(ShortLinkMap.short_key == short_key))
         ).scalar_one_or_none()
-        if exists is None:
-            self._session.add(ShortLinkMap(short_key=short_key, article_key=article_key, biz=biz or ""))
-            await self._session.flush()
+        if exists is not None:
+            return
+        try:
+            async with self._session.begin_nested():
+                self._session.add(ShortLinkMap(short_key=short_key, article_key=article_key, biz=biz or ""))
+                await self._session.flush()
+        except IntegrityError:
+            # 唯一冲突 = 并发对手已写入，目标本就达成；除此之外（如非空/外键）如实上抛，不做掩盖。
+            won = (
+                await self._session.execute(select(ShortLinkMap.id).where(ShortLinkMap.short_key == short_key))
+            ).scalar_one_or_none()
+            if won is None:
+                raise
 
     async def _reuse_cached_asset(
         self, space_id: str, asset: Any, kb_uuid: str, asset_repo: AssetRepository
