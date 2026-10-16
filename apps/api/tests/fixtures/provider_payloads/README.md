@@ -28,3 +28,91 @@
 ## wellbyte.json
 
 形状来源 Wellbyte｜envelope：app/providers/article_sources/wellbyte.py:6「响应统一 {code, message, data, meta:{endpoint, cache_hit, elapsed_ms, request_id, credits_charged}}」，_CODE_OK=0 见 :52，失败读 message 见 :320-325；meta 五个子键**代码一处都不读**（全文件无 meta 访问）⇒ 保留仅为形状忠实，值属推断；行路径：:136-147 data(dict)→MsgList(dict)→Msg(list)，:140-141 注释是 TC-A4-04 的层级教训「**不是** data.data.MsgList（首轮看错层级）」，与 docs/06_validation/evidence/channeltest-20260929/README.md:169 一致；行键：:153-162 读 AppMsg.ContentUrl/Title/Digest/CreateTime 与 BaseInfo.DateTime（:160-162 与 justoneapi 同法，epoch 秒）；docstring :13「ContentUrl(带 sessionid)」⇒ 本样本的 ContentUrl 刻意携带 sessionid，供 STEP-01 S1.3.1 的追踪参数剥离用例；标识：:270-278 data.AccountInfo.UserName（startswith("gh_") 守卫），docstring :13-14「传文章 URL 即返回 ghid——biz→gh_ 映射零成本路径」，活体 TC-A4-04 见 :248-251 与 README.md:167-168（gh_b9465228558d）；端点与请求：:121-127 POST /v1/wechat_mp/user/account_history_articles_v2，body {url: <文章 URL>}（**入参是文章 URL 而非 ghid** ⇒ D-05 标识错位）；:118-119 page>1 返回空（D-06）；:170-176 详情端点禁用（422 三连拒 TC-A4-05/06/07）⇒ 无详情样本；registry.py:245-250 verified_scope=发现活体实测 78cr。刻意不含：AppMsg.MsgId/ItemIndex（仅 STEP-03:36 假设，代码与活体记录均无）。合成声明：除 gh_ 与时间戳外均为占位值。
+
+---
+
+## S3.4.1（P-14）新增的详情 / 搜索载荷
+
+下面七份是 STEP-03 卡面 S3.4.1 补的**详情兜底与关键词搜索**形状（清单那一族只有
+`{provider}.json` 一种形状，P-14 记的正是这个缺口）。认领它们的用例全在
+`apps/api/tests/test_provider_contract.py`（`_SAMPLE_CLAIMS` 逐份点名，目录里有未认领文件
+或认领表里有已消失的文件，`test_every_sample_is_claimed_by_a_case` 都会红）。
+本节的锚一律写**函数名/分支名而不写行号**——上面那批条目的 `:123-145` 已经漂过一轮，
+而行号漂了没人核对（`check_docs_consistency` 只校验 backlog.md 的锚）。
+值全是合成占位；只有活体用例号（TC-A*）与 `gh_b9465228558d` 这类实测记录里的常量是真引用。
+
+## dajiala_detail.json
+
+形状来源 Dajiala｜证据级别：**活体实测**（TC-A1-07，¥0.04/次，`dajiala.py::fetch_article_detail`
+自述「返回 data.html（完整 DOCTYPE）+ 元数据」）。envelope 与清单同包裹 `{code,msg,data}`，
+但 **data 是对象不是数组**（清单端点 post_condition 的 data 才是数组）⇒
+`fetch_article_detail` 读 `data.get("html")` 并在 `not isinstance(data, dict)` / `not html` 时判 None。
+键名按代码逐字：html/title/nickname/author/biz/gh_id/post_time；`author` 与 `nickname` **刻意同时给且不同值**，
+因为代码是 `nickname or author`——只给一个就把别名优先序变成了无人看守的默认值。
+`post_time` 是 epoch 秒（1790659200，与清单样本同口径）。刻意不含：cost_money/remain（代码从不读）。
+消费用例：`test_dajiala_detail_maps_every_field_from_payload`、`test_dajiala_detail_content_text_is_stripped_and_capped`。
+
+## dajiala_search.json
+
+形状来源 Dajiala kw_search｜证据级别：**文档级（端点存在但未实测）**——`dajiala.py::search_articles`
+的 docstring 自己写着「单价、参数名、响应形状全部未知，本实现按 Dajiala 统一包裹 {code, data} 推断」。
+所以本样本只声明「推断形状」：data 直接是数组，行键 url/title/digest/nickname（与清单同源的那套键名），
+**不含** sort/publishTimeType 之类代码根本不读的键。
+消费用例：`test_dajiala_search_maps_rows_and_sends_only_the_keyword`（其中一条断言钉的正是
+「代码只发 keyword，`sort`/`time_range` 两个形参在 dajiala 上不生效」这一现状）。
+
+## justoneapi_detail.json
+
+形状来源 JustOneAPI｜证据级别：**活体实测**（TC-A3-07，¥0.15/次，get-article-detail/v1）。
+层级按代码逐字：`data.data` 是数组、取 **items[0]** ⇒ 样本刻意放**两行**且第二行标题不同，
+否则「取首行」这条判据与「取任意一行」不可区分。
+键名：content（HTML 正文）/content_multi_text（富文本纯版）/title/author/nick_name/biz/ghid/user_name/
+create_time/public_time——`author`+`nick_name`、`ghid`+`user_name` 都是**空值与非空值配对**（代码是 `a or b` 兜底链），
+`create_time` 与 `public_time` **给不同值**（代码 create_time 优先）。
+刻意不含：v5 端点独有的阅读指标 60+ 字段（v1/v5 形状差异未逐项核实，写了就是猜测）。
+消费用例：`test_justoneapi_detail_maps_first_row_and_field_aliases`。
+
+## justoneapi_search.json
+
+形状来源 JustOneAPI search-article/v1｜证据级别：**契约级（价目表在册、参数名与响应形状未活体验证）**，
+`justoneapi.py` 的搜索段注释逐字记着这一点。样本因此只按代码的读取面给形状：
+顶层 `data` 直接是数组（与详情不同！代码 `isinstance(data, list)`），
+行键 url/content_url 与 author/nick_name 各配一对**取值优先级判据**（第一行两者都有、值不同，
+第二行只有次选键）——这是「别名兜底链」唯一能被样本判住的写法。
+消费用例：`test_justoneapi_search_maps_rows_and_url_alias_priority`。
+
+## tikhub_detail.json
+
+形状来源 TikHub v2 fetch_article_detail_h5｜证据级别：**契约级（OpenAPI 在案、余额 0 从未实测）**。
+顶层**刻意不含 code/message**（沿用 tikhub.json 的既定判断：`TikhubClient::_handle_response`
+只按 HTTP 状态判、从不读业务码，含了就是猜测）。层级 `data` 是对象，
+键 content/html 与 author/nick_name 与 gh_id/user_name 按代码的三条兜底链配对——
+`content_text` 只在代码里存在而本样本不给，因为「只有纯文本没有 HTML」那一支由用例内联载荷判
+（形状未实测，不值得为它多落一份文件）。
+**没有 create_time 这类时间键**：`fetch_article_detail` 根本不解析时间，样本给键就是替实现编需求。
+消费用例：`test_tikhub_detail_maps_fields_and_request_shape`。
+
+## tikhub_search.json
+
+形状来源 TikHub fetch_search｜证据级别：**契约级（TC-A2-02b 实测 402，从未拿到过 200 响应体）**。
+顶层 `data` 直接是数组，行键 doc_url/url/title/digest——doc_url 压 url 是代码的读取序，
+第一行两个都给、第二行只给 url。样本**不给** source/author 之类键：
+`search_articles` 只填 url/title/digest，作者字段在 TikHub 上是空的（用例
+`test_tikhub_search_maps_rows_with_doc_url_priority` 把「作者恒空串」钉成现状，
+免得后来人按别家形状"顺手补齐"）。
+消费用例：同上。
+
+## wellbyte_search.json
+
+形状来源 Wellbyte article_v1｜证据级别：**活体实测**（TC-A4-02，155cr/次，返回 15 items）。
+层级 `data.data` 是数组（与清单的 `data.MsgList.Msg` **不同层级**——这正是 TC-A4-04 记过的层级教训的另一半）。
+行键 doc_url/url/title/digest/source{title, dateTime}：`source.title` 是号名（Wellbyte 的形状里作者不在线上），
+`source.dateTime` **两种口径都给出**——第一行 epoch 数字（代码只解这个数字），
+第二行「4分钟前」（docstring 自述分钟级时效，代码按非数字留空）。
+这一对就是「宁缺勿编」判据的载荷：相对串不许被硬解成绝对时刻。
+meta 子键照 §wellbyte.json 的口径保留（代码不读，仅形状忠实）。
+消费用例：`test_wellbyte_search_maps_rows_and_request_shape`、
+`test_wellbyte_search_publish_time_accepts_epoch_only`。
+另：**Wellbyte 没有详情样本**，因为 `fetch_article_detail` 是刻意禁用的（422 三连拒 TC-A4-05/06/07），
+它的判据是「一个字都不发」，见 `test_wellbyte_detail_is_disabled_and_must_not_call_upstream`。
+

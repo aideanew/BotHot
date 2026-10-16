@@ -1,0 +1,28 @@
+{
+  "code": 0,
+  "message": "",
+  "data": {
+    "data": [
+      {
+        "title": "示例：正文第一篇",
+        "content": "<div id=\"js_content\"><p>JustOneAPI 正文 HTML（合成占位值）</p></div>",
+        "content_multi_text": "JustOneAPI 纯文本正文（合成占位值）",
+        "author": "",
+        "nick_name": "占位号名",
+        "biz": "MjM5MjgwNTQ1MQ==",
+        "ghid": "",
+        "user_name": "gh_b9465228558d",
+        "create_time": 1790659200,
+        "public_time": 1790659300
+      },
+      {
+        "title": "示例：正文第二篇（不应被取用）",
+        "content": "<div>第二条正文（占位，用于证明只取 data.data[0]）</div>",
+        "content_multi_text": "第二条纯文本（占位）",
+        "create_time": 1790745600
+      }
+    ]
+  },
+  "recordTime": 1790749260,
+  "requestId": "00000000-0000-0000-0000-000000000000"
+}

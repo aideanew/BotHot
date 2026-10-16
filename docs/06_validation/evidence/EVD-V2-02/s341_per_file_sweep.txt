@@ -1,0 +1,87 @@
+tests/test_chat_sse.py :: 20 passed, 17 skipped,  [1792166952s]
+tests/test_collection_contract.py :: 174 passed  [1792166956s]
+tests/test_d04_short_link.py :: 1 passed, 2 skipped  [1792166959s]
+tests/test_db_url_resolution.py :: 4 passed  [1792166960s]
+tests/test_discovery.py :: 17 passed, 2 skipped,  [1792166969s]
+tests/test_docs_batch.py :: 16 skipped  [1792167019s]
+tests/test_alerting_default.py :: 5 passed  耗时2s
+tests/test_alerting_drill.py :: 2 skipped  耗时2s
+tests/test_article_identity.py :: 26 passed  耗时1s
+tests/test_asset_fragment_guard.py :: 12 passed  耗时2s
+tests/test_auth.py :: 22 passed, 2 skipped,  耗时142s
+tests/test_backchannel_logout.py :: 38 passed,  耗时18s
+tests/test_batch_ingest_key_drift.py :: 12 passed  耗时2s
+tests/test_be02_engine_routing.py :: 7 passed, 3 skipped,  耗时16s
+tests/test_bots_logs_filter.py :: 5 skipped  耗时3s
+tests/test_categorizer.py :: 5 passed, 1 skipped  耗时2s
+tests/test_docs_pagination.py :: 7 skipped  耗时2s
+tests/test_embedding.py :: 14 passed  耗时2s
+tests/test_engine_delete.py :: 4 passed  耗时2s
+tests/test_env_isolation.py :: 2 passed, 1 skipped  耗时4s
+tests/test_envelope.py :: NO_SUMMARY（该文件里有本机卡死的用例，被 --timeout 杀掉） 耗时33s
+tests/test_extra_config_crypto.py :: 7 passed  耗时1s
+tests/test_extractor.py :: 19 passed,  耗时29s
+tests/test_health.py :: NO_SUMMARY（该文件里有本机卡死的用例，被 --timeout 杀掉） 耗时32s
+tests/test_health_ready.py :: NO_SUMMARY（该文件里有本机卡死的用例，被 --timeout 杀掉） 耗时36s
+tests/test_hot_scorer_batch.py :: 1 passed  耗时1s
+tests/test_idempotency_lock.py :: 8 skipped,  耗时32s
+tests/test_idor_matrix.py :: 14 passed  耗时8s
+tests/test_indexes.py :: 3 passed, 2 skipped  耗时2s
+tests/test_intent.py :: 17 passed  耗时2s
+tests/test_job_worker.py :: 14 skipped  耗时44s
+tests/test_kb_longlink_ingest.py :: 11 passed, 1 skipped  耗时2s
+tests/test_kb_multisource_anchor.py :: 6 skipped  耗时2s
+tests/test_kb_orphan_purge.py :: 6 skipped,  耗时9s
+tests/test_kb_resolve_retry.py :: 3 passed  耗时2s
+tests/test_langbot.py :: 11 passed, 8 skipped,  耗时60s
+tests/test_manifest_sync.py :: 21 skipped  耗时66s
+tests/test_metadata_filter.py :: 10 skipped,  耗时8s
+tests/test_normalizer_quality.py :: 14 passed,  耗时23s
+tests/test_notification_frame_id.py :: 4 passed, 2 skipped  耗时3s
+tests/test_notification_history.py :: 8 skipped  耗时3s
+tests/test_observability.py :: NO_SUMMARY（本机卡死被 --timeout 杀） 耗时33s
+tests/test_p0_asset_cache.py :: 4 skipped,  耗时8s
+tests/test_p2_subscription.py :: 21 skipped  耗时2s
+tests/test_p4_engines.py :: 10 passed, 3 skipped,  耗时9s
+tests/test_pagination.py :: 3 passed  耗时1s
+tests/test_persistence.py :: 4 skipped,  耗时20s
+tests/test_process_heartbeat.py :: 17 skipped,  耗时59s
+tests/test_production_config_guard.py :: 13 passed  耗时2s
+tests/test_provider_contract.py :: 176 passed  耗时5s
+tests/test_public_library_admin.py :: 4 passed, 3 skipped  耗时2s
+tests/test_push_providers.py :: 20 passed  耗时2s
+tests/test_r02_batch_docs.py :: 2 passed, 23 skipped,  耗时13s
+tests/test_r02_docs_lifecycle.py :: 3 passed, 18 skipped,  耗时18s
+tests/test_r02_subscription_lifecycle.py :: 3 passed, 26 skipped,  耗时17s
+tests/test_r04_jobs.py :: 1 passed, 11 skipped,  耗时8s
+tests/test_r11_admin_routes.py :: 14 skipped,  耗时8s
+tests/test_r11_batch_admin.py :: 20 skipped,  耗时9s
+tests/test_r11_engine_keys.py :: 16 passed, 13 skipped,  耗时8s
+tests/test_r11_push.py :: 3 passed, 8 skipped,  耗时8s
+tests/test_r11_roles.py :: 7 passed, 8 skipped,  耗时9s
+tests/test_r48_admin_jobs.py :: 1 passed, 20 skipped,  耗时8s
+tests/test_r493_openapi_security.py :: 6 passed  耗时35s
+tests/test_read_cache.py :: 5 passed  耗时1s
+tests/test_redfox_client.py :: 25 passed  耗时3s
+tests/test_repositories.py :: 1 passed, 9 skipped  耗时2s
+tests/test_reranker.py :: 9 passed, 4 skipped,  耗时9s
+tests/test_resolver.py :: 17 passed,  耗时29s
+tests/test_rss_provider.py :: 46 passed  耗时3s
+tests/test_scheduler.py :: 22 skipped  耗时68s
+tests/test_security_middleware.py :: NO_SUMMARY（本机卡死被 --timeout 杀） 耗时42s
+tests/test_session_store_redis.py :: 2 skipped  耗时10s
+tests/test_spaces_api.py :: 19 passed, 7 skipped,  耗时157s
+tests/test_startup_probe_timeout.py :: 1 passed  耗时9s
+tests/test_w1_push_domain.py :: 27 passed, 1 skipped  耗时2s
+tests/test_w2_cluster.py :: 3 passed  耗时2s
+tests/test_w2_integration.py :: 3 skipped  耗时2s
+tests/test_w2_report.py :: 6 passed  耗时2s
+tests/test_w2_scorer.py :: 7 passed  耗时2s
+tests/test_w2_worker.py :: 1 skipped  耗时5s
+tests/test_w3_push_scheduler.py :: 4 passed, 7 skipped  耗时8s
+tests/test_wa_hot_scoring.py :: 7 passed, 6 skipped  耗时2s
+tests/test_wb_push_hardening.py :: 6 passed, 7 skipped  耗时2s
+tests/test_wc_engine_delete.py :: 4 passed  耗时2s
+tests/test_wc_pagination.py :: 4 passed  耗时3s
+tests/test_wc_pool.py :: 3 passed  耗时2s
+tests/test_we_notifications.py :: NO_SUMMARY（本机卡死被 --timeout 杀） 耗时41s

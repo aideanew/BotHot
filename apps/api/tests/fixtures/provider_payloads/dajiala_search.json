@@ -1,0 +1,18 @@
+{
+  "code": 0,
+  "msg": "",
+  "data": [
+    {
+      "url": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000001&idx=1&sn=aaaa1111",
+      "title": "示例：搜索第一篇",
+      "digest": "搜索摘要（合成占位值）",
+      "nickname": "占位号名"
+    },
+    {
+      "url": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000002&idx=1&sn=bbbb2222",
+      "title": "示例：搜索第二篇",
+      "digest": "",
+      "nickname": ""
+    }
+  ]
+}

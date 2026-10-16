@@ -1,0 +1,14 @@
+{
+  "data": [
+    {
+      "title": "示例：TikHub 搜索第一篇",
+      "doc_url": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000001&idx=1&sn=aaaa1111",
+      "url": "https://example.invalid/搜索第一篇的次选键（不应被取用）",
+      "digest": "搜索摘要（合成占位值）"
+    },
+    {
+      "title": "示例：TikHub 搜索第二篇",
+      "url": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000002&idx=1&sn=bbbb2222"
+    }
+  ]
+}

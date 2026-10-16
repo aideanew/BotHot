@@ -1,0 +1,34 @@
+{
+  "code": 0,
+  "message": "",
+  "data": {
+    "data": [
+      {
+        "title": "示例：数井搜索第一篇",
+        "doc_url": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000001&idx=1&sn=aaaa1111",
+        "url": "https://example.invalid/搜索第一篇的次选键（不应被取用）",
+        "digest": "搜一搜摘要（合成占位值）",
+        "source": {
+          "title": "占位号名",
+          "dateTime": 1790659200
+        }
+      },
+      {
+        "title": "示例：数井搜索第二篇",
+        "url": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000002&idx=1&sn=bbbb2222",
+        "digest": "",
+        "source": {
+          "title": "占位号名二",
+          "dateTime": "4分钟前"
+        }
+      }
+    ]
+  },
+  "meta": {
+    "endpoint": "article_v1",
+    "cache_hit": false,
+    "elapsed_ms": 2100,
+    "request_id": "00000000-0000-0000-0000-000000000000",
+    "credits_charged": 155
+  }
+}

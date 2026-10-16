@@ -1,0 +1,13 @@
+{
+  "code": 0,
+  "msg": "",
+  "data": {
+    "html": "<!DOCTYPE html><html><head><title>示例：正文第一篇</title></head><body><div id=\"js_content\"><p>第一段正文（合成占位值）</p><p>第二段正文（合成占位值）</p></div></body></html>",
+    "title": "示例：正文第一篇",
+    "nickname": "占位号名",
+    "author": "占位作者名",
+    "biz": "MjM5MjgwNTQ1MQ==",
+    "gh_id": "gh_b9465228558d",
+    "post_time": 1790659200
+  }
+}

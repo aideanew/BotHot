@@ -1,0 +1,22 @@
+{
+  "code": 0,
+  "message": "",
+  "data": [
+    {
+      "title": "示例：搜索第一篇",
+      "url": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000001&idx=1&sn=aaaa1111",
+      "content_url": "https://example.invalid/搜索第一篇的备用键（不应被取用）",
+      "digest": "搜索摘要（合成占位值）",
+      "author": "占位作者名",
+      "nick_name": "占位号名"
+    },
+    {
+      "title": "示例：搜索第二篇",
+      "content_url": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2650000002&idx=1&sn=bbbb2222",
+      "digest": "",
+      "nick_name": "占位号名二"
+    }
+  ],
+  "recordTime": 1790749260,
+  "requestId": "00000000-0000-0000-0000-000000000000"
+}
