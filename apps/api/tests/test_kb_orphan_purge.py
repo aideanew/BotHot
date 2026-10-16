@@ -26,11 +26,16 @@ from app.models.entities import ContentAsset, KnowledgeDocument, Source
 from app.providers.langbot.client import LangBotClient
 from app.repositories.asset import AssetRepository, DocumentRepository
 from app.repositories.space import SpaceRepository
+from app.services.article_identity import canonical_article_key
 from app.services.extractor import ExtractedContent
 from app.services.kb import KnowledgeBaseService
 from app.services.resolver import ResolvedArticle
 
 URL_A = "https://mp.weixin.qq.com/s/p0-cache-001?biz=MjM5MjgwNTQ1MQ==&hid=h0"
+# 资产键现取生产真源（S2.3.1）：规范键直写后，裸末段 `p0-cache-001` 既不再被写入、
+# 也不在 `_persist_document` 的兜底范围内（S2.2.4 的只读兜底只覆盖短链裸 token），
+# 用它预置/查询会让"覆盖写"退化成"新建一行"——@ci run 38889655890 的两条红即在此。
+KEY_A = canonical_article_key(URL_A)
 KB_UUID = "kb-b27"
 
 
@@ -116,7 +121,7 @@ async def test_persist_document_overwrite_purges_old_file(db_session: Any) -> No
     await db_session.flush()
     asset = ContentAsset(
         source_id=source.id,
-        external_id="p0-cache-001",
+        external_id=KEY_A,
         url=URL_A,
         title="覆盖写文章",
         content_hash="hash-old",
@@ -187,9 +192,9 @@ async def test_asset_hash_stable_after_full_reingest(db_session: Any) -> None:  
             select(Source).where(Source.type == "wechat_oa", Source.external_id == "MjM5MjgwNTQ1MQ==")
         )
     ).scalar_one()
-    asset = await AssetRepository(db_session).get_by_source_external(source.id, "p0-cache-001")
+    asset = await AssetRepository(db_session).get_by_source_external(source.id, KEY_A)
     hash_before = asset.content_hash
 
     await svc.ingest_url(space.id, URL_A)
-    asset = await AssetRepository(db_session).get_by_source_external(source.id, "p0-cache-001")
+    asset = await AssetRepository(db_session).get_by_source_external(source.id, KEY_A)
     assert asset.content_hash == hash_before  # 内容未变 → 指纹稳定

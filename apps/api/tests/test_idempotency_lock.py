@@ -41,14 +41,20 @@ from app.services.resolver import ResolvedArticle
 # 短链 + 长链两形态（同文）：短链解析后指向长链末段 long-key-001
 SHORT_URL = "https://mp.weixin.qq.com/s/short-key-t27?biz=MjM5MjgwNTQ1MQ==&hid=t27"
 LONG_URL = "https://mp.weixin.qq.com/s/long-key-001?biz=MjM5MjgwNTQ1MQ==&hid=t27"
+# 键一律现取自生产真源（S2.3.1），不写末段字面量：字面量在规范键上线后会拿**旧键**查
+# **新行**，红得像是"实现坏了"，实际是测试前提过期——@ci run 38889655890 的 6 条红全部源于此。
+LONG_KEY = canonical_article_key(LONG_URL)
+# `short_link_maps.short_key` 与 S2.2.4 的只读兜底锚都用**裸 token**（`_short_link_key` 不经
+# 规范键，迁移前后同形），所以这一条保持字面量才是对的，不是漏改。
 SHORT_KEY = "short-key-t27"
-LONG_KEY = "long-key-001"
 
 # T2.7 自身命名空间（清理夹具按此收敛，绝不触碰命名空间外数据）
 # DSN 允许环境变量覆盖：CI 无 PG 时走 skip 分支，本地/CI service container 可指向他处
 PG_DSN = os.environ.get("AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot")
 _T27_USER_SUBS = ("sub-t27-idem", "sub-t27-race", "sub-t27-f22")
-_T27_ASSET_KEYS = (SHORT_KEY, LONG_KEY)
+# 清理集要同时覆盖规范键与迁移前的裸 token：本机的 PG 可能留有直写上线前的行，
+# 只清新键会让旧行残留继续影响 `_find_source_by_anchor` 的第三条锚。
+_T27_ASSET_KEYS = (SHORT_KEY, LONG_KEY, canonical_article_key(SHORT_URL), "long-key-001")
 _T27_SOURCE_BIZ = "MjM5MjgwNTQ1MQ=="
 _T27_SPACE_PREFIX = "T27"
 
@@ -185,7 +191,7 @@ async def test_short_link_map_created_and_reused_zero_fetch(db_session) -> None:
     assert mapping is not None, "短链映射应落库"
     assert mapping.article_key == LONG_KEY
 
-    # 资产落库键 = 长链末段（与 _persist_document 口径一致）
+    # 资产落库键 = 长链的**规范键**（与 `_persist_document` 的 `_article_key(url)` 同口径）
     asset = (
         await db_session.execute(select(ContentAsset).where(ContentAsset.external_id == LONG_KEY))
     ).scalar_one_or_none()
