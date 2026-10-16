@@ -5,7 +5,7 @@ title: BotHot 裁决台账
 status: active
 owner: governance
 created: 2026-10-15
-updated: 2026-10-15
+updated: 2026-10-16
 ---
 
 # BotHot 裁决台账（decision-log）
@@ -44,6 +44,8 @@ updated: 2026-10-15
 | **D-V2-02** | 清单↔资产对齐与状态机 | `article_key` 列 + `job_items.manifest_id` + 四态 `DISCOVERED→ENQUEUED→INGESTED/FAILED`（stale 回退 DISCOVERED），迁移 `ab1006c1a` | 仅改 Diff 不加列 | **BLOCKING** | 2026-10-15 21:40 | 2026-10-15 12:04 | 用户授权代选 / 2026-10-15 / A：article_key 列 + job_items.manifest_id + 四态；迁移必须可 downgrade，并在 CI ubuntu 上跑 upgrade→downgrade→upgrade |  |
 | D-09 | 契约唯一源 | Pydantic → `gen_contracts` 生成（依据 **ADR-0008**，现 stranded 于 `docs/任务规划V0.1.0/03_solution/decisions/adr-0008-contract-single-source.md`，归位见 STEP-01 S1.1.0） | 手写 schema + 比对测试 | NON | 2026-10-15 21:40 | 2026-10-16 21:40 | | |
 | D-V3-02 | 分页与字段命名 | 新接口强制目标壳 `{items,page,pageSize,total,hasMore}`；存量两壳（9 处 offset / 6 处 page）只读兼容，按 14a/15 收敛；`masterKeyConfigured` 属违规存量不新增 | 一次性全量改造 15 端点 | NON | 2026-10-15 21:40 | 2026-10-16 21:40 | | |
+| **D-V8-01** | `PushRetryState.responseData` 类型：冻结稿写 `object\|null`，实测 `providers/push/base.py:50` 是 `response_data: str = ""`（六个 Provider 无一例外按字符串塞上游回执原文）——两者**类型不相交**，不是宽严关系 | 契约与产物取**实测** `string`，实现不动；"回执结构化"转 STEP-06/05 另立卡再裁（当前无消费面，改了无人受益） | 现在就改 `PushResult.response_data` 为 `dict\|None`（牵动 6 个 provider 与落库列，且投递终态至今无 admin 读面） | NON | 2026-10-16 13:41 | 2026-10-17 13:41 | | |
+| **D-V8-02** | `ArticleKey` 跨域冗余边界冲突：`collection` 稿 `minLength: 3`，`resources` 稿 `minLength: 8`，而唯一源只能有一个别名 | 取**更严的 8**，并用见证语料证明它不排任何合法键（三支分支各自最短可过串是 `s:aaaaaaaa`=10、`b:…:1:1`=13、`h:`+32=34，均 >8 ⇒ 两界都非生效约束） | 保留 3（会让两域产物对同一别名给出不同事实，正是本门禁要消灭的） | NON | 2026-10-16 13:41 | 2026-10-17 13:41 | | |
 
 ## 3. 路由、RSS、预算与数据修复
 | ID | 问题 | 默认值(A) | 备选(B) | 级别 | 登记时间 | 生效时间 | 签字 | 推翻记录 |
