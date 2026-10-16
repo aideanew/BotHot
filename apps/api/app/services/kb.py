@@ -357,9 +357,10 @@ class KnowledgeBaseService:
         传 `article.url`），而本函数拿到的 `article_key` 是**入参 URL**（短链 token）算出来的。
         无参短链时：`_biz_from_url(入参 URL)` 解不出 biz ⇒ 锚①空；源若按页面 biz 建（或按
         重定向后长链建）⇒ 键都不等于短链 token，锚②也空。旧 docstring 说的"必然命中"不成立。
-        第三条锚用 `ContentAsset.external_id ∈ {article_key, legacy_key}` 精确等值 join 回 Source
-        补齐这条路（`legacy_key` 是 S2.2.4 的存量裸 token，只在入参为短链时非空；
-        资产侧的键在迁移前后分别是裸 token 与 `s:token`，两支都带上才不会对同一篇重抓），
+        第三条锚用 `ContentAsset.external_id` 的**逐键有序**等值 join 回 Source
+        补齐这条路（候选是 `article_key` 与 `legacy_key` 两支，`legacy_key` 是 S2.2.4 的存量裸 token，
+        只在入参为短链时非空；资产侧的键在迁移前后分别是裸 token 与 `s:token`，两支都带上才不会对同一篇重抓，
+        但**先规范键后旧键**、命中即返，绝不合成一次 `IN`——理由见函数体内的注释），
         （资产侧的键正是按入参 URL 落的，见 `_persist_document` 的 `_article_key(url)`），
         使二次入库命中缓存而不是重复抓取——顺带恢复 `kb.py` 里依赖 source 的 stale 版本判定。
 
@@ -392,19 +393,27 @@ class KnowledgeBaseService:
         # 无区分能力，等值查也会把 P-3 的冒名扩散成跨源冒名（S2.2.3 起规范键恒 ≥8，
         # 所以这一层现在防的是**回归**而不是现网输入；`legacy_key` 是裸 token，可能短，
         # 因此逐键过同一道闸，不让"兼容"变成放宽匹配面）。
-        anchor_keys = [k for k in (article_key, legacy_key) if len(k) >= MIN_FRAGMENT_LEN]
-        if anchor_keys:
+        # **逐键有序查**，绝不把两个键并成一次 `IN`：`article_key` 在规范键空间、
+        # `legacy_key` 在迁移前的裸 token 空间，二者可以分属**不同的源**——旧算法一律取
+        # URL 末段且非单射（`mp/appmsgalbum?__biz=A&album_id=1` 与 `album_id=2` 都落
+        # `"appmsgalbum"`），合成一次 `IN(...).limit(1)` 后谁赢由查询计划决定，本函数
+        # 声称的"依次"就成了假话，而 S2.2.4 的兼容会反过来制造一次跨源冒名。
+        # 实测面分清：假会话里实测的是**顺序竞争**（AF-B8 两个行序都要求规范键赢）；
+        # 末段键碰撞是旧算法的**形状性质**，现网是否真有此类行属 STEP-07 的审计范围，本段不主张。
+        # 顺序固定为：规范键优先，旧键只在其失配时才试。
+        for anchor_key in [k for k in (article_key, legacy_key) if len(k) >= MIN_FRAGMENT_LEN]:
             row = (
                 await self._session.execute(
                     select(Source)
                     .join(ContentAsset, ContentAsset.source_id == Source.id)
                     .where(
                         Source.type == "wechat_oa",
-                        ContentAsset.external_id.in_(anchor_keys),
+                        ContentAsset.external_id == anchor_key,
                         # 只认 READY 资产：缓存命中的语义是「这篇已可用」，
-                        # 领回一条正文还没就绪的源会把 hitCache 判成真的（调用方据 kb.py:246
-                        # 的 status 检查早退，那一步非 READY 时又会落回抓取，等于白锚一次还扩大
-                        # 了 token 撞名时的归属面）。与锚①②不同，这里必须带状态谓词。
+                        # 领回一条正文还没就绪的源会把 hitCache 判成真的（调用方在
+                        # `_ingest_url_inner` 里以 `cached.status == "READY"` 早退，那一步非 READY
+                        # 时又会落回抓取，等于白锚一次还扩大了 token 撞名时的归属面）。
+                        # 与锚①②不同，这里必须带状态谓词。
                         ContentAsset.status == "READY",
                     )
                     .limit(1)

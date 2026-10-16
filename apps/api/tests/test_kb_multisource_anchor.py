@@ -1,8 +1,9 @@
 """STEP-02 / S2.1.4：`kb._find_source_by_anchor` 的锚定顺序与「多源不崩」（探针 P-4 转正）。
 
 卡面 S2.1.4.1 要求把 P-4 探针转成常驻用例、S2.1.4.3 要求另加「已有 biz 源时优先命中 biz 源」，
-两条都在这里；**STEP-R0（V0.7.0）又把短链缓存回归的两条常驻用例并进来**（本文件共 4 条）。
-四条都是**连库**用例：判据是「向 DB 要了什么、DB 回了几行」，
+两条都在这里；**STEP-R0（V0.7.0）又把短链缓存回归的两条常驻用例并进来**；
+**S2.2.4 的第三条锚有序性再添两条**（`_legacy_shape_ready` 之上那一对——一支赢、一支不拆）。
+用例条数由 pytest 报，这里不抄数。本文件全是**连库**用例：判据是「向 DB 要了什么、DB 回了几行」，
 假会话证不了「多行命中时 `scalar_one_or_none()` 抛不抛」这一件事。
 
 改前的红（有依赖环境实测读数 `docs/任务规划V0.3.0/evidence/probes_4afaedd.txt:19`：
@@ -11,12 +12,17 @@
 `Source.url.like("%s%")` 兜底 ⇒ 库里只要有 ≥2 条 https 源就命中多行，`scalar_one_or_none()` 抛错，
 整条入库链路 500。S2.1.4 删掉那条兜底、两条锚查询各带 `.limit(1)`。
 
-本机跑不起来（`kb.py:22-25` 模块级 import `structlog`/`sqlalchemy`，本机皆无）⇒ 卡面验收命令
-`cd apps/api && uv run pytest tests/test_kb_multisource_anchor.py -q`（连库，需 `bash scripts/test-env.sh up`）；
+运行面（本段更正）：本机 `.venv` 里 structlog/sqlalchemy 齐备，收集与静态面都能跑，
+真正缺的是**连库执行**——本机 5432/5433 现读拒连且无 docker，所以本文件全部 skip，
+而 skip≠pass（D-V4-01）。卡面验收命令
+`cd apps/api && uv run pytest tests/test_kb_multisource_anchor.py -q`（需 `bash scripts/test-env.sh up`）
+的判定面在 `@ci` ubuntu；旧文本写的「本机跑不起来」是 `3a67e96` 时点的读数，已过期。
 本机侧等价证明在 `docs/06_validation/evidence/EVD-V2-02/prove_anchor_fallback.py`：
-行为面 AF-B1…B5 用 AST 取出**磁盘上 kb.py 的当前函数体**真实执行，配一台如实实现 `limit(1)`
-截断与多行抛错的记账假会话；结构面 AF-S1/S2/S6 机检「函数体内不再有 `.like(`」这类否定式声明，
-不靠人眼读 diff。
+行为面（AF-B1…B6、AF-B8）用 AST 取出**磁盘上 kb.py 的当前函数体**真实执行，配一台如实实现
+`limit(1)` 截断、多行抛错与第三条锚 `.join` 的记账假会话（`.join` 是 S2.2.4 之后才需要的——
+在那之前假会话一遇到第三条锚就抛 AttributeError，AF-B6 从那时起一直是红的，红在工具不在代码）；
+结构面（AF-S1/S2/S6/S7/S8）机检「函数体内不再有 `.like(`」「第三条锚逐键有序且两支键空间不许
+并成一次 `IN`」这类声明，不靠人眼读 diff。
 """
 
 from __future__ import annotations
@@ -189,3 +195,87 @@ async def test_asset_reverse_lookup_recovers_biz_keyed_source(db_session) -> Non
         "拿到 None 说明第三条锚没跑——二次入库会重新抓取（078dc30 那一条回归）"
     )
     assert got.id == src.id, f"应返回资产所属源 {src.id}，实得 {got.id}（{got.name}）"
+
+
+def _legacy_shape_ready() -> tuple[str, str]:
+    """返回 (规范键, 旧裸 token) 两支候选，规范键现取自生产真源（S2.3.1 同一口径）。"""
+    canon = _article_key(SHORT_1)
+    assert canon == f"s:{SHORT_TOKEN_1}", f"短链规范键形状变了，下面两条用例的前提要跟着改：{canon!r}"
+    assert len(SHORT_TOKEN_1) >= 8, f"夹具 token 过不了长度守卫：{SHORT_TOKEN_1!r}"
+    return canon, SHORT_TOKEN_1
+
+
+async def test_third_anchor_prefers_canonical_key_over_legacy(db_session) -> None:  # type: ignore[no-untyped-def]
+    """S2.2.4 的反证：两支候选都有 READY 资产时，第三条锚必须返回**规范键**那一支的源。
+
+    为什么这条必须是用例而不是 docstring：改前实现把两支键空间并成一次
+    `ContentAsset.external_id.in_([article_key, legacy_key]).limit(1)`，**没有 ORDER BY**，
+    谁赢由查询计划决定。这不是理论风险——旧算法一律取 URL 末段且**非单射**
+    （`mp/appmsgalbum?__biz=A&album_id=1` 与 `album_id=2` 都落 `"appmsgalbum"`），
+    所以裸 token 那一支完全可能指向**另一篇**文章的源；领回来就是跨源冒名
+    （`hitCache=True` 而正文是别人的），与 P-3 同族、由 S2.2.4 的兼容层自己打开。
+    见 `docs/任务规划V0.12.0/09-执行过程-独立执行段第二批.md` §7.4。
+
+    形状照现场摆：源 LEG 持迁移前落的裸 token 资产，源 CAN 持迁移后的规范键资产；
+    锚①（`SHORT_1` 无 query ⇒ biz 空）与锚②（没有以规范键为 external_id 的源）都不中，
+    只剩锚③。本机无 PG 时本条 skip ⇒ 判定面在 `@ci`（D-V4-01）；
+    同一判据的本机等价证明在 `docs/06_validation/evidence/EVD-V2-02/prove_anchor_fallback.py`
+    的 **AF-B8**（记账假会话，已补上 `.join` 才能跑第三条锚）与 **AF-S8**（逐键有序的静态面）。
+    """
+    from test_langbot import _client  # noqa: PLC0415
+    from test_p0_asset_cache import _CountingStubResolver  # noqa: PLC0415
+
+    canon, legacy = _legacy_shape_ready()
+    leg = Source(type="wechat_oa", external_id="LEGACY-BIZ", name="旧裸 token 源", url=SHORT_1)
+    can = Source(type="wechat_oa", external_id="CANON-BIZ", name="规范键源", url=SHORT_1)
+    db_session.add_all([leg, can])
+    await db_session.commit()
+    db_session.add_all(
+        [
+            ContentAsset(
+                source_id=leg.id, external_id=legacy, content_hash="1" * 64, content_markdown="旧行", status="READY"
+            ),
+            ContentAsset(
+                source_id=can.id, external_id=canon, content_hash="2" * 64, content_markdown="新行", status="READY"
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    svc = KnowledgeBaseService(_client(), db_session, _CountingStubResolver())
+    got = await svc._find_source_by_anchor(canon, SHORT_1, legacy_key=legacy)  # noqa: SLF001
+    assert got is not None, "两条候选资产都在库里却返回 None——第三条锚没跑"
+    assert got.id == can.id, (
+        f"应返回规范键那一支的源 {can.id}，实得 {got.id}（{got.name}）——"
+        "两支键空间在竞争，这就是那次跨源冒名"
+    )
+
+
+async def test_third_anchor_still_falls_back_to_legacy_key(db_session) -> None:  # type: ignore[no-untyped-def]
+    """同一判据的另一半：库里只有旧裸 token 资产时，兼容层**必须**照样领回（不能为了有序把兼容拆掉）。
+
+    上一条用例只断言"规范键赢"，它挡得住顺序反，挡不住"干脆不再查旧键"——
+    后者会让迁移前的存量行每次重抓（付费源就是花钱）。两条合起来才同时钉住
+    "有序"和"兼容层还在"。
+    """
+    from test_langbot import _client  # noqa: PLC0415
+    from test_p0_asset_cache import _CountingStubResolver  # noqa: PLC0415
+
+    canon, legacy = _legacy_shape_ready()
+    leg = Source(type="wechat_oa", external_id="LEGACY-ONLY-BIZ", name="只有旧行的源", url=SHORT_1)
+    db_session.add(leg)
+    await db_session.commit()
+    db_session.add(
+        ContentAsset(
+            source_id=leg.id, external_id=legacy, content_hash="3" * 64, content_markdown="迁移前的行", status="READY"
+        )
+    )
+    await db_session.commit()
+
+    svc = KnowledgeBaseService(_client(), db_session, _CountingStubResolver())
+    got = await svc._find_source_by_anchor(canon, SHORT_1, legacy_key=legacy)  # noqa: SLF001
+    assert got is not None, (
+        f"规范键 {canon!r} 失配后，旧裸 token {legacy!r} 那一支没把源领回来——"
+        "S2.2.4 的只读兜底被拆掉了，迁移前的存量行每次都会重抓"
+    )
+    assert got.id == leg.id, f"应返回旧行所属源 {leg.id}，实得 {got.id}（{got.name}）"

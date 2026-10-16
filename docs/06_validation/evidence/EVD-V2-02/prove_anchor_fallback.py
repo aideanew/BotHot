@@ -132,32 +132,39 @@ class MultipleResultsFound(Exception):
 
 
 class _Cond:
-    __slots__ = ("col", "op", "val")
+    __slots__ = ("col", "op", "val", "table")
 
-    def __init__(self, col: str, op: str, val: object) -> None:
-        self.col, self.op, self.val = col, op, val
+    def __init__(self, col: str, op: str, val: object, table: str = "") -> None:
+        self.col, self.op, self.val, self.table = col, op, val, table
 
     def __repr__(self) -> str:
         return f"{self.col}.{self.op}({self.val!r})"
 
 
 class _Col:
-    """假列：`==` 与 `.like()` 只记成条件，不生成 SQL。"""
+    """假列：`==` 与 `.like()` 只记成条件，不生成 SQL。
 
-    def __init__(self, name: str) -> None:
-        self.name = name
+    `table` 是给第三条锚用的：`Source.external_id` 与 `ContentAsset.external_id` **同名**，
+    只带列名的条件在 join 里无法分派到正确的驱动表上（第十五轮之前第三条锚走的是
+    `.in_([...])`，`_Query` 没有 `join`，那条链一发进来就抛 AttributeError ⇒ AF-B6 从
+    S2.2.4 起一直是红的，红在假会话而不是生产代码）。列名 `col` 保持裸名不变——
+    既有判据读的是 `c.col`/`c.op`/`c.val`，扩字段不搬它们。
+    """
+
+    def __init__(self, name: str, table: str = "") -> None:
+        self.name, self.table = name, table
 
     def __eq__(self, other: object) -> object:
-        return _Cond(self.name, "eq", other)
+        return _Cond(self.name, "eq", other, self.table)
 
     def __ne__(self, other: object) -> object:
-        return _Cond(self.name, "ne", other)
+        return _Cond(self.name, "ne", other, self.table)
 
     def __hash__(self) -> int:
         return hash(self.name)
 
     def like(self, pattern: str) -> object:
-        return _Cond(self.name, "like", pattern)
+        return _Cond(self.name, "like", pattern, self.table)
 
 
 class _Model:
@@ -166,12 +173,24 @@ class _Model:
     def __init__(self, key: str, *cols: str) -> None:
         self._key = key
         for c in cols:
-            setattr(self, c, _Col(c))
+            setattr(self, c, _Col(c, key))
 
 
 class _Query:
     def __init__(self, key: str) -> None:
         self.key, self.conds, self.limit_n = key, [], None
+        self.join_key = ""
+
+    def join(self, model: object, on: object = None) -> _Query:
+        """只认 kb.py 里那一条 join 形状：`select(Source).join(ContentAsset, ContentAsset.source_id == Source.id)`。
+
+        on 谓词不进条件账本（它是连接条件不是过滤条件），表侧关联由 `_run` 按
+        `asset["source_id"] == src["id"]` 施加。若将来第三条锚改成 join 别的列，
+        这条假会话会在 `_run` 里给出**错的行为**而不是崩——所以 AF-S8 同时盯着
+        「逐键有序」那一族形状，形状变了它会先出声。
+        """
+        self.join_key = getattr(model, "_key", "")
+        return self
 
     def where(self, *conds: object) -> _Query:
         self.conds += [c for c in conds if isinstance(c, _Cond)]
@@ -217,7 +236,19 @@ class _StubSession:
 
     def _run(self, q: _Query) -> _Result:
         self.log.append((q.key, list(q.conds), q.limit_n))
-        return _Result(_match(self._tables.get(q.key, []), q.conds, q.limit_n))
+        if not q.join_key:
+            return _Result(_match(self._tables.get(q.key, []), q.conds, q.limit_n))
+        # 第三条锚：驱动表是 Source，条件按**表**分派（两支都有同名的 external_id）。
+        rows = []
+        for src in _match(self._tables.get(q.key, []),
+                          [c for c in q.conds if c.table != q.join_key], None):
+            side = [c for c in q.conds if c.table == q.join_key]
+            for asset in self._tables.get(q.join_key, []):
+                if asset.get("source_id") != src.get("id"):
+                    continue
+                if all(asset.get(c.col) == c.val for c in side):
+                    rows.append(src)
+        return _Result(rows[:q.limit_n] if q.limit_n is not None else rows)
 
     async def execute(self, q: _Query) -> _Result:
         return self._run(q)
@@ -244,8 +275,8 @@ class _Recorder:
         pass
 
 
-SOURCE = _Model("Source", "type", "external_id", "url")
-ASSET_M = _Model("ContentAsset", "source_id", "external_id", "url")
+SOURCE = _Model("Source", "id", "type", "external_id", "url")
+ASSET_M = _Model("ContentAsset", "id", "source_id", "external_id", "url", "status")
 
 
 # ── AST 取件 ─────────────────────────────────────────────────────────────
@@ -519,17 +550,22 @@ def _world(kb_src: str, asset_src: str, source_rows: list[dict], asset_rows: lis
 
     anchor = ns[KB_TARGET]
     frag = ns[AS_TARGET]
-    return (lambda ak, u: asyncio.run(anchor(_Host(session), ak, u)),
+    return (lambda ak, u, lk="": asyncio.run(anchor(_Host(session), ak, u, lk)),
             lambda sid, f: asyncio.run(frag(_Host(session), sid, f)), session, rec, None)
 
 
-def _call_anchor(kb_src: str, asset_src: str, article_key: str, url: str, source_rows: list[dict]):
-    """跑一次锚定查询，返回 (结果, 会话账本, 异常名或空串)。"""
-    anchor, _frag, sess, _rec, err = _world(kb_src, asset_src, source_rows, [])
+def _call_anchor(kb_src: str, asset_src: str, article_key: str, url: str, source_rows: list[dict],
+                 legacy_key: str = "", asset_rows: list[dict] | None = None):
+    """跑一次锚定查询，返回 (结果, 会话账本, 异常名或空串)。
+
+    `legacy_key`/`asset_rows` 是 S2.2.4 之后第三条锚的两支候选与它的资产侧行——
+    默认空，既有用例（AF-B1…B6）不受影响。
+    """
+    anchor, _frag, sess, _rec, err = _world(kb_src, asset_src, source_rows, list(asset_rows or []))
     if err:
         return None, [], err
     try:
-        return anchor(article_key, url), sess.log, ""
+        return anchor(article_key, url, legacy_key), sess.log, ""
     except BaseException as exc:  # noqa: BLE001 - 「崩了」本身就是 P-4 的判据
         return None, sess.log, type(exc).__name__
 
@@ -1024,6 +1060,12 @@ def af_s7(kb: str, _asset: str) -> tuple[bool, object]:
     四件事可以同时成立却互不相关（第六轮复审在 BD 台上报过同一类，当时改成数据流才堵住）。
     现在顺着流走——找到把值比给 `Source.external_id` 的那条循环，要求它迭代表的可达式里含委托调用；
     `_b = _biz_from_url(url)` 存进局部变量再进锚元组那种等价写法仍然算数（EQUIVS 里就有那一发）。
+
+    射程只到 **Source 侧**：第三条锚比的是 `ContentAsset.external_id`，那是文章键空间，
+    它的正确来源本来就是 `article_key`/`legacy_key` 而不是委托结果，把它算进来会让判据对
+    正确实现撒谎。这一格过去没人看见是因为旧实现用 `.in_([...])`（是 Call 不是 Compare，
+    压根不进本判据的视线）；S2.2.4 改逐键有序后它变成 Compare，才被自己的规则误伤——
+    误伤也是信息：**列没限定的判据，会把另一张表上的合法比较一起圈进来**。
     """
     fns = _fn_nodes(kb, KB_TARGET)
     if not fns:
@@ -1036,7 +1078,8 @@ def af_s7(kb: str, _asset: str) -> tuple[bool, object]:
     n_cmp = 0
     for n in ast.walk(body):
         if not (isinstance(n, ast.Compare)
-                and any(isinstance(x, ast.Attribute) and x.attr == "external_id" for x in ast.walk(n))):
+                and any(isinstance(x, ast.Attribute) and x.attr == "external_id"
+                        and isinstance(x.value, ast.Name) and x.value.id == "Source" for x in ast.walk(n))):
             continue
         n_cmp += 1
         names = [x.id for x in ast.walk(n) if isinstance(x, ast.Name) and x.id in loops]
@@ -1050,6 +1093,182 @@ def af_s7(kb: str, _asset: str) -> tuple[bool, object]:
     return not bad, bad or [f"{n_cmp} 处 external_id 比较所用的锚，其来源都可达 `_biz_from_url`"]
 
 
+def _seq_candidates(node: ast.AST) -> list[ast.expr]:
+    """把 `for x in <node>` 的迭代式展开成**有序**候选表达式；展不开就返回空。
+
+    认三种：列表/元组字面量、单层列表推导或生成器表达式、外面再套一层 `list(...)`/`tuple(...)`。
+    不认的都有理由：集合与 dict 没有顺序（`set([...])` 这种"两支都在但顺序不保证"必须展不开，
+    展不开就是红，而不是"换个形状躲过去"）；`sorted(...)` 的顺序取决于**键串的字典序**，
+    而"规范键先"是语义顺序不是字典顺序，允许它等于把判据交给数据（第十七轮独立验证报回的
+    `sorted([...], reverse=True)` 那一发就是这么绿的）；切片 `[::-1]` 同理。
+    """
+    if isinstance(node, (ast.List, ast.Tuple)):
+        return list(node.elts)
+    if isinstance(node, (ast.ListComp, ast.GeneratorExp)) and len(node.generators) == 1:
+        return _seq_candidates(node.generators[0].iter)
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id in ("list", "tuple") and len(node.args) == 1 and not node.keywords):
+        return _seq_candidates(node.args[0])
+    return []
+
+
+def _resolved_names(expr: ast.AST, binds: dict[str, list[ast.expr]],
+                    seen: frozenset[str] = frozenset()) -> set[str]:
+    """把一支候选**绕道局部变量**之后收敛到它到底携带哪几个键名。
+
+    只认名字集合而不是"表达式里出现过这个名字"：上一版按包含判，
+    `[article_key if article_key.startswith("s:") else legacy_key, legacy_key]`
+    与 `sorted([...], reverse=True)` 都能绿着把顺序换成旧键先——那正是本判据要拦的那件事
+    （第十七轮独立验证实测：两支候选的形状判据在 S8/B8 与两条连库用例上全绿）。
+    """
+    if isinstance(expr, ast.Name):
+        if expr.id in binds and expr.id not in seen:
+            out = {expr.id}
+            for value in binds[expr.id]:
+                out |= _resolved_names(value, binds, seen | {expr.id})
+            return out
+        return {expr.id}
+    return {n.id for n in ast.walk(expr) if isinstance(n, ast.Name)}
+
+
+def af_s8(kb: str, _asset: str) -> tuple[bool, object]:
+    """第三条锚**逐键有序**：候选一支一支等值查，规范键在前、旧键在后；体内不许出现把两支
+    键空间并成一次 `IN` 的写法。
+
+    存在理由（09 执行记录 §7.4，由独立验证构造出的跨源冒名）：`article_key` 在规范键空间、
+    `legacy_key` 在迁移前的裸 token 空间，而旧算法取 URL 末段且**非单射**
+    （`mp/appmsgalbum?__biz=A&album_id=1` 与 `album_id=2` 都落 `"appmsgalbum"`），
+    所以同一串裸 token 可能同时是**另一篇**文章在旧空间里的键。写成
+    `external_id.in_([article_key, legacy_key]).limit(1)` 之后谁赢由查询计划决定 ⇒
+    函数 docstring 声称的"依次"成假话，S2.2.4 的兼容层反而制造一次跨源冒名。
+
+    判形状不判字形，五格缺一即红：
+    ① 体内必须有一条 `for`，其循环变量被**等值**比给 `ContentAsset.external_id`；
+    ② 那条 `for` 的迭代式按 `_seq_candidates` 展开后的候选序列**恰好两支**，且
+       第一支 `_resolved_names` 的结果**等于** `{article_key}`、第二支**等于** `{legacy_key}`
+       ——不是"包含"，是相等。写成包含时，第十七轮独立验证实测出两发全绿：
+       `[article_key if article_key.startswith("s:") else legacy_key, legacy_key]`
+       与 `sorted([...], reverse=True)` 都"含"规范键却把旧键摆到了前面；
+       绕道局部变量（`ak = article_key` 再进序列）仍然算数，因为 `_resolved_names` 会走一跳；
+    ③ 两支候选必须**互不相同**（同一支摆两次等于只查一支）；
+    ④ 体内任何 `*.external_id.in_(...)` 一律算违例（并集写法）。
+    `sorted(...)` 不在 `_seq_candidates` 的展开表里：它的顺序取决于**键串的字典序**，
+    而"规范键先"是**语义顺序**不是字典顺序，允许它就是把判据交给数据。
+    """
+    fns = _fn_nodes(kb, KB_TARGET)
+    if not fns:
+        return False, f"kb.py 里没有 {KB_TARGET}"
+    body = fns[-1]
+    bad: list[str] = []
+
+    loops = {n.target.id: n.iter for n in ast.walk(body)
+             if isinstance(n, (ast.For, ast.AsyncFor)) and isinstance(n.target, ast.Name)}
+    binds = _assigned_values(body)
+
+    hit: list[tuple[str, int]] = []
+    for n in ast.walk(body):
+        if not isinstance(n, ast.Compare) or len(n.ops) != 1 or not isinstance(n.ops[0], ast.Eq):
+            continue
+        cols = [x for x in ast.walk(n)
+                if isinstance(x, ast.Attribute) and x.attr == "external_id"
+                and isinstance(x.value, ast.Name) and x.value.id == "ContentAsset"]
+        if not cols:
+            continue
+        names = [x.id for x in ast.walk(n) if isinstance(x, ast.Name) and x.id in loops]
+        if not names:
+            bad.append(f"@{n.lineno}: 与 `ContentAsset.external_id` 等值的不是任何循环候选：{ast.unparse(n)}")
+            continue
+        hit.append((names[0], n.lineno))
+        cands = _seq_candidates(loops[names[0]])
+        if len(cands) != 2:
+            bad.append(f"@{n.lineno}: 第三条锚的候选不是恰好两支有序序列（实得 {len(cands)} 支）："
+                       f"{ast.unparse(loops[names[0]])}")
+            continue
+        first = _resolved_names(cands[0], binds)
+        second = _resolved_names(cands[1], binds)
+        if first != {"article_key"}:
+            bad.append(f"@{n.lineno}: 第一支候选不等于规范键（顺序必须规范键优先）："
+                       f"{ast.unparse(cands[0])} → {sorted(first)}")
+        if second != {"legacy_key"}:
+            bad.append(f"@{n.lineno}: 第二支候选不等于存量裸 token：{ast.unparse(cands[1])} → {sorted(second)}")
+        if first & second:
+            bad.append(f"@{n.lineno}: 两支候选重合（{sorted(first & second)}）——等于只查一支")
+
+    if not hit:
+        bad.append("体内没有任何把循环候选等值比给 `ContentAsset.external_id` 的比较"
+                   "（第三条锚没在逐键查）")
+
+    # 旧裸 token 只许进**资产侧**那一条锚。把它塞进 Source 侧的锚元组，等于让一个非单射的
+    # 末段键去匹配 `Source.external_id`——那是比第三条锚更强的冒名面。这一格是第十七轮独立
+    # 验证实测出来的：改成 `(a for a in (_biz_from_url(url), article_key, legacy_key) if a)`
+    # 之后**全部判据都绿**，因为 AF-S7 只问"可达委托调用"，三支里含委托就满足。
+    for n in ast.walk(body):
+        if not isinstance(n, ast.Compare) or not any(
+                isinstance(x, ast.Attribute) and x.attr == "external_id"
+                and isinstance(x.value, ast.Name) and x.value.id == "Source" for x in ast.walk(n)):
+            continue
+        for name in {x.id for x in ast.walk(n) if isinstance(x, ast.Name) and x.id in loops}:
+            for cand in _seq_candidates(loops[name]):
+                if "legacy_key" in _resolved_names(cand, binds):
+                    bad.append(f"@{n.lineno}: 旧裸 token 进了 Source 侧的锚候选：{ast.unparse(cand)}")
+
+    for n in ast.walk(body):
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "in_"
+                and isinstance(n.func.value, ast.Attribute) and n.func.value.attr == "external_id"):
+            bad.append(f"@{n.lineno}: 键空间被并成一次 `IN`：{ast.unparse(n)}")
+
+    return not bad, bad or [f"第三条锚逐键有序（{len(hit)} 处等值比较），体内无 `external_id.in_(...)`"]
+
+
+def af_b8(kb: str, asset: str) -> tuple[bool, object]:
+    """第三条锚的行为面：两支候选同时在库里有 READY 资产时，返回的是**规范键**那一支的源；
+    只有旧裸 token 时，兼容层仍然把它领回来。
+
+    存在理由：AF-S8 判的是形状，形状对但顺序写反（或干脆只剩一支）都得靠这一条行为面抓。
+    两个子案缺一不可——只留子案①，"把 legacy 候选删掉"这种假修就绿了；只留子案②，
+    顺序写反就绿了（它两支都能命中）。这是 09 执行记录 §7.4 那次跨源冒名的直接反证。
+    """
+    _biz, _long, short_1, short_tok = _samples()
+    canon_key = f"s:{short_tok}"
+    src_can, src_leg = _row("MzCan", short_1), _row("MzLeg", short_1)
+    assets = [
+        {"id": "a-can", "source_id": "MzCan", "external_id": canon_key, "status": "READY", "url": short_1},
+        {"id": "a-leg", "source_id": "MzLeg", "external_id": short_tok, "status": "READY", "url": short_1},
+    ]
+    bad: list[str] = []
+
+    for order in ([src_leg, src_can], [src_can, src_leg]):
+        got, log, exc = _call_anchor(kb, asset, canon_key, short_1, order,
+                                     legacy_key=short_tok, asset_rows=assets)
+        tag = "行序 " + "/".join(str(r["id"]) for r in order)
+        if exc:
+            bad.append(f"子案①（两支都在，{tag}）抛了 {exc!r}")
+        if got is None:
+            bad.append(f"子案① 返回 None——第三条锚根本没跑起来（{tag}）")
+        elif got.get("id") != "MzCan":
+            bad.append(f"子案① 该返回规范键那一支 MzCan，实得 {got.get('id')!r}（{tag}，跨源冒名的形状）")
+        third = [e for e in log if e[0] == "Source" and any(c.table == "ContentAsset" for c in e[1])]
+        if len(third) > 1:
+            bad.append(f"子案① 规范键命中后仍继续查旧键（下发 {len(third)} 条资产反查，{tag}）")
+
+    # 子案①'：**只有规范键那一支**在库里 ⇒ 必须领回 CAN。
+    # 上一版只有"两支都在"这一对样本，实测 `[article_key, article_key]` 这种把旧键换成规范键
+    # 的写法（两支候选重合）在它上面照样绿——补这一对，加上行序两个方向，才把"赢"与"唯一"分开判。
+    got1, _log1, exc1 = _call_anchor(kb, asset, canon_key, short_1, [src_can, src_leg],
+                                     legacy_key=short_tok, asset_rows=[assets[0]])
+    if exc1 or got1 is None or got1.get("id") != "MzCan":
+        bad.append(f"子案①' 只有规范键资产时应领回 MzCan，实得 {got1!r}、异常 {exc1!r}")
+
+    got2, log2, exc2 = _call_anchor(kb, asset, canon_key, short_1, [src_leg],
+                                    legacy_key=short_tok, asset_rows=[assets[1]])
+    if exc2:
+        bad.append(f"子案②（只有旧键）抛了 {exc2!r}")
+    if got2 is None or got2.get("id") != "MzLeg":
+        bad.append(f"子案② S2.2.4 的兼容层没命中，实得 {got2!r}（log={log2}）")
+
+    return not bad, bad or ["两支都在⇒规范键赢且不多查一次；只有旧键⇒兼容层照样领回"]
+
+
 CHECKS: tuple[tuple[str, str, object], ...] = (
     ("AF-P0", "两个目标都能被单独 exec（行为面判据的前提）", af_p0),
     ("AF-B1", "biz 锚命中：一条查询、external_id 比到 biz、带 limit(1)", af_b1),
@@ -1058,6 +1277,7 @@ CHECKS: tuple[tuple[str, str, object], ...] = (
     ("AF-B4", "同 external_id 的脏数据两行被 limit(1) 截断（摘掉就抛）", af_b4),
     ("AF-B5", "短链：空 biz 被 `if a` 跳过，只用 article_key 锚", af_b5),
     ("AF-B6", "生产量级的 18 字符键也不下发 URL 列 like 条件（按条件判，不按 `.like(` 字形判）", af_b6),
+    ("AF-B8", "第三条锚行为面：两支候选都在时规范键赢，只有旧裸 token 时兼容层仍命中", af_b8),
     ("AF-A1", "片段 's'：返回 None、零条 SQL、恰一条 WARNING（事件名点名）", af_a1),
     ("AF-A2", "空片段：返回 None、零条 SQL、不刷 WARNING", af_a2),
     ("AF-A3", "阈值边界卡在 8（7 挡、8 放）", af_a3),
@@ -1071,7 +1291,8 @@ CHECKS: tuple[tuple[str, str, object], ...] = (
               "**明认盲区**：拼出来的名字（f-string、`"".join([...])` 再当字典键）不在射程内，"
               "那一族要么在 exec 时炸成 INCONCLUSIVE，要么交 J-6/CI", af_s5),
     ("AF-S6", "kb 全文 AST 层不再出现 Source.url.like(...)", af_s6),
-    ("AF-S7", "锚仍来自 _biz_from_url 的结果（不许顺手拆掉 S2.1.3）", af_s7),
+    ("AF-S7", "锚仍来自 _biz_from_url 的结果（不许顺手拆掉 S2.1.3）；射程只到 Source 侧的 external_id 比较", af_s7),
+    ("AF-S8", "第三条锚逐键有序（规范键先、旧键后），且两支键空间不许并成一次 external_id.in_(...)", af_s8),
 )
 
 
@@ -1146,7 +1367,9 @@ KB_TAIL_OLD = ("                    .limit(1)\n                )\n            ).
                "                    Source.type == \"wechat_oa\",\n"
                "                    Source.url.like(f\"%{article_key}%\"),\n"
                "                )\n            )\n        ).scalar_one_or_none()\n        return row\n")
-KB_NO_LIMIT = "                    .limit(1)\n                )\n            ).scalar_one_or_none()"
+KB_NO_LIMIT = ("                        Source.external_id == anchor,\n"
+               "                    )\n                    .limit(1)\n"
+               "                )\n            ).scalar_one_or_none()")
 AS_GUARD = ("        if len(fragment) < MIN_FRAGMENT_LEN:\n"
             "            if fragment:\n"
             "                logger.warning(\n"
@@ -1169,14 +1392,18 @@ MUTANTS: list[tuple[str, str, str, str, set[str]]] = [
     ("退回 S2.1.4 改前：把 `Source.url.like('%article_key%')` 兜底原样放回", "kb", KB_TAIL, KB_TAIL_OLD,
      {"AF-S1", "AF-S6", "AF-B2", "AF-B3"}),
     ("摘掉锚查询的 .limit(1)（同 external_id 的脏数据会抛）", "kb", KB_NO_LIMIT,
+     "                        Source.external_id == anchor,\n                    )\n"
      "                )\n            ).scalar_one_or_none()", {"AF-S2", "AF-B4"}),
     ("锚元组里不用委托结果（S2.1.3 的接线被顺手拆掉）", "kb", KB_LOOP,
      "        for anchor in (a for a in (article_key,) if a):", {"AF-S7", "AF-B1", "AF-B4"}),
     ("去掉 `if a` 过滤：空 biz 也去查一次锚", "kb", KB_LOOP,
      "        for anchor in (_biz_from_url(url), article_key):", {"AF-B5"}),
-    ("锚命中了也不返回（`if row is not None` 改成永假）", "kb",
-     "            if row is not None:\n                return row",
-     "            if False:\n                return row", {"AF-B1", "AF-B4", "AF-B5"}),
+    ("第三条锚命中了也不返回（兼容层形同虚设）。锚里带上尾部的 `return None` 是为了**唯一**："
+     "S2.2.4 之后体内有两处同形的 `if row is not None: return row`，旧锚出现 2 次 ⇒ 这一发从"
+     "那一批起一直是取消的（self-test 报「锚出现 2 次」而不是「期望红实得绿」，取消是可见的，"
+     "不是蒙过去）", "kb",
+     "            if row is not None:\n                return row\n        return None",
+     "            if False:\n                return row\n        return None", {"AF-B8"}),
     ("给锚定方法加一个引用未定义名字的装饰器（被 exec 的那份与活绑定不是同一个）", "kb",
      "    async def _find_source_by_anchor(", "    @_probe_cache\n    async def _find_source_by_anchor(",
      {"AF-P0", "AF-S5"}),
@@ -1373,6 +1600,40 @@ MUTANTS: list[tuple[str, str, str, str, set[str]]] = [
      '                _r17 = text("SELECT * FROM sources WHERE url LIKE \'%' + "{article_key}%'\")\n"
      "                return (await self._session.execute(_r17)).scalar()",
      {"AF-B6", "AF-S1", "AF-S6"}),
+    # ↓ 09 执行记录 §7.4：S2.2.4 的兼容层自己打开的一次跨源冒名。这几发的**实测红集**写在期望里，
+    #   其中"并回一次 IN"那发除 AF-S8/AF-B8 外还红在 AF-B6 上（假会话对 `in_` 无法构造条件，
+    #   炸成异常本身就是"这一族跑不起来"的证据）——把期望写成只红一条就是凭想象读数。
+    #   前两发在旧实现（一次 `in_([...])`）上是**看不见**的，因为那时第三条锚是 Call 不是 Compare，
+    #   AF-S7/AF-S8 都读不到它；这正是"并集写法"躲过按 Compare 建模的判据的形状。
+    ("第三条锚并回一次 `IN([规范键, 旧键])`：两支键空间竞争，谁赢由查询计划决定", "kb",
+     "                        ContentAsset.external_id == anchor_key,",
+     "                        ContentAsset.external_id.in_([article_key, legacy_key]),",
+     {"AF-S8", "AF-B8"}),
+    ("候选顺序倒过来（旧键先、规范键后）：兼容层会长期盖住规范键那一行", "kb",
+     "        for anchor_key in [k for k in (article_key, legacy_key) if len(k) >= MIN_FRAGMENT_LEN]:",
+     "        for anchor_key in [k for k in (legacy_key, article_key) if len(k) >= MIN_FRAGMENT_LEN]:",
+     {"AF-S8", "AF-B8"}),
+    ("只剩规范键那一支（兼容层被拆掉，但形状看起来还在逐键查）", "kb",
+     "        for anchor_key in [k for k in (article_key, legacy_key) if len(k) >= MIN_FRAGMENT_LEN]:",
+     "        for anchor_key in [article_key]:",
+     {"AF-S8", "AF-B8"}),
+    # ↓ 第十七轮独立验证报回的三发"形状对而值错"：它们在上一版 AF-S8 的**按名包含**判法下全绿
+    #   （三元式那一发连两条连库用例都过），改成 `_resolved_names` 相等判 + 恰好两支之后才有牙齿。
+    ("第一支写成三元式（含 `article_key` 这个名字，值却可能是旧裸 token）", "kb",
+     "        for anchor_key in [k for k in (article_key, legacy_key) if len(k) >= MIN_FRAGMENT_LEN]:",
+     '        for anchor_key in [article_key if article_key.startswith("s:") else legacy_key, legacy_key]:',
+     {"AF-S8"}),
+    ("用 `sorted(..., reverse=True)` 排候选（顺序变成字典序而不是语义序）", "kb",
+     "        for anchor_key in [k for k in (article_key, legacy_key) if len(k) >= MIN_FRAGMENT_LEN]:",
+     "        for anchor_key in sorted([article_key, legacy_key], reverse=True):",
+     {"AF-S8"}),
+    ("两支候选写成同一支（形状是两支，匹配面却只有一支）", "kb",
+     "        for anchor_key in [k for k in (article_key, legacy_key) if len(k) >= MIN_FRAGMENT_LEN]:",
+     "        for anchor_key in [article_key, article_key]:",
+     {"AF-S8", "AF-B8"}),
+    ("旧裸 token 挤进 Source 侧的锚元组（非单射的末段键去匹配 `Source.external_id`）", "kb",
+     KB_LOOP, "        for anchor in (a for a in (_biz_from_url(url), article_key, legacy_key) if a):",
+     {"AF-S8"}),
 ]
 
 #: select 链的原文（`.where` 在前、`.limit` 在后）与其等价换序版：AF-S2 数的是处数，不是顺序。
@@ -1492,6 +1753,9 @@ EQUIVS: list[tuple[str, str, str, str]] = [
      '                logger.warning("asset_url_fragment_too_short", source_id=source_id,\n'
      "                               fragment=fragment, min_len=len(\"12345678\"))\n"
      "            return None\n"),
+    ("候选序列外面套一层 `tuple(...)`（顺序语义没变，判据认的是顺序而不是字面形状）", "kb",
+     "        for anchor_key in [k for k in (article_key, legacy_key) if len(k) >= MIN_FRAGMENT_LEN]:",
+     "        for anchor_key in tuple([k for k in (article_key, legacy_key) if len(k) >= MIN_FRAGMENT_LEN]):"),
 ]
 
 
