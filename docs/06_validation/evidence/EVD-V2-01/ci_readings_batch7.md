@@ -47,9 +47,23 @@
 ## 本机全量套件的处置（写清楚，免得被当成"未验证却说已验证"）
 
 - 本机一次 `pytest -q` 全量跑了约 45 分钟无输出后被我把其中止（它管道到 `tail`，中间读数取不到，
-  这是取证方式的缺陷，不是用例的结论）。
-- 所以本批**没有**本机的全量 pass/skip 总数。我跑的有界子集：
-  `pytest tests -q -k "contract or gen_contracts or schema"` → `131 passed, 1 skipped, 1059 deselected` `@win`；
+  这是取证方式的缺陷，不是用例的结论）。第二次改成"输出直接写文件、不经管道"重跑，
+  结果见本文件末尾的补记。
+- **CI 日志的总数取不到**：`actions/runs/{id}/logs` 需要仓库 admin（实测返回
+  `Must have admin rights to Repository`），当前凭据没有 ⇒ 我不引用任何"CI 上的 pass/skip 总数"，
+  只主张 `conclusion=success`（D-V6-02 认定的口径就是 run id + head_sha + conclusion）。
+- 本机跑过的有界子集：`pytest tests -q -k "contract or gen_contracts or schema"`
+  → `131 passed, 1 skipped, 1059 deselected` `@win`；
   单文件 `pytest tests/test_collection_contract.py -q` → `127 passed` `@win`。
-- 全量结论以 `@ci` 的 `backend` job 为准（见上表；`c966a34` 那条还在跑，回来之前本批状态记
-  **部分确认**）。
+- 全量结论以 `@ci` 的 `backend` job 为准：`c966a34`（第六轮返工那一次提交）的
+  run 38854844793 已 completed / **success** ⇒ 本批改动在 ubuntu 全量面上是绿的。
+
+## 补记（后到读数，追加而不覆盖）
+
+| head | 工作流 | run id | 结论 |
+|---|---|---|---|
+| `c966a34` | CI | 38854844793 | completed / **success**（backend job 含 `Contract drift gate (gen_contracts --check)`） |
+| `c966a34` | Security | 38854844911 | completed / **success** |
+| `c966a34` | CI-Windows | 38854844817 | 取数时 in_progress（不预告结论） |
+| `2df0f88` | CI / Security / CI-Windows | 38855155404 / 38855155422 / 38855155401 | 取数时 in_progress |
+
