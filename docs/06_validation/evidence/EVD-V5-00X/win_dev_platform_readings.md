@@ -204,3 +204,49 @@ Install backend deps、Install frontend deps、**`entry.py 与 Makefile 目标�
 `pytest -q -rs` 的第二次全量已启动（输出 `.staging/full_run_rs.txt`），目的是把 **422 条 skip 的构成**
 逐条打出来——S00X.4.1 要求 windows job "在 summary 里打印 skip 构成"，现在我只有条数、没有分类。
 它覆盖的是 `81e1f4f` 起的树；跑完前我不再改 `apps/api` 下的文件，免得读数与代码错位。
+
+---
+
+## 4. `pytest -q -rs` 全量跑完：422 条 skip 的构成（S00X.4.1 要的正是这张表）
+
+读数（`@win`，本机 Win10 + `apps/api/.venv`）：**801 passed / 422 skipped / 0 failed，4905.45s（1:21:45）**。
+`-rs` 打出 400 行 `SKIPPED` 摘要（部分同源 skip 被 pytest 合并计数），按原因归类：
+
+| 条数 | 原因（逐字取自摘要） | 含义 |
+|---|---|---|
+| 300 | `AIDEANBOT_TEST_PG_DSN 未设置：连库用例需要独立测试库` | **配置缺**：`conftest.py:49-68` 解析不到 DSN ⇒ `conftest.py:106-107` 在夹具里 skip |
+| 93 | `PG 不可达（OperationalError），Docker 引擎恢复后…` | **实例缺**：已配 DSN 但连不上 |
+| 2 | `测试 Redis 不可达（ConnectionError）` | 容器缺 |
+| 1 | `Redis 不可达（redis://localhost:6379/0，TimeoutError）` | 同上，另一条口径 |
+| 1 | `PG:5433 不可达（OperationalError）` | 部署形态端口，本机无实例 |
+| 1 | `PG 不可达（OperationalError）`（无"Docker 引擎"后缀） | 第三处独立措辞 |
+| 1 | `LangBot :5300 不可达或未注入管理员凭据` | 外部服务缺 |
+| 1 | `宿主未设这 6 个待清代理变量，本条对照在此` | **故意 skip**（代理变量对照用例，本机就是没有） |
+
+**结论（这才是 S00X.4.1 要的判断）**：422 条里 **395 条（≈94%）的原因是同一个——本机没有 PostgreSQL**
+（300 配置缺 + 95 连不上，含 `:5433` 那条）。另有 3 条 Redis、1 条 LangBot、1 条是设计如此。
+所以 `@win` 的全量读数**不能**当作验收面：它与 `@linux` 基线（1058 passed / 5 skipped）差的不是质量，
+是**一片从未执行过的代码**。这条把 AGENTS.md 里"skip 构成 = LangBot/Redis 不可达类 4 条、
+PG 不可达类 = 0"那句的历史基线彻底更正了——那是**配好隔离 PG 之后**的读数，本机无 PG 时 PG 类就是 395 条。
+
+顺带一条可执行的改进（不必等 S00X.4.2）：上表里 95 条"PG 不可达"分散在 **3 种措辞**、
+300 条"DSN 未设置"另有 1 种，`CI-Windows` job 若要"在 summary 打印 skip 构成"，
+应打印**归类后的计数表**而不是 400 行原文，否则读数永远靠人手算。
+
+## 5. 这条读数的失效边界（我自己造的，必须写在这张表旁边）
+
+**它不是 HEAD 的读数。** 起跑树在 `2df0f88`～`81e1f4f` 区间（`git merge-base --is-ancestor 2df0f88 HEAD` 成立），
+而**它跑的这 82 分钟里我正在改 `apps/api`**：`app/services/kb.py`（owner 门的一次临时变异 + 还原）、
+`tests/test_idor_matrix.py`（从 10 条扩到 14 条）。因此：
+
+- **成立的部分**：skip 的**原因构成**——原因串来自 `conftest` 与环境探测，与我改的两个文件无关，
+  395/422 这个判断不受重叠影响。
+- **不成立的部分**：`801 passed` 这个总数与"0 failed"不能归到任何单一提交上。
+  特别是 `test_idor_matrix.py` 在这个窗口里被改过，它在全量里的最终状态无法归因。
+  要一条干净的 `@win` 全量读数，得在 HEAD 上重跑一次（82 分钟，本批没做，见下）。
+- 我为什么不直接把 `801` 写进结论：上一批就是因为"总数与树错位"被你（验收方）抓过一次
+  （`6e40a94` 那次我标了"起点树=2df0f88、覆盖面不等于 @linux 基线"）。这次重叠更严重，
+  所以我把总数降级为"带窗口的读数"，只把**构成**当结论用。
+
+**待做**：HEAD 上一次干净的 `pytest -q -rs` 全量（约 82 分钟 `@win`），用来支撑 S00X.4.1 的出门判据；
+以及 `@ci` 的 `196a808` 之后读数（含 P-11 之外的连库面）。

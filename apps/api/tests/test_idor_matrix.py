@@ -32,6 +32,7 @@ import textwrap
 from pathlib import Path
 from typing import Annotated, Any
 
+import pytest
 from fastapi import Depends
 
 from app.api.deps import get_current_user_id, require_roles
@@ -262,18 +263,18 @@ def _checklist_text() -> list[str]:
 
 
 def test_denial_vocabulary_comes_from_the_frozen_draft() -> None:
-    """期望的状态码与错误码必须**就是稿面写的那两个**——防止我把判据改成自己顺手的样子。
+    """期望的状态码/错误码必须**由稿面文本推导出来**，而不是我把常量再念一遍。
 
-    本卡十轮的复发族是"判据绑在我的实现上"。这条把出口条件反过来钉：
-    先读稿面文本里出现的 403/404 与 10004/30004，再断言我的常量与之一致；
-    将来稿面换码（比如把 30004 并到 30001），这条会先红，逼实现跟着改。
+    第十一轮验证 G1 抓到的正是后一种写法：`DENIAL_STATUSES == {403, 404}` 是常量对字面量，永真；
+    而 `"403" in blob` 这类 substring 会被 `24030` 之类的长数字串喂饱 ⇒ 稿面漂移守卫照样绿。
+    现在改成双向：从 `x-idor-checklist` 抽出**所有 3–5 位数字串**，先要求集合恰为稿面那四个
+    （多一个少一个都红，因为那说明出口条件被人改过而矩阵还按旧四条判），再由它**推导**两个常量。
     """
     blob = " ".join(_checklist_text())
-    for status in ("403", "404"):
-        assert status in blob, f"稿面文本里没有 {status}，常量里却有 ⇒ 判据漂移"
-    for code in ("10004", "30004"):
-        assert code in blob, f"稿面文本里没有 {code}，常量里却有 ⇒ 判据漂移"
-    assert DENIAL_STATUSES == {403, 404} and DENIAL_CODES == {"10004", "30004"}
+    tokens = set(re.findall(r"(?<!\d)\d{3,5}(?!\d)", blob))
+    assert tokens == {"403", "404", "10004", "30004"}, f"稿面的数字口径变了：现读到 {sorted(tokens)}"
+    assert DENIAL_STATUSES == {int(t) for t in tokens if len(t) == 3}, DENIAL_STATUSES
+    assert DENIAL_CODES == {t for t in tokens if len(t) == 5}, DENIAL_CODES
 
 
 def test_source_card_mentions_30001_but_the_draft_does_not() -> None:
@@ -310,3 +311,147 @@ def _case_id(path: str, method: str) -> str:
 def test_case_ids_are_unique() -> None:
     ids = [_case_id(p, m) for p, m, _ in CHECKLIST_OPERATIONS]
     assert len(set(ids)) == len(ids) == 31, f"用例 id 撞了：{[i for i in ids if ids.count(i) > 1]}"
+
+
+# ── 6. 给"修复本身"装反证（第十一轮验证 G3：全仓库没有一条用例能证明 owner 门存在）──
+
+OWNER_GATED_METHODS = frozenset({"ingest_url", "get_doc_ingest_status"})
+_API_DIR = REPO_ROOT / "apps" / "api" / "app" / "api" / "v1"
+
+
+def _unthreaded_owner_calls() -> tuple[list[str], int]:
+    """扫 `app/api/v1/**`：调用 owner 门方法却没写 `owner=` 的位置。返回 (违规, 扫到的调用数)。"""
+    offending: list[str] = []
+    seen = 0
+    for path in sorted(_API_DIR.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            if node.func.attr not in OWNER_GATED_METHODS:
+                continue
+            seen += 1
+            if not any(kw.arg == "owner" for kw in node.keywords):
+                offending.append(f"{path.name}:{node.lineno} {node.func.attr}() 未传 owner=")
+    return offending, seen
+
+
+def test_http_routes_never_rely_on_the_fail_open_default() -> None:
+    """HTTP 层调用 owner 门方法时必须**显式**传 `owner=`，不许吃 `owner=None` 的默认值。
+
+    为什么不把默认值删掉：`services/spaces.py::_delete_doc` 早就定了 `owner=None 表示无归属约束
+    （后台/admin 跨用户路径）`，本仓库口径一致比"这条单独更严"重要；真正的风险面是
+    **以后新增一条路由忘了传**，那一条现在会被这里抓住（第十一轮 G2 点名的 fail-open 面）。
+
+    `seen` 也必须断言：扫描类守卫在"什么都没扫到"时天然读绿，那是最骗人的一种绿（G3 的同一族）。
+    """
+    offending, seen = _unthreaded_owner_calls()
+    assert seen >= 2, f"只扫到 {seen} 处调用 ⇒ 扫描本身失效了，这条守卫现在是装饰"
+    assert not offending, "这些 HTTP 调用没传 owner（会吃 fail-open 默认）：" + "; ".join(offending)
+
+
+async def test_owner_gate_rejects_a_stranger_without_a_database(monkeypatch: Any) -> None:
+    """S1.4.3.3 的反证补上**静态抓不到、连库又 skip** 的那一段：直接打 owner 门。
+
+    第十一轮验证 G3 的实测结论是：把 `kb.py` 的 owner 判据整行删掉，本机可跑的整套测试仍然全绿
+    （两条路由的用例需要 PG ⇒ skip；服务级用例都以 `owner=None` 调用）。
+    这里用桩 repo 绕开数据库，钉住三个方向：
+    ①别人的空间 + 传了 owner ⇒ 30004；②同空间 + owner 相符 ⇒ 已过门；③`owner=None` ⇒ 已过门（后台口径）。
+    ②③用"门后的下一个调用"当哨兵：真到了门后才会撞上它。
+    """
+    from types import SimpleNamespace
+
+    from app.services import kb as kb_module
+
+    space = SimpleNamespace(id="space-b", user_id="user-b", engine="builtin")
+
+    class _StubRepo:
+        def __init__(self, session: Any) -> None:
+            self._session = session
+
+        async def get_by_id(self, space_id: str) -> Any:
+            return space if space_id == space.id else None
+
+    class _PastGate(RuntimeError):
+        """门后的第一个调用点抛的哨兵：它的出现**就是**"已过 owner 门"的证明。"""
+
+    async def _marker(self: Any, short_key: str) -> str:
+        raise _PastGate(short_key)
+
+    monkeypatch.setattr(kb_module, "SpaceRepository", _StubRepo)
+    monkeypatch.setattr(kb_module.KnowledgeBaseService, "_lookup_short_link", _marker)
+    svc = kb_module.KnowledgeBaseService(  # type: ignore[arg-type]
+        client=object(), session=None, resolver=object()  # type: ignore[arg-type]
+    )
+    url = "https://mp.weixin.qq.com/s/abcdefgh"
+
+    # ①别人的空间 + 传了 owner ⇒ 30004，且**绝不**走到门后
+    with pytest.raises(kb_module.ResourceNotFoundError):
+        await svc.ingest_url("space-b", url, owner="user-a")
+
+    # ②同空间 + owner 相符 ⇒ 走到门后（哨兵而非 ResourceNotFoundError 证明方向没写反）
+    with pytest.raises(_PastGate):
+        await svc.ingest_url("space-b", url, owner="user-b")
+
+    # ③后台口径：不传 owner ⇒ 无归属约束（job_worker / scheduler 靠这条，误拦会让采集停摆）
+    with pytest.raises(_PastGate):
+        await svc.ingest_url("space-b", url)
+
+    # ④不存在的空间与"不属于你"必须同码——否则响应面就是一台存在性 oracle
+    with pytest.raises(kb_module.ResourceNotFoundError):
+        await svc.ingest_url("space-zzz", url, owner="user-a")
+
+
+# ── 7. 单向核对的补集：整只路由器从两侧同时消失时也要能红 ─────────────────────
+
+DOC_ONLY_PATHS = frozenset({"/docs", "/docs/oauth2-redirect", "/openapi.json", "/redoc"})
+
+
+def test_enumeration_accounts_for_every_registered_router() -> None:
+    """OpenAPI 交叉核对是**单向**的：一只整组 `include_in_schema=False` 的路由器
+    会同时从两侧消失，守卫却仍读绿（第十一轮验证 G2 点名）。这里改用注册表逐只对账。
+
+    读数锚（2026-10-16 `@win`）：`APP_ROUTERS` 16 只 + `metrics_router` = 89 个操作，
+    枚举 93 个，差集恰为 FastAPI 自带的 4 个文档路由（`/metrics` 属于 metrics_router，已在 89 内）。
+    """
+    from app.main import APP_ROUTERS, metrics_router
+
+    def ops_of(router: Any) -> int:
+        total = 0
+        for route in router.routes:
+            methods = getattr(route, "methods", None)
+            if getattr(route, "path", None) and methods:
+                total += len(set(methods) - {"HEAD", "OPTIONS"})
+        return total
+
+    registered_ops = sum(ops_of(rt) for rt in [*APP_ROUTERS, metrics_router])
+    assert len(APP_ROUTERS) == 15, len(APP_ROUTERS)
+    assert registered_ops == 89, registered_ops
+    extra = sorted({p for p, _, _ in ALL_OPERATIONS if _is_doc_only(p)})
+    assert len(ALL_OPERATIONS) == registered_ops + 4, (len(ALL_OPERATIONS), registered_ops)
+    assert set(extra) == DOC_ONLY_PATHS, extra
+
+
+def _is_doc_only(path: str) -> bool:
+    return path in DOC_ONLY_PATHS
+
+
+# ── 8. 下界这个词不许误导：机制与清单措辞不同的端点必须逐条列出 ────────────────
+
+NON_OWNER_ROLE_GATED = frozenset({("PATCH", "/api/v1/spaces/{space_id}/public")})
+
+
+def test_the_floor_overclaims_for_the_allowlist_gated_endpoint() -> None:
+    """`PATCH /spaces/{space_id}/public` 的门**不是** `space.user_id`，而是
+    `PUBLIC_ADMIN_ALLOWLIST` + `owner_type == "system"`（`services/public_library.py:34-43`）。
+
+    AST 底线把它读成 `threaded` 是**过度声称**：身份确实被用了，但走的是另一条机制，
+    而稿面规则「owner = sub 或 rank ≥ operator」在这里由 allowlist 兑现。
+    第十一轮验证 E 项点名了这一处，所以这张表必须存在且必须仍然对得上清单——
+    清单里少了它，说明有人改了路由而没改这张表。
+    """
+    for method, path in NON_OWNER_ROLE_GATED:
+        assert any(p == path and m == method for p, m, _ in CHECKLIST_OPERATIONS), (
+            f"{method} {path} 已不在稿面清单命中的操作里 ⇒ 更新 NON_OWNER_ROLE_GATED"
+        )
+        assert _identity_usage(next(ep for p, m, ep in CHECKLIST_OPERATIONS if (p, m) == (path, method))) == "threaded"
