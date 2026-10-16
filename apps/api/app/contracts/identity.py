@@ -154,8 +154,12 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "exp-required",
         "可选（required 只有 sub），类型 integer（不接受 null）",
         "必填 int：缺失与 null 都拒",
-        "JWT 的 exp 缺失即无法判有效期，「可选」在这里没有可用场景；稿里 iss/aud 的默认 "" 同理保留宽松。"
-        "消费者：`test_session_claims_requires_exp`。",
+        "JWT 的 exp 缺失即无法判有效期，「可选」在这里没有可用场景；稿里 iss/aud 的默认 \"\" 同理保留宽松。"
+        "消费者：`test_session_claims_requires_exp`。"
+        "台账行 **D-V8-04**：required 类 tightening 必须引一条真实存在的裁决号"
+        "（`test_required_tightening_cites_a_live_decision_id`）。第七轮验证证明"
+        "「产物比稿更严」这个方向判据对**稿侧被改弱**完全无感——比对器看不见历史，"
+        "所以把代价搬到登记侧：改稿的人与登记的人必须撞见同一条 D-V* 记录。",
     ),
     Divergence(
         "SessionClaims",

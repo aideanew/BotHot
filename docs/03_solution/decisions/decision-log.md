@@ -47,6 +47,7 @@ updated: 2026-10-16
 | **D-V8-01** | `PushRetryState.responseData` 类型：冻结稿写 `object\|null`，实测 `providers/push/base.py:50` 是 `response_data: str = ""`（六个 Provider 无一例外按字符串塞上游回执原文）——两者**类型不相交**，不是宽严关系 | 契约与产物取**实测** `string`，实现不动；"回执结构化"转 STEP-06/05 另立卡再裁（当前无消费面，改了无人受益） | 现在就改 `PushResult.response_data` 为 `dict\|None`（牵动 6 个 provider 与落库列，且投递终态至今无 admin 读面） | NON | 2026-10-16 13:41 | 2026-10-17 13:41 | | |
 | **D-V8-02** | `ArticleKey` 跨域冗余边界冲突：`collection` 稿 `minLength: 3`，`resources` 稿 `minLength: 8`，而唯一源只能有一个别名 | 取**更严的 8**，并用见证语料证明它不排任何合法键（三支分支各自最短可过串是 `s:aaaaaaaa`=10、`b:…:1:1`=13、`h:`+32=34，均 >8 ⇒ 两界都非生效约束） | 保留 3（会让两域产物对同一别名给出不同事实，正是本门禁要消灭的） | NON | 2026-10-16 13:41 | 2026-10-17 13:41 | | |
 | **D-V8-03** | 契约文档 `$id` 两套写法并存：三份冻结稿里 collection 已被写成标识符式 `bothot://contracts/collection/v1`，identity/events 仍是文件位址式 `https://bothot/contracts/<域>.schema.json`，而生成物一律标识符式 | 把 identity/events 稿的 `$id` 统一到**产物侧写法** `bothot://contracts/<域>/v1`（生成物是消费端真正解析的文档，$id 应当与之一致） | 反过来让生成器改用文件位址式（要改 `gen_contracts.py` 且与已改过的 collection 稿一致化） | NON | 2026-10-16 13:58 | 2026-10-17 13:58 | | |
+| **D-V8-04** | `SessionClaims.exp` 必填与否：identity 冻结稿的 `required` 只有 `sub`（`exp` 写为可选），但会话声明缺 `exp` 就无法判有效期——「可选」在这里没有可用场景 | 契约侧把 `exp` 收成**必填**（缺失与 `null` 都拒），登记为 `exp-required`（tightening） | 保持稿面可选、由校验层另行兜住（则契约与真实接受集分家，正是唯一源要消灭的事） | NON | 2026-10-16 14:20 | 2026-10-17 14:20 | | |
 
 ## 3. 路由、RSS、预算与数据修复
 | ID | 问题 | 默认值(A) | 备选(B) | 级别 | 登记时间 | 生效时间 | 签字 | 推翻记录 |
