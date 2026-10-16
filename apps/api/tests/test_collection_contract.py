@@ -3134,18 +3134,35 @@ def blocking_rows_state() -> tuple[int, int, list[str]]:
 def _open_signoff_gaps(doc_line: str, total: int, unsigned: list[str]) -> list[str]:
     """基线文档里那一行有没有把**当前未签集合与总数**写出来（纯函数，反证可喂构造数据）。
 
-    为什么不是"检测『全部签入』这种措辞"：更正类文本必须能引用历史说法
-    （`01` 的 F-12 现在同时写着旧的「10 项 BLOCKING 全部签入」与现读更正），
-    按措辞拦要么逼我删掉历史、要么逼我加豁免关键词——后者正是本卡十轮反复出现的那类自我放行。
-    所以判据只看**实质**：未签的号必须被点名、总数必须出现。
+    结构部分是承重的：未签的号必须逐个点名、总数必须出现（按**数字边界**，别让日期里的 13 顶包）。
+    刻意不把"是否出现『全部签入』字样"当放行或拦截的依据——措辞永远能换个说法绕过；
+    而"把未签的两条号写出来"绕不过。字样检查另有一条 `_signed_all_phrase_gaps`，
+    它只做否定（因此只能拦夸大，不会被当成豁免口子）。
     """
+    clean = doc_line.replace("*", "").replace("`", "")
     gaps = []
     for rid in unsigned:
-        if rid not in doc_line:
+        if not re.search(rf"(?<![A-Za-z0-9-]){re.escape(rid)}(?![A-Za-z0-9-])", clean):
             gaps.append(f"未签 BLOCKING {rid} 没有被点名")
-    if unsigned and str(total) not in doc_line:
-        gaps.append(f"BLOCKING 总数 {total} 没有出现在该行")
+    # 边界含 `- / .`：否则 `见 2026-10-13 记录` 里的 13 会被当成"总数已写出"——
+    # 那是我写完第一版立刻被验证者抓到的形态。
+    if unsigned and not re.search(rf"(?<![\d./-]){total}(?![\d./-])", clean):
+        gaps.append(f"BLOCKING 总数 {total} 没有以数字边界的形式出现在该行")
     return gaps
+
+
+#: 「已全签」的同族说法。列不全 ⇒ 只能当否定式补充判据，不能当主判据。
+_SIGNED_ALL_PHRASES = ("全部签入", "均已签入", "全部已签", "无待签", "全部签署")
+
+
+def _signed_all_phrase_gaps(doc_line: str, unsigned: list[str]) -> list[str]:
+    """还有未签 BLOCKING 时，任何文档行都不许声称"已全签"（只 condemn，不 exempt）。"""
+    clean = doc_line.replace("*", "").replace("`", "")
+    if not unsigned:
+        return []
+    if any(p in clean for p in _SIGNED_ALL_PHRASES):
+        return [f"该行声称「已全签」，但仍有未签：{unsigned}"]
+    return []
 
 
 def test_baseline_doc_names_the_open_blocking_signoffs() -> None:
@@ -3156,7 +3173,10 @@ def test_baseline_doc_names_the_open_blocking_signoffs() -> None:
     且锚点行号早已漂移。基线文档写着"全签了"，任何下游 Agent 都会据此跳过人判步骤。
     """
     total, signed, unsigned = blocking_rows_state()
-    assert total == 13 and signed == 11, (total, signed)
+    assert (total, signed) == (13, 11), (
+        f"台账 BLOCKING 状态变成 总 {total} 已签 {signed} 未签 {unsigned} ⇒ 本断言要跟着改，"
+        "同时把 01 的 F-12 与 00-README 的相应叙述一起改（三处必须同时成立，缺一处就是假话）"
+    )
     line = next(
         ln
         for ln in (REPO_ROOT / "docs" / "任务规划V0.12.0" / "01-事实基线与进度.md")
@@ -3164,63 +3184,149 @@ def test_baseline_doc_names_the_open_blocking_signoffs() -> None:
         .splitlines()
         if ln.startswith("| F-12 |")
     )
-    gaps = _open_signoff_gaps(line, total, unsigned)
+    gaps = _open_signoff_gaps(line, total, unsigned) + _signed_all_phrase_gaps(line, unsigned)
     assert not gaps, f"基线文档与台账实测不符：{gaps}｜实测 总 {total} 已签 {signed} 未签 {unsigned}"
 
 
+def test_no_doc_claims_every_blocking_ruling_is_signed() -> None:
+    """扫**活文档**：还有未签 BLOCKING 时，任何一行都不许说"已全签"。
+
+    盘点抓到 `decision-log.md` 自己的汇总句也这么写（同一事实的第三个副本）；
+    只在 F-12 一行上核对，等于让台账正文替自己作保。
+
+    扫描面刻意限于活文档（现行规划树 + `docs/03_solution/`），**不含历史规划树**：
+    V0.11.0 等目录是当时快照的真实读数，回改它们等于伪造历史（与本仓库"不重写已推送提交"同理）。
+    这不是豁免关键词——判据仍是"措辞只能被否证"，只是作用域限定在仍会被下游 Agent 当作现状读的文件。
+    """
+    _, _, unsigned = blocking_rows_state()
+    living = [
+        REPO_ROOT / "docs" / "任务规划V0.12.0",
+        REPO_ROOT / "docs" / "03_solution",
+        REPO_ROOT / "docs" / "04_engineering",
+    ]
+    offenders: list[str] = []
+    for root in living:
+        for path in sorted(root.rglob("*.md")):
+            for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                offenders += [
+                    f"{path.relative_to(REPO_ROOT)}:{n} {g}"
+                    for g in _signed_all_phrase_gaps(line, unsigned)
+                ]
+    assert not offenders, "这些行声称已全签，而台账有未签项：" + "; ".join(offenders)
+
+
 def test_open_signoff_gap_detector_is_falsifiable() -> None:
-    """上一条的判据必须能抓到"少写未签号"和"少写总数"两种形态——否则它是装饰。"""
-    honest = "| F-12 | …BLOCKING 共 **13** 行，已签 **11**…**未签 2 = D-V8-05 / D-V8-08** |"
-    assert _open_signoff_gaps(honest, 13, ["D-V8-05", "D-V8-08"]) == []
-    assert len(_open_signoff_gaps("| F-12 | 10 项 BLOCKING 全部签入 |", 13, ["D-V8-05", "D-V8-08"])) == 3
-    assert any("总数" in g for g in _open_signoff_gaps("| F-12 | D-V8-05 D-V8-08 |", 13, ["D-V8-05", "D-V8-08"]))
+    """判据必须抓得到四种形态：少写号、少写总数、**反过来夸口**、数字被日期顶包。
+
+    后两种是验证者实测出来的：「13 项 BLOCKING 全部签入，D-V8-05 与 D-V8-08 已签」
+    号点齐了、总数也在，旧判据读绿；`见 2026-10-13 记录` 里的 `13` 也会被当成"总数已写出"。
+    """
+    unsigned = ["D-V8-05", "D-V8-08"]
+    honest = "| F-12 | …BLOCKING 共 **13** 行，已签 **11**…现读更正 **未签 2 = D-V8-05 / D-V8-08** |"
+    assert _open_signoff_gaps(honest, 13, unsigned) == []
+    assert len(_open_signoff_gaps("| F-12 | BLOCKING 全部签入 |", 13, unsigned)) == 3
+    assert any("总数" in g for g in _open_signoff_gaps("| F-12 | D-V8-05 D-V8-08 |", 13, unsigned))
+    assert any(
+        "总数" in g for g in _open_signoff_gaps("| F-12 | 见 2026-10-13 记录 D-V8-05 D-V8-08 |", 13, unsigned)
+    ), "日期里的 13 被当成「总数已写出」，数字边界判据失效"
+    lying = "| F-12 | 13 项 BLOCKING 全部签入，含 D-V8-05 与 D-V8-08 |"
+    assert _open_signoff_gaps(lying, 13, unsigned) == [], "结构部分应判它合规（号点齐、总数在）"
+    assert _signed_all_phrase_gaps(lying, unsigned), "夸口句必须被否定式判据抓到"
+    assert _signed_all_phrase_gaps(honest, unsigned) == []
+    assert _signed_all_phrase_gaps("| F-12 | 11 项已签，无待签项 |", []) == []
 
 
-def _range_gaps(claims: list[tuple[str, int, str, str, str]], ledger_ids: set[str]) -> list[str]:
-    """把「文档声明的区间」与「台账该段的实际成员」对账（纯函数，反证可喂构造数据）。"""
+def _decision_ranges_in(text: str) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int, int]]]:
+    """取出一行里的「裁决区间声明」⇒ `(同段区间, 跨段区间)`。
+
+    两处刻意的宽度，都来自验证者实测出的盲区：
+    - **先剥 `*` 与反引号**：否则「D-V7-01～**03**」绕过判据。而绕过判据的写法正是我上一版
+      自以为正确的"修法"——绿来自盲区而不是来自正确，这比没有守卫更坏。
+    - **右端可不带 `D-Vn-` 前缀**（`D-V7-01～04`）：扫描面里这种写法有 5 处，旧正则一处都没看见。
+    跨段写法（`D-V7-01～D-V8-04`）单列出来，让调用方判它"无法核对"而不是静默不匹配。
+    """
+    clean = text.replace("*", "").replace("`", "")
+    cross = [
+        (int(a), int(b), int(c), int(d))
+        for a, b, c, d in re.findall(r"D-V(\d+)-(\d{1,2})\s*[～~-]\s*D-V(\d+)-(\d{1,2})(?!\d)", clean)
+        if a != c
+    ]
+    same = [
+        (int(seg), int(lo), int(hi))
+        for seg, lo, hi in re.findall(r"D-V(\d+)-(\d{1,2})\s*[～~-]\s*(?:D-V\1-)?(\d{1,2})(?!\d)", clean)
+    ]
+    return same, cross
+
+
+def _range_gaps(
+    claims: list[tuple[str, int, int, int, int]],
+    cross_claims: list[tuple[str, int, int, int, int]],
+    ledger_ids: set[str],
+) -> list[str]:
+    """把「文档声明的区间」与「台账该段实际成员」对账（纯函数，反证可喂构造数据）。
+
+    两端都必须对齐：右端是该段实际最大值（少写一条＝暗示这条不存在），
+    左端是最小值（`02～04` 漏写第一条，读的默认值同样少一条）。
+    """
     problems = []
+    by_seg: dict[int, list[int]] = {}
+    for seg, seq in re.findall(r"^D-V(\d+)-(\d+)$", "\n".join(ledger_ids), flags=re.M):
+        by_seg.setdefault(int(seg), []).append(int(seq))
     for name, n, seg, lo, hi in claims:
-        in_seg = sorted(i for i in ledger_ids if i.startswith(f"D-V{seg}-"))
-        if not in_seg:
-            problems.append(f"{name}:{n} 引用了 D-V{seg}-0x 段，但台账里没有该段任何一行")
+        seqs = sorted(by_seg.get(seg, []))
+        if not seqs:
+            problems.append(f"{name}:{n} 引用了 D-V{seg}-xx 段，但台账里没有该段任何一行")
             continue
-        if f"D-V{seg}-0{lo}" not in in_seg:
-            problems.append(f"{name}:{n} 声明区间左端 D-V{seg}-0{lo} 在台账里不存在")
-        if f"D-V{seg}-0{hi}" != in_seg[-1]:
-            problems.append(f"{name}:{n} 声明区间右端 D-V{seg}-0{hi}，该段实际最大为 {in_seg[-1]}")
+        if lo != seqs[0]:
+            problems.append(f"{name}:{n} 区间左端写作 {lo}，该段实际最小为 {seqs[0]}")
+        if hi != seqs[-1]:
+            problems.append(f"{name}:{n} 区间右端写作 {hi}，该段实际最大为 {seqs[-1]}")
+    for name, n, seg_a, lo, seg_b, hi in cross_claims:
+        problems.append(
+            f"{name}:{n} 写了跨段区间 D-V{seg_a}-{lo}～D-V{seg_b}-{hi}，无法核对；"
+            "请改成两条完整 id（跨段声明会让人以为中间那段也存在）"
+        )
     return problems
 
 
 def test_declared_decision_ranges_are_complete() -> None:
-    """文档写「D-V7-01～D-V7-04」这类**区间**时，右端必须就是台账该段的实际最大值。
+    """文档写「D-V7-01～D-V7-04」这类**区间**时，两端都必须就是台账该段的实际边界。
 
-    现读触发：`00-README.md:33` 曾写「新增裁决 D-V7-01～D-V7-03」，而台账与 `03` 都是四条。
+    现读触发：`00-README.md` 曾写右端少一条，而台账、`03`、`STEP-00W` 都是四条。
     少写一条的后果不是数字错，而是**有人据此以为 D-V7-04 不存在**、不去读它的默认值。
     """
     ledger_ids = set(re.findall(r"D-V\d+-\d\d", "\n".join(_ledger_lines())))
-    claims = []
+    claims: list[tuple[str, int, int, int, int]] = []
+    cross: list[tuple[str, int, int, int, int]] = []
     for path in sorted((REPO_ROOT / "docs" / "任务规划V0.12.0").rglob("*.md")):
         for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            for seg, lo, hi in re.findall(r"D-V(\d+)-0(\d)[～~-]+D-V\1-0(\d)", line):
-                claims.append((path.name, n, seg, lo, hi))
+            same, crossed = _decision_ranges_in(line)
+            claims += [(path.name, n, seg, lo, hi) for seg, lo, hi in same]
+            cross += [(path.name, n, *c) for c in crossed]
     assert claims, "一条区间声明都没扫到——本守卫的扫描面已失效"
-    problems = _range_gaps(claims, ledger_ids)
+    problems = _range_gaps(claims, cross, ledger_ids)
     assert not problems, "文档声明的裁决区间与台账不符：" + "; ".join(problems)
 
 
 def test_range_guard_catches_the_off_by_one_it_was_written_for() -> None:
-    """反证：少写一条（`01～03` 而台账有 `04`）必须红；写全了必须绿。"""
+    """反证：少写一条（右端 03 而台账有 04）必须红；写全了必须绿。"""
     ids = {"D-V7-01", "D-V7-02", "D-V7-03", "D-V7-04"}
-    assert _range_gaps([("00-README.md", 33, "7", "1", "3")], ids) == [
-        "00-README.md:33 声明区间右端 D-V7-03，该段实际最大为 D-V7-04"
+    assert _range_gaps([("00-README.md", 33, 7, 1, 3)], [], ids) == [
+        "00-README.md:33 区间右端写作 3，该段实际最大为 4"
     ]
-    assert _range_gaps([("00-README.md", 33, "7", "1", "4")], ids) == []
-    assert _range_gaps([("00-README.md", 33, "42", "1", "4")], ids) == [
-        "00-README.md:33 引用了 D-V42-0x 段，但台账里没有该段任何一行"
-    ]
-    assert _range_gaps([("x.md", 1, "7", "9", "4")], ids) == [
-        "x.md:1 声明区间左端 D-V7-09 在台账里不存在"
-    ]
+    assert _range_gaps([("00-README.md", 33, 7, 1, 4)], [], ids) == []
+    assert any("任何一行" in g for g in _range_gaps([("00-README.md", 33, 42, 1, 4)], [], ids))
+    assert any("左端" in g for g in _range_gaps([("x.md", 1, 7, 2, 4)], [], ids))
+    assert any("跨段" in g for g in _range_gaps([], [("x.md", 1, 7, 1, 8, 4)], ids))
+    # 绕过形态必须一样被拦：加粗与行内代码都不许成为盲区
+    for sneaky in ("新增裁决 D-V7-01～**03**", "新增裁决 D-V7-01～`03`"):
+        same, crossed = _decision_ranges_in(sneaky)
+        assert _range_gaps([("t.md", 1, *c) for c in same], [("t.md", 1, *c) for c in crossed], ids), (
+            f"{sneaky!r} 绕过了区间判据——那叫躲进盲区，不叫修正"
+        )
+    for honest in ("新增裁决 D-V7-01～D-V7-04", "新增裁决 D-V7-01～04"):
+        same, crossed = _decision_ranges_in(honest)
+        assert _range_gaps([("t.md", 1, *c) for c in same], [("t.md", 1, *c) for c in crossed], ids) == []
 
 
 def test_ledger_guards_fire_on_the_two_real_defects_they_were_written_for() -> None:

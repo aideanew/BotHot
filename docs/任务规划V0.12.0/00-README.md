@@ -16,9 +16,10 @@
 
 > **2026-10-16 更正本段最后一句**（写在原句之后、不覆盖它，因为原句是 3a67e96 时点的真实读数）：
 > 采集域 01 卡已推进到「四域契约收编完成 + S1.4.3 前半批」——`collection / identity / events / resources`
-> 四域的稿-源比对与登记门在位（**`183 passed` `@win`** = `test_collection_contract.py` 169 条
-> + `test_idor_matrix.py` 14 条，2026-10-16 17:56 现读；此前本行写 `179` 是第十轮锚之前的数；
-> STEP-02 的 `test_article_identity.py` 另有 26 条），
+> 四域的稿-源比对与登记门在位（**`188 passed` `@win`** = `test_collection_contract.py` 174 条
+> + `test_idor_matrix.py` 14 条，2026-10-16 18:24 记录；本行历史上写过 `179`、`183` 两个过期数，
+> 原因是"改完代码没回头重测就写数"——现在写数一律放在最后一次编辑之后），
+> STEP-02 的 `test_article_identity.py` 另有 26 条，三文件合跑 **214 passed**；
 > `api` 一域仍 blocked 在 **D-V8-08（BLOCKING，未签）**；S1.4.3 的静态底线抓到并修好两条真实越权
 > （`EVD-V2-01/s143_idor_floor.md`），逐端点连库矩阵发布为 **P-11**、稿面清单扩面发布为 **P-12**。
 > 本卡的判据"比对器注入必红"经十轮独立验证仍不成立，出口条件 **D-V8-05**（BLOCKING，未签）等人判。
