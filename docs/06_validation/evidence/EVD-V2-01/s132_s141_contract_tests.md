@@ -123,4 +123,18 @@ B007 那条修得值得记：我原来写 `for rule, need in _NORMALIZATION_TO_K
 
 - `CI` run **38737622962** = **success**（backend 含这 44 条新测试 + 覆盖率门禁 75 未破）
 - `CI-Windows` run **38737622022** = **failure**（13:10:16Z，第七个同形态读数，仍非 cancelled）
-- 修复后的这版（61 条）的 @ci 读数**尚未取**——它是下一步要补的凭据，不在这里预支。
+## 11. 修复版（61 条）的 @ci 读数 —— 承诺补的那一条，现在补上
+
+- 提交 `d4cb236`；run **38743100273**；job=backend **116449607972** = **success**（13:29:19Z → 13:32:00Z）
+  （原始响应 `jobs_ci_d4cb236.json`）
+- 步 **Contract drift gate (gen_contracts --check) = success**、**Tests (pytest) + coverage + skip gate = success**
+- 汇总行：`1119 passed, 6 skipped, 1 warning in 78.46s`
+  ⇒ 相对无契约测试时的基线 `1058 passed, 6 skipped`（`ci_backend_log_e7e9f25_excerpt.txt`）
+  **净增 61 个 pass、0 个新 skip**——与 `test_collection_contract.py` 的 61 条逐一对上，
+  没有一条靠 skip 蒙过门禁。skip 门禁：`total_skipped=6 baseline=6 pg_unreachable=0`。
+- 覆盖率实测：`TOTAL 8878 1812 80%`（此前 §6 只能给的算术预测是 8877/1811/79.60%）
+  ⇒ **语句数差 1**（登记表合并两条后又改动一处），所以那条预测偏低但同向；
+  现在这一行是读数不是算术。门禁 `--cov-fail-under=75` 余量扩大到 5pt。
+- `CI-Windows` run 38743100542 = **failure**（第八个同形态读数，仍非 cancelled；U-23 未变）
+- `Security` run 38743100163 = **success**
+
