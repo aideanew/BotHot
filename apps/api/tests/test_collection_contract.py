@@ -523,6 +523,30 @@ class _Missing:
 MISSING = _Missing()
 
 
+def _is_noop_invention(leaf: str, value: Any) -> bool:
+    """产物单方面新增的这条约束是不是「写了等于没写」。
+
+    登记的 kind 声称在收紧，值却是恒真约束时，放行等于给"注释性收紧"发证。
+    第九轮 T3e 的实测：把 `SessionClaims.additionalProperties` 翻成 `true`，
+    仍被那条**声称**"契约拒绝多余键"的登记解释掉（0 条差异），而产物那时其实允许任意键。
+    只列可机械判定的几种；`maxLength: 10**9` 这类"数值上几乎不约束"的留给登记文本与人读——
+    不在这里假装能拦下所有语义空转。
+    """
+    if value is MISSING or value is None:
+        return True
+    if leaf == "additionalProperties":
+        return value is not False  # true / {} = 允许任意键 = 没有约束
+    if leaf in {"minLength", "minItems"}:
+        return isinstance(value, int) and not isinstance(value, bool) and value <= 0
+    if leaf == "pattern":
+        return str(value).split("#")[0] in {"", ".*", "^.*$", "(?s).*", "(?:.*)"}
+    if leaf == "format":
+        return not str(value).strip()
+    if leaf == "enum":
+        return isinstance(value, list) and not value
+    return False
+
+
 def _direction_ok(leaf: str, fa: Any, fb: Any, entry: Divergence, fields: set[str]) -> bool:
     """同样被"允许"的 kind，还得**方向对**：登记说的是收紧，实际就必须是收紧。
 
@@ -732,11 +756,23 @@ def cites_live_decision(entry: Divergence) -> bool:
     return bool(cited) and cited <= live_decision_ids()
 
 
+def _is_ledger_row(line: str) -> bool:
+    """台账表格行（`| D-12 |` / `| **D-V8-06** |`）。正文里的自由叙述不算。"""
+    return bool(re.match(r"^\|\s*\*?\*?D-", line))
+
+
 def _ledger_row_texts(entry: Divergence) -> str:
-    """这条登记所引台账行的**原文**拼在一起（用来检查"引用是不是在说这件事"）。"""
+    """这条登记所引台账行的**原文**拼在一起（用来检查"引用是不是在说这件事"）。
+
+    只取表格里的那几行：正文段落里出现同一个裁决号不算答复。
+    第九轮验证 T3c 的洗白路径之一就是"引用落在散文里"——散文提到过 `sub`，
+    登记表却在说另一件事， substring 判据把两者当成同一件事。
+    """
     cited = set(re.findall(r"D-V\d+-\d\d", " ".join((entry.draft, entry.model, entry.reason))))
     blob = []
     for line in _ledger_lines():
+        if not _is_ledger_row(line):
+            continue
         ids = set(re.findall(r"D-V\d+-\d\d", line))
         if ids & cited:
             blob.append(line)
@@ -770,17 +806,45 @@ def cited_tokens(entry: Divergence, path: str) -> set[str]:
     out.add(_path_property(path) or (path.rsplit(".", 1)[-1] if path else ""))
     return {t for t in out if t}
 
-def citation_covers(entry: Divergence, names: set[str]) -> bool:
-    """被点名的字段必须真的出现在所引台账行里。
 
-    这是 T2b 隔离测量逼出来的第二道闸：引一条**存在但不相干**的台账号
-    （实测引 `D-V8-04` 去解释"稿侧把必填 `url` 删掉"）原本能把差异洗白——
-    引用只有在"说的就是这件事"时才是责任，否则只是签名。
+def _ledger_mentions(text: str, token: str) -> bool:
+    """台账行里有没有**作为一个词**提到它。
+
+    substring 判据在第九轮 T3c 被实测打穿：`D-V8-04` 只是顺口写了「required 只有 `sub`」，
+    于是 `sub` 成了万能通行证，一条给 `sub` 私加 `pattern` 的登记借这条毫不相干的号洗白。
+    词边界（前后不许再接标识符字符）把它降回"确实在说这个标识符"。
     """
-    if not names:
-        return True
+    stem = token.split(".")[-1]
+    variants = {stem}
+    if "_" in stem:
+        parts = stem.split("_")
+        variants.add(parts[0] + "".join(x.capitalize() for x in parts[1:]))
+        variants.add("".join(x.capitalize() for x in parts))
+    for variant in variants:
+        if re.search(rf"(?<![A-Za-z0-9_]){re.escape(variant)}(?![A-Za-z0-9_])", text):
+            return True
+    return False
+
+
+def citation_covers(
+    entry: Divergence, names: set[str], *, def_name: str | None = None, fact: str | None = None
+) -> bool:
+    """被点名的字段**和这个 def、这一类事实**都必须真的出现在所引台账行里。
+
+    这是 T2b 隔离测量逼出来的第二道闸，第九轮 T3c 又把它的两个漏洞补上了：
+    ①只比字段名 ⇒ 「`sub` 在这条号里出现过」就能给 `sub` 加任何约束；
+    ②不比事实类 ⇒ 一条裁「必填与否」的号可以顺带裁掉「格式（pattern）」。
+    现在登记要买到放行，台账那一行必须同时说到 **def、字段、事实类**三样。
+    """
     text = _ledger_row_texts(entry)
-    return bool(text) and all(name in text for name in names)
+    if not text:
+        return False
+    wanted = set(names)
+    if def_name:
+        wanted.add(def_name)
+    if fact:
+        wanted.add(fact)
+    return all(_ledger_mentions(text, name) for name in wanted if name)
 
 
 def _ref_tokens(ref: str) -> set[str]:
@@ -805,6 +869,9 @@ def _explains(entry: Divergence, def_name: str, path: str, fa: Any = MISSING, fb
        `required` 只允许"产物比稿多必填、且增量全在被点名字段里"；
     6. 产物**丢掉**稿里已有的东西（`fb is MISSING`）除 structural 外一律不放行，
        而 structural 也只许在"完整路径点名"时解释新增（`fa is MISSING`）。
+    7. 凡是要引台账（新增约束、`required` 变更）：所引那一行必须**同时说到 def、字段、事实类**，
+       且按**词边界**匹配，且只看表格行——第九轮 T3c 的洗白正是"顺口提到过 `sub`"（substring）
+       + "引用落在散文里"两条一起成立。新增的值还必须**不是恒真约束**（`_is_noop_invention`）。
 
     窄的一档仍然保留：登记可以把 `field` 写成完整叶子路径
     （`properties.responseData.types`），那是"只解释这一个位置这一件事"。
@@ -831,10 +898,16 @@ def _explains(entry: Divergence, def_name: str, path: str, fa: Any = MISSING, fb
         # `pattern: "^x$"` 或 `maxLength: 1` 这样的接受集收窄——连一条引用都不必引。
         # 现在必须同时满足：①完整路径点名；②kind 是"新增约束"的三档之一
         # （tightening/strictness/conflict——structural 不在此列，它声称的是等价写法）；
-        # ③引一条**存在**的台账号；④那行号说的就是这些字段（token 相关，不是蹭相邻号）。
+        # ③引一条**存在**的台账号；④那行号同时说到 def、字段、事实类（第九轮 T3c）；
+        # ⑤新增的值**真的在收窄**——`additionalProperties: true`、`minLength: 0`、`pattern: ".*"`
+        #   这类"写了等于没写"的值不许被一条声称在收紧的登记解释（第九轮 T3e）。
         if not exact or entry.kind not in {"tightening", "strictness", "conflict"}:
             return False
-        return cites_live_decision(entry) and citation_covers(entry, cited_tokens(entry, path))
+        if _is_noop_invention(leaf, fb):
+            return False
+        return cites_live_decision(entry) and citation_covers(
+            entry, cited_tokens(entry, path), def_name=def_name, fact=leaf
+        )
     if leaf == "required":
         licensed = fields - _BARE_FACT_KEYS
         # 引台账这一条不是形式主义：登记点名 `url` 之后，第七轮验证把**稿侧**的 required
@@ -844,7 +917,9 @@ def _explains(entry: Divergence, def_name: str, path: str, fa: Any = MISSING, fb
         return (
             entry.kind == "tightening"
             and cites_live_decision(entry)
-            and citation_covers(entry, cited_tokens(entry, path) | licensed)
+            and citation_covers(
+                entry, cited_tokens(entry, path) | licensed, def_name=def_name, fact="required"
+            )
             and _direction_ok("required", fa, fb, entry, licensed)
         )
     if entry.kind not in FACT_ALLOWED_KINDS.get(leaf, DEFAULT_ALLOWED_KINDS):
@@ -2545,11 +2620,9 @@ def test_citation_must_be_about_the_licensed_fields() -> None:
 def test_article_key_min_length_is_the_unified_value() -> None:
     """D-V8-02 的兑现：两稿 3 vs 8，产物取 8，且**证明它不排任何合法键**。
 
-    只说"反正冗余"是不够的——判据是三支分支各自最短可过串都 >8：
-    `s:`+8 字符 = 10、`b:…:1:1` 支最短 14、`h:` 支 34。
+    只说"反正冗余"是不够的——判据是三支分支各自最短可过串都 >8，
+    三支的最短样本由 `_ARTICLE_KEY_BRANCH_SAMPLES` 给出、长度进了断言。
     """
-    import re
-
     col_draft = _defs_of(load_cached(DOMAINS["collection"][0]))["ArticleKey"]["minLength"]
     res_draft = _defs_of(load_cached(DOMAINS["resources"][0]))["ArticleKey"]["minLength"]
     artifact = _defs_of(load_cached(DOMAINS["collection"][1]))["ArticleManifest"]["properties"]["article_key"]
@@ -2557,16 +2630,58 @@ def test_article_key_min_length_is_the_unified_value() -> None:
     assert artifact["minLength"] == 8, "唯一源必须取更严者（D-V8-02 的默认值）"
     # 逐支断言，不只是 min()：第八轮验证 T2 指出我散文里把 `b:` 支写成 13（实为 14），
     # 而测试只断言 min(...)==10 ⇒ 第二个数写错没人抓。数字进了断言才不会烂在散文里。
-    per_branch = {
-        "s": len("s:" + "a" * 8),
-        "b": len("b:" + "A" * 8 + ":1:1"),
-        "h": len("h:" + "0" * 32),
-    }
+    per_branch = {k: len(v) for k, v in _ARTICLE_KEY_BRANCH_SAMPLES.items()}
     assert per_branch == {"s": 10, "b": 14, "h": 34}, per_branch
     shortest = min(per_branch.values())
     assert shortest == 10 and shortest >= 8
-    for sample in ("s:" + "a" * 8, "b:" + "A" * 8 + ":1:1", "h:" + "0" * 32):
+    for sample in _ARTICLE_KEY_BRANCH_SAMPLES.values():
         assert re.fullmatch(artifact["pattern"][1:-1], sample), f"合法键被新下界排除了：{sample}"
+
+
+# 三支规范键各自"最短可过串"（`b:` 支的 `:1:1` 两个后缀段是必填）。
+# 唯一的一份算式：文档里重抄的三元组由 `test_plan_docs_restate_the_verified_minima` 对着它比。
+_ARTICLE_KEY_BRANCH_SAMPLES = {"s": "s:" + "a" * 8, "b": "b:" + "A" * 8 + ":1:1", "h": "h:" + "0" * 32}
+
+_PLAN_DIR = REPO_ROOT / "docs" / "任务规划V0.12.0"
+
+
+def test_plan_docs_restate_the_verified_minima() -> None:
+    """文档散文里重抄的那串"最短可过串"数字，必须等于断言里算出来的那串。
+
+    第八轮抓到 `13`（实为 14）只活在测试里、第九轮抓到它还活在**两份文档**里：
+    我把测试补了，文档没跟着改，于是同一个错数在两处继续被人引用。
+    判据不新增事实——它只是把已有的算术逼着文档去对齐。
+    """
+    truth = tuple(len(_ARTICLE_KEY_BRANCH_SAMPLES[k]) for k in ("s", "b", "h"))
+    offenders: list[str] = []
+    for path in sorted(_PLAN_DIR.rglob("*.md")):
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if "最短可过串" not in line:
+                continue
+            for triple in re.findall(r"(\d+)\s*/\s*(\d+)\s*/\s*(\d+)", line):
+                got = tuple(int(x) for x in triple)
+                if got != truth:
+                    offenders.append(f"{path.name}:{n} 写的是 {got}，算出来是 {truth}")
+    assert not offenders, "文档里的可过串长度与测试断言不一致：\n" + "\n".join(offenders)
+
+
+_WRONG_TRIPLE = re.compile(r"10\s*/\s*13\s*/\s*34")
+
+
+def test_the_wrong_minima_triple_is_not_restated() -> None:
+    """那个"比实算小 1"的旧三元组不许以任何间距形式再出现在 `docs/` 里。
+
+    上一条守卫只在含「最短可过串」的行上生效——于是"复述旧错数"这种写法天然逃得过它
+    （我自己就在更正注里复述了一次，首跑被上一条抓红）。这条按**内容**拦，不看措辞。
+    已知残留：已推送的提交 `4427fd1` 的 message 正文里也有它——历史消息不改写。
+    """
+    offenders = [
+        f"{p.relative_to(REPO_ROOT)}:{n}"
+        for p in sorted((REPO_ROOT / "docs").rglob("*.md"))
+        for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), start=1)
+        if _WRONG_TRIPLE.search(line)
+    ]
+    assert not offenders, f"旧错数仍然活在：{offenders}"
 
 
 def test_content_type_single_value_enum_is_equivalent() -> None:
@@ -2715,6 +2830,154 @@ def test_junk_normalization_row_is_a_dead_claim() -> None:
     finally:
         DOMAINS["resources"] = original
         compare_defs("resources")
+
+
+
+def _compare_with_extra_row(row: Divergence, mutate: Any, domain: str) -> list[str]:
+    """在内存里同时改「生成物 + 该域登记表」跑比对（用于注入类反证）。"""
+    frozen_path, generated_path, rows = DOMAINS[domain]
+    DOMAINS[domain] = (frozen_path, generated_path, rows + (row,))
+    try:
+        return _compare_with_mutated_generated(mutate, domain=domain)
+    finally:
+        DOMAINS[domain] = (frozen_path, generated_path, rows)
+
+
+def test_borrowed_citation_does_not_license_an_invented_constraint() -> None:
+    """第九轮验证 T3c：借一条**存在、也提到同名字段、但裁的是另一件事**的台账行 ⇒ 必须红。
+
+    实测过原状：`SessionClaims.properties.sub` 私加 `pattern: "^PROBE$"`，
+    登记写 `field="properties.sub.pattern"`、引用 `D-V8-04`（那条只裁 `exp` 必填，
+    只是顺口写了「required 只有 `sub`」）⇒ 0 条差异，全绕过。
+    现在要求所引那行同时说到 **def 名 + 字段 + 这一类事实**，且按词边界匹配。
+    """
+    for kind in ("tightening", "strictness", "conflict"):
+        row = Divergence(
+            "SessionClaims",
+            "properties.sub.pattern",
+            kind,
+            f"probe-inject-{kind}",
+            "无（稿里没有 pattern）",
+            "1（产物多出 ^PROBE$）",
+            "见 D-V8-04",
+        )
+
+        def mutate(gen: dict[str, Any]) -> None:
+            gen["$defs"]["SessionClaims"]["properties"]["sub"]["pattern"] = "^PROBE$"
+
+        diffs = _compare_with_extra_row(row, mutate, "identity")
+        assert any("pattern" in d for d in diffs), (
+            f"kind={kind}：不相干的台账号仍然洗白了私加的 pattern ⇒ {diffs}"
+        )
+
+
+def test_invented_noop_constraint_is_not_licensable() -> None:
+    """第九轮验证 T3e：登记声称在收紧，产物新增的却是**恒真约束** ⇒ 必须红。
+
+    实测过原状：把 `SessionClaims.additionalProperties` 翻成 `true`（=允许任意未知键），
+    那条**声称**「契约拒绝多余键」的 `identity-extra-forbid` 照样把它解释成 0 条差异。
+    值本身不约束时，路径点名 + kind + 引用三样都齐了也仍然是橡皮章。
+    """
+
+    def flip(gen: dict[str, Any]) -> None:
+        gen["$defs"]["SessionClaims"]["additionalProperties"] = True
+
+    diffs = _compare_with_mutated_generated(flip, domain="identity")
+    assert any("additionalProperties" in d for d in diffs), (
+        f"恒真的新增被登记解释了：{diffs}"
+    )
+
+
+def test_inert_citation_blob_ignores_prose_outside_the_table() -> None:
+    """引用必须答在**表格行**上：散文段落里顺口提到某个字段号，不构成裁决。
+
+    第一版 `_ledger_row_texts` 全文扫，凡是含该裁决号的行都算答复——
+    于是台账正文写一句「D-V8-06 与 pattern 无关」就会反过来把 pattern 放行。
+    """
+    entry = Divergence(
+        "SessionClaims",
+        "properties.sub.pattern",
+        "tightening",
+        "probe-text-scope",
+        "无",
+        "1",
+        "见 D-V2-01",
+    )
+    blob = _ledger_row_texts(entry)
+    assert blob, "D-V2-01 的表格行没被取到——引用文本来源又漂了"
+    for line in blob.splitlines():
+        assert _is_ledger_row(line), f"引用文本混进了非表格行：{line[:40]}"
+
+
+def _ledger_split(line: str) -> list[str]:
+    """按「未被反斜杠转义的竖线」切一行 —— 台账里 `\\|` 是合法的单元格内文本。"""
+    return [c.strip() for c in re.split(r"(?<!\\)\|", line)]
+
+
+def _table_interrupts(lines: list[str]) -> list[str]:
+    """表格中间夹空行 ⇒ 后半截脱离表格（渲染上等于没登记）。
+
+    新起一张表不算打断：紧跟表头行或 `|---|` 分隔行的空行是正常段落边界。
+    """
+    bad: list[str] = []
+    for i, line in enumerate(lines):
+        if line.strip():
+            continue
+        prev = lines[i - 1] if i > 0 else ""
+        nxt = lines[i + 1] if i + 1 < len(lines) else ""
+        if prev.startswith("|") and nxt.startswith("|") and not _starts_new_table(nxt):
+            bad.append(f"第 {i + 1} 行是空行，夹在表格中间 ⇒ 其后各行脱离表格（前一行：{prev[:24].strip()}…）")
+    return bad
+
+
+def _starts_new_table(line: str) -> bool:
+    return bool(re.match(r"^\|\s*:?-{2,}", line)) or line.startswith("| ID |")
+
+
+def test_decision_log_tables_are_well_formed() -> None:
+    """台账必须渲染得出来：行内不许有未转义的竖线，表格中间不许夹空行。
+
+    第八轮验证抓到两个真实缺陷，都是**我插行时造的**：
+    ①`D-V8-05`（那条要你签的 BLOCKING）与 `D-V8-06` 被一个空行挤出表格，渲染上等于不存在；
+    ②`D-V8-06` 与 `D-V8-07` 被粘在同一行（少一个换行），一行里塞了两条裁决。
+    登记动作本身没错，错在「登记了但没人看得见」。这条守卫让它下次一定红。
+    """
+    lines = LEDGER_PATH.read_text(encoding="utf-8").splitlines()
+    header_cells = 0
+    problems: list[str] = []
+    for i, line in enumerate(lines, start=1):
+        if line.startswith("| ID |"):
+            header_cells = len(_ledger_split(line))
+            continue
+        if re.match(r"^\|\s*\*?\*?D-", line):
+            cells = len(_ledger_split(line))
+            if header_cells and cells != header_cells:
+                problems.append(
+                    f"第 {i} 行有 {cells} 列，当前表头是 {header_cells} 列"
+                    "（多半是单元格里有未转义的竖线）"
+                )
+    problems += _table_interrupts(lines)
+    assert not problems, "台账表格有问题：\n" + "\n".join(problems)
+
+
+def test_decision_log_has_no_glued_rows() -> None:
+    """一条物理行只能登记一条裁决（第八轮抓到两行被粘成一行，一行 21 列）。
+
+    判据取「ID 单元格个数」而不是「全文出现几次 `D-V8-06`」：
+    推翻记录里引用别的裁决号是合法叙述，按字符串计数会把正常行误判成粘行。
+    """
+    lines = LEDGER_PATH.read_text(encoding="utf-8").splitlines()
+    glued = []
+    for i, line in enumerate(lines, start=1):
+        if not _is_ledger_row(line):
+            continue
+        id_cells = [c for c in _ledger_split(line) if _ID_CELL.fullmatch(c)]
+        if len(id_cells) > 1:
+            glued.append((i, id_cells))
+    assert not glued, f"这些行里粘了多条裁决：{glued}"
+
+
+_ID_CELL = re.compile(r"\*{0,2}D-(?:V\d+)?-\d{2}\*{0,2}|D-\d+\*{0,2}")
 
 
 # ── 9. 产物与模型的即时一致性（把 CI 那条链拉进本地测试）───────────────────────

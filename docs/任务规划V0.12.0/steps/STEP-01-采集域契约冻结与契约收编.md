@@ -5,13 +5,15 @@
 > （第三/五/六/七轮各 FAIL），机械门 `git log --grep="轮" --format=%s main` 里 STEP-01 计 8 条 > 2。
 > 已按台账规则登记 **D-V8-05（BLOCKING，待人不签不自动生效）**：默认值 A 是把"实现语义"交给标准库
 > `jsonschema`、自研比对器退役为"差异登记 + 覆盖率守卫"；备选 B 是继续自研。**这条由 owner 判，不由我选。**
-> 域面不受影响：collection / identity / events / **resources 四域已收编**（`156 passed` `@win`，
+> 域面不受影响：collection / identity / events / **resources 四域已收编**（`166 passed` `@win`，
+> 2026-10-16 第九轮返工后读数；上一批 159 见 08-执行过程 §25），
 > 20+ 条永久反证在位，`gen_contracts --check` 四条 schema 幂等一致），S1.2.2 只剩 `api` 一域。
 > resources 收编顺带**执行了 D-V8-02**（`ArticleKey` 下界 3-vs-8 取更严者 8，并证明它不排任何合法键：
-> 三支最短可过串 10/13/34 全 >8），并登记 **D-V8-06**（规范键 pattern 在 resources 稿里只是注释、
+> 三支最短可过串 10/14/34 全 >8），并登记 **D-V8-06**（规范键 pattern 在 resources 稿里只是注释、
 > 在唯一源里是校验——两侧不是等价改写）。域面判据仍是"每条不等必须有登记且登记有责任人"，不是"注入必红"。
 > S1.4.3（IDOR 生成器）未做。
-> 逐次读数与七轮攻防见 `08` §9–§24 与 `EVD-V2-01/s132_round{5,6,7}_hardening.md`、
+> 逐次读数与九轮攻防见 `08` §9–§26 与 `EVD-V2-01/s132_round{5,6,7}_hardening.md`、
+> `s132_round9_hardening.md`（第八轮的返工写在 `08` §25）、
 > `s122_resources_domain.md`；`responseData` 不相交登记 **D-V8-01**、`$id` 两套写法登记 **D-V8-03**、
 > `exp` 必填登记 **D-V8-04**、`ArticleKey` 跨域边界 **D-V8-02**（已执行）、`sub` 两域形状分歧见 P-10。
 
