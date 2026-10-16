@@ -451,17 +451,31 @@ async def test_reingest_same_url_overwrites_no_new_row(db_session) -> None:  # t
 
 
 class _StubKBService:
-    """端点桩：固定 v0.3h 响应形状或抛指定异常（路由/信封/状态码验证）。"""
+    """端点桩：固定 v0.3h 响应形状或抛指定异常（路由/信封/状态码验证）。
+
+    `owner_seen`/`seen_owner` 记下路由传进来的**调用者**：S1.4.3 修的那两条洞就是
+    形参挂着 `Depends(get_current_user_id)` 却从不透传，光看状态码抓不到（422 也长得一样）。
+    """
 
     def __init__(self, result: dict[str, Any] | Exception) -> None:
         self._result = result
+        self.owner_seen = False
+        self.seen_owner: str | None = None
 
-    async def ingest_url(self, space_id: str, url: str) -> dict[str, Any]:
+    def _record(self, owner: str | None) -> None:
+        self.owner_seen = True
+        self.seen_owner = owner
+
+    async def ingest_url(self, space_id: str, url: str, owner: str | None = None) -> dict[str, Any]:
+        self._record(owner)
         if isinstance(self._result, Exception):
             raise self._result
         return dict(self._result)
 
-    async def get_doc_ingest_status(self, space_id: str, doc_id: str) -> dict[str, Any]:
+    async def get_doc_ingest_status(
+        self, space_id: str, doc_id: str, owner: str | None = None
+    ) -> dict[str, Any]:
+        self._record(owner)
         if isinstance(self._result, Exception):
             raise self._result
         return dict(self._result)
@@ -498,6 +512,30 @@ def test_ingest_status_endpoint_200_shape() -> None:
     assert resp.status_code == 200
     assert resp.json()["code"] == 0
     assert set(resp.json()["data"].keys()) == {"docId", "status", "langbotFileId"}
+
+
+def test_ingest_routes_thread_the_caller_to_the_service() -> None:
+    """S1.4.3：这两条端点必须把**调用者**传到服务边界。
+
+    静态 AST 底线只查"路由引用了身份形参"——把 `user_id` 打进日志也算引用。
+    这条查的是值真的进了 `owner=`：桩把收到的 owner 记下来，断言它等于 override 的 `user-1`。
+    它是无需 PG 就能跑的运行时证据（CI ubuntu 上跑的就是这一类）。
+    """
+    ingest = _StubKBService(_V1_SHAPE)
+    resp = _ingest_endpoint_client(ingest).post(
+        "/api/v1/spaces/s1/docs", json={"url": "https://mp.weixin.qq.com/s/x"}
+    )
+    assert resp.status_code == 202
+    assert ingest.owner_seen and ingest.seen_owner == "user-1", (
+        f"ingest_doc 没把调用者传给服务（seen={ingest.seen_owner!r}）⇒ 越权面回来了"
+    )
+
+    status = _StubKBService({"docId": "doc-1", "status": "READY", "langbotFileId": "f"})
+    resp2 = _ingest_endpoint_client(status).get("/api/v1/spaces/s1/docs/doc-1/status")
+    assert resp2.status_code == 200
+    assert status.owner_seen and status.seen_owner == "user-1", (
+        f"get_doc_ingest_status 没把调用者传给服务（seen={status.seen_owner!r}）"
+    )
 
 
 def test_ingest_endpoint_missing_url_maps_10005() -> None:

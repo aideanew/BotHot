@@ -121,3 +121,44 @@
 
 状态：S1.4.3 的**静态面已带反证**（含"修复本身"的反证），连库面仍是 P-11；
 `kb.py` 的 owner 门在本机可跑范围内现在能被抓住，但路由级 A-vs-B 证据仍然只有 `@ci` 能给。
+
+## 7. `@ci` 读数与我自己造成的一次红（不遮）
+
+推送后的 CI 读数（D-V6-02 口径，run id + head_sha + conclusion）：
+
+| head_sha | run id | job | 结论 |
+|---|---|---|---|
+| `196a808` | 38869881572 | backend（步骤 13「Tests (pytest) + coverage + skip gate」）| **failure** |
+| `28219d6` | 38870267208 | backend | failure（同一批失败，未另修） |
+| `6ee9682` | 38868847085 | CI | success |
+| `5f04695` | 38865446871 | CI | success |
+
+失败实测（原始日志 `.staging/job_116871220038.log.gz`，剥 ANSI 后解析）：**4 failed, 1233 passed, 6 skipped**，
+四条全在 `tests/test_langbot.py`，全是 `assert 500 == 202 / 200 / 502 / 404`：
+`test_ingest_endpoint_202_shape_v1`、`test_ingest_status_endpoint_200_shape`、
+`test_ingest_status_endpoint_failed_maps_30003_502`、`test_ingest_status_endpoint_bad_space_maps_30004_readable`。
+
+**根因是我自己的改动**：`_StubKBService`（`tests/test_langbot.py:453`）按旧签名实现
+`ingest_url(self, space_id, url)`，而我把路由改成传 `owner=user_id` ⇒ 桩接到未知关键字 ⇒ 500。
+
+**为什么我本地没抓到**（这条比根因更重要）：我推送前跑的是
+`test_be02_engine_routing.py / test_idempotency_lock.py / test_spaces_api.py` 三个"看起来最近"的文件
+（26 passed / 16 skipped），**没有跑 `test_langbot.py`**——而恰恰是它用桩复刻了这两条端点。
+我据此把"受影响面已验"写进了提交信息，那是过度声称：我验的是**我猜的相关文件**，不是**调用面**。
+`-k` 选择器当时也没有覆盖 `langbot`。这是 U-20 那种"skip/局部绿当全量绿"的近亲，只是这次方向相反：
+局部**跑绿**了，但局部选错了。
+
+**处置**：
+1. `_StubKBService` 两个方法接 `owner: str | None = None`，并**记录**收到的值（`owner_seen` / `seen_owner`）；
+2. 新增 `test_ingest_routes_thread_the_caller_to_the_service`：桩记下 `owner` 后断言它等于 override 的
+   `user-1`。这条把"修复本身"从静态引用检查升级为**运行时值传递**证据，且无需 PG——
+   正是第十一轮验证 G3' 要的那一块（AST 只查"引用了参数"，打进日志也算引用）；
+3. 复跑 `pytest tests/test_langbot.py -q` → **11 passed, 8 skipped** `@win`（4 条失败全部转绿）；
+   并扩跑 `-k "kb or ingest or space or langbot or idor or contract or batch"` 全量级子集后才推。
+4. 扩跑读数（`@win`，写文件取退出码，不用 `| tail`）：**255 passed, 124 skipped, 869 deselected，296.47s**。
+   第一次跑法用了 `-q | tail`，输出被管道吃掉、退出码是 `tail` 的 ⇒ 那次**没有任何证据**，重跑才有。
+5. 复刻者清点（决定"该跑哪些文件"的依据）：`grep -rn "def ingest_url\|def get_doc_ingest_status" app tests`
+   在仓库内只有 `kb.py`（真实现）与 `test_langbot.py:453`（桩）两处 ⇒ 其余 38 个调用点都是位置参调用，
+   新增带默认值的 kw 不会破，这解释了为什么红的是 4 条而不是几十条。
+6. `3f46918`（第十一轮锚，未含本条修复）随后同样 `CI` failure（run 38871959200），与诊断一致：
+   同一个根因，不是新问题。
