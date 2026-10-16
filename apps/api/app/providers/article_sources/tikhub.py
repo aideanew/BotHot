@@ -29,7 +29,7 @@ from app.core.errors import (
     DiscoveryFailedError,
 )
 from app.core.security import upstream_semaphore, upstream_timeout
-from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult
+from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult, work_list_row_id
 
 logger = structlog.get_logger(__name__)
 
@@ -137,15 +137,17 @@ class TikhubClient:
             # 微信原始结构：app_msg_ext_info 或 comm_msg_info 内含标题/URL
             app_msg = item.get("app_msg_ext_info", {})
             comm_msg = item.get("comm_msg_info", {})
+            url = str(app_msg.get("content_url", "") or item.get("content_url", "") or "").strip()
             row: dict[str, Any] = {
-                "url": app_msg.get("content_url", "") or item.get("content_url", ""),
+                "id": work_list_row_id(url),
+                "url": url,
                 "title": app_msg.get("title", "") or item.get("title", ""),
                 "digest": app_msg.get("digest", "") or item.get("digest", ""),
             }
             # create_time 是 Unix 时间戳
             create_time = comm_msg.get("create_time") or item.get("create_time")
             if isinstance(create_time, int | float) and create_time > 0:
-                row["publish_time"] = str(create_time)
+                row["publishTime"] = str(create_time)
             if row["url"]:
                 rows.append(row)
 

@@ -28,6 +28,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
@@ -38,6 +39,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.models.entities import ArticleManifest
+from app.services.article_identity import canonical_article_key
 
 logger = structlog.get_logger(__name__)
 
@@ -48,7 +50,9 @@ DEFAULT_MAX_PAGES = 20
 UPSTREAM_TZ = ZoneInfo("Asia/Shanghai")
 
 # 防御式字段别名（按活体实测字段形状排列：命中键在前，历史/未知变体在后兜底）
-_ID_KEYS = ("workUuid", "work_uuid", "uuid", "id", "articleId", "article_id")
+# S3.3.2：规范名 `id` 排在最前——各家 provider 归一后写的就是它，上游别名（workUuid/uuid/…）
+# 留在后面只为兼容既有渠道（redfox 原样透传 `workUuid`）。
+_ID_KEYS = ("id", "workUuid", "work_uuid", "uuid", "articleId", "article_id")
 _URL_KEYS = ("workUrl", "work_url", "url", "link", "articleUrl", "article_url")
 _TITLE_KEYS = ("title", "name", "articleTitle", "article_title")
 _TIME_KEYS = ("publishTime", "publish_time", "pubTime", "pub_time", "createTime", "create_time")
@@ -75,6 +79,10 @@ class ManifestSyncReport:
     updated: int = 0  # 既有行可变字段有变化
     unchanged: int = 0  # 既有行与远端一致
     skipped: int = 0  # 缺 external_id 等不可用行
+    # STEP-03 S3.3.3：行缺 id、以 canonical key 兜底的次数（契约 `ManifestSyncReport.id_fallback`）。
+    # **刻意不计进 `total`**：那些行已经落在 discovered/updated/unchanged 里了，
+    # 再加一次就是同一行计两遍——这是口径，不是漏加。
+    id_fallback: int = 0
     known_local: int = 0  # 同步前本地已入库条数（增量游标基线）
     total_remote: int | None = None  # 上游 data.total（缺失/异常 → None）
     pages_planned: int = 0  # 按缺口规划的分页数
@@ -113,9 +121,27 @@ def _parse_time(value: Any) -> datetime | None:
         try:
             dt = datetime.fromisoformat(s.replace("Z", "+00:00").replace("/", "-"))
         except ValueError:
-            return None
+            # RFC 822 / 2822：RSS `pubDate` 的形状（`Wed, 02 Oct 2024 07:30:00 GMT`）不是 ISO，
+            # 旧实现走到这里直接 return None ⇒ 整源时间戳恒空（P-1 的 rss 那一半）。
+            return _parse_rfc822(s)
         return dt if dt.tzinfo else dt.replace(tzinfo=UPSTREAM_TZ)
     return None
+
+
+def _parse_rfc822(value: str) -> datetime | None:
+    """RFC 822/2822 时间 → 带时区的 UTC datetime；解不出返回 None（**行照样保留**）。
+
+    用标准库而不是手写格式表：`parsedate_to_datetime` 覆盖 RSS 规范允许的那一长串变体
+    （`GMT`/`+0800`/`EST`/省略秒），自己列格式就是在维护一份永远少一条的名单。
+    无时区的按 RFC 822 的默认读成 GMT（不是北京时间）——上游省略时区时它说的是 GMT。
+    """
+    try:
+        dt = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def _from_epoch(ts: float) -> datetime | None:
@@ -136,12 +162,34 @@ def _upstream_page_size() -> int:
     return PAGE_SIZE
 
 
+def _row_identity(row: dict[str, Any]) -> tuple[str, bool]:
+    """清单行的身份：`(external_id, 是否走了规范键兜底)`；两者都解不出时返回 `("", False)`。
+
+    单独成一个函数而不是把标记塞进 `_map_row` 的返回 dict：
+    那种做法要求调用方**记得** pop 一个混在模型字段里的键，忘了会在插入路径炸
+    `TypeError`，却在**更新路径**静默通过（`_apply_update` 只遍历固定字段名）——
+    半有声半无声的门不当门。现在 `_map_row` 与 `sync_source` 都问这同一个函数，
+    判据只有一处，返回的 dict 永远是纯模型字段。
+    """
+    direct = _first_str(row, _ID_KEYS)
+    if direct:
+        return direct, False
+    url = _first_str(row, _URL_KEYS)
+    return (canonical_article_key(url), True) if url else ("", False)
+
+
 def _map_row(row: dict[str, Any]) -> dict[str, Any] | None:
-    """原始清单行 → ArticleManifest 字段（缺 external_id 不可用 → None）。
+    """原始清单行 → ArticleManifest 字段。
 
     字段口径集中于此；上游字段形状变化时只改本函数。
+
+    S3.3.3（P-1 的消费端那一半）：**缺 id 不再丢整行**——有 URL 就用
+    `canonical_article_key(url)` 兜底建键（判据在 `_row_identity`，与 `sync_source`
+    的计数同一个真源）。仍然返回 None 的只剩一种：连 URL 都没有的行——
+    那种行没有正文地址，建出来的键只是空壳哈希，落库等于把脏数据固化，
+    所以它必须是 skipped 而不是 discovered。
     """
-    external_id = _first_str(row, _ID_KEYS)
+    external_id, _fallback = _row_identity(row)
     if not external_id:
         return None
     url = _first_str(row, _URL_KEYS)
@@ -210,6 +258,17 @@ class ManifestSyncService:
                 if mapped is None:
                     report.skipped += 1
                     continue
+                # S3.3.3：兜底建行要**可见**——计一次数 + 一条结构化告警。
+                # 只把行收下不吭声，就还是"采集静默失败"那个形状（STEP-05 的同族）。
+                # 判据与 `_map_row` 同取 `_row_identity`，两边不会各判一套。
+                if _row_identity(row)[1]:
+                    report.id_fallback += 1
+                    logger.warning(
+                        "discovery.id_fallback",
+                        source_id=source_id,
+                        url=mapped["url"],
+                        external_id=mapped["external_id"],
+                    )
                 outcome = await self._upsert(source_id, mapped)
                 setattr(report, outcome, getattr(report, outcome) + 1)
                 if outcome != "discovered":
@@ -222,7 +281,7 @@ class ManifestSyncService:
         await self._session.flush()
         logger.info(
             "Manifest 同步 source=%s biz=%s calls=%d gap_planned=%d pages=%d local=%d total=%s "
-            "new=%d upd=%d same=%d skip=%d",
+            "new=%d upd=%d same=%d skip=%d id_fallback=%d",
             source_id,
             biz,
             report.calls_made,
@@ -234,6 +293,7 @@ class ManifestSyncService:
             report.updated,
             report.unchanged,
             report.skipped,
+            report.id_fallback,
         )
         return report
 

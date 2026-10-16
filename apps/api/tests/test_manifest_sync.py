@@ -24,14 +24,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.config import Settings
 from app.core.errors import DependencyUnavailableError
 from app.models.entities import ArticleManifest, Job, KnowledgeSpace, Source, SourceSubscription
+from app.providers.article_sources.base import work_list_row_id
 from app.repositories.space import SpaceRepository
 from app.repositories.user import SqlAlchemyUserStore
+from app.services.article_identity import canonical_article_key
 from app.services.manifest import (
     UPSTREAM_TZ,
     ManifestSyncReport,
     ManifestSyncService,
     _map_row,
     _parse_time,
+    _row_identity,
     make_redfox_provider,
 )
 from app.services.scheduler import IncrementalScheduler, make_sync_runner
@@ -201,11 +204,31 @@ async def _sync(
 
 
 def test_map_row_defensive_aliases() -> None:
-    """字段别名防御式映射：workUuid/uuid/articleId 均认；缺 id → None。"""
+    """字段别名防御式映射：`id`/workUuid/uuid/articleId 均认；**缺 id 但有 url ⇒ 规范键兜底并标记**。
+
+    STEP-03 S3.3.3 改了这里的一条旧语义：本用例原本断言 `_map_row({"url","title"}) is None`
+    （"缺 external_id 不可用"），而那正是 P-1——四家付费 provider 的行全是这个形状，
+    于是整页被静默丢掉、日志却像成功。现在只有**连 url 都没有**的行才算不可用。
+    """
     assert _map_row({"workUuid": "w1", "url": "u", "title": "t"})["external_id"] == "w1"  # type: ignore[index]
     assert _map_row({"uuid": "w2", "url": "u", "title": "t"})["external_id"] == "w2"  # type: ignore[index]
     assert _map_row({"articleId": "w3", "url": "u", "title": "t"})["external_id"] == "w3"  # type: ignore[index]
-    assert _map_row({"url": "u", "title": "t"}) is None, "缺 external_id 不可用"
+    # 规范名 `id` 排最前（S3.3.2）：上游别名与它同时存在时用 `id`，别让兜底覆盖真值
+    assert _map_row({"id": "canon", "workUuid": "legacy", "url": "u", "title": "t"})["external_id"] == "canon"  # type: ignore[index]
+
+    fb = _map_row({"url": "u", "title": "t"})
+    assert fb is not None, "缺 id 的行不再被判成不可用（P-1 的那条 return None 已删）"
+    assert fb["external_id"] == canonical_article_key("u")
+    # 兜底与否由 `_row_identity` 单点判（标记不再混在模型字段 dict 里）
+    assert _row_identity({"url": "u", "title": "t"}) == (canonical_article_key("u"), True)
+    assert _row_identity({"id": "canon", "url": "u", "title": "t"}) == ("canon", False)
+    assert _row_identity({"title": "两者都缺"}) == ("", False)
+    # 生产端算键、消费端兜底算键，同一个 URL 必须得到同一个键（否则是新的冒名面）
+    assert _row_identity({"url": "  https://example.com/a/1  ", "title": "t"})[0] == work_list_row_id(
+        "https://example.com/a/1"
+    )
+
+    assert _map_row({"title": "只有标题"}) is None, "连 url 都没有的行仍然不可用（不造空壳身份）"
     assert _map_row({}) is None
 
 
@@ -340,15 +363,27 @@ async def test_sync_total_under_reports_still_recovers_all() -> None:
 
 
 async def test_sync_walk_continues_past_rows_without_id() -> None:
-    """缺 id 的脏行不中断翻页：它既非新篇也非既有篇，不构成「前缀已结束」的信号。"""
+    """缺 id 的行经规范键兜底入库，且不中断翻页：它仍是新篇，不构成「前缀已结束」的信号。
+
+    STEP-03 S3.3.3 改语义的连带面：本用例原来断言 `skipped == 1`（那行被丢掉），
+    现在那行必须**入库**并计入 `id_fallback`——这正是 P-1 要的修复形状。
+    翻页判据（`calls == [1, 2]`）不变：兜底行是新篇，`saw_existing` 不该被它置真。
+    """
     engine, factory = _factory()
     try:
         source_id, _ = await _seed_source(factory)
         provider = _StubProvider({1: [_row(1), {"url": "u", "title": "无ID"}], 2: [_row(2)]}, total=2)
         report = await _sync(source_id, provider)
 
-        assert report.skipped == 1 and report.discovered == 2  # type: ignore[attr-defined]
+        assert report.discovered == 3, f"兜底行必须真入库，实际 {report.discovered}"  # type: ignore[attr-defined]
+        assert report.skipped == 0, "有 url 的行不再计入 skipped"  # type: ignore[attr-defined]
+        assert report.id_fallback == 1  # type: ignore[attr-defined]
         assert provider.calls == [1, 2]
+        rows = await _manifest_rows(factory, source_id)
+        assert len(rows) == 3
+        assert canonical_article_key("u") in {r.external_id for r in rows}
+        # 兜底行不能把 total 撑大：id_fallback 与 discovered/… 是同一行的两个视角
+        assert report.total == 3  # type: ignore[attr-defined]
     finally:
         await engine.dispose()
 
@@ -425,15 +460,22 @@ async def test_sync_updates_empty_url_from_real_workurl() -> None:
         await engine.dispose()
 
 
-async def test_sync_skips_rows_without_id() -> None:
-    """缺 external_id 的行计入 skipped，不入库（不造脏行）。"""
+async def test_sync_skips_rows_without_id_or_url() -> None:
+    """连 url 都没有的行仍然计入 skipped、不入库（不造空壳身份）。
+
+    用例名带"without_id"的那版语义已被 S3.3.3 换掉：现在有 id 缺 url 之外只剩
+    "两者都缺"这一种不可用行。它与 `test_sync_walk_continues_past_rows_without_id`
+    是**两种不同的行**，两条合起来才把"兜底"与"拒收"的分界钉住——
+    只留一条，另一种就会被静默并进错误的半边。
+    """
     engine, factory = _factory()
     try:
         source_id, _ = await _seed_source(factory)
-        provider = _StubProvider({1: [_row(1), {"url": "u", "title": "无ID"}]}, total=2)
+        provider = _StubProvider({1: [_row(1), {"title": "无URL无ID"}]}, total=2)
         report = await _sync(source_id, provider)
 
         assert report.discovered == 1 and report.skipped == 1  # type: ignore[attr-defined]
+        assert report.id_fallback == 0, "被拒收的行不许同时计成兜底行（同一行计两遍）"  # type: ignore[attr-defined]
         assert len(await _manifest_rows(factory, source_id)) == 1
     finally:
         await engine.dispose()

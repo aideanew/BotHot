@@ -1,6 +1,21 @@
 # STEP-03 渠道行契约归一
 
-> 基线 main@61358c3｜状态：⚪ 未开始
+> 基线 main@61358c3｜状态：🟡 进行中（2026-10-16 起）——**S3.1 / S3.2 / S3.3 已交付**：
+> 新 `tests/test_provider_contract.py`（按样本名参数化 + 样本认领守卫 + 缺 Key 显式失败），
+> 四家付费 provider 的清单行加规范键 `id`（真源 `canonical_article_key`，时间键统一 `publishTime`），
+> `_ID_KEYS` 把 `id` 排最前、`_map_row` 缺 id 不再丢整行而是兜底建键 + `id_fallback` 计数 + WARNING，
+> `_parse_time` 接 `email.utils.parsedate_to_datetime`（RFC 822 / GMT / EST / 无时区按 GMT）。
+> 先红的读数与"实现前就暴露的三处卡面口径差"见 `10-执行过程-独立执行段第三批.md` §6.1–§6.3。
+> **S3.4.1 未达，不遮**：卡面要「4 家 provider 模块覆盖率 ≥80%」，现读 43–52%，
+> 缺口在 detail/search/错误映射，已发布为 **P-14**（带读数命令与反证要求）。
+> 独立验证在本批提交前抓出两处真缺陷并当场修掉：生产端用未 strip 的 URL 算键会与消费端
+> 算出**两个**身份（同一键空间的冒名，STEP-02 同族）；`id_fallback` 标记混在模型字段里
+> "靠调用方记得 pop"（插入路径有声、更新路径无声）——现改由 `_row_identity` 单点判。
+> 另有一项**只登记不改**：RFC 822 无时区按 GMT、ISO 无时区按 `Asia/Shanghai`，
+> 这是两套上游各自的规范，改哪一边都要活体样本或真库来判。
+> 两条被改到的连库用例（`test_manifest_sync.py` 的 skipped 语义）本机只 skip ⇒ 判定在 `@ci`。
+> 三处口径更正：所有权表里的 `article_sources/redfox.py` **不存在**（RedFox 在
+> `app/providers/redfox/client.py`，且它的行是上游原样透传，本卡不改它的键名）。
 
 | 字段 | 内容 |
 |---|---|

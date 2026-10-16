@@ -33,7 +33,7 @@ from app.core.errors import (
     DiscoveryFailedError,
 )
 from app.core.security import upstream_semaphore, upstream_timeout
-from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult
+from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult, work_list_row_id
 
 logger = structlog.get_logger(__name__)
 
@@ -108,15 +108,17 @@ class DajialaClient:
             if not isinstance(item, dict):
                 continue
             # 归一化到 manifest._map_row 的字段别名
+            url = str(item.get("url", "") or "").strip()
             row: dict[str, Any] = {
-                "url": item.get("url", ""),
+                "id": work_list_row_id(url),
+                "url": url,
                 "title": item.get("title", ""),
                 "digest": item.get("digest", ""),
             }
             # post_time 是 Unix 时间戳（如 1790659200）
             post_time = item.get("post_time")
             if isinstance(post_time, int | float) and post_time > 0:
-                row["publish_time"] = str(post_time)
+                row["publishTime"] = str(post_time)
             rows.append(row)
 
         return rows, len(rows)

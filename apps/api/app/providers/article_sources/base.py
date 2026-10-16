@@ -14,6 +14,28 @@ from datetime import datetime
 from typing import Any, Protocol
 
 
+def work_list_row_id(url: str) -> str:
+    """清单行 id = URL 的规范键（ADR-0011 的 `canonical_article_key`）。
+
+    存在理由（STEP-03 的 P-1）：`manifest._map_row` 在解不出 id 时 `return None`，
+    而 dajiala / justoneapi / tikhub / wellbyte 的清单样本里**没有任何 id 形状字段**
+    ⇒ 上游返回 N 条、本地落 0 条，而一轮同步读起来像成功。
+    生产端先补 `id`、消费端再兜一层（`_map_row` 的 fallback），任一端回退都不会丢整页。
+
+    上游带 id 的渠道（redfox 的 `workUuid`、rss 的 `guid`/`id`）**不**走这里：
+    它们的沿用由消费端 `_ID_KEYS` 的优先序负责，本函数只负责"上游没给"的那一侧，
+    免得多处判上游 id 而各处判得还不一样。
+
+    `url` 先 `strip()` 再算键：消费端兜底走的是 `_first_str`（它会 strip），
+    生产端若用未 strip 的原串，同一个 ` https://x/a ` 会算出**另一个**哈希键——
+    那就是 STEP-02 刚消灭的那族"两处各说各话的冒名键"，只是换了入口。
+    """
+    from app.services.article_identity import canonical_article_key
+
+    cleaned = url.strip()
+    return canonical_article_key(cleaned) if cleaned else ""
+
+
 @dataclass(frozen=True, slots=True)
 class ArticleDetail:
     """付费详情 API 的归一化产物。

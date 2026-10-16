@@ -39,7 +39,7 @@ from app.core.errors import (
     RateLimitedUpstreamError,
 )
 from app.core.security import upstream_semaphore, upstream_timeout
-from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult
+from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult, work_list_row_id
 
 logger = structlog.get_logger(__name__)
 
@@ -152,14 +152,16 @@ class WellbyteClient:
                 continue
             app_msg = msg.get("AppMsg", {})
             base_info = msg.get("BaseInfo", {})
+            url = str(app_msg.get("ContentUrl", "") or "").strip()
             row: dict[str, Any] = {
-                "url": app_msg.get("ContentUrl", ""),
+                "id": work_list_row_id(url),
+                "url": url,
                 "title": app_msg.get("Title", ""),
                 "digest": app_msg.get("Digest", ""),
             }
             create_time = app_msg.get("CreateTime") or base_info.get("DateTime")
             if isinstance(create_time, int | float) and create_time > 0:
-                row["publish_time"] = str(create_time)
+                row["publishTime"] = str(create_time)
             if row["url"]:
                 rows.append(row)
 

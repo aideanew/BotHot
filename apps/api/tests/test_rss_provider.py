@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from app.providers.article_sources.rss import (
@@ -18,6 +20,7 @@ from app.providers.article_sources.rss import (
     RSSFeedProvider,
     _parse_feed,
 )
+from app.services.manifest import _map_row
 
 # ── 测试数据 ──────────────────────────────────────────────
 
@@ -267,3 +270,52 @@ class TestFreeRSSFeeds:
         assert "wechat" in categories
         assert "tech" in categories
         assert "news" in categories
+
+
+def _one_item_feed(pub_date: str) -> str:
+    """造一个只含一条 item 的 RSS2，`pubDate` 由参数决定（S3.1.2 的三种形状）。"""
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0">\n  <channel>\n    <title>t</title>\n'
+        '    <item>\n      <title>文章</title>\n'
+        '      <link>https://example.com/a/1</link>\n'
+        f'      <pubDate>{pub_date}</pubDate>\n'
+        '      <guid>guid-rfc</guid>\n    </item>\n  </channel>\n</rss>\n'
+    )
+
+
+class TestPublishTimeRfc822:
+    """S3.1.2：RSS 的 RFC 822 时间必须解得出，且**解不出也不许丢行**。
+
+    改前的红：`manifest._parse_time` 只认 ISO 与 epoch，`Wed, 02 Oct 2024 07:30:00 GMT`
+    走 `fromisoformat` 抛 ValueError ⇒ `publish_time=None`（P-1 的 rss 那一半）。
+    三条各判一个维度：数字时区偏移、英文时区缩写、非法值——
+    只测第一条会把"缩写表没覆盖"放过去，只测前两条会把"非法值炸掉整行"放过去。
+    """
+
+    def test_rfc822_with_numeric_offset(self) -> None:
+        mapped = _map_row(_parse_feed(_one_item_feed("Mon, 02 Oct 2026 10:00:00 +0800"))[0])
+        assert mapped is not None
+        assert mapped["publish_time"] == datetime(2026, 10, 2, 2, 0, tzinfo=UTC), mapped["publish_time"]
+
+    def test_rfc822_with_gmt_abbreviation(self) -> None:
+        mapped = _map_row(_parse_feed(_one_item_feed("Wed, 02 Oct 2024 07:30:00 GMT"))[0])
+        assert mapped is not None
+        assert mapped["publish_time"] == datetime(2024, 10, 2, 7, 30, tzinfo=UTC), mapped["publish_time"]
+
+    def test_rfc822_with_named_zone_est(self) -> None:
+        mapped = _map_row(_parse_feed(_one_item_feed("Wed, 02 Oct 2024 07:30:00 EST"))[0])
+        assert mapped is not None
+        # EST = -05:00（`parsedate_to_datetime` 认这三个字母；自己列格式表就会漏掉这一族）
+        assert mapped["publish_time"] == datetime(2024, 10, 2, 12, 30, tzinfo=UTC), mapped["publish_time"]
+
+    def test_illegal_time_keeps_the_row(self) -> None:
+        """非法时间 ⇒ `publish_time` 为 None，但**这一行必须还在**。
+
+        这条是"时间"与"行"的分离判据：把解析失败升级成丢行，就等于把 P-1 换了个入口再来一次。
+        """
+        row = _parse_feed(_one_item_feed("2026年10月02日 10:00"))[0]
+        mapped = _map_row(row)
+        assert mapped is not None, "时间解不出不得连带丢掉整行"
+        assert mapped["publish_time"] is None
+        assert mapped["external_id"] == "guid-rfc", "身份来自 guid，不该被时间失败牵连"
