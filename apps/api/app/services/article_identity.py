@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from hashlib import sha256
 from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse, urlsplit, urlunsplit
@@ -103,6 +104,13 @@ TRACKING_QUERY_KEYS = frozenset(
 _HASH_PREFIX = "h:"
 _HASH_HEX_LEN = 32
 
+#: `b:` / `s:` 两支的**接受形状**，与契约 `ArticleKey.pattern` 的三个分支逐段同文
+#: （`packages/contracts/schemas/collection.schema.json` 的 `ArticleManifest.properties.article_key`，
+#: 冻结稿以 `oneOf` 三支表达同一语义）。写成完整键形状而不是分段字符类，是为了让
+#: "产出的键一定被契约接受"这件事可以在本模块内判定，而不是等下游 STEP-04 校验时炸。
+CANONICAL_B_KEY = re.compile(r"^b:[A-Za-z0-9+/=_-]{8,64}:[0-9]{1,12}:[0-9]{1,2}$")
+CANONICAL_S_KEY = re.compile(r"^s:[A-Za-z0-9_-]{8,64}$")
+
 
 def normalize_url(url: str) -> str:
     """身份用途的 URL 归一：scheme/host 小写、去 fragment、去追踪参数、其余参数按键排序。
@@ -135,19 +143,31 @@ def canonical_article_key(url: str) -> str:
     """文章规范键：`b:{biz}:{mid}:{idx}` / `s:{token}` / `h:` + sha256(normalize_url)[:32]。
 
     前缀让三种来源互不碰撞且**自描述来源**（ADR-0011 §2 的理由）：看到 `b:` 就知道能解出
-    biz/mid/idx，看到 `h:` 就知道这是不可解析 URL 的降级身份。三条不变量由
+    biz/mid/idx，看到 `h:` 就知道这是不可解析 URL 的降级身份。四条不变量由
     `tests/test_article_identity.py` 的 S2.2.1 用例钉住：
     ①任何输入都不等于裸 `s`（旧算法把长链坍缩成它，探针 P-3）；②同一篇长链带不带追踪参数/片段同键；
-    ③同 `__biz` 不同 `mid` 必须异键。
+    ③同 `__biz` 不同 `mid` 必须异键；④**产出的键一定被契约 `ArticleKey` 接受**。
+
+    第④条不是锦上添花，是第二轮独立验证实测出来的洞：`Source.url` 是自由字段，
+    旧写法会吐出 `b:MjM5:1:1`（biz 短于 8）、`s:abc`（短于 minLength）、
+    以及 136 字符的 `b:` 键（超 `maxLength: 128`），最坏一个是
+    `__biz=AAAAAAAA:B&mid=C` 与 `__biz=AAAAAAAA&mid=B:C` **得到同一个键串**
+    （`b:` 的三段用 `:` 分隔，而 `:` 没被挡在字符类外）——那是一次新的身份坍缩，
+    与本卡要消灭的 P-3 同族。所以两支有形状的分支都要先验证再采纳，验证不过就降级 `h:`：
+    `h:` 恒 34 字符、恒被接受，且对脏输入仍然**单射到归一后的 URL**（不是折成同一个常量）。
 
     解析一律委托 `parse_wechat_url`——本函数**不许**自己再解析一遍 URL（单一来源，ADR §3.5）。
     """
     parts = parse_wechat_url(url)
     if parts.host == WECHAT_HOST:
         if parts.biz and parts.mid:
-            return f"b:{parts.biz}:{parts.mid}:{parts.idx or _DEFAULT_IDX}"
+            candidate = f"b:{parts.biz}:{parts.mid}:{parts.idx or _DEFAULT_IDX}"
+            if CANONICAL_B_KEY.fullmatch(candidate):
+                return candidate
         if parts.short_token:
-            return f"s:{parts.short_token}"
+            candidate = f"s:{parts.short_token}"
+            if CANONICAL_S_KEY.fullmatch(candidate):
+                return candidate
     if not isinstance(url, str):
         raise TypeError(f"canonical_article_key 只接受 str，收到 {type(url).__name__}")
     return _HASH_PREFIX + sha256(normalize_url(url).encode("utf-8")).hexdigest()[:_HASH_HEX_LEN]

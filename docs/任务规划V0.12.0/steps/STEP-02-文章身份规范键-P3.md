@@ -4,6 +4,11 @@
 > `article_identity.normalize_url` / `canonical_article_key`（ADR-0011 三分支 `b:`/`s:`/`h:`），
 > ADR §3 五条不变量逐条有用例（`tests/test_article_identity.py` 现 24 条、模块覆盖 100% `@win`），
 > 读数与两处被既有证明件抓出的缺陷见 `EVD-V2-02/s221_canonical_key.md`。
+> **第二轮独立验证抓出更重的一条**：两支"无条件采纳"会产出契约 `ArticleKey` 拒收的键
+> （`b:MjM5:1:1` 段太短、`s:abc` 短于 minLength、136 字符超 maxLength ⇒ PG `varchar(128)` 直接 DataError，
+> 最坏是 `__biz=AAAAAAAA:B&mid=C` 与 `__biz=AAAAAAAA&mid=B:C` **冒名成同一个键**）；
+> 已改为"整键形状验证后采纳，否则降级 `h:`"，新增不变量④与 3 条变异反证，
+> 并在 ADR-0011 追加 §8 实施期更正（§3.1/§6 的"≥8""≤128 零迁移"按伪码字面实现时为假）。
 > **规范键目前只有消费者（测试）、没有生产者**：S2.2.3 调用点迁移（现读 `kb.py:241/282/461/467/510`，
 > 非卡面行号）必须与 S2.2.4 历史兼容、S2.3.3 `batch_ingest.py:44` 第二份实现的委托**同批**做，
 > 否则短链二次入库会重抓——拆开推就是把"局部绿当全量绿"再犯一次。

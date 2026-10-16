@@ -71,3 +71,58 @@ ADR-0011 §3 的**五条不变量逐条有归属用例**（`tests/test_article_i
 
 状态：**S2.2.1 / S2.2.2 已确认（`@win`）**；S2.2.2.1 的"S2.2.1 转绿"与 S2.2.2.2 的 100% 覆盖达成。
 下一步是 S2.2.3 + S2.2.4 + S2.3.3 同批（它们互为前提），做完才谈得上 STEP-02 的 `@ci` 判定。
+
+---
+
+## 6. 第二轮独立验证：规范键会产出**契约自己拒收**的键（已修）
+
+验证者（基线 `e124d7d`）判 **RED**：`canonical_article_key` 的两个有形状分支是"无条件采纳"的，
+而 `Source.url` 是自由字段。我先自己复现（探针 `.staging/probe_key_contract.py`，`@win`），
+四条主张全部成立，且**最坏的一条比报告说的更重**：
+
+| 输入 | 修复前输出（实测） | 问题 |
+|---|---|---|
+| `?__biz=MjM5&mid=1&idx=1` | `b:MjM5:1:1` | biz 段 4 字符，契约要求 `{8,64}` |
+| `/s/abc` | `s:abc`（len 5） | 违反 `minLength: 8` |
+| `?__biz=` + 130×`A` | 136 字符 `b:` 键 | 超 `maxLength: 128` ⇒ PG `varchar(128)` 写入直接 DataError |
+| `?__biz=AAAAAAAA:B&mid=C` vs `?__biz=AAAAAAAA&mid=B:C` | **同一个键串** `b:AAAAAAAA:B:C:1` | `b:` 以 `:` 分段而 `:` 没被挡在段值外 ⇒ **两篇文章共用一个身份**，与本卡要消灭的 P-3 坍缩同族 |
+
+对照：合法长链 `b:MjM5MjgwNTQ1MQ==:2650000001:1`（len 31）本就通过 ⇒ 问题只在**未经形状验证就采纳**。
+
+**修复**：`b:` / `s:` 两支先按整键正则验证（`CANONICAL_B_KEY` / `CANONICAL_S_KEY`，
+字符类与长度界与契约三支逐段同文），不过则降级 `h:`。复测：上表四条输入全部得到
+`h:` + 32 hex（len 34、契约通过），冒名碰撞读 `False`，合法长链仍是 `b:`。
+
+新增用例与反证：
+- `test_every_emitted_key_is_accepted_by_the_contract` —— **pattern 从生成的契约产物里按内容取**
+  （16 条语料含上述对抗输入，逐条断言被契约接受 + 长度在 `[minLength, maxLength]` 内）。
+- `test_colon_in_biz_or_mid_cannot_forge_the_same_identity` —— 两支不同输入必须不同键。
+- 证明件 `MUTANTS` +3：摘掉 `b:` 验证 / 摘掉 `s:` 验证 / 让脏输入重新折叠，
+  `--self-test` 逐条确认指定用例变红 ⇒ **15 个变异体全锚**。
+- `ALLOWED_IMPORTS` 再加 `re`（附理由：契约本就是正则表达的；`subprocess`/`socket`/`httpx`/`os` 仍在拒绝面内）。
+
+## 7. 我这批在取证时又犯的错（按老规矩写在证据里，不删）
+
+- 探针第一版照 `art["$defs"]["ArticleKey"]["pattern"]` 读 ⇒ `KeyError`。
+  产物里 `ArticleKey` 是别名、已被内联到 `ArticleManifest.properties.article_key`（登记表 `alias-inlining`
+  说的就是这件事），所以必须**按内容找 pattern**而不是按固定路径。这是 memory 里
+  "探针不许假设仓库布局"的又一次应验，发生在我自己刚批评过 S1.4.3 之后不到一小时。
+- 探针据此打出过一次 `产物与稿面 pattern 一致 = False`，看着像新缺陷。核对后是**假警报**：
+  冻结稿用 `oneOf` 三支表达同一语义、产物用一条 alternation，正是 `oneOf-to-pattern-set` 那条归一登记的
+  适用面。我不把它当发现写进结论，但也把它记在这里——因为"看起来像洞的读数"和"真洞"的差别
+  只能靠再去读一处来源来分辨，不能靠直觉归档。
+
+## 8. ADR-0011 的连带更正
+
+§3.1「长度 ≥ 8」、§3.4、§6「键变长（≤128）…零迁移」在按 §2 伪码字面实现时**都为假**。
+已在 ADR 追加 §8（2026-10-16 实施期更正，不重开裁决：三分支与理由不变，变的是"验证后采纳"），
+并把上面四条实测输入写进那张表——否则迁移调用点时会带着一个假的安全前提去做（`varchar(128)` 那行尤其）。
+
+读数（`@win`，修复后）：`pytest tests/test_article_identity.py -q` → **26 passed**；
+合跑 `test_article_identity + test_kb_longlink_ingest + test_collection_contract + test_idor_matrix` →
+**220 passed**；`--cov=app.services.article_identity` → **59/59 = 100%**；
+`prove_article_identity.py` PASS=12/FAIL=0；`--self-test` **PASS**（15 变异体 + 17 判据样本 + 4 等价重构 + cp936）；
+`ruff` / `mypy` 干净。
+
+状态更新：S2.2.1/S2.2.2 仍然只到"键能生产、暂无生产者"，但**现在多了一条不变量④**，
+且 §7 的三条验收命令未变。调用点迁移（S2.2.3/S2.2.4/S2.3.3）的前置条件已补齐。

@@ -83,3 +83,25 @@ cd apps/api
 .venv/bin/python -m pytest tests/test_kb_longlink_ingest.py -q -rs        # P-3：同号两篇各自独立入库
 grep -rn 'rsplit("/")' app/services/kb.py app/services/batch_ingest.py     # 期望仅剩委托前的兼容薄壳或空
 ```
+
+## 8. 实施期更正（2026-10-16，不重开裁决）
+
+§2 的伪码按字面实现时，**§3.1 / §3.4 与 §6 的"≤128 零迁移"三条都不成立**。
+第二轮独立验证（读数 `EVD-V2-02/s221_canonical_key.md` §6）实测四类产物，全部被契约 `ArticleKey` 拒收：
+
+| 输入（`Source.url` 这类自由字段真能装进去） | 按 §2 字面实现的输出 | 违反了什么 |
+|---|---|---|
+| `?__biz=MjM5&mid=1&idx=1` | `b:MjM5:1:1` | biz 段 4 字符 < `{8,64}` |
+| `/s/abc` | `s:abc` | 总长 5 < `minLength: 8` |
+| `?__biz=` + 130×`A` | 136 字符的 `b:` 键 | 超 `maxLength: 128` ⇒ **Postgres `varchar(128)` 直接 DataError**，"零迁移"是假的 |
+| `?__biz=AAAAAAAA:B&mid=C` 与 `?__biz=AAAAAAAA&mid=B:C` | **同一个键串** `b:AAAAAAAA:B:C:1` | `b:` 用 `:` 分段，`:` 逃进段值就冒名 ⇒ 与本 ADR 要消灭的 §1 坍缩同族 |
+
+**更正的口径**：§2 的三分支与 §2 的理由（前缀自描述来源）**不变**；变的是采纳条件——
+`b:` / `s:` 两支必须先验证整键形状（`article_identity.CANONICAL_B_KEY` / `CANONICAL_S_KEY`，
+字符类与长度界与契约三支逐段同文），验证不过则降级 `h:`。`h:` 恒 34 字符、恒被接受，
+且是"归一后 URL"的哈希，所以脏输入之间不会共享身份（这也是为什么 `normalize_url` 对
+无 scheme 且无 host 的输入**原样返回**而不是归零——否则 `""` 与 `/` 会折成同一个串）。
+
+判据侧的反证已进 `docs/06_validation/evidence/EVD-V2-02/prove_article_identity.py` 的 `MUTANTS`
+（新增三条：摘掉 b: 验证 / 摘掉 s: 验证 / 让脏输入重新折叠），`--self-test` 逐条确认指定用例变红。
+§7 的三条验收命令不变，仍然有效。

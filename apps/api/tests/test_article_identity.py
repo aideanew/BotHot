@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import quote
@@ -260,6 +262,88 @@ def test_every_input_yields_a_usable_key():
 def test_idx_defaults_to_one_inside_the_b_key():
     no_idx = f"https://{WECHAT_HOST}/s?__biz={BIZ_A}&mid=2650000001&sn=eeee"
     assert canonical_article_key(no_idx).endswith(":1"), canonical_article_key(no_idx)
+
+
+ARTIFACT_PATH = Path(__file__).resolve().parents[3] / "packages" / "contracts" / "schemas" / "collection.schema.json"
+
+
+def _contract_article_key_pattern() -> tuple[str, int | None, int | None]:
+    """从**生成的契约产物**里按内容取出 `ArticleKey` 的 pattern 与长度界。
+
+    产物里 `ArticleKey` 是别名、会被内联到引用处（登记表 `alias-inlining` 说的就是这件事），
+    照 `doc["$defs"]["ArticleKey"]` 读会 KeyError——那是我自己的探针犯过的布局假设错误。
+    """
+    doc = json.loads(ARTIFACT_PATH.read_text(encoding="utf-8"))
+
+    def walk(node: object) -> tuple[str, int | None, int | None] | None:
+        if isinstance(node, dict):
+            pat = node.get("pattern")
+            if isinstance(pat, str) and pat.startswith("^(?:b:"):
+                return pat, node.get("minLength"), node.get("maxLength")
+            for value in node.values():
+                found = walk(value)
+                if found:
+                    return found
+        elif isinstance(node, list):
+            for value in node:
+                found = walk(value)
+                if found:
+                    return found
+        return None
+
+    found = walk(doc)
+    assert found, f"产物 {ARTIFACT_PATH.name} 里找不到 ArticleKey 的 pattern"
+    return found
+
+
+def test_every_emitted_key_is_accepted_by_the_contract():
+    """不变量④：本函数**产出**的每个键都必须被契约 `ArticleKey` 接受（含对抗输入）。
+
+    第二轮独立验证实测的洞（旧实现全绿通过，因为它从没被喂过这些输入）：
+    `b:MjM5:1:1`（biz 短于 8）、`s:abc`（短于 minLength）、130 字符 biz 得到 136 字符键
+    （超 `maxLength: 128`）、`/s/AA:BB` 与 `/s/a.b.c`（字符类不符）。
+    这些都是 `Source.url` 这类自由字段真能装进去的东西，不是理论构造。
+    """
+    pattern_text, min_len, max_len = _contract_article_key_pattern()
+    pattern = re.compile(pattern_text)
+    adversarial = [
+        f"https://{WECHAT_HOST}/s?__biz=MjM5&mid=1&idx=1",
+        f"https://{WECHAT_HOST}/s?__biz={'A' * 130}&mid=1&idx=1",
+        f"https://{WECHAT_HOST}/s/abc",
+        f"https://{WECHAT_HOST}/s/AA:BB",
+        f"https://{WECHAT_HOST}/s/a.b.c",
+        LONG_A,
+        LONG_A_TRACKING,
+        LONG_B,
+        SHORT_1,
+        SHORT_WITH_FAKE_BIZ_PARAM,
+        MALFORMED_LONG,
+        OFFSITE,
+        f"https://{WECHAT_HOST}/s",
+        "",
+        "/",
+        "not a url at all",
+    ]
+    for url in adversarial:
+        key = canonical_article_key(url)
+        assert pattern.search(key), f"契约拒收本模块产出的键：{url!r} → {key!r}"
+        assert key != "s", f"退化键回来了：{url!r}"
+        assert (min_len or 0) <= len(key) <= (max_len or 10**9), f"长度越界：{key!r}"
+
+
+def test_colon_in_biz_or_mid_cannot_forge_the_same_identity():
+    """`b:` 三段用 `:` 分隔，所以 `:` 逃进 biz/mid 时会**冒名成同一个键**——P-3 的同族。
+
+    实测旧写法：`__biz=AAAAAAAA:B&mid=C` 与 `__biz=AAAAAAAA&mid=B:C` 都吐
+    `b:AAAAAAAA:B:C:1`（解析出的三元组不同、键串相同 ⇒ 两篇文章共用一个身份）。
+    现在两支都因形状不合法降级 `h:`，而 `h:` 是归一后 URL 的哈希，两条输入必然不同键。
+    """
+    forged_a = f"https://{WECHAT_HOST}/s?__biz=AAAAAAAA:B&mid=C&idx=1"
+    forged_b = f"https://{WECHAT_HOST}/s?__biz=AAAAAAAA&mid=B:C&idx=1"
+    key_a, key_b = canonical_article_key(forged_a), canonical_article_key(forged_b)
+    assert key_a != key_b, f"两种不同输入得到同一个文章身份：{key_a}"
+    assert key_a.startswith("h:") and key_b.startswith("h:"), (key_a, key_b)
+    assert parse_wechat_url(forged_a).biz == "AAAAAAAA:B", "降级必须发生在键层，不是把解析改了"
 
 
 def test_normalize_url_drops_tracking_and_sorts_params():

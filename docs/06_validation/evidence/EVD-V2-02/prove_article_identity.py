@@ -79,12 +79,23 @@ DELIVERABLES: dict[str, tuple[str, ...]] = {
     "normalize_url 去追踪参数、排序、脏输入不折叠": ("test_normalize_url_drops_tracking_and_sorts_params",),
     "不变量⑤规范键委托唯一解析源（AST）": ("test_canonical_key_does_not_reparse_the_url",),
     "非 str 抛 TypeError 而非退化成常量键": ("test_non_string_input_raises_instead_of_a_constant_key",),
+    # ── 第二轮独立验证抓出的两个新口径（旧实现全绿，因为它没被喂过这些输入）──
+    "不变量④产出的键必被契约 ArticleKey 接受（含对抗语料）": (
+        "test_every_emitted_key_is_accepted_by_the_contract",
+    ),
+    "b: 三段的冒名面：`:` 逃进 biz/mid 不得折叠成同一身份": (
+        "test_colon_in_biz_or_mid_cannot_forge_the_same_identity",
+    ),
 }
 
 #: 白名单加 `hashlib`：S2.2（ADR-0011 §2）的 `h:` 降级分支**定义上**就是
 #: `"h:" + sha256(normalize_url(url)).hexdigest()[:32]`，而本项的判据是"无三方、无 IO"——
 #: `hashlib` 是纯计算的标准库，不加就必须靠函数体内 import 来绕开这条守卫（那是规避不是合规）。
-ALLOWED_IMPORTS = {"__future__", "dataclasses", "hashlib", "urllib.parse"}
+#: 白名单加 `re`：第二轮独立验证实测旧写法会产出契约 `ArticleKey` 拒收的键
+#: （短 biz、短 `s:` token、136 字符超 `maxLength`，以及两支冒名同键），
+#: 修复方式只能是"按契约形状验证后再采纳"，而契约本来就是正则表达的——`re` 同为纯计算标准库。
+#: 这两条都是**加理由的扩白**，不是放宽判据：`subprocess`/`socket`/`httpx`/`os` 仍在 PI-1 拒绝面内。
+ALLOWED_IMPORTS = {"__future__", "dataclasses", "hashlib", "re", "urllib.parse"}
 #: 裸名（Load 语境出现即算 IO）
 IO_NAMES = {"open", "input", "session", "requests", "httpx", "socket", "urlopen", "asyncio"}
 #: 挂在任意对象上的方法名——`s.execute()` 与 `session.execute()` 是同一个漏洞的两种写法，
@@ -540,6 +551,31 @@ MUTANTS: list[tuple[str, str, str, set[str]]] = [
         'sn=_first(query, "sn")',
         'sn=""',
         {"test_long_links_share_biz_but_differ_mid", "test_tracking_params_do_not_change_identity"},
+    ),
+    # ── 第二轮独立验证后的新增：规范键两支的形状验证与脏输入不折叠 ──
+    (
+        "b: 支的形状验证被摘掉（契约拒收 + 冒名同键一起回来）",
+        "if CANONICAL_B_KEY.fullmatch(candidate):",
+        "if True:",
+        {
+            "test_every_emitted_key_is_accepted_by_the_contract",
+            "test_colon_in_biz_or_mid_cannot_forge_the_same_identity",
+        },
+    ),
+    (
+        "s: 支的形状验证被摘掉（短 token 产出契约外键）",
+        "if CANONICAL_S_KEY.fullmatch(candidate):",
+        "if True:",
+        {"test_every_emitted_key_is_accepted_by_the_contract"},
+    ),
+    (
+        "脏输入重新折叠：无 scheme/host 也走归一（无关输入共享身份）",
+        "if not parts.scheme and not parts.netloc:",
+        "if False:",
+        {
+            "test_normalize_url_drops_tracking_and_sorts_params",
+            "test_every_input_yields_a_usable_key",
+        },
     ),
 ]
 
