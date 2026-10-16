@@ -1,6 +1,7 @@
 # STEP-03 渠道行契约归一
 
-> 基线 main@61358c3｜状态：🟡 进行中（2026-10-16 起）——**S3.1 / S3.2 / S3.3 已交付**：
+> 基线 main@61358c3｜状态：✅ Done（2026-10-17 判定；下面按时间顺序保留 🟡 进行中（2026-10-16 起）的
+> 历史行文，不回改——它们是当时真实读数）——**S3.1 / S3.2 / S3.3 已交付**：
 > 新 `tests/test_provider_contract.py`（按样本名参数化 + 样本认领守卫 + 缺 Key 显式失败），
 > 四家付费 provider 的清单行加规范键 `id`（真源 `canonical_article_key`，时间键统一 `publishTime`），
 > `_ID_KEYS` 把 `id` 排最前、`_map_row` 缺 id 不再丢整行而是兜底建键 + `id_fallback` 计数 + WARNING，
@@ -14,6 +15,11 @@
 > 不是"没测到就说覆盖到"。反证电池 `EVD-V2-02/mutate_s341.py` 从入库位置重跑：
 > **18/18 发变异都红在点名的那条用例上**（不是"想想会红"）。
 > 覆盖率是拿**真断言**换的：新增 165 + 14 个用例，skip 数一根没动（21→21），零 xfail。
+> **`@ci` 已回读成立**（run 38934866169 = success，backend `1470 passed / 6 skipped`、
+> 全仓覆盖率 85.47%、`skip 门禁 pg_unreachable=0`；本机收集 1476 与 CI 侧 1470+6 逐条对上 ⇒
+> 新用例真跑真过；`Security` 38934866184 = success；`CI-Windows` 与本卡无关）⇒ **本卡 ✅ Done**。
+> 新用例写在 +0800 主机上而 runner 是 UTC，这一点与"P-15 钉的是现状不是理想值"一起记在
+> `10-执行过程-独立执行段第三批.md` §8.5。
 > **本批另查出三条生产缺陷，只登记不顺手改**（P-15 provider 的 naive 本地时间违 `AwareDatetime`
 > 契约、P-16 TikHub detail/search 抛异常而两处 docstring 承诺降级、P-17 wellbyte 一处未防 JSON null
 > 会丢整页搜索）——三条都有"钉现状"的见证用例，修好它们必须让对应那条一起动。
@@ -26,7 +32,8 @@
 > **已回读**（run 38904912095 = success，backend `1303 passed / 6 skipped`、覆盖率 81.61%、
 > `skip 门禁 total_skipped=6 baseline=6 pg_unreachable=0` ⇒ 连库真跑），
 > `Security` run 38904912113 = success，`CI-Windows` run 38904912154 红在同点 U-23。
-> **本卡状态：S3.1–S3.3 ✅ 已确认，S3.4.1 ⚪ 未达（P-14）** ⇒ 卡头保持 🟡 直到覆盖率门过线。
+> **本卡状态：S3.1–S3.3 与 S3.4.1 均 ✅ 已确认（覆盖率门已过线，`@ci` 回读成立）** ⇒ 卡头 ✅ Done；
+> 本卡不含活体上游核实（R-1：样本形状与上游不符时以样本为准完成，核实留 STEP-08 S8.5.1）。
 > 三处口径更正：所有权表里的 `article_sources/redfox.py` **不存在**（RedFox 在
 > `app/providers/redfox/client.py`，且它的行是上游原样透传，本卡不改它的键名）。
 
