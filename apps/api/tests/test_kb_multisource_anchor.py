@@ -65,15 +65,18 @@ async def test_biz_anchor_wins_when_both_anchors_exist(db_session) -> None:  # t
     SQL 本身不保证行的顺序，所以把两条锚的次序写进判据里才有意义——
     把实现改成先查 article_key，本用例立刻红（而不是碰巧还是绿的）。
 
-    开头那句 `assert key == "s"` 是本用例的前提而不是结论：长链的幂等键退化成一个字母，
-    正是 D-01b 那条坍缩链的现场。哪天 `_article_key` 换了口径，这一行会先出声，
-    免得「优先命中 biz 源」这句话悄悄变成在测另一件事。
+    开头那句 `assert key.startswith("b:")` 是本用例的前提而不是结论：S2.2.3 之前这里是
+    `assert key == "s"`——长链幂等键退化成一个字母，正是 D-01b 那条坍缩链的现场；
+    规范键上线后前提换成"取到的是 b: 支"，两处形态各由 `test_article_identity.py` 与
+    `test_batch_ingest_key_drift.py` 守着，本行只保证**这条用例在测的那件事没变**。
+    哪天键口径又漂（比如误并到 `h:` 支），这一行会先出声，免得「优先命中 biz 源」
+    悄悄变成在测另一件事。
     """
     from test_langbot import _client  # noqa: PLC0415
     from test_p0_asset_cache import _CountingStubResolver  # noqa: PLC0415
 
     key = _article_key(LONG_A)
-    assert key == "s", f"夹具长链的 article_key 不再是末段 `s`（本用例的前提变了）：{key!r}"
+    assert key.startswith("b:"), f"长链规范键不再是 b: 支（本用例的前提变了）：{key!r}"
 
     biz_src = Source(
         type="wechat_oa", external_id=BIZ_A, name="biz 锚源", url="https://mp.weixin.qq.com/s/biz-anchored"
@@ -91,15 +94,17 @@ async def test_biz_anchor_wins_when_both_anchors_exist(db_session) -> None:  # t
 
 
 async def test_short_key_does_not_trigger_asset_reverse_lookup(db_session) -> None:  # type: ignore[no-untyped-def]
-    """R0.2.2 ①：长度 < `MIN_FRAGMENT_LEN` 的键（长链退化成的 `"s"`）**不得**走第三条资产反查。
+    """R0.2.2 ①：长度 < `MIN_FRAGMENT_LEN` 的键**不得**走第三条资产反查。
 
+    S2.2.3 之后生产路径不再产出 `"s"`（规范键恒 ≥8、`h:` 恒 34），所以这条从
+    "现网护栏"转成**回归护栏**：它显式喂一个短键，保证将来有人把闸拆掉时这里先红。
     形状刻意摆成"反查能命中"的样子：一条 external_id 既非 `s` 也非 BIZ_A 的源，
     挂一条 `external_id="s"` 的资产。若守卫被拆掉，第三条锚会用资产等值查把这条源捞出来
     ⇒ 本用例红；有守卫时三个锚全空 ⇒ 返回 None。
 
-    这条是 P-3（长链键坍缩为 `"s"`）的护栏：`"s"` 无区分能力，一旦放它走反查，
+    这条守的是 P-3（长链键曾坍缩为 `"s"`）那类形态：短键无区分能力，一旦放它走反查，
     「同号第一篇的资产」会把任意第二篇领到同一个源上——冒名从"同号"扩散到"跨源"。
-    变异反证（卡面 R0.2.2.1）：删掉 `if len(article_key) >= MIN_FRAGMENT_LEN` 的守卫 ⇒ 本用例必红。
+    变异反证（卡面 R0.2.2.1）：把 `anchor_keys` 的长度过滤拆掉 ⇒ 本用例必红。
     """
     from test_langbot import _client  # noqa: PLC0415
     from test_p0_asset_cache import _CountingStubResolver  # noqa: PLC0415

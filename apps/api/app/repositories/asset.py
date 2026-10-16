@@ -17,8 +17,9 @@ from app.models.entities import ContentAsset, KnowledgeDocument
 
 logger = structlog.get_logger(__name__)
 
-# S2.1.5：LIKE 兜底的最小片段长度。`%s%` 这类单字符片段几乎命中所有 https URL
-# （长链的 article_key 就是 URL 末段 `s`，见 kb._article_key），既错又慢。
+# S2.1.5：片段短于此长度一律不查。来历是长链的 article_key 曾退化为 URL 末段单字母
+# （`kb._article_key` 的旧口径），`%s%` 几乎命中所有 https URL，既错又慢。
+# S2.2.3 起规范键恒 ≥8（`h:` 恒 34），所以这道闸现在是**回归护栏**而非现网路径。
 MIN_FRAGMENT_LEN = 8
 
 
@@ -45,8 +46,9 @@ class AssetRepository:
 
         仅用于缓存命中/版本管理的前置查找，不改变幂等键语义（external_id 仍为主锚）。
 
-        S2.1.5：片段短于 `MIN_FRAGMENT_LEN` 一律不查——长链的 article_key 是 URL 末段 `s`
-        （见 `kb._article_key`），`%s%` 在 https URL 里近乎全表命中。此处的 `.limit(1)`
+        S2.1.5：片段短于 `MIN_FRAGMENT_LEN` 一律不查——历史上长链的 article_key 是 URL 末段
+        （`kb._article_key` 旧口径，现为规范键 ⇒ 这一层转为回归护栏），单字母片段在 https URL
+        里近乎全表命中。此处的 `.limit(1)`
         只保证不崩，返回的却是「碰巧排在最前的另一篇」：缓存命中会复用错资产，版本管理
         会比对错 hash。短到无法区分身份的片段必须显式放弃兜底并留痕，而不是静默猜一行。
         """

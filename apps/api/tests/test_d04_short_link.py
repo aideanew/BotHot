@@ -22,7 +22,12 @@ def test_short_link_key_surface_parsing() -> None:
     assert _short_link_key("https://mp.weixin.qq.com/s?__biz=Mz0&id=1") == ""
     assert _short_link_key("https://example.com/a") == ""
     # 末段 article_key 口径（与 _article_key 一致）
-    assert _article_key("https://mp.weixin.qq.com/s/FINAL-KEY").rstrip("/") == "FINAL-KEY"
+    # S2.2.3 之后的两条口径必须分清：**映射的键是裸 token，文章身份是 `s:` 前缀键**。
+    # 存量侧：迁移之前落的资产 external_id 是裸 token（旧 `_article_key` 取末段），
+    # 迁移之后同一条短链算出的是 `s:token` ⇒ 不做只读兜底就会对**已有资产**重抓一次
+    # （S2.2.4 存在的理由，也是 D-V9-01 默认值 A 划出的边界）。新建的行两侧同形，不受影响。
+    assert _short_link_key("https://mp.weixin.qq.com/s/FINAL-KEY") == "FINAL-KEY"
+    assert _article_key("https://mp.weixin.qq.com/s/FINAL-KEY") == "s:FINAL-KEY"
 
 
 async def test_short_link_map_idempotent_upsert(db_session) -> None:  # type: ignore[no-untyped-def]

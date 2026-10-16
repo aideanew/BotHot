@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +31,7 @@ from app.core.config import get_settings
 from app.core.errors import MalformedUrlError, RequestInvalidError, ResourceNotFoundError
 from app.repositories.job import JobItemRepository, JobRepository
 from app.repositories.space import SpaceRepository
+from app.services.article_identity import canonical_article_key
 
 JOB_TYPE_BATCH = "batch_ingest"
 DEFAULT_MAX_URLS = 50
@@ -42,14 +42,13 @@ _TERMINAL_STATUSES = ("SUCCEEDED", "PARTIAL_SUCCESS", "FAILED", "CANCELLED")
 
 
 def _article_key(url: str) -> str:
-    """URL → 文章幂等键（口径必须与 `kb._article_key` 一致；单源 kb.py 的 `_article_key`）。
+    """URL → 文章幂等键：**委托 ADR-0011 规范键**（与 `kb._article_key` 同一真源）。
 
-    仅用于 `job_items.external_id` 的可追溯标注——无消费方依赖此值做去重
-    （worker 只用 `item.url`；`_compute_new_manifests` 仅筛 sync_account 族），
-    故不跨模块引私有函数，漂移影响面仅限后台列表面读。
+    旧版这里是同一算法的第二份手写副本（剥 query 取末段），两份一旦走偏，
+    `job_items.external_id` 与资产/源两侧的键就会各说各话。漂移由
+    `tests/test_batch_ingest_key_drift.py` 逐样本判红（同一批 URL 两模块结果必须逐字符相等）。
     """
-    tail = re.sub(r"[?&#].*$", "", url).rstrip("/").rsplit("/", 1)[-1]
-    return tail or url
+    return canonical_article_key(url)
 
 
 def _fingerprint(urls: list[str]) -> str:

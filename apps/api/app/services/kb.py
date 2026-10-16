@@ -39,6 +39,7 @@ from app.providers.langbot.client import LangBotClient
 from app.providers.raw_store import RawStore, make_raw_store
 from app.repositories.asset import MIN_FRAGMENT_LEN, AssetRepository, DocumentRepository
 from app.repositories.space import SpaceRepository
+from app.services.article_identity import canonical_article_key
 from app.services.categorizer import categorize
 from app.services.extractor import ExtractedContent, ExtractorService
 from app.services.feed_service import on_article_indexed
@@ -240,7 +241,11 @@ class KnowledgeBaseService:
         else:
             article_key = _article_key(norm_url)
         asset_repo = AssetRepository(self._session)
-        source = await self._find_source_by_anchor(article_key, norm_url)
+        # S2.2.4 存量兼容（**只读，不改写**）：规范键迁移前，短链资产的 external_id 落的是
+        # 裸 token；迁移后同一条短链算出 `s:token`。不做这一层，已有资产会被重抓一次
+        # （付费源就是真花钱）。回填旧行属 STEP-07，见 ADR-0011 §6/§8 与裁决 D-V9-01 默认值 A。
+        legacy_key = short_key if is_short else ""
+        source = await self._find_source_by_anchor(article_key, norm_url, legacy_key=legacy_key)
 
         # AB-P004 P0②：先查后抓——同 (source,external) 有 READY 资产 → 0 微信请求，直接复用
         if source is not None:
@@ -249,6 +254,8 @@ class KnowledgeBaseService:
             # article_key 落库时，上查询失配——按「该源下 URL 含 article_key」兜底查资产
             if cached is None:
                 cached = await asset_repo.get_by_url_fragment(source.id, article_key)
+            if cached is None and legacy_key:
+                cached = await asset_repo.get_by_source_external(source.id, legacy_key)
             if cached is not None and cached.status == "READY":
                 self._cache_hits += 1
                 await asset_repo.hit(cached)
@@ -339,7 +346,9 @@ class KnowledgeBaseService:
                     await asyncio.sleep(self._RESOLVE_BACKOFF_BASE * (2**attempt))
         raise last_exc  # type: ignore[misc]
 
-    async def _find_source_by_anchor(self, article_key: str, url: str) -> Source | None:
+    async def _find_source_by_anchor(
+        self, article_key: str, url: str, legacy_key: str = ""
+    ) -> Source | None:
         """三个锚依次查既有 source：biz 参数锚 → article_key 锚 → 资产精确反查，全不中返回 None。
 
         R0（V0.7.0 回归修复）：**前两个锚并不覆盖无参短链场景**，勿再按旧注释推断"必然命中"。
@@ -348,7 +357,9 @@ class KnowledgeBaseService:
         传 `article.url`），而本函数拿到的 `article_key` 是**入参 URL**（短链 token）算出来的。
         无参短链时：`_biz_from_url(入参 URL)` 解不出 biz ⇒ 锚①空；源若按页面 biz 建（或按
         重定向后长链建）⇒ 键都不等于短链 token，锚②也空。旧 docstring 说的"必然命中"不成立。
-        第三条锚用 `ContentAsset.external_id == article_key` 精确等值 join 回 Source 补齐这条路
+        第三条锚用 `ContentAsset.external_id ∈ {article_key, legacy_key}` 精确等值 join 回 Source
+        补齐这条路（`legacy_key` 是 S2.2.4 的存量裸 token，只在入参为短链时非空；
+        资产侧的键在迁移前后分别是裸 token 与 `s:token`，两支都带上才不会对同一篇重抓），
         （资产侧的键正是按入参 URL 落的，见 `_persist_document` 的 `_article_key(url)`），
         使二次入库命中缓存而不是重复抓取——顺带恢复 `kb.py` 里依赖 source 的 stale 版本判定。
 
@@ -359,8 +370,9 @@ class KnowledgeBaseService:
         S2.1.3 委托解析层后长链也能解出 `__biz`，遗留路径由 biz 参数锚覆盖，该子串兜底已删。
         **本轮不复活它**：第三条锚是等值查，不会一个字母命中全表。
 
-        长度守卫：`article_key` 短于 `MIN_FRAGMENT_LEN` 时不跑第三条锚——`"s"` 这类键
-        无区分能力，等值查也会把 P-3 的冒名扩散成跨源冒名（STEP-02 S2.2 才是其正解）。
+        长度守卫：任何**短于 `MIN_FRAGMENT_LEN` 的键**都不跑第三条锚——`"s"` 这类键无区分能力，
+        等值查也会把 P-3 的冒名扩散成跨源冒名。S2.2.3 之后规范键恒 ≥8（`h:` 恒 34），
+        所以这一层现在防的是回归；`legacy_key`（S2.2.4 的裸 token）可能短，故逐键过闸。
         三条锚一律 `.limit(1)`：同一键若因存量脏数据有多行，取一行而不是崩。
         """
         for anchor in (a for a in (_biz_from_url(url), article_key) if a):
@@ -376,14 +388,19 @@ class KnowledgeBaseService:
             ).scalar_one_or_none()
             if row is not None:
                 return row
-        if len(article_key) >= MIN_FRAGMENT_LEN:
+        # 长度守卫：`article_key` 短于 `MIN_FRAGMENT_LEN` 时不跑第三条锚——`"s"` 这类键
+        # 无区分能力，等值查也会把 P-3 的冒名扩散成跨源冒名（S2.2.3 起规范键恒 ≥8，
+        # 所以这一层现在防的是**回归**而不是现网输入；`legacy_key` 是裸 token，可能短，
+        # 因此逐键过同一道闸，不让"兼容"变成放宽匹配面）。
+        anchor_keys = [k for k in (article_key, legacy_key) if len(k) >= MIN_FRAGMENT_LEN]
+        if anchor_keys:
             row = (
                 await self._session.execute(
                     select(Source)
                     .join(ContentAsset, ContentAsset.source_id == Source.id)
                     .where(
                         Source.type == "wechat_oa",
-                        ContentAsset.external_id == article_key,
+                        ContentAsset.external_id.in_(anchor_keys),
                         # 只认 READY 资产：缓存命中的语义是「这篇已可用」，
                         # 领回一条正文还没就绪的源会把 hitCache 判成真的（调用方据 kb.py:246
                         # 的 status 检查早退，那一步非 READY 时又会落回抓取，等于白锚一次还扩大
@@ -597,9 +614,16 @@ class KnowledgeBaseService:
 
 
 def _article_key(url: str) -> str:
-    """URL → 文章幂等键（末段；短链跳转后即稳定 id）。"""
-    tail = re.sub(r"[?&#].*$", "", url).rstrip("/").rsplit("/", 1)[-1]
-    return tail or url
+    """URL → 文章身份键：**委托 ADR-0011 规范键**（S2.2.3.2 保留函数名，避免外部 import 断裂）。
+
+    旧口径"剥 `[?&#]` 后取末段"会把微信长链坍缩成字母 `s`：同账号同号的两篇文章得到同一个键
+    （探针 P-3），而所有 https URL 都含字母 s，曾让 URL 子串兜底抛 `MultipleResultsFound`（P-4）。
+    现在键形状由 `article_identity.canonical_article_key` 单点决定（`b:` / `s:` / `h:` 三支，
+    且产出必过契约 `ArticleKey` 的形状校验）；本函数只剩一个名字，为了不改 5 个调用点与外部 import。
+    存量旧键行**不在此迁移**：短链场景由 `_ingest_url_inner` 的旧裸 token 只读兜底覆盖（S2.2.4），
+    其余由 STEP-07 的回填处理（ADR-0011 §6/§8、裁决 D-V9-01）。
+    """
+    return canonical_article_key(url)
 
 
 def _hash(text: str) -> str:

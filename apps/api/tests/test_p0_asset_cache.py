@@ -14,6 +14,7 @@ from test_langbot import _client, _lb_transport, _StubResolver  # noqa: F401  (�
 from app.models.entities import ContentAsset, KnowledgeDocument, Source
 from app.repositories.asset import AssetRepository
 from app.repositories.space import SpaceRepository
+from app.services.article_identity import canonical_article_key
 from app.services.kb import KnowledgeBaseService
 from app.services.resolver import ResolvedArticle
 
@@ -62,9 +63,8 @@ def _biz_anchor() -> str:
 
 
 def _article_key(url: str) -> str:
-    import re
-
-    return re.sub(r"[?&#].*$", "", url).rstrip("/").rsplit("/", 1)[-1] or url
+    """测试侧取键与生产同一真源（S2.3.1）；算法判定力在 test_article_identity.py。"""
+    return canonical_article_key(url)
 
 
 async def _asset(db_session, url: str) -> ContentAsset:

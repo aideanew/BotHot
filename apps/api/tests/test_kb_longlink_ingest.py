@@ -16,11 +16,12 @@ named 'structlog'`，rc=2）⇒ 下面的用例只能在有依赖的环境里真
 驱动同一组断言，并带三条反证通道（改坏必须红 / 判据必须能假 / 等价写法必须不假红）。
 
 根因（D-01b）：`kb.py` 旧实现只读 `qs.get("biz")`，而微信长链的真实参数名是 `__biz`
-（形状见 `tests/fixtures/wechat_urls.py:45`）⇒ 长链入库时 biz 恒为空串，
-`_find_source_by_anchor`（`kb.py:343`）的锚点只剩 article_key，而长链的 article_key
-又是 URL 末段 `s`（`kb.py:554-557`）⇒ 同账号所有长链坍缩到同一个锚。
-本文件证的是这条链的**上游那一环**（锚不该是空串）；坍缩之后那句 `like('%s%')` 兜底
-由 S2.1.4 处理，不在这里。
+（形状见 `tests/fixtures/wechat_urls.py` 的 `LONG_A`）⇒ 长链入库时 biz 恒为空串，
+`_find_source_by_anchor` 的锚点就只剩 article_key，而当时 `_article_key` 取的是 URL 末段
+⇒ 同账号所有长链坍缩到同一个锚。本文件证的是这条链的**上游那一环**（锚不该是空串）；
+坍缩之后那句 `like('%s%')` 兜底由 S2.1.4 处理，坍缩本身由 S2.2.3 的规范键终结
+（`test_two_distinct_long_links` 就是 P-3 的转正判据）。
+（刻意只给符号名不给行号：本仓库行号每批都漂，`kb.py:343`/`:554-557` 这类锚在两批内就失效了。）
 
 验收口径（卡面 S2.1.3「补测试」+ 本步补充，全部为本机实测行为）：
 1. `_biz_from_url(LONG_A)` 非空且等于 `BIZ_A`；
@@ -50,6 +51,52 @@ from fixtures.wechat_urls import (
 
 from app.services.article_identity import parse_wechat_url
 from app.services.kb import _biz_from_url
+
+
+async def test_two_distinct_long_links(db_session) -> None:  # type: ignore[no-untyped-def]
+    """P-3 探针转正（卡面 S2.2.3.3）：**同号两篇长链必须各自独立入库，抓取计数 = 2**。
+
+    改前的实测形态（`docs/任务规划V0.2.0/evidence/probe_longlink_collision.py`）：
+    `kb._article_key` 取 URL 末段 ⇒ 两条长链同为 `"s"`，第二篇经"资产等值 `s`"命中
+    第一篇的 READY 资产，`hitCache=True` 而正文是**另一篇**——静默错内容，比失败更坏。
+    S2.2.3 之后两支各自是 `b:{biz}:{mid}:{idx}`，因此：
+
+    - ①不同 mid 的两篇 ⇒ 两次真实抓取（`fetch_count == 2`）、两个不同 docId、第二篇不命中缓存；
+    - ②同一篇的另一种书写（追加追踪参数）⇒ **不**多抓（`fetch_count` 仍为 2）且 `hitCache` 为真。
+
+    两个方向必须同时断言：只断①，实现可以退化成"每次都抓"（缓存被拆掉也算过）；
+    只断②，实现可以退化成"按末段坍缩"（正是原缺陷）。
+    本机无 PG ⇒ 本条 skip；判定发生在 `@ci` ubuntu（D-V4-01 验收面）。
+    """
+    from test_langbot import _client  # noqa: PLC0415
+    from test_p0_asset_cache import _CountingStubResolver  # noqa: PLC0415
+
+    from app.repositories.space import SpaceRepository
+    from app.repositories.user import SqlAlchemyUserStore
+    from app.services.kb import KnowledgeBaseService
+
+    user = await SqlAlchemyUserStore(db_session).upsert_by_sub(
+        "sub-s223-p3", "s223p3@test.local", "S223-P3"
+    )
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="S223规范键空间")
+    await db_session.commit()
+
+    resolver = _CountingStubResolver()
+    svc = KnowledgeBaseService(_client(), db_session, resolver)
+
+    first = await svc.ingest_url(space.id, LONG_A)
+    assert first["hitCache"] is False, first
+    assert resolver.fetch_count == 1, resolver.fetch_count
+
+    second = await svc.ingest_url(space.id, LONG_B)
+    assert resolver.fetch_count == 2, f"同号两篇只抓了一次 ⇒ 键又坍缩了：{second!r}"
+    assert second["hitCache"] is False, f"第二篇领到了第一篇的资产：{second!r}"
+    assert second["docId"] != first["docId"], (first, second)
+
+    # 同一篇的另一种书写：不该多抓一次，也不该新建文档
+    third = await svc.ingest_url(space.id, LONG_A_TRACKING)
+    assert resolver.fetch_count == 2, f"追踪参数改变了文章身份 ⇒ 重复抓取：{third!r}"
+    assert third["hitCache"] is True, f"同篇两形态没走缓存：{third!r}"
 
 
 def test_long_link_yields_non_empty_biz() -> None:

@@ -48,8 +48,10 @@ class ContentAsset(BaseModel):
     source_id: str = Field(max_length=36, alias="sourceId", description="FK sources.id ON DELETE CASCADE")
     external_id: ArticleKey = Field(
         alias="externalId",
-        description="文章身份键。实测 ContentAsset.external_id = _article_key(url)（kb.py:432），"
-        "而 ArticleManifest.external_id 装渠道上游 id——两个键空间不相交即 P0-2/P-2 根因（ADR-0012 §1）",
+        description="文章身份键。实测 ContentAsset.external_id 取 `kb._article_key(url)`"
+        "（S2.2.3 起即 ADR-0011 规范键；此处刻意不写行号锚——本仓库行号每批都漂，"
+        "符号名才是可查的锚）；而 ArticleManifest.external_id 装渠道上游 id——"
+        "两个键空间不相交即 P0-2/P-2 根因（ADR-0012 §1）",
     )
     url: str = Field(
         default="",

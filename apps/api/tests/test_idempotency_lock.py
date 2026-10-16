@@ -34,6 +34,7 @@ from app.models.entities import (
 from app.repositories.asset import AssetRepository
 from app.repositories.space import SpaceRepository
 from app.repositories.user import SqlAlchemyUserStore
+from app.services.article_identity import canonical_article_key
 from app.services.public_library import PublicLibraryService
 from app.services.resolver import ResolvedArticle
 
@@ -128,10 +129,14 @@ class _ShortToLongResolver(_CountingStubResolver):
 
 
 def _article_key(url: str) -> str:
-    """URL → article_key（与 kb.py 归一化同口径；断言比对用）。"""
-    import re
+    """测试侧取键：**必须与生产同一真源**（S2.3.1）。
 
-    return re.sub(r"[?&#].*$", "", url).rstrip("/").rsplit("/", 1)[-1] or url
+    这里曾是自己 `re.sub` 复刻的一份末段算法——生产改口径后，本文件会拿旧键去查新写入的行，
+    表现为"测试前提变了"而不是"实现坏了"，属于最难查的那一类假失败。
+    键算法本身的判定力在 `test_article_identity.py` 与 `test_batch_ingest_key_drift.py`，
+    不在这里重复一份实现。
+    """
+    return canonical_article_key(url)
 
 
 async def _seeder(db_session, name: str):

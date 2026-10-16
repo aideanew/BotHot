@@ -39,7 +39,9 @@ __all__ = [
 ]
 
 #: 公众号 biz（`__biz` 参数值）。同一账号下 LONG_A/LONG_B 只差 `mid` ⇒ D-01 的坍缩
-#: 恰好发生在这对上：`_article_key` 令两者同为 `"s"`（`app/services/kb.py:554-557`）。
+#: 恰好发生在这对上：`kb._article_key` 的**旧口径**令两者同为 `"s"`（S2.2.3 之前）；
+#: 规范键上线后两支各自独立，退化形态由 `test_article_identity.py` 与
+#: `test_batch_ingest_key_drift.py` 钉住不再回归。
 BIZ_A = "MjM5MjgwNTQ1MQ=="
 
 LONG_A = f"https://mp.weixin.qq.com/s?__biz={BIZ_A}&mid=2650000001&idx=1&sn=aaaa1111"

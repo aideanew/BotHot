@@ -32,7 +32,7 @@
           "type": "string"
         },
         "externalId": {
-          "description": "文章身份键。实测 ContentAsset.external_id = _article_key(url)（kb.py:432），而 ArticleManifest.external_id 装渠道上游 id——两个键空间不相交即 P0-2/P-2 根因（ADR-0012 §1）",
+          "description": "文章身份键。实测 ContentAsset.external_id 取 `kb._article_key(url)`（S2.2.3 起即 ADR-0011 规范键；此处刻意不写行号锚——本仓库行号每批都漂，符号名才是可查的锚）；而 ArticleManifest.external_id 装渠道上游 id——两个键空间不相交即 P0-2/P-2 根因（ADR-0012 §1）",
           "maxLength": 128,
           "minLength": 8,
           "pattern": "^(?:b:[A-Za-z0-9+/=_-]{8,64}:[0-9]{1,12}:[0-9]{1,2}|s:[A-Za-z0-9_-]{8,64}|h:[0-9a-f]{32})$",
