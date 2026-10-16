@@ -20,6 +20,9 @@
 > `_save_short_link` 先查后插而无 savepoint ⇒ 两个并发首抓都查空、后发者撞 `uq_shortlink_key`
 > 冒成 500。已按 `_ensure_source` 的 T2.7 兜底同形修掉，加 barrier 钉死交错的连库用例
 > 与本机确定性证据件 `EVD-V2-02/prove_shortlink_race.py`（`--self-test` PASS，摘 savepoint 必红）。
+> **`@ci` 已回读成立**：`d2f536c` run 38918538114 与 `8cc7dea` run 38920557247 的 `CI` 均 success
+> （后者 backend `1305 passed / 6 skipped`、skip 门禁 `pg_unreachable=0` ⇒ 两条新连库用例真跑），
+> 读数与反面写在 `10-执行过程-独立执行段第三批.md` §7.6。
 > 教训写在 `10-执行过程-独立执行段第三批.md` §7.2：恒真这件事我上一批**读到过却没走完**，
 > 只当成 ADR 前提失效记录，没推出"每个短链首抓都落一行 ⇒ 并发量变常态"。
 > **这条读数不可复核**（记录里没留文件清单，现读 grep 只得到 11 个文件）——按纪律标注为过期，
