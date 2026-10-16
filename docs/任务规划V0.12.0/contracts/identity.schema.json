@@ -7,7 +7,8 @@
   "x-not-in-single-source": {
     "x-permission-matrix": "端点 × 角色的授权矩阵不是字段形状，Pydantic 无对应表达；真源在 api/deps.py 的 require_roles 与各端点的角色参数。治理面由 S1.4.3 的 IDOR 用例生成器逐端点核对，而不是抄一份第二表进来。",
     "x-idor-checklist": "越权清单是「哪些端点必须被生成用例」的清单，不是形状。",
-    "x-never-persisted": "balance/level/credits 永不落库属持久化纪律，由 grep 型守卫与评审承担。"
+    "x-never-persisted": "balance/level/credits 永不落库属持久化纪律，由 grep 型守卫与评审承担。",
+    "IsAdminEcho": "/me 的回显位。它带的两条是 x-authoritative=false 与「永不参与授权」——那是行为约束，Pydantic 表达不了，也不该为它造一个无使用处的模型（造出来就是第二个假契约面）。责任在 services/roles.py 与前端；本条由 alias-inlining 登记点名接手。"
   },
   "definitions": {
     "Sub": {

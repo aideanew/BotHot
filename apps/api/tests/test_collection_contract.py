@@ -6,7 +6,9 @@
 
 三条纪律，每条都有对应的反证测试，不是口号：
 1. **归一不免费** —— 比对器每用一次归一，都必须有对应 kind 的登记；
-   反过来登记表里每条 `rule` 也必须真被消费（被比对器用到，或被本文件某个断言兑现）。
+   反过来登记表里每条 `rule` 也必须真被消费。第五轮验证把"消费"收窄成两档：
+   **被比对器当归一用到**，或**由本文件某个具名断言兑现**——
+   "它解释过一处差异"不再算消费，因为一条专门用来遮差异的登记会自己给自己发消费者。
    双向核对见 `test_registry_rules_are_all_consumed`。
    第三轮独立验证就是拿这个打的：`x-not`、"另设 dump 形状检查"、`strictness` 三条当时是
    **只有承诺、没有实现者**的装饰条目。
@@ -14,8 +16,8 @@
    第一版只查稿侧，所以往生成物塞 `minItems` / `const` 能静默溜过去。
 3. **pattern 比文本推导，不只比语料** —— 稿的 `oneOf` 三支去掉 `^`/`$` 折成
    `^(?:A|B|C)$` 后必须与生成物 pattern **逐字符相等**。
-   11 条语料会被 `{32}`→`{31,32}`、字符类去掉 `-`、`{1,12}`→`{1,13}` 绕过：
-   量词与字符类是正则语义，有限样本罩不住。
+   有限语料会被 `{32}`→`{31,32}`、字符类去掉 `-`、`{1,12}`→`{1,13}` 绕过：
+   量词与字符类是正则语义，样本再多也罩不住（`_PATTERN_CORPUS` 只是第二层）。
 
 `jsonschema` / `hypothesis` 都不在依赖里，也**不装**：比对器自己实现稿实际用到的关键词子集。
 不起 TestClient（U-23 的挂起面就在那）、不连库、不联网。
@@ -70,6 +72,7 @@ DOMAINS: dict[str, tuple[Path, Path, tuple[Divergence, ...]]] = {
 }
 
 # 比对器**实现了**的校验关键词。两侧任一出现别的关键词 ⇒ 红（宁可吵，不可静默少比）。
+# `default` 从"剥离表"移进来了（第五轮验证 I10/I10b/X3：两侧随便改 default 都读出 0 条差异）。
 SUPPORTED_VALIDATING_KEYWORDS = frozenset(
     {
         "type",
@@ -89,18 +92,17 @@ SUPPORTED_VALIDATING_KEYWORDS = frozenset(
         "$ref",
         "oneOf",
         "anyOf",
+        "default",
     }
 )
-# 人读面/默认值关键词：允许存在，但必须由登记表的 rule 解释
+# 人读面关键词：允许存在，但必须由登记表的 rule 解释
 STRIPPED_KEYWORDS_TO_RULE = {
     "title": "strip-title",
     "description": "strip-description",
-    "default": "dump-materializes-defaults",
 }
-# 这些键不参与"未映射关键词"判定（结构性或文档性，已由别处处理）
-_NON_CONSTRAINT_KEYS = frozenset(
-    {"$defs", "definitions", "$schema", "$id", "$ref", "title", "description", "default"}
-)
+# 这些键不参与"未映射关键词"判定（结构性或文档性，已由别处处理）。
+# `default` 以前在这里——第五轮验证证明那正是"两侧随便改默认值都不响"的根因，已移进校验面。
+_NON_CONSTRAINT_KEYS = frozenset({"$defs", "definitions", "$schema", "$id", "$ref", "title", "description"})
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -269,6 +271,7 @@ def _canon(node: Any) -> dict[str, Any]:
     facts: dict[str, Any] = {}
     types: list[str] = []
     nullable = False
+    merged_single_anyof = False
     if isinstance(node.get("type"), list):
         types = [t for t in node["type"] if t != "null"]
         nullable = "null" in node["type"]
@@ -283,14 +286,19 @@ def _canon(node: Any) -> dict[str, Any]:
             types = sub.pop("types", [])
             nullable = nullable or bool(sub.pop("nullable", False))
             facts.update(sub)
+            merged_single_anyof = True
     branches = node.get("oneOf") or node.get("anyOf") or []
     all_pattern_branches = bool(branches) and all(
         isinstance(b, dict) and set(b) <= {"pattern", "title"} for b in branches
     )
-    if branches and not all_pattern_branches and "anyOf" not in node:
+    if branches and not all_pattern_branches and not merged_single_anyof:
         # oneOf/anyOf 的分支**不是纯 pattern 包装**时，它是真约束（const/minimum/type 分支…）。
         # 第一版只把分支里的 pattern 折走、其余静默丢弃 ⇒ 第四轮验证塞一个
         # `oneOf: [{"const": 0}]` 进去，门禁 0 条差异。
+        # 第五轮验证又抓到两个洞：条件里写的 `"anyOf" not in node` 让**两支及以上**的 anyOf
+        # 整块消失（稿 `[{"const":0},{"const":1}]` vs 生成物 `[{"const":0},{"const":2}]` 读 0 条），
+        # 而"合并单支"那种可空写法（nullable-form 归一）必须继续合并、不能再比分支。
+        # 所以判据换成"有没有被当可空合并掉"，而不是"是不是 anyOf"。
         facts["branches"] = sorted(json.dumps(_canon(b), sort_keys=True, ensure_ascii=False) for b in branches)
     pf = _pattern_fact(node)
     if pf:
@@ -305,6 +313,7 @@ def _canon(node: Any) -> dict[str, Any]:
         "additionalProperties",
         "const",
         "minItems",
+        "default",
     ):
         if key in node:
             facts[key] = node[key]
@@ -312,7 +321,10 @@ def _canon(node: Any) -> dict[str, Any]:
         facts["required"] = sorted(node["required"])  # required 是集合，不比顺序
         _note_rule("required-order")
     if "items" in node:
-        facts["items"] = _canon(node["items"])
+        # 数组形式的 items（tuple 校验）第一版被 `_canon(list)` 折成空事实 ⇒ 两支各写
+        # maxLength 5 / 9 读出来是 0 条差异（第五轮验证 I9/I9b）。逐位比，不比顺序之外的东西。
+        items = node["items"]
+        facts["items"] = [_canon(x) for x in items] if isinstance(items, list) else _canon(items)
     if "properties" in node:
         facts["properties"] = {k: _canon(v) for k, v in node["properties"].items()}
     unmapped = sorted(
@@ -345,32 +357,100 @@ _NORMALIZATION_TO_KIND = {
     "ref-inlining": "structural",
     "required-order": "structural",
     "alias-inlining": "structural",
+    "not-a-shape": "structural",
     "definitions-vs-refs-dialect": "structural",
 }
+
+# 登记表 `kind` 的合法取值（`app/contracts/__init__.py` 的 Divergence 文档注释里就这五种）。
+# 第五轮验证点名"kind 从来没被校验过"：写个 `kind="magic"` 等于给这条登记凭空造第六种放行能力。
+DIVERGENCE_KINDS = frozenset({"structural", "tightening", "serialization", "strictness", "documentation"})
+
+# 一个 def 只要含这些关键词之一，它就在**声明约束**，不许被"它不是形状"的理由退出比对。
+_SHAPE_BEARING_KEYWORDS = frozenset(
+    {"properties", "required", "enum", "const", "pattern", "items", "anyOf", "oneOf", "allOf", "additionalProperties"}
+)
+
+
+def _not_a_shape_names(frozen: dict[str, Any]) -> set[str]:
+    """稿子自己声明"这些条目不在唯一源（Python 模型）里"的 def 名集合。
+
+    读的是稿根 `x-not-in-single-source` 的键，**只取确实是 def 的那些**
+    （identity 用它列根层治理注释，events 用它列三个注释性 def——同名不同层，各管各的）。
+    被点名的 def 退出 `_walk` 与逐 def 比对，代价由 `test_not_a_shape_claims_are_narrow` 付：
+    它必须真的不含任何形状关键词、必须不在生成物里、必须有 structural 登记点名接手。
+    """
+    mark = frozen.get("x-not-in-single-source") or {}
+    if not isinstance(mark, dict):
+        return set()
+    return {str(k) for k in mark if k in _defs_of(frozen)}
+
+
+def _default_explainer(divergences: tuple[Divergence, ...], def_name: str, prop: str) -> Divergence | None:
+    """`default` 差异**只接受一个方向、且必须点名到具体属性**。
+
+    - 方向：稿里没写、模型物化出来了（serialization 类登记）才算合法；
+      反向（稿有 default 而生成物没有）与"两侧都有但不同"都是硬差异——
+      否则"把稿里声明的默认改掉"就变成一件登记一下就合法的事。
+    - 点名：登记的 `field` 必须列出这个属性名。第五轮验证的第二类洞正在这：
+      只按 def 放行的话，把 `pages` 的默认从 0 改成 7 也是"稿没写 ⇒ 模型物化"，
+      照样溜过去。现在没列名的属性一旦物化出默认值就红，
+      于是"哪些属性有物化默认值"这件事变成登记表里一份**必须维护的清单**。
+    """
+    for d in divergences:
+        if d.kind != "serialization":
+            continue
+        if d.ref.strip() != def_name and def_name not in _ref_tokens(d.ref):
+            continue
+        if prop in _field_tokens(d.field):
+            return d
+    return None
+
+
+def _referenced_by(node: Any, name: str) -> bool:
+    """稿侧某个**已收编** def 里是否真的 `$ref` 指向 name（别名内联的证据）。"""
+    if isinstance(node, dict):
+        ref = node.get("$ref")
+        if isinstance(ref, str) and ref.rsplit("/", 1)[-1] == name:
+            return True
+        return any(_referenced_by(v, name) for v in node.values())
+    if isinstance(node, list):
+        return any(_referenced_by(x, name) for x in node)
+    return False
+
+
+
+def _ref_tokens(ref: str) -> set[str]:
+    return {x.strip() for x in ref.replace("（", " ").replace("）", " ").replace("/", " ").split() if x.strip()}
+
+
+def _field_tokens(field: str) -> set[str]:
+    return {x.strip() for x in field.replace(",", " ").split() if x.strip()}
 
 
 def _explains(entry: Divergence, def_name: str, path: str) -> bool:
     """这条登记能否解释这个位置的差异。
 
-    收紧过的三条规则，缺一条就会退化成橡皮章：
+    收紧过的四条规则，缺一条就会退化成橡皮章：
     - `path == ""`（整个 def 在生成物里缺席）只接受 **structural 且 ref 点名叫到该 def** 的登记；
-    - `field == "*"`（放行整个 def 的所有差异）只接受 **ref 就是该 def 名** 的登记。
-      第一版这里写的是"`ref` 以 `*（` 开头也算命中"，而登记表里恰好有
-      `*（所有可空字段）` / `*（本域全部 def）` 这种条目，两者一撞 = **任何差异都有人解释**，
-      比对当场变成常亮绿灯；
-    - 其余情况必须叶子字段名对得上。
+    - `field == "*"` **在任何非空 path 上一律不解释**（第五轮验证点名：`ref="WorkListRow"` +
+      `field="*"` + `kind="structural"` 能把该 def 的 five 类真实漂移一次性吞掉，
+      还顺手把它自己的 rule 洗进 `_USED_EXPLAINERS` 让"必须有消费者"那条也变绿。
+      整片放行没有任何语义价值——真要放行一片，就点名到每个具体字段，写不出来就说明它不该放行）；
+    - 登记可以把 `field` 写成**完整叶子路径**（`properties.responseData.types`），
+      这是比"字段名"更窄的一档，用于"只解释这一个位置这一件事"；
+    - 其余情况必须叶子字段名对得上，且 def 被点名。
     """
-    tokens = {x.strip() for x in entry.ref.replace("（", " ").replace("）", " ").replace("/", " ").split()}
+    tokens = _ref_tokens(entry.ref)
     if path == "":
         return entry.kind == "structural" and def_name in tokens
     if entry.field.strip() == "*":
-        # 只有 structural（等价写法）允许整片放行；tightening/serialization/strictness/
-        # documentation **必须点名到具体 field**。否则一条 "*"+strictness 的登记就能吞掉
-        # 该 def 里任何数值改动——门禁会重新变成橡皮章（这次是被人"好心"注册的）。
-        return entry.ref.strip() == def_name and entry.kind == "structural"
-    fields = {x.strip() for x in entry.field.replace(",", " ").split() if x.strip()}
+        return False
+    fields = _field_tokens(entry.field)
+    scoped = entry.ref.strip() == def_name or def_name in tokens
+    if path in fields:
+        return scoped
     leaf = path.rsplit(".", 1)[-1].split(":", 1)[0] if path else ""
-    return (leaf in fields or def_name in fields) and (entry.ref.strip() == def_name or def_name in tokens)
+    return (leaf in fields or def_name in fields) and scoped
 
 
 def compare_defs(domain: str = "collection") -> tuple[list[str], set[str]]:
@@ -387,11 +467,14 @@ def compare_defs(domain: str = "collection") -> tuple[list[str], set[str]]:
     frozen = load_cached(frozen_path)
     generated = load_cached(generated_path)
     fdefs, gdefs = _defs_of(frozen), _defs_of(generated)
+    excluded = _not_a_shape_names(frozen)
     if "definitions" in frozen:
         _note_rule("definitions-vs-refs-dialect")  # 只有稿真用了 draft-07 方言才记账
 
     problems: list[str] = []
     for name, node in fdefs.items():
+        if name in excluded:
+            continue  # 稿声明"这不是形状" ⇒ 不按 schema 要求它可理解，但由 narrow 测试反向核验
         _walk(node, f"{domain}.稿.{name}", fdefs, problems, frozenset({name}))
     for name, node in gdefs.items():
         _walk(node, f"{domain}.生成.{name}", gdefs, problems, frozenset({name}))
@@ -416,9 +499,21 @@ def compare_defs(domain: str = "collection") -> tuple[list[str], set[str]]:
 
     diffs: list[str] = []
     for name in sorted(set(fdefs) | set(gdefs)):
+        if name in excluded:
+            hit = next((d for d in divergences if d.kind == "structural" and _explains(d, name, "")), None)
+            if hit is None:
+                diffs.append(f"{name}: 稿声明它不在唯一源里，但登记表没有 structural 条目点名叫它")
+            elif name in gdefs:
+                diffs.append(f"{name}: 稿声明它不是形状，生成物里却有这个 def（标记已过期，二选一）")
+            else:
+                _note_rule(hit.rule if hit.rule in _NORMALIZATION_TO_KIND else "not-a-shape")
+            continue
         if name not in gdefs:
-            if any(d.kind == "structural" and _explains(d, name, "") for d in divergences):
-                _note_rule("alias-inlining")
+            hit = next((d for d in divergences if d.kind == "structural" and _explains(d, name, "")), None)
+            if hit is not None:
+                # 缺席原因写进登记：别名内联（约束在使用处现形）用 alias-inlining 记账，
+                # 别的（注释性 def）用它自己的 rule——不再一律写成"别名内联"那种半真话。
+                _note_rule(hit.rule if hit.rule in _NORMALIZATION_TO_KIND else "alias-inlining")
                 continue
             diffs.append(f"{name}: 生成物缺这个 def（且没有能解释它的 structural 登记）")
             continue
@@ -434,6 +529,17 @@ def compare_defs(domain: str = "collection") -> tuple[list[str], set[str]]:
         if a != b:
             for path, fa, fb in _flat_diff(a, b, name):
                 tail = path[len(name) + 1 :] if path.startswith(f"{name}.") else path
+                if tail == "default" or tail.endswith(".default"):
+                    prop = tail.rsplit(".", 2)[-2] if "." in tail else tail
+                    dhit = _default_explainer(divergences, name, prop)
+                    if fa is MISSING and fb is not MISSING and dhit is not None:
+                        _note_explainer(dhit.rule)
+                        continue
+                    diffs.append(
+                        f"{name}: {tail} 稿={fa} 生成={fb}（default 只放行「稿没写、模型物化，"
+                        "且该属性被 serialization 登记点名」这一个方向）"
+                    )
+                    continue
                 hit = next((d for d in divergences if _explains(d, name, tail)), None)
                 if hit is not None:
                     _note_explainer(hit.rule)
@@ -473,14 +579,29 @@ def _extra_x_keys(draft_node: Any, gen_node: Any, path: str) -> list[str]:
     return out
 
 
+class _Missing:
+    """"这一侧根本没有这个键"的哨兵。"""
+
+    def __repr__(self) -> str:
+        return "（无此键）"
+
+
+MISSING = _Missing()
+
+
 def _flat_diff(a: Any, b: Any, path: str) -> list[tuple[str, Any, Any]]:
+    """叶子级差异。缺键用 `MISSING` 哨兵而**不是 None**：
+    `"default": null` 是合法的 JSON Schema，用 None 当"没有这个键"的记号会让
+    「稿里没写 default、模型物化出一个 null 默认值」读起来像"两侧都是 None"，
+    于是方向判据（只放行"稿没写 ⇒ 模型物化"）失效，比对器把一批真差异报成硬差异。
+    """
     out: list[tuple[str, Any, Any]] = []
     if isinstance(a, dict) and isinstance(b, dict):
         for key in sorted(set(a) | set(b)):
             if key not in a:
-                out.append((f"{path}.{key}", None, b[key]))
+                out.append((f"{path}.{key}", MISSING, b[key]))
             elif key not in b:
-                out.append((f"{path}.{key}", a[key], None))
+                out.append((f"{path}.{key}", a[key], MISSING))
             else:
                 out.extend(_flat_diff(a[key], b[key], f"{path}.{key}"))
     elif a != b:
@@ -522,8 +643,11 @@ def test_neither_side_uses_a_keyword_the_comparator_does_not_implement(domain: s
     """两侧都查未知关键词：漏一侧 = 那一侧可以随便加约束而门禁不响。"""
     doc = load_cached(path)
     defs = _defs_of(doc)
+    excluded = _not_a_shape_names(doc) if side == "稿" else set()
     problems: list[str] = []
     for name, node in defs.items():
+        if name in excluded:
+            continue
         _walk(node, f"{domain}.{side}.{name}", defs, problems, frozenset({name}))
     assert not problems, "；".join(problems)
 
@@ -571,23 +695,39 @@ RULE_CONSUMERS: dict[str, str] = {
     "identity-extra-forbid": "test_session_claims_rejects_unknown_claim",
     "role-rank-anchor": "test_role_values_match_role_rank",
     "identity-x-annotations": "test_identity_annotations_have_owners",
+    "generated-provenance-keys": "test_artifact_provenance_keys_are_declared",
+}
+
+# 稿里有、生成物里**没有**、又没被任何已收编 def 引用的约束型条目 ⇒ 必须点名一个见证测试。
+# 这类条目过去只靠一句"别名会被内联到使用处"过关，而 identity 的 `UserId` 根本没有使用处
+# （第五轮验证抓到）：约束在产物里彻底不存在，登记表的解释却是假的。
+ALIAS_WITNESSES: dict[str, dict[str, str]] = {
+    "identity": {"UserId": "test_user_id_pattern_witnesses"},
 }
 
 
 def test_registry_rules_are_all_consumed() -> None:
-    """反向：每条登记的 rule 都必须真有人消费——被比对器用到，或有断言替它兑现。
+    """反向：每条登记的 rule 都必须真有人消费——**被比对器当归一用到**，或有断言替它兑现。
 
     没有这条，登记表就会长"只有承诺没有实现者"的条目（第三轮验证抓到过三条）。
+
+    第五轮验证把"解释过一次差异"从消费里剔了出去：`compare_defs` 命中某条登记时会
+    `_note_explainer(hit.rule)`，于是**一条专门用来遮差异的登记会自己给自己发消费者**
+    （验证者演示：塞 `ref="WorkListRow", field="*", kind="structural"` 那条，五类真漂移
+    全被吞，同时它把本测试也刷绿）。归一（`_USED_RULES`）是比对器代码里真在跑的等价处理，
+    算消费；解释（`_USED_EXPLAINERS`）只是"某处差异被放行了"，不算——放行条目必须另有人钉。
     """
     module = sys.modules[__name__]
     for domain, (_f, _g, divergences) in DOMAINS.items():
         _diffs, used_norms = compare_defs(domain)
-        used = set(used_norms) | set(_USED_EXPLAINERS)
         unclaimed: list[str] = []
         for d in divergences:
             fn_name = RULE_CONSUMERS.get(d.rule)
-            if d.rule not in used and fn_name is None:
-                unclaimed.append(f"{d.rule}（{d.ref} / {d.field}）既没被比对器用到，也没登记消费者")
+            if d.rule not in used_norms and fn_name is None:
+                unclaimed.append(
+                    f"{d.rule}（{d.ref} / {d.field}）既没被比对器当归一用到，也没登记消费者"
+                    f"（它解释过 {len(_USED_EXPLAINERS & {d.rule})} 处差异，但那不算兑现承诺）"
+                )
                 continue
             if fn_name is None:
                 continue
@@ -599,6 +739,68 @@ def test_registry_rules_are_all_consumed() -> None:
             # 这种条目的消费者调用，等于"归一被用了就不用再验它说的事"（第四轮验证点名）。
             fn()
         assert not unclaimed, f"{domain} 登记表里有 dead claim：\n  " + "\n  ".join(unclaimed)
+
+
+def test_registry_kinds_are_the_documented_five() -> None:
+    """`kind` 从来没人校验过（第五轮验证点名）：写错一种 = 凭空多第六种放行能力。
+
+    `_explains` 只认 structural、`_default_explainer` 只认 serialization、
+    `_NORMALIZATION_TO_KIND` 只查这五种里的若干种——但登记表里出现 `kind="magic"`
+    不会有任何人响，那条条目就只是一段自由文本。
+    """
+    for domain, (_f, _g, divergences) in DOMAINS.items():
+        bad = [f"{d.rule}: kind={d.kind!r}" for d in divergences if d.kind not in DIVERGENCE_KINDS]
+        assert not bad, f"{domain} 登记表里有非法 kind：\n  " + "\n  ".join(bad)
+
+
+def test_absent_draft_defs_are_accounted_for() -> None:
+    """稿里有、生成物里没有的 def 只有三种正当去向，且**逐条验**，不是一句"别名内联"包打天下。
+
+    第五轮验证打脸的那条就在 (c)：identity 的 `UserId` 带着 UUID pattern，却没有任何模型引用它
+    ⇒ 约束在产物里彻底不存在，而登记表写的是"Sub/UserId 的约束被内联进使用处"——那是假的。
+    现在 (c) 必须点名一个可执行的见证测试，本条会真的调用它。
+    """
+    module = sys.modules[__name__]
+    for domain, (frozen_path, generated_path, _div) in DOMAINS.items():
+        fdefs, gdefs = _defs_of(load_cached(frozen_path)), _defs_of(load_cached(generated_path))
+        absorbed = set(fdefs) & set(gdefs)
+        witnesses = ALIAS_WITNESSES.get(domain, {})
+        unaccounted: list[str] = []
+        for name in sorted(set(fdefs) - set(gdefs)):
+            if name in _not_a_shape_names(load_cached(frozen_path)):
+                continue
+            if any(_referenced_by(fdefs[k], name) for k in absorbed):
+                continue
+            fn_name = witnesses.get(name)
+            if fn_name is None:
+                unaccounted.append(f"{name}: 既不是「稿声明非形状」、也没有已收编 def 引用它，还没点名见证测试")
+                continue
+            fn = getattr(module, fn_name, None)
+            if fn is None:
+                unaccounted.append(f"{name}: 见证测试 {fn_name} 不存在")
+                continue
+            fn()
+        assert not unaccounted, f"{domain} 有消失的 def 无人负责：\n  " + "\n  ".join(unaccounted)
+
+
+def test_not_a_shape_claims_are_narrow() -> None:
+    """"它不是形状"这句话必须**又窄又有人接手**，否则就是关掉一整块门禁的许可证。
+
+    三条都是硬的：①被点名的 def 确实不含形状关键词（含就不许退出）；
+    ②它确实不在生成物里（在 ⇒ 标记过期）；③有 structural 登记点名叫它（注释也要有责任人）。
+    """
+    for domain, (frozen_path, generated_path, divergences) in DOMAINS.items():
+        frozen = load_cached(frozen_path)
+        fdefs, gdefs = _defs_of(frozen), _defs_of(load_cached(generated_path))
+        mark = frozen.get("x-not-in-single-source") or {}
+        for name in sorted(_not_a_shape_names(frozen)):
+            body = fdefs[name]
+            shape_keys = sorted(set(body) & _SHAPE_BEARING_KEYWORDS) if isinstance(body, dict) else []
+            assert not shape_keys, f"{domain}/{name}: 含形状关键词 {shape_keys} ⇒ 它是形状，不许声明「不是形状」"
+            assert name not in gdefs, f"{domain}/{name}: 稿说不是形状，生成物却有这个 def"
+            assert mark[name].strip(), f"{domain}/{name}: 退出理由写空"
+            hit = next((d for d in divergences if d.kind == "structural" and _explains(d, name, "")), None)
+            assert hit is not None, f"{domain}/{name}: 没有 structural 登记点名接手注释"
 
 
 def test_every_x_keyword_on_an_absorbed_def_is_claimed() -> None:
@@ -734,10 +936,13 @@ def _compare_with_mutated_generated(mutate: Any, domain: str = "collection") -> 
     ],
 )
 def test_comparator_bites_on_each_drift_class(label: str, mutate: Any) -> None:
-    """十一类真实漂移，每类都必须被抓。
+    """每一类真实漂移一条参数化反证，**类数不写在文档字符串里**。
 
     这组直接来自第三轮独立验证——它用这些方式击败过第一版比对器。
     钉成测试的意思是：**下一次谁把比对器改坏，CI 会替那位验证者再问一遍。**
+
+    第一版这里写着"十一类"，加到十五条后没人回头改数字（第五轮验证抓到）：
+    写死的读数会在下一次改动时变成假话，而假话比空话更有害。条数由 pytest 自己报。
     """
     diffs = _compare_with_mutated_generated(mutate)
     assert diffs, f"比对器被绕过：注入「{label}」仍然 0 条差异"
@@ -791,6 +996,152 @@ def test_comparator_bites_when_generated_loses_a_description() -> None:
         doc["$defs"]["ChannelName"].pop("description", None)
 
     assert _compare_with_mutated_generated(mutate), "生成物丢说明读出 0 条差异"
+
+
+# 第五轮独立验证（读 `git show 983a356`）拿这三类击败过比对器，逐类钉成反证。
+@pytest.mark.parametrize(
+    "label,side,mutate",
+    [
+        (
+            "default：生成物把空串默认值改成别的字符串",
+            "生成物",
+            lambda g: g["$defs"]["ManifestSyncReport"]["properties"]["pages"].__setitem__("default", 7),
+        ),
+        (
+            "default：稿声明一个模型没有的默认值",
+            "稿",
+            lambda d: d["$defs"]["ManifestStatus"].__setitem__("default", "DISCOVERED"),
+        ),
+        (
+            "default：稿把模型物化出来的默认值改掉（两侧都有但不同）",
+            "稿",
+            lambda d: d["$defs"]["WorkListRow"]["properties"]["digest"].__setitem__("default", "not-empty"),
+        ),
+        (
+            "tuple items：两侧都写数组形式而第 0 位约束不同",
+            "both",
+            None,  # 需要同时改两侧，单独写不了 lambda ⇒ 见下面的具名函数
+        ),
+        (
+            "多支 anyOf：两支都不是 pattern 包装",
+            "both",
+            None,  # 同上
+        ),
+        (
+            "kind 写错 = 凭空第六种放行能力",
+            "registry",
+            None,  # 登记表不在 JSON 文件里，改由具名测试直接构造
+        ),
+    ],
+    ids=lambda v: str(v),
+)
+def test_comparator_bites_on_fifth_round_blind_spots(label: str, side: str, mutate: Any) -> None:
+    """三类"两侧都改 ⇒ 第一版读 0 条差异"的注入必须各自变红。
+
+    `side="both"` 的两类无法用单侧注入器表达（第一版正是因为只测单侧才漏掉它们），
+    所以这里走 `_compare_with_both_sides_mutated()`；`side="registry"` 那类
+    是直接构造一条恶意登记喂给 `compare_defs`，验证 kind 值域那条测试真的在管。
+    """
+    if side == "生成物":
+        assert _compare_with_mutated_generated(mutate), f"注入「{label}」仍然 0 条差异"
+        return
+    if side == "稿":
+        assert _compare_with_mutated_draft(mutate), f"注入「{label}」仍然 0 条差异"
+        return
+    if side == "both":
+        fn = _BOTH_SIDE_PROOFS[label]
+        assert fn(), f"注入「{label}」仍然 0 条差异"
+        return
+    assert _malformed_kind_entry_is_rejected(), "kind 值域核对没咬住非法 kind"
+
+
+def _mutate_tuple_items(doc_a: dict[str, Any], doc_b: dict[str, Any]) -> None:
+    """稿侧 items 写成 tuple 形式 `[{"maxLength":5}]`、生成物侧 `[{"maxLength":9}]`。
+
+    第一版 `_canon(node["items"])` 对一个 **list** 调用自己 ⇒ 走到
+    `node if isinstance(node, dict) else {}` 折成空事实，两侧都空 = 没差异。
+    """
+    for doc, ml in ((doc_a, 5), (doc_b, 9)):
+        doc["$defs"]["WorkListPage"]["properties"]["rows"]["items"] = [{"maxLength": ml}]
+
+
+def _mutate_multi_anyof(doc_a: dict[str, Any], doc_b: dict[str, Any]) -> None:
+    """两支及以上的 anyOf（都不是纯 pattern 包装）——第一版条件 `"anyOf" not in node` 整块丢弃。"""
+    doc_a["$defs"]["ManifestSyncReport"]["properties"]["pages"]["anyOf"] = [{"const": 0}, {"const": 1}]
+    doc_b["$defs"]["ManifestSyncReport"]["properties"]["pages"]["anyOf"] = [{"const": 0}, {"const": 2}]
+
+
+_BOTH_SIDE_PROOFS: dict[str, Any] = {
+    "tuple items：两侧都写数组形式而第 0 位约束不同": lambda: _compare_with_both_sides_mutated(_mutate_tuple_items),
+    "多支 anyOf：两支都不是 pattern 包装": lambda: _compare_with_both_sides_mutated(_mutate_multi_anyof),
+}
+
+
+def _compare_with_both_sides_mutated(mutate: Any) -> list[str]:
+    """同时改两侧再跑比对——单侧注入器**结构上**测不到"两侧都改但改得不一样"这一类。"""
+    frozen_path, generated_path = DOMAINS["collection"][0], DOMAINS["collection"][1]
+    f_original, g_original = load_cached(frozen_path), load_cached(generated_path)
+    f_mut, g_mut = copy.deepcopy(f_original), copy.deepcopy(g_original)
+    mutate(f_mut, g_mut)
+    _LOADED[frozen_path], _LOADED[generated_path] = f_mut, g_mut
+    try:
+        return compare_defs("collection")[0]
+    finally:
+        _LOADED[frozen_path], _LOADED[generated_path] = f_original, g_original
+        compare_defs("collection")
+
+
+def _malformed_kind_entry_is_rejected() -> bool:
+    """构造一条 `kind` 不在值域里的登记，`test_registry_kinds_are_the_documented_five` 必须红。"""
+    from app.contracts.collection import CONTRACT_DIVERGENCES as CD
+
+    poisoned = CD + (Divergence("WorkListRow", "*", "magic", "adv-swallower", "x", "y", "z"),)
+    original = DOMAINS["collection"]
+    try:
+        DOMAINS["collection"] = (original[0], original[1], poisoned)
+        module = sys.modules[__name__]
+        try:
+            module.test_registry_kinds_are_the_documented_five()
+        except AssertionError:
+            return True
+        return False
+    finally:
+        DOMAINS["collection"] = original
+
+
+def test_star_wildcard_entry_no_longer_buys_a_free_pass() -> None:
+    """第五轮验证的杀手锏：`ref="WorkListRow"` + `field="*"` + `kind="structural"` 曾吞掉该 def 全部差异。
+
+    现在 `field=="*"` 在非根路径上一律不解释（`_explains` 第二条）。这条测试直接注入那条
+    恶意登记 + 五类真漂移，要求**每一类仍然报**；顺带验它没能把自己洗成"有消费者"。
+    """
+    from app.contracts.collection import CONTRACT_DIVERGENCES as CD
+
+    swallower = Divergence("WorkListRow", "*", "structural", "adv-swallower", "x", "y", "z")
+    original = DOMAINS["collection"]
+
+    def drift(g: dict[str, Any]) -> None:
+        row = g["$defs"]["WorkListRow"]
+        row["additionalProperties"] = False
+        row["required"] = ["url", "title"]
+        row["properties"]["url"]["format"] = "email"
+        row["properties"].pop("id", None)
+        row["properties"]["publish_time"]["format"] = "date"
+
+    try:
+        DOMAINS["collection"] = (original[0], original[1], CD + (swallower,))
+        diffs = _compare_with_mutated_generated(drift)
+        assert diffs, "整片放行的登记仍然能把 WorkListRow 的差异全吞掉"
+        # 这条登记本身没有 RULE_CONSUMERS 消费者 ⇒ 「解释过一次差异」不算兑现承诺
+        unclaimed = [d.rule for d in CD + (swallower,) if d.rule not in _used_norms("collection")]
+        assert "adv-swallower" in unclaimed, "恶意登记靠解释差异给自己发了消费者"
+    finally:
+        DOMAINS["collection"] = original
+        compare_defs("collection")
+
+
+def _used_norms(domain: str) -> set[str]:
+    return compare_defs(domain)[1]
 
 
 # ── 4. 键不变量（ADR-0011 §3；2/3 两条要 URL，留 STEP-02）──────────────────────
@@ -1053,6 +1404,36 @@ def test_role_values_match_role_rank() -> None:
     assert {r.value for r in identity_contract.Role} == set(ROLE_RANK)
 
 
+def test_user_id_pattern_witnesses() -> None:
+    """兑现 `alias-inlining` 里那句"UserId"——它**没有**使用处，所以约束只能由本测试见证。
+
+    直接 `TypeAdapter` 跑 UUID 形状：大写、少一段、多一段都必须拒。第五轮验证指出
+    登记表原文写的是"Sub/UserId 的约束被内联进使用处"，那是把没发生的事写成已发生；
+    现在文本已更正，本测试就是更正后唯一的落点（并由 `ALIAS_WITNESSES` 强制它存在）。
+    """
+    adapter: TypeAdapter[identity_contract.UserId] = TypeAdapter(identity_contract.UserId)
+    assert adapter.validate_python("3f2504e0-4f89-11d4-993c-00cc940563e1")
+    for bad in (
+        "3F2504E0-4F89-11D4-993C-00CC940563E1",  # 大写不算 UUID 文本（稿里钉的是小写类）
+        "3f2504e0-4f89-11d4-993c-00cc940563e",  # 少一位
+        "3f2504e04f8911d4993c00cc940563e1",  # 没连字符
+        "3f2504e0-4f89-11d4-993c-00cc940563e1x",  # 尾部多一字符（pattern 带锚 ⇒ 必须拒）
+        "",
+    ):
+        with pytest.raises(ValidationError):
+            adapter.validate_python(bad)
+    draft = _defs_of(load_cached(DOMAINS["identity"][0]))["UserId"]
+    assert draft["pattern"] == identity_contract.USER_ID_PATTERN
+
+
+def test_artifact_provenance_keys_are_declared() -> None:
+    """兑现 `generated-provenance-keys`：产物必须自证是谁生成的，且每个域都带。"""
+    for domain, (_f, generated_path, _div) in DOMAINS.items():
+        doc = load_cached(generated_path)
+        assert doc["x-generated-by"] == "scripts/gen_contracts.py", domain
+        assert doc["x-source-module"] == f"app.contracts.{domain}", domain
+
+
 def test_identity_annotations_have_owners() -> None:
     """`identity-x-annotations` 的消费者：四条治理注释确实由本测试与 x-key 核对盯着。
 
@@ -1074,17 +1455,23 @@ def test_identity_annotations_have_owners() -> None:
 
 
 def test_generated_artifact_matches_current_model() -> None:
-    """有人改了模型却没重跑生成器时，这条必须红。
+    """有人改了模型却没重跑生成器时，这条必须红——**每个域都查**。
 
     `--check` 只在 CI 跑（`ci.yml:97-98`），提交前那段窗口本地是裸的；
     而 `compare_defs()` 读的是**两个文件**，模型改了在本地全组测试照样绿
     （第三轮验证点名的空档）。这里在进程内 import 生成器重算，不落盘。
+
+    第五轮验证抓到的正是范围问题：本条第一版硬编码 `["collection"]`，
+    于是 identity 域"模型 ≠ 已提交产物"这段窗口本地完全没门禁——
+    上面三条新盲区（default / 多支 anyOf / tuple items）也全落在这段裸窗口里。
     """
     spec = importlib.util.spec_from_file_location("gen_contracts_under_test", GEN_CONTRACTS_PATH)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    fresh = module.generate_schemas()["collection"]
-    assert fresh == GENERATED_PATH.read_text(encoding="utf-8"), (
-        "模型与已提交产物不一致：跑 `python scripts/gen_contracts.py` 重生成"
-    )
+    fresh = module.generate_schemas()
+    assert set(fresh) == set(DOMAINS), f"生成器覆盖的域与域表不一致：{sorted(fresh)} vs {sorted(DOMAINS)}"
+    for domain, path in ((d, DOMAINS[d][1]) for d in sorted(DOMAINS)):
+        assert fresh[domain] == path.read_text(encoding="utf-8"), (
+            f"{domain}: 模型与已提交产物不一致，跑 `python scripts/gen_contracts.py` 重生成"
+        )

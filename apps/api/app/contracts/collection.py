@@ -352,16 +352,19 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "消费者：`test_last_success_at_requires_timezone`。",
     ),
     Divergence(
-        "WorkListRow / ArticleManifest / ManifestSyncReport / CollectionEvent / DiscoveryChannelView",
+        "WorkListRow / WorkListPage / ArticleManifest / ManifestSyncReport / CollectionEvent / DiscoveryChannelView",
         "digest, author, content_hash, all_skipped_pages, idempotency_key, count, "
-        "contractVerifiedAt, verifiedScope, lastSuccessAt, lastError",
+        "contractVerifiedAt, verifiedScope, lastSuccessAt, lastError, publish_time, total",
         "serialization",
         "dump-materializes-defaults",
         "可选字段，无 default",
-        'default="" / 0 / None ⇒ model_dump() 会物化出来',
+        'default="" / 0 / None ⇒ model_dump() 会物化出来，且生成物里显式带 `default` 键',
         "接受集不变，但响应里多出显式的空串/0/null，前端按「字段是否存在」分支时会看到。"
         "消费者：`test_optional_defaults_materialize_on_dump`——本条 reason 第一次写的时候"
-        "只承诺「另设一条 dump 形状检查」却没有实现者，第三轮验证正是因此判它 dead claim。",
+        "只承诺「另设一条 dump 形状检查」却没有实现者，第三轮验证正是因此判它 dead claim。"
+        "**第五轮验证补的两件事**：①`default` 过去被比对器整个剥掉不比 ⇒ 两侧随便改默认值都读 0 条 "
+        "差异，现在它进约束面，且只放行「稿没写⇒模型物化」这一个方向；②WorkListPage 之前没列进 ref，"
+        "它自己物化的 `total` 默认值与 rows 里内联的 WorkListRow 默认值都无处认领。",
     ),
     Divergence(
         "*（除 WorkListRow 外所有模型）",

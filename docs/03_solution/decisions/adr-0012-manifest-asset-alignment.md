@@ -22,9 +22,14 @@ related: [D-V2-02, D-V3-01, D-V2-01, ADR-0011, STEP-01, STEP-04, STEP-07]
 
 | 位置 | 装什么 | 写入点 |
 |---|---|---|
-| `article_manifests.external_id`（`app/models/entities.py:108`，唯一键 `:115`） | 渠道上游稳定 id（`workUuid` 等） | `app/services/manifest.py:255`、`subscription.py:130` |
+| `article_manifests.external_id`（`app/models/entities.py:108`，唯一键 `:115`） | 渠道上游稳定 id（`workUuid` 等） | 取键 `app/services/manifest.py:144` → 入 dict `:156` → 唯一构造点 `:255` |
 | `content_assets.external_id`（`entities.py:127`，注释就写着 `# article_key`，唯一键 `:144`） | `_article_key(url)` 派生的文章键 | `app/services/kb.py:461` |
 | `job_items.external_id`（`entities.py:216`） | 从清单行**原样透传**的渠道 id | `subscription.py:849`、`repositories/job.py:197` |
+
+> 干扰项（第五轮验证踩过）：`sources.external_id`（`entities.py:62`，注释 `# 公众号 biz`，
+> 写点 `subscription.py:130`、查询点 `:125`）是**账号级**键空间，与上面三行的**文章级**键空间
+> 不同层，也不是本 ADR 要对齐的对象。它和 `article_manifests.external_id` 同名不同义，
+> 拿它当清单写入点会把"三层无共同键"这个结论讲错。
 
 ⇒ 后果（P0-2）：**清单、作业、资产三层没有共同的键可 join**。Diff 只能拿
 `(source_id, external_id)` 判"这条清单见过没有"，而资产侧用的是另一个键空间；

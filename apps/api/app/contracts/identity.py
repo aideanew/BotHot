@@ -27,10 +27,8 @@ from . import Divergence
 Sub = Annotated[str, StringConstraints(min_length=1, max_length=64)]
 
 # 本地代理主键 UUID。**只**做域表外键锚，不外泄给前端当身份判断——那是 sub 的职责。
-UserId = Annotated[
-    str,
-    StringConstraints(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"),
-]
+USER_ID_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+UserId = Annotated[str, StringConstraints(pattern=USER_ID_PATTERN)]
 
 # /me 的回显位。它不是校验对象、也不参与授权（缺本地 users 行时它 fail-closed 成 False，
 # 而授权路径抛 10001，两者刻意分歧），所以只保留类型、不造模型。
@@ -89,11 +87,16 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
         "*",
         "structural",
         "alias-inlining",
-        "三个都是 $defs 条目（Sub/UserId 有约束，IsAdminEcho 是带 x-authoritative 的 boolean）",
-        "类型别名不生成 $defs：Sub/UserId 的约束被内联进使用处，IsAdminEcho 因为没人引用而不出现",
-        "Pydantic 只为 BaseModel/Enum 建 $defs。IsAdminEcho 的真实职责是「/me 回显位不参与授权」，"
-        "那是行为约束（由 roles.py 与前端各自负责），保留一个无使用处的类型只会制造假契约面 ⇒ "
-        "本条同时记录「它不在生成物里」这件事，而不是硬造一个 def 去过门禁。",
+        "三个都是 definitions 条目：Sub 有 min/maxLength，UserId 有 UUID pattern，"
+        "IsAdminEcho 是 boolean 带 x-authoritative",
+        "生成物里三个都没有，但**原因各不相同**——这一条以前把三者混成一句「约束被内联进使用处」，"
+        "而 UserId 根本没有使用处，那句话对它是假的（第五轮验证抓到）",
+        "Sub：`SessionClaims.properties.sub` 用 `$ref` 引它 ⇒ 约束在**产物里现形**（minLength 1 / maxLength 64），"
+        "这是真正的别名内联。UserId：本域没有任何模型引用它，所以 pattern 既不在产物也不在任何使用处，"
+        "它由 `ALIAS_WITNESSES` 点名的 `test_user_id_pattern_witnesses` 直接跑 TypeAdapter 见证——"
+        "要么给它一个使用处，要么由后续裁决删掉这个别名，不能拿一句「内联了」把消失讲圆。"
+        "IsAdminEcho：稿里已加 `x-not-in-single-source` 标记，它的职责（回显位不参与授权）是行为约束、"
+        "不是形状，由 roles.py 与前端各自负责。",
     ),
     Divergence(
         "*（所有 def）",
