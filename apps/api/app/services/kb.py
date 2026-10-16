@@ -197,21 +197,27 @@ class KnowledgeBaseService:
 
     # -------------------------------------------------------------- 单篇 ingest 全链
 
-    async def ingest_url(self, space_id: str, url: str) -> dict[str, Any]:
+    async def ingest_url(self, space_id: str, url: str, owner: str | None = None) -> dict[str, Any]:
         """URL → resolve → extract → normalize → score → KB 入库（异步任务）。
 
         返回 {docId, title, status, langbotFileId, taskId}（v0.3g 备案形状）。
         R6.6.10（F-6）：并发同 URL 按空间+URL 加锁，避免双份微信请求。
+
+        `owner` 是调用者 user id：非本人空间 → 30004（与无效空间同语义，不泄露存在性）。
+        `owner=None` 只留给无 HTTP 调用者的后台路径（JobWorker 逐篇消费），
+        与 `services/spaces.py::_delete_doc` 的同一约定对齐。
         """
         lock_key = f"{space_id}:{url}"
         lock = self._ingest_locks.setdefault(lock_key, asyncio.Lock())
         async with lock:
-            return await self._ingest_url_inner(space_id, url)
+            return await self._ingest_url_inner(space_id, url, owner)
 
-    async def _ingest_url_inner(self, space_id: str, url: str) -> dict[str, Any]:
+    async def _ingest_url_inner(
+        self, space_id: str, url: str, owner: str | None = None
+    ) -> dict[str, Any]:
         repo = SpaceRepository(self._session)
         space = await repo.get_by_id(space_id)
-        if space is None:
+        if space is None or (owner is not None and space.user_id != owner):
             raise ResourceNotFoundError(space_id)
 
         # BE-02 前置引擎可用性检查：非 builtin 且 Key 未配/未开放 → 10004/403，
@@ -535,14 +541,20 @@ class KnowledgeBaseService:
 
     # -------------------------------------------------------------- ingest 状态查询
 
-    async def get_doc_ingest_status(self, space_id: str, doc_id: str) -> dict[str, Any]:
+    async def get_doc_ingest_status(
+        self, space_id: str, doc_id: str, owner: str | None = None
+    ) -> dict[str, Any]:
         """以引擎文件状态为准刷新本地状态并返回（v0.3g 备案形状）。
 
         BE-02：builtin 走 LangBot 文件清单（原路径零变更）；非 builtin 走 adapter.ingest_status。
+
+        `owner` 非空时，他人空间的 doc 与不存在的 doc 给同一个 30004——这条状态串里有
+        `langbotFileId` 与引擎侧 kb 归属，按存在性探测就是一次跨租户信息泄露。
+        日报兜底（`services/scheduler.py`）没有 HTTP 调用者，故按约定传 None。
         """
         space_repo = SpaceRepository(self._session)
         space = await space_repo.get_by_id(space_id)
-        if space is None:
+        if space is None or (owner is not None and space.user_id != owner):
             raise ResourceNotFoundError(space_id)
         engine = str(getattr(space, "engine", "builtin") or "builtin")
         kb_id = self._router.kb_id_for(space)

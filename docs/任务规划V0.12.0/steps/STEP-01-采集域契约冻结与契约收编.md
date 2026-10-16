@@ -1,8 +1,9 @@
 # STEP-01 采集域契约冻结与契约收编
 
 > 基线 main@61358c3（本版卡面）｜状态：🟡 进行中——已过 S1.1.0 / S1.1.1 / S1.1.2 / S1.2.1 / S1.3.1 / S1.4.1；
-> **S1.3.2「比对器全捕」这条判据已触发 D-14 熔断**：七轮独立验证每轮都判出新的击穿面
-> （第三/五/六/七轮各 FAIL），机械门 `git log --grep="轮" --format=%s main` 里 STEP-01 计 8 条 > 2。
+> **S1.3.2「比对器全捕」这条判据已触发 D-14 熔断**：九轮独立验证每轮都判出新的击穿面
+> （第三/五/六/七/八/九轮各 FAIL，第九轮抓到的是"不相干台账引用可洗白"与"恒真新增被放行"），
+> 机械门 `git log --grep="轮" --format=%s main | grep -c STEP-01` 现读 **10 条 > 2**。
 > 已按台账规则登记 **D-V8-05（BLOCKING，待人不签不自动生效）**：默认值 A 是把"实现语义"交给标准库
 > `jsonschema`、自研比对器退役为"差异登记 + 覆盖率守卫"；备选 B 是继续自研。**这条由 owner 判，不由我选。**
 > 域面不受影响：collection / identity / events / **resources 四域已收编**（`166 passed` `@win`，
@@ -11,7 +12,10 @@
 > resources 收编顺带**执行了 D-V8-02**（`ArticleKey` 下界 3-vs-8 取更严者 8，并证明它不排任何合法键：
 > 三支最短可过串 10/14/34 全 >8），并登记 **D-V8-06**（规范键 pattern 在 resources 稿里只是注释、
 > 在唯一源里是校验——两侧不是等价改写）。域面判据仍是"每条不等必须有登记且登记有责任人"，不是"注入必红"。
-> S1.4.3（IDOR 生成器）未做。
+> S1.4.3（IDOR 生成器）**前半批已交付**：枚举完整性 + AST 接线底线（`apps/api/tests/test_idor_matrix.py`，
+> 本机 `@win` 10 条），据此抓到并修好两条真实越权（`POST /spaces/{space_id}/docs`、
+> `GET /spaces/{space_id}/docs/{doc_id}/status`——形参挂身份却从不比较 `space.user_id`），
+> 见 `EVD-V2-01/s143_idor_floor.md`；逐端点 A-vs-B 连库矩阵发布为 **P-11**，清单外属主 id 扩面发布为 **P-12**（属裁决）。
 > 逐次读数与九轮攻防见 `08` §9–§26 与 `EVD-V2-01/s132_round{5,6,7}_hardening.md`、
 > `s132_round9_hardening.md`（第八轮的返工写在 `08` §25）、
 > `s122_resources_domain.md`；`responseData` 不相交登记 **D-V8-01**、`$id` 两套写法登记 **D-V8-03**、

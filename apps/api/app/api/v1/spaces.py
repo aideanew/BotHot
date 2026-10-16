@@ -378,15 +378,17 @@ class BatchIngestRequest(BaseModel):
 async def ingest_doc(
     space_id: str,
     payload: IngestDocRequest,
-    _user_id: Annotated[str, Depends(get_current_user_id)],
+    user_id: Annotated[str, Depends(get_current_user_id)],
     svc: Annotated[KnowledgeBaseService, Depends(get_kb_service)],
 ) -> JSONResponse:
     """提交文章 URL 入库（异步）：resolve→extract→score→LangBot ingest。
 
     v0.3g 备案：body 仅 {url}（直传 resolved/extracted 形状延后，见交付报告）；
     202 Accepted + {docId,title,status,langbotFileId,taskId}。
+    未登录 → 10001；越权/无效空间 → 30004（与 `docs:batch` 同口径——S1.4.3 抓到这条
+    曾经是 `_user_id` 形参却不透传，等于任何人可往他人空间写入并触发计费抓取）。
     """
-    result = await svc.ingest_url(space_id, payload.url)
+    result = await svc.ingest_url(space_id, payload.url, owner=user_id)
     body = success(data=result)
     return JSONResponse(status_code=202, content=body.model_dump())
 
@@ -418,13 +420,14 @@ async def ingest_docs_batch(
 async def get_doc_ingest_status(
     space_id: str,
     doc_id: str,
-    _user_id: Annotated[str, Depends(get_current_user_id)],
+    user_id: Annotated[str, Depends(get_current_user_id)],
     svc: Annotated[KnowledgeBaseService, Depends(get_kb_service)],
 ) -> JSONResponse:
     """ingest 状态查询：{docId,status,langbotFileId}（LangBot 权威状态回写本地）。
 
     status ∈ FETCHED|INDEXED|READY；FAILED → 30003/502。
+    越权与不存在同语义 → 30004（返回值带 `langbotFileId`，是引擎侧句柄，不做存在性探测面）。
     """
-    result = await svc.get_doc_ingest_status(space_id, doc_id)
+    result = await svc.get_doc_ingest_status(space_id, doc_id, owner=user_id)
     body = success(data=result)
     return JSONResponse(status_code=200, content=body.model_dump())
