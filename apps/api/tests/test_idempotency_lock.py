@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import uuid
 from collections.abc import Iterator
 
 import pytest
@@ -481,6 +482,18 @@ async def test_concurrent_short_link_map_write_is_absorbed(db_session) -> None: 
     gate = asyncio.Barrier(2)
     resolver = _BarrieredResolver(gate)
 
+    # 正证据：数一数到底有几条 INSERT 打到映射表。两次 = 两边都查空、后发者真的撞了唯一约束；
+    # 一次 = 某一方在 select 时就看见了对手已提交的行而早退 ⇒ 本次并没有走到竞态，
+    # 用例对此**明说**（skip 并报原因），绝不把"没测到"读成"通过"（U-20 的口径）。
+    from sqlalchemy import event
+
+    insert_attempts: list[str] = []
+
+    @event.listens_for(engine.sync_engine, "before_cursor_execute")
+    def _count_inserts(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001
+        if "INSERT INTO short_link_maps" in statement:
+            insert_attempts.append(statement)
+
     async def _one(tag: str) -> tuple[str, str]:
         try:
             session = RaceSession()
@@ -493,15 +506,85 @@ async def test_concurrent_short_link_map_write_is_absorbed(db_session) -> None: 
         except BaseException as exc:  # noqa: BLE001 竞态面如实上报，不掩盖
             return tag, f"__ERROR__ {type(exc).__name__}: {str(exc)[:140]}"
 
-    results = await asyncio.gather(_one("A"), _one("B"))
+    try:
+        results = await asyncio.gather(_one("A"), _one("B"))
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", _count_inserts)
     errors = [r for r in results if "__ERROR__" in r[1]]
     await engine.dispose()
 
     assert not errors, (
-        f"并发写短链映射把异常冒了出来（应被 _save_short_link 的 savepoint 兜底吸收）：{errors}"
+        f"并发写短链映射把异常冒了出来（期望被 _save_short_link 的 savepoint 吸收；"
+        f"本次 INSERT 尝试 {len(insert_attempts)} 次）：{errors}"
     )
+    if len(insert_attempts) < 2:
+        pytest.skip(
+            f"本次运行只有 {len(insert_attempts)} 条 INSERT 打到 short_link_maps ⇒ 没有形成双写交错，"
+            "兜底分支未被执行，本用例这次没有判定力（不是通过）"
+        )
     with create_engine(PG_DSN, connect_args={"connect_timeout": 3}).connect() as conn:
         maps = conn.execute(
             select(func.count()).select_from(ShortLinkMap).where(ShortLinkMap.short_key == map_key)
         ).scalar_one()
     assert maps == 1, f"映射行应收敛为单行，实际 {maps}（0 表示两边都没写进行）"
+
+
+async def test_short_link_map_conflict_branch_is_actually_taken(db_session) -> None:  # type: ignore[no-untyped-def]
+    """兜底分支的确定性证据：让对手的提交**正好落在**"前置查"与"插入"之间。
+
+    为什么还要这一条：上面那条 barrier 用例判的是整条并发链不冒异常，但它仍由调度决定；
+    而"后发者撞唯一约束"这个分支只要没被执行过，绿灯就说明不了兜底在位——
+    若交错退化成"一方早退"，实现有洞也照样绿（独立验证报的正是这个判定力缺口）。
+    这里用一层只代理 `execute` 的会话壳，把一次真提交插在第一次查询之后 ⇒
+    生产的 insert 必然撞 `uq_shortlink_key` ⇒ 必然走 `except IntegrityError` + 重查。
+
+    断言里"必须发生两次查询"就是正证据；只断言"没抛"是负证据，挡不住"根本没走到"。
+    """
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    side = create_async_engine(PG_DSN, connect_args={"connect_timeout": 3})
+    main = create_async_engine(PG_DSN, connect_args={"connect_timeout": 3})
+    SideSession = async_sessionmaker(bind=side, expire_on_commit=False)
+    MainSession = async_sessionmaker(bind=main, expire_on_commit=False)
+    probe_key = f"probe-race-{uuid.uuid4().hex[:12]}"
+
+    class _InterposingSession:
+        """代理到真会话，只在第一次 execute 之后替对手提交同键行。"""
+
+        def __init__(self, inner) -> None:
+            self._inner = inner
+            self.selects = 0
+
+        async def execute(self, stmt):
+            self.selects += 1
+            result = await self._inner.execute(stmt)
+            if self.selects == 1:
+                async with SideSession() as other:
+                    other.add(ShortLinkMap(short_key=probe_key, article_key="s:opponent", biz=""))
+                    await other.commit()
+            return result
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    try:
+        async with MainSession() as raw:
+            wrapper = _InterposingSession(raw)
+            svc = _svc(wrapper, _CountingStubResolver())
+            await svc._save_short_link(probe_key, "s:mine", "")  # noqa: SLF001
+            await raw.commit()
+            assert wrapper.selects == 2, (
+                f"期望「前置查 + 冲突后重查」两次查询，实得 {wrapper.selects} ⇒ 兜底分支没被执行，"
+                "本用例这次没有判定力（不是通过）"
+            )
+            rows = (
+                await raw.execute(select(ShortLinkMap).where(ShortLinkMap.short_key == probe_key))
+            ).scalars().all()
+            assert len(rows) == 1, f"表里应只剩对手那一行，实际 {len(rows)}"
+            assert rows[0].article_key == "s:opponent", "兜底的语义是承认对手已写入，不是把自己的键覆盖上去"
+    finally:
+        async with SideSession() as cleaner:
+            await cleaner.execute(text("DELETE FROM short_link_maps WHERE short_key = :k"), {"k": probe_key})
+            await cleaner.commit()
+        await side.dispose()
+        await main.dispose()

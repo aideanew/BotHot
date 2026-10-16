@@ -4,7 +4,7 @@
 （run 38908795127 红在 `test_concurrent_same_url_converges`，同一条在 38899498196 上是绿的），
 而本机没有 PG 也没有 docker。靠 flaky 的绿当证据，等于把判定力交给调度器。
 本件用 AST 取出**磁盘上 kb.py 的当前函数体**真实执行（不是抄本），配一台
-可脚本化抛 IntegrityError 的假 session，四条判据都是确定的行为断言。
+可脚本化抛 IntegrityError 的假 session，判据都是确定的行为断言（条数由本件自己报，不在散文里数）。
 
 判据：
 - SR-B1 正常写入：查不到既有行 ⇒ 走一次 add + 一次 flush，不抛；
@@ -39,7 +39,7 @@ TARGET = "_save_short_link"
 
 sys.path.insert(0, str(API))
 
-from sqlalchemy.exc import IntegrityError  # noqa: E402  (要真异常类，假造会让 isinstance 判空)
+from sqlalchemy.exc import IntegrityError, PendingRollbackError  # noqa: E402  (要真异常类，假造会让 isinstance 判空)
 
 
 class _Result:
@@ -59,12 +59,17 @@ class _Nested:
     async def __aenter__(self) -> "_Nested":
         self._sess.nested_entered += 1
         self._sess.snapshot = len(self._sess.added)
+        self._sess.in_nested += 1
         return self
 
     async def __aexit__(self, exc_type: object, exc: object, tb: object) -> bool:
+        self._sess.in_nested -= 1
         if exc_type is not None:
             del self._sess.added[self._sess.snapshot :]
             self._sess.rolled_back += 1
+            # 真 savepoint 的回滚会把事务恢复到可用状态；假替身必须显式还原这一点，
+            # 否则「有没有 savepoint」在下一句 execute 上表现得一样（第十五轮自证报的保真缺口）。
+            self._sess.needs_rollback = False
         return False
 
 
@@ -78,9 +83,15 @@ class _FakeSession:
         self.nested_entered = 0
         self.rolled_back = 0
         self.snapshot = 0
+        self.in_nested = 0
+        self.needs_rollback = False
 
     async def execute(self, _stmt: Any) -> _Result:
         self.selects += 1
+        if self.needs_rollback:
+            # 真 SQLAlchemy 在 flush 失败且没有 savepoint 时，下一次 execute 抛的是
+            # PendingRollbackError——正是"摘掉 savepoint 后兜底重查本身会炸"的机制。
+            raise PendingRollbackError("SELECT …", {}, Exception("transaction is rollback required"))
         return _Result(self._select_results.pop(0) if self._select_results else None)
 
     def add(self, obj: Any) -> None:
@@ -89,6 +100,8 @@ class _FakeSession:
     async def flush(self) -> None:
         self.flushes += 1
         if self._flush_raises:
+            if self.in_nested == 0:
+                self.needs_rollback = True
             raise IntegrityError("INSERT INTO short_link_maps", {}, Exception("uq_shortlink_key"))
 
     def begin_nested(self) -> _Nested:
@@ -214,6 +227,14 @@ MUTANTS = [
      "        if exists is not None:", "        if exists is None:", {"SR-B4"}),
     ("早退条件永真（永远不写映射，静默丢键）",
      "        if exists is not None:", "        if True:", {"SR-B1"}),
+    # 第五发是「兜底整体失效」的**行为等价**变异（不是字面重放修复前源码）：把捕获的异常类
+    # 换掉 ⇒ IntegrityError 直接冒出。之所以要它：M1 只把 savepoint 摘掉而 `except` 仍在，
+    # SR-B2 的红只落在 rolled_back 这个结构代理上，而假 session 不建模
+    # 「无 savepoint 时 flush 失败后 execute 抛 PendingRollbackError」——
+    # 只有这一发能让 SR-B2 因为「异常真的冒出来」而红。
+    # 字面重放修复前形状需要整段替换（锚里含中文注释），本件不这么做，理由写在记录里。
+    ("兜底整体失效（捕的不是 IntegrityError，异常直接冒到调用面）",
+     "        except IntegrityError:", "        except KeyError:", {"SR-B2", "SR-S1"}),
 ]
 
 
