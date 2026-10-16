@@ -1,0 +1,49 @@
+{
+  "$defs": {
+    "EventName": {
+      "description": "事件名值集。真源是 `services/push_events.py:26` 的 `VALID_EVENT_TYPES`。\n\n新增事件名属契约变更：本枚举、那个常量、冻结稿的 `enum` 三处必须同时改，\n由 `test_event_name_set_equals_valid_event_types` 钉住三方相等。\n顺序也带语义（稿里是声明序）——比对器比 enum 列表原序，不排序。",
+      "enum": [
+        "new_article",
+        "hot_topic_update",
+        "daily_report"
+      ],
+      "type": "string"
+    },
+    "PushRetryState": {
+      "description": "一次投递的回执与重试判据（运行时形状来自 `providers/push/base.py:39-51` 的 `PushResult`）。\n\n与 `PushResult` 的已知不等写在登记表 `response-data-type-conflict` 里，\n两边对应关系由契约测试单向核对——这里复制那份 dataclass 就是第二个真源。",
+      "properties": {
+        "delivered": {
+          "title": "Delivered",
+          "type": "boolean"
+        },
+        "reason": {
+          "description": "失败必有可读原因，不伪造回执（AGENTS.md 关键约束 6）",
+          "maxLength": 512,
+          "title": "Reason",
+          "type": "string"
+        },
+        "responseData": {
+          "default": "",
+          "title": "Responsedata",
+          "type": "string"
+        },
+        "retryable": {
+          "title": "Retryable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "delivered",
+        "reason",
+        "retryable"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "bothot://contracts/events/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "由 scripts/gen_contracts.py 从 apps/api/app/contracts/events.py 生成，请勿手动修改（--check 幂等门禁）。唯一源是 Python 模型（ADR-0008）。",
+  "title": "BotHot events 域契约（生成物）",
+  "x-generated-by": "scripts/gen_contracts.py",
+  "x-source-module": "app.contracts.events"
+}

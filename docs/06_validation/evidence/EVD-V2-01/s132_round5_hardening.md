@@ -1,6 +1,7 @@
 # S1.3.2 第五轮验证返工：三类比对器盲区 + 两处被证成的假话
 
-批次：`STEP-01` S1.3.2/S1.3.3 返工（第五轮独立验证判 **FAIL** 之后的修复）。
+批次：`STEP-01` S1.3.2/S1.3.3 返工（第五轮独立验证判 **FAIL** 之后的修复）
+**+ 同批续做的 events 域收编**（§11 之后）。
 基线：`main@983a356`（我提交 S1.1.2 ADR-0012 那一次）。
 执行者与验证者都是子智能体，读数一律标机器位（`@win` = 本机 Win10 + `apps/api/.venv`）。
 
@@ -155,17 +156,71 @@ FAILED …[多支 anyOf：两支都不是 pattern 包装-both]
 
 ## 11. 本批**没有**做的事
 
-- events 域的收编**没有落地**：`app/contracts/events.py` 未创建、`DOMAINS` 未加行、
-  产物未生成。我在 ADR-0012 提交后起手做它，被第五轮验证的 FAIL 打断——
-  比对器有洞的时候往洞里塞新域，等于给下一个验证者多送三处可绕过面。
-  已确认的起手事实只有两条：`push_events.py:26 VALID_EVENT_TYPES` 三值、
-  `providers/push/base.py:50 response_data: str = ""`（**与 events 稿的 `responseData: object|null`
-  类型不相交**，这条冲突必须在收编时正面登记，不能静默挑一边）。
-- `resources` / `api` 两域未起。`resources` 有一颗已知地雷：它的 `ArticleKey` 写 `minLength: 8`，
-  `collection` 的写 `3`（`test_article_key_bounds_are_redundant` 实测钉着 3/128）——
-  同名不同约束，收编时必须裁决，不许挑一个当默认。
+- `resources` / `api` 两域未起。`resources` 有一颗已知地雷：它的 `ArticleKey` 与 `collection` 的
+  **同名不同约束**（稿侧 `minLength` 8 vs 3，`test_article_key_bounds_are_redundant` 钉着 3/128）
+  ⇒ 收编时必须正面裁决，不许静默挑一个。
+  `api.envelope` 更麻烦：它的**根层就是信封形状**，`definitions` 里只有若干条，
+  而现有比对器只比 `$defs` 目录 ⇒ 要么给它建 def，要么给比对器加根层比路面，两条都得先想清楚。
 - S1.4.3 的 IDOR 参数化生成器未动（端点清单要从路由表来，不能手写）。
-- `default` 进校验面后**没给 identity/CollectionEvent 的枚举补 default**——那是模型的事，不是比对器的事。
-- 全量后端套件的读数见 §12（跑到哪填哪，不预告结果）。
-- `@ci` 读数（这批改动推上去之后 run id + head_sha + conclusion）尚未取，
-  取到之前本批状态只能记 **需要返工 → 待验证**。
+- `default` 进校验面后**没给 identity/collection 的枚举补 default**——那是模型的事，不是比对器的事。
+- `@ci` 读数（本批推送后的 run id + head_sha + conclusion）尚未取；取到之前本批状态记
+  **部分确认**，不记"已验证"。
+
+## 12. 同批续做：events 域收编（S1.2.2 第三个域）
+
+返工之后接着把 events 落了，因为它正好是这套机制的第一个真实检验场——稿里六个 def，
+**三个是注释、一个是无使用处的别名、两个是能收编的形状**。
+
+| 收编 | 形状 | 备注 |
+|---|---|---|
+| `EventName` | `str, Enum` 三值 | 与 `push_events.py:26 VALID_EVENT_TYPES` **同序**钉；"新增事件名须三处同改"从注释变成断言 |
+| `PushRetryState` | `BaseModel`：`delivered` / `reason(≤512)` / `responseData` / `retryable` | 三个必填来自稿的 `required`；`responseData` 用 alias，Python 侧仍 snake_case |
+| `IdempotencyKey` | `Annotated[str, max_length=128]` | 本域**没有使用处** ⇒ 走 `ALIAS_WITNESSES`，由 `test_idempotency_key_alias_witness` 见证 |
+| `EventPayloadRules` / `QueueMechanism` / `ManifestTransition` | 不收编 | 稿根层 `x-not-in-single-source` 声明 + `not-a-shape` structural 登记，两处缺一处都红 |
+
+**没有静默解决的一条冲突**：稿 `responseData: ["object","null"]` vs
+实测 `providers/push/base.py:50` 的 `response_data: str = ""`（六个 Provider 无一例外按字符串塞
+上游回执原文）。两者类型**不相交**，不是宽严关系。契约取实测——产物是消费端读的形状，
+写 `object|null` 会让按稿实现的前端解析器在第一条真实回执上就炸——但取实测不等于把冲突抹掉：
+登记 `response-data-type-conflict`（tightening）+ 消费者
+`test_push_retry_state_tracks_runtime_push_result` 把三方（稿 / 实现 / 产物）钉在同一条测试里，
+**谁去裁决、改哪一边，都会先撞到这条红**。裁决请求写在登记文本里，等 owner 判。
+
+`x-retry-policy` 那条注释也做成可执行事实：测试读 `push_scheduler.MAX_PUSH_RETRIES` 与
+`RETRY_BACKOFF_BASE_SECONDS` 算出 `[60, 240, 960]` 再与稿比——那组数字第一次有了责任人。
+
+### 12.1 新机制自己也被反证钉住（四条）
+
+- 删掉 `x-not-in-single-source` 里的 `ManifestTransition` ⇒ 红：它的 `enumStatus`/`legalEdges`
+  是比对器不认识的关键词，退出比对必须有**稿侧**声明，不能只靠登记表。
+- 把**真形状** `PushRetryState` 标成"不是形状" ⇒ 红两处（`compare_defs` 见它仍在生成物里、
+  narrow 判据见它含 `properties`/`required`）。
+- 稿侧把 `reason.maxLength` 从 512 改 511 ⇒ 仍然红。这条钉的是 `response-data-type-conflict`
+  **不越界**：它只解释 `responseData` 的类型那一处，不是给整个 def 买免检票。
+- 给没被登记点名的属性（`EventName`）物化一个 `default` ⇒ 红，钉 `default` 方向判据的"点名"那一半。
+
+### 12.2 events 批读数
+
+| 命令 | 结果 | 位 |
+|---|---|---|
+| `pytest tests/test_collection_contract.py -q` | `109 passed in 1.52s`（返工批 92 → 加 events 域与 8 条新测试） | `@win` |
+| `gen_contracts.py --check --only-schemas` | rc=0，**三条**幂等一致（collection / identity / events） | `@win` |
+| `ruff check app/contracts/events.py tests/test_collection_contract.py scripts` | `All checks passed!` | `@win` |
+| `mypy app/contracts/` | `Success: no issues found in 4 source files` | `@win` |
+
+### 12.3 这一批我自己又踩的两处（写清楚，因为"探针报错"不等于"被测对象有问题"）
+
+1. `events.py` 第一版有**九处**在 CJK 字符串里嵌 ASCII 双引号 ⇒ `SyntaxError`，`py_compile` 当场抓住。
+   这条规矩上一轮才写进记忆，还是复发——教训是"写完必须 compile 再声称绿"，不是"我记得住了"。
+2. `assert runtime["response_data"] is str` 恒假，因为 `providers/push/base.py` 带
+   `from __future__ import annotations` ⇒ `dataclasses.fields(...).type` 是**字符串** `'str'`。
+   第一遍读出来是红，我差点把它写成"实现与契约不符"的证据；实际是我的断言写法不成立，
+   改用 `typing.get_type_hints` 才对。
+
+## 13. 本批仍**未**取得的外部读数
+
+全量后端套件（`apps/api` 下 `pytest -q`）与推送后的 CI 结论（run id + head_sha + conclusion）
+在写这一段时**还没回来**。所以：
+- 契约面读数以 `@win` 单文件为准（§10 与 §12.2），**没有**本批的全量 pass/skip 总数；
+- 不引用任何历史批次的总数来充当本批总数；
+- 状态记 **部分确认**，待第六轮验证 + `@ci` 读数再判收尾。

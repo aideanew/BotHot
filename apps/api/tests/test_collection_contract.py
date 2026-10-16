@@ -30,11 +30,12 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, get_type_hints
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from app.contracts import events as events_contract
 from app.contracts import identity as identity_contract
 from app.contracts.collection import (
     ARTICLE_KEY_PATTERN,
@@ -51,6 +52,9 @@ from app.contracts.collection import (
 )
 from app.core.errors import ERROR_CODES
 from app.providers.discovery.registry import CHANNELS
+from app.providers.push.base import PushResult
+from app.services.push_events import VALID_EVENT_TYPES
+from app.services.push_scheduler import MAX_PUSH_RETRIES, RETRY_BACKOFF_BASE_SECONDS
 from app.services.roles import ROLE_RANK
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -68,6 +72,11 @@ DOMAINS: dict[str, tuple[Path, Path, tuple[Divergence, ...]]] = {
         CONTRACT_DIR / "identity.schema.json",
         SCHEMA_DIR / "identity.schema.json",
         identity_contract.CONTRACT_DIVERGENCES,
+    ),
+    "events": (
+        CONTRACT_DIR / "events.schema.json",
+        SCHEMA_DIR / "events.schema.json",
+        events_contract.CONTRACT_DIVERGENCES,
     ),
 }
 
@@ -696,6 +705,10 @@ RULE_CONSUMERS: dict[str, str] = {
     "role-rank-anchor": "test_role_values_match_role_rank",
     "identity-x-annotations": "test_identity_annotations_have_owners",
     "generated-provenance-keys": "test_artifact_provenance_keys_are_declared",
+    "event-name-set-anchor": "test_event_name_set_equals_valid_event_types",
+    "push-retry-annotations": "test_retry_policy_constants_match_frozen_draft",
+    "response-data-type-conflict": "test_push_retry_state_tracks_runtime_push_result",
+    "events-dump-materializes-defaults": "test_push_retry_default_materializes_on_dump",
 }
 
 # 稿里有、生成物里**没有**、又没被任何已收编 def 引用的约束型条目 ⇒ 必须点名一个见证测试。
@@ -703,6 +716,7 @@ RULE_CONSUMERS: dict[str, str] = {
 # （第五轮验证抓到）：约束在产物里彻底不存在，登记表的解释却是假的。
 ALIAS_WITNESSES: dict[str, dict[str, str]] = {
     "identity": {"UserId": "test_user_id_pattern_witnesses"},
+    "events": {"IdempotencyKey": "test_idempotency_key_alias_witness"},
 }
 
 
@@ -1449,6 +1463,147 @@ def test_identity_annotations_have_owners() -> None:
         leaked = [k for k in body if k.startswith("x-") and k not in generated_defs[name]]
         claimed = {x.strip() for d in DOMAINS["identity"][2] for x in d.field.replace(",", " ").split()}
         assert all(k in claimed for k in leaked), f"{name}: 注释键 {leaked} 既没进生成物也没登记责任人"
+
+
+# ── 11. events 域：替登记表的每条 rule 兑现承诺 ───────────────────────────────
+
+
+def test_event_name_set_equals_valid_event_types() -> None:
+    """rule `event-name-set-anchor` 的消费者：稿、枚举、实现常量**三方**等值且同序。
+
+    稿里那条 `x-source-of-truth` 说的是"新增事件名须三处同改"——那是件可以机器判的事，
+    所以它不该只活在文本里。顺序也钉：比对器比 enum 原序，这里同步。
+    """
+    draft = _defs_of(load_cached(DOMAINS["events"][0]))["EventName"]["enum"]
+    assert [e.value for e in events_contract.EventName] == draft
+    assert {e.value for e in events_contract.EventName} == VALID_EVENT_TYPES
+    assert _defs_of(load_cached(DOMAINS["events"][1]))["EventName"]["enum"] == draft
+
+
+def test_idempotency_key_alias_witness() -> None:
+    """`IdempotencyKey` 在本域**没有使用处** ⇒ 约束只能由本测试见证（ALIAS_WITNESSES 强制它存在）。
+
+    实测两个键形状必须能过（`hot_rescore:yyyyMMddHH` / `sync_account:{sourceId}`），
+    长度上界与稿一致（String(128)）。稿里另外两条（禁随机 uuid、禁拼用户可控串）
+    不是形状，登记表已把责任人写清，这里不假装 TypeAdapter 能判。
+    """
+    adapter: TypeAdapter[events_contract.IdempotencyKey] = TypeAdapter(events_contract.IdempotencyKey)
+    assert adapter.validate_python("hot_rescore:2026101601")
+    assert adapter.validate_python("sync_account:" + "0" * 36)
+    with pytest.raises(ValidationError):
+        adapter.validate_python("x" * 129)
+    assert _defs_of(load_cached(DOMAINS["events"][0]))["IdempotencyKey"]["maxLength"] == 128
+
+
+def test_retry_policy_constants_match_frozen_draft() -> None:
+    """`push-retry-annotations` 的消费者：退避注释必须是**可执行事实**，不是散文。
+
+    稿里写 `maxRetries: 3` / `backoffSeconds: [60, 240, 960]` / 公式 `60 * 4^(n-1)`。
+    这里读 `push_scheduler` 的两个真实常量算出前三次再比——有人改公式而忘了改稿，
+    或改了稿而忘了改实现，本测试都会红。
+    """
+    policy = _defs_of(load_cached(DOMAINS["events"][0]))["PushRetryState"]["x-retry-policy"]
+    assert MAX_PUSH_RETRIES == policy["maxRetries"]
+    assert [RETRY_BACKOFF_BASE_SECONDS * 4**n for n in range(MAX_PUSH_RETRIES)] == policy["backoffSeconds"]
+
+
+def test_push_retry_state_tracks_runtime_push_result() -> None:
+    """`response-data-type-conflict` 的消费者：钉住契约与运行时 `PushResult` 的当前真实关系。
+
+    三方各说各话，必须**继续可见**而不是被"取实测"抹平：
+    - 稿：`responseData: [object, null]`
+    - 实现：`providers/push/base.py:50` 的 `response_data: str = ""`
+    - 契约/产物：`string`
+    裁决落地（改实现成结构化，或改稿）时这条会红——那是它应有的行为，不是回归。
+    差集也点名：运行时多一个 `channel`（路由信息，不进响应面），不许默默少一列。
+    """
+    # `providers/push/base.py` 带 `from __future__ import annotations` ⇒ dataclass 的
+    # `field.type` 是**字符串** `'str'`，直接 `is str` 永远假。取真正解析后的类型注解。
+    runtime = get_type_hints(PushResult)
+    assert runtime["response_data"] is str
+    assert (runtime["delivered"], runtime["retryable"], runtime["reason"]) == (bool, bool, str)
+    draft_props = _defs_of(load_cached(DOMAINS["events"][0]))["PushRetryState"]["properties"]
+    gen_props = _defs_of(load_cached(DOMAINS["events"][1]))["PushRetryState"]["properties"]
+    assert draft_props["responseData"]["type"] == ["object", "null"]
+    assert gen_props["responseData"]["type"] == "string"
+    python_names = set(events_contract.PushRetryState.model_fields)
+    assert set(runtime) - {"channel"} == python_names
+    assert events_contract.PushRetryState.model_fields["response_data"].alias == "responseData"
+
+
+def test_push_retry_default_materializes_on_dump() -> None:
+    """`events-dump-materializes-defaults` 的消费者：稿没写默认值，dump 会物化出空串。"""
+    dumped = events_contract.PushRetryState.model_validate(
+        {"delivered": False, "reason": "webhook 502", "retryable": True}
+    ).model_dump()
+    assert dumped["response_data"] == ""
+    assert set(dumped) == {"delivered", "reason", "response_data", "retryable"}
+
+
+# ── 12. "它不是形状"这套退出机制自己会不会被滥用 ──────────────────────────────
+
+
+def test_comparator_bites_when_not_a_shape_marker_is_dropped() -> None:
+    """删掉稿里的 `x-not-in-single-source` 标记 ⇒ 必须立刻红。
+
+    红的原因是那个 def 带着比对器不实现的关键词（`enumStatus` / `legalEdges` /
+    `illegalEdgesMustBeRejected`）。这条钉的是"退出比对要有**稿侧**声明"这半边——
+    否则只要删标记，注释性 def 就变成"没人认识的关键词"而被静默跳过。
+    """
+
+    def mutate(doc: dict[str, Any]) -> None:
+        doc["x-not-in-single-source"].pop("ManifestTransition", None)
+
+    diffs = _compare_with_mutated_draft(mutate, domain="events")
+    assert any("ManifestTransition" in d for d in diffs), f"删标记后仍然 0 条差异：{diffs}"
+
+
+def test_comparator_bites_when_a_real_shape_is_declared_not_a_shape() -> None:
+    """把**真形状** `PushRetryState` 标成"不是形状" ⇒ 必须红，而且红两处。
+
+    ①`compare_defs` 发现它其实还在生成物里（标记过期）；
+    ②narrow 测试发现它含 `properties`/`required`（根本不许退出比对）。
+    这条是这套机制的正面防线：退出许可证只能给真正没有约束的东西。
+    """
+
+    def mutate(doc: dict[str, Any]) -> None:
+        doc["x-not-in-single-source"]["PushRetryState"] = "我想让它消失"
+
+    diffs = _compare_with_mutated_draft(mutate, domain="events")
+    assert any("PushRetryState" in d for d in diffs), f"真形状被一句声明放走了：{diffs}"
+    frozen = load_cached(DOMAINS["events"][0])
+    marked = copy.deepcopy(frozen)
+    marked["x-not-in-single-source"]["PushRetryState"] = "我想让它消失"
+    shape_keys = set(_defs_of(marked)["PushRetryState"]) & _SHAPE_BEARING_KEYWORDS
+    assert shape_keys, "narrow 判据找不到形状关键词 ⇒ 这条声明其实放得过去"
+
+
+def test_registered_conflict_entry_does_not_swallow_neighbouring_drift() -> None:
+    """`response-data-type-conflict` 只解释 `responseData` 的**类型**那一处。
+
+    稿里把 `reason.maxLength` 从 512 改成 511，必须仍然报——否则"登记一条已知冲突"
+    就等于给整个 def 买了免检票（第五轮验证对 `field=\"*\"` 的批评是同一件事）。
+    """
+
+    def mutate(doc: dict[str, Any]) -> None:
+        doc["definitions"]["PushRetryState"]["properties"]["reason"]["maxLength"] = 511
+
+    diffs = _compare_with_mutated_draft(mutate, domain="events")
+    assert any("maxLength" in d for d in diffs), f"冲突登记越界吞掉了 maxLength 差异：{diffs}"
+
+
+def test_default_materialization_must_be_named_property_by_property() -> None:
+    """给一个**没被登记点名**的属性物化出默认值 ⇒ 必须红。
+
+    这条钉的是 `default` 的方向判据里"点名"那一半：只按 def 放行的话，
+    把 `pages` 的默认从 0 改成 7 也算"稿没写 ⇒ 模型物化"，照样溜过去（第五轮 I10b）。
+    """
+
+    def mutate(gen: dict[str, Any]) -> None:
+        gen["$defs"]["EventName"]["default"] = "new_article"
+
+    diffs = _compare_with_mutated_generated(mutate, domain="events")
+    assert any("default" in d for d in diffs), f"未点名的默认物化被放走：{diffs}"
 
 
 # ── 9. 产物与模型的即时一致性（把 CI 那条链拉进本地测试）───────────────────────

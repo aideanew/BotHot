@@ -4,6 +4,13 @@
   "title": "BotHot 异步事件与作业契约（冻结稿 V0.7.0 / 基线 main@13acacc）",
   "description": "实测来源：apps/api/app/services/push_events.py:26（VALID_EVENT_TYPES）/:29-66（_hydrate_payload）/:70-80（emit_event）/:82-88（claim_pending_events SKIP LOCKED）、apps/api/app/services/push_scheduler.py:110-113/203-218（领取与退避/死信）、apps/api/app/services/scheduler.py:365-394（hot_rescore 每小时）、apps/api/app/services/subscription.py:329/743/828（幂等键前缀、Job/JobItem）、AGENTS.md 关键约束 4（队列在 PG，FOR UPDATE SKIP LOCKED，不引入 Redis 队列）。",
   "type": "object",
+  "x-not-in-single-source": {
+    "EventPayloadRules": "payload 自足原则与三类快照字段表是「emit 时快照哪些键」的生产端清单，不是字段形状；Pydantic 表达不了「查不到对象时静默置空串」这条已知缺陷（见本条目 x-known-defect，已转 STEP-05 计数与告警）。责任在 services/push_events.py 的 _hydrate_payload。",
+    "QueueMechanism": "PG + FOR UPDATE SKIP LOCKED、禁 Redis 队列、Redis 不可达时三处降级行为，全是实现选型与可用性规则，不是形状。责任在 AGENTS.md 关键约束 4 与 repositories/job.py。",
+    "ManifestTransition": "四态状态机与两条非法边：值集已由 collection.ManifestStatus 钉住，这里再建一个枚举就是第二个真源；边能不能走是行为，由 STEP-04 S4.4.2.1 逐条建用例（两条非法边各一条）。",
+    "x-eventing-surface": "生产端/喂入端/消费端三个坐标是运行时拓扑（谁在什么节律里领取），不是任何一次请求响应的形状。",
+    "x-observability-pairing": "「每个事件名必须同时产出三族指标」是可观测性配对规则，落点在 STEP-05 的指标登记，不是字段约束。"
+  },
   "definitions": {
     "EventName": {
       "type": "string",

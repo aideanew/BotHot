@@ -162,6 +162,7 @@ def generate() -> dict[str, str]:
 CONTRACT_SCHEMA_MODULES: dict[str, str] = {
     "collection": "app.contracts.collection",
     "identity": "app.contracts.identity",
+    "events": "app.contracts.events",
 }
 
 
