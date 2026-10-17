@@ -97,6 +97,31 @@ docs(architecture): 更新系统架构设计文档
 - e2e 测试：`apps/web/e2e/*.spec.ts`（Playwright，与单测分目录，正确）
 - 框架：Vitest（单元，`environment: happy-dom`，见 vitest.config.ts:26） + Playwright（e2e）
 
+### 4.3 验证纪律（STEP-00E S00E.2.2 增，2026-10-17）
+
+三条都是本轮实测踩出来的，不是从别处抄来的通用建议。
+
+1. **`skip ≠ pass`，且判定动作必须是"点名"而不是"看总数"**。
+   一条用例出现在 `SKIPPED [...]` 列表里就等于**它没有被执行**；把这种读数写成"通过"是本仓
+   最贵的一类错误（本文件 §4.1 那条"采集路径错位导致静默不跑"是同一族的另一面）。
+   判定动作固定三步：①`pytest -q -rs`（`-rs` 不是可选项，不加就拿不到原因）；
+   ②读 skip 门禁打的 `pg_unreachable` / 各族计数，**不是**读 `N passed`；
+   ③对关键用例**单独点名**——它出现在 skip 列表 = 未验收。
+   样例判据：`test_be02_engine_routing.py::test_short_link_second_ingest_hits_cache_via_url_fallback`
+   （R0 的缓存回归），见 `docs/06_validation/evidence/EVD-V4-00E/s00e_readings.md` §2。
+2. **工具/依赖缺失必须打印 `SKIP(tool missing)`，并与"用例自己 skip"用不同退出码区分**。
+   原因：同一份 `skipped` 计数里混着两种语义完全不同的东西——
+   "这台机器没有 docker"（读数无效，换机重跑）与"这条用例按设计在该环境跳过"（读数有效）。
+   二者共用一个计数就是 00E 本机现状的问题：`1570 passed / 6 skipped` 看起来与依赖机同等，
+   实际上**这台机器上的连库面一条都没跑**。落地形态见 `ci-windows.yml` 的门禁（按原因族记账 +
+   未知族即红）与 `cross-platform.md` §8。
+3. **验收环境是共享工作树的一部分，每台机器每轮重取，不得引用上一版的工具链状态**。
+   本轮实测：`shutil.which('docker')` 与 `which('docker-compose')` 均为 `None`、
+   `wsl.exe --list` rc=1（无发行版）、`netstat` 对 5433/6380 无监听——这与 2026-10-15
+   `EVD-V5-00X` §1 记的工具链清单**不是同一份事实**（那份里 gitleaks/node/pnpm 都装齐了，
+   docker 从来没有）。引用旧读数的后果是把"判不了"写成"已通过"。
+   每轮开工第一步 = 现跑上面三条探测，并把输出贴进当批 EVD。
+
 ## 5. 依赖管理
 
 ### 5.1 后端

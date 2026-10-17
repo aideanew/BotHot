@@ -30,14 +30,39 @@
 > 本卡不占迁移号；若需要 DDL ⇒ 停下上报。
 
 ## Execution Steps
-1. [ ] ✅ **S00E.1.1** 先量现状：`bash scripts/test-env.sh up`（或 compose）是否可用；记录失败点（端口占用 / 镜像拉取 / 无 docker）入 EVD
+1. [x] ✅ **S00E.1.1** 先量现状：`bash scripts/test-env.sh up`（或 compose）是否可用；记录失败点（端口占用 / 镜像拉取 / 无 docker）入 EVD
+   — **已确认（本机现测，2026-10-17）**：失败点 = **无 docker、无 docker-compose、WSL 无发行版**
+   （`shutil.which` 两个都是 `None`；`wsl.exe --list --quiet` rc=1 打用法帮助；
+   `netstat` 对 5433/6380 无监听）。⇒ 本卡的 1.2/1.3/3.2 在本机**只能改文件不能出读数**，
+   按 D-V4-01 就不算验收。读数与命令在 `EVD-V4-00E/s00e_readings.md` §1。
 2. [ ] 🛠 **S00E.1.2** 固定 PG/Redis 起法：测试专用 compose，宿主端口用**项目分配段**（PG 5433、Redis 6380），禁占 3000（AGENTS.md 端口表）；加 `docker compose ps` 健康等待与超时
+   — **本卡被现读推翻的一处**：卡面要求测试端口用 5433/6380，而 `scripts/test-env.sh:37` 写死
+   `FORBIDDEN_PORTS=("5433" "5435" "6379" "6380")` 且命中即拒绝启动，理由是 D-12（conftest 曾把
+   部署库当测试库）。**事故规则比卡面有力 ⇒ 按现读改卡，不改脚本**，见 E-2。
+   其余两项（`compose.test.yml`、健康等待/占用者点名）需要 docker 才能验证 ⇒ **本机判不了**，见 E-1/E-3。
    - S00E.1.2.1 与并发会话隔离：默认端口被占时**报错退出并点名占用者**，不静默换端口（换端口会让 `AIDEANBOT_TEST_PG_DSN` 与读数分叉）
 3. [ ] 🛠 **S00E.1.3** 迁移与播种：`verify-backend` 目标内先 `alembic upgrade head` 再 pytest；`alembic` 单头断言保留
-4. [ ] ✅ **S00E.1.4** 全量读数：`make verify-backend` 输出 `failed/passed/skipped` + 覆盖率，junit 入 EVD；**目标 0 failed 且 skip ≤ 6**
-   - S00E.1.4.1 判据必须带 `-rs`，并对 `test_be02_engine_routing.py::test_short_link_second_ingest_hits_cache_via_url_fallback` 单独点名：出现在 skipped 列表 = **未验收**，不是通过
+4. [x] ✅ **S00E.1.4** 全量读数：`make verify-backend` 输出 `failed/passed/skipped` + 覆盖率，junit 入 EVD；**目标 0 failed 且 skip ≤ 6**
+   — **已确认，但取数面不是本机**：本机无 docker ⇒ `make verify-backend` 跑不起来（E-3），
+   按 D-V4-01 的签字注记（正式验收面 = CI ubuntu-latest）取 `@ci` run **39041150287** @ `a3ad07a`：
+   `1570 passed / 6 skipped / 0 failed in 103.15s`、`Total coverage: 86.01%`、
+   `skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0`。
+   ⚠️ `skip ≤ 6` 现在**恰好被用满**、零余量：任何新增的 LangBot/Redis 类 skip 都会把 ubuntu 门顶红，
+   而那张卡的作者未必知道这是设计要求重测（同机制在 `CI-Windows` 上今天已验证两次，
+   见 `EVD-V13-00H` §8/§9）⇒ 程序写进 `cross-platform.md` §8，建议提升为共用纪律。
+   - [x] S00E.1.4.1 判据必须带 `-rs`，并对 `test_be02_engine_routing.py::test_short_link_second_ingest_hits_cache_via_url_fallback` 单独点名：出现在 skipped 列表 = **未验收**，不是通过
+     — **已确认**：该 run 的六条 skip 是 `test_chat_sse:1130/1208`、`test_env_isolation:77`、
+     `test_session_store_redis:47/71`、`test_we_notifications:247`，**被点名那条不在其中** ⇒ 它在真库上实跑。
 5. [ ] 🛠 **S00E.2.1** 前端面：`verify-frontend` = `pnpm install --frozen-lockfile` → `typecheck` → `vitest run`；把 `node_modules` 是否存在**作为读数输出**（F-10：上一版说存在、本版说没有）
-6. [ ] 📄 **S00E.2.2** `conventions.md` 增三条：①skip≠pass 的判定动作；②工具缺失必须打印 `SKIP(tool missing)` 并区分退出码；③验收环境是共享工作树的一部分，**每台机器每轮重取**，不得引用上一版的工具链状态
+   — **本批未做，原因不是遗漏**：共享工作树里 `apps/web/pnpm-lock.yaml` 此刻是**他人未提交改动**
+   （`git status` 可见），从一份被改过的 lockfile 装依赖再出"前端面读数"，得到的数无法归因到任何提交。
+   等该文件落定后单独一轮，并把 `node_modules` 的存在性按 F-10 要求打出来。
+6. [x] 📄 **S00E.2.2** `conventions.md` 增三条：①skip≠pass 的判定动作；②工具缺失必须打印 `SKIP(tool missing)` 并区分退出码；③验收环境是共享工作树的一部分，**每台机器每轮重取**，不得引用上一版的工具链状态
+   — **已写入** `docs/04_engineering/conventions.md` §4.3，三条各带本轮的实测出处
+   （①给了"点名"三步与 R0 那条样例判据；②指出同一 `skipped` 计数混着两种语义——
+   "这台机器没 docker（读数无效）"与"这条按设计在该环境跳过（读数有效）"，
+   并点名 `1570 passed / 6 skipped` 在本机等价于"连库面一条没跑"；
+   ③附上本轮的三条探测命令，并写明它与 2026-10-15 `EVD-V5-00X` §1 那份清单**不是同一份事实**）。
 7. [ ] 👤 **S00E.3.1** 裁决并登记："验收由谁的环境跑"二选一——(A) 固定一台依赖机为验收机，(B) CI 作为唯一验收面。写进 `decision-log.md` 的 `D-V4-01`
 8. [ ] ✅ **S00E.3.2** 复跑验证：同一命令连跑两次，failed/skipped 数一致；不一致说明环境有状态泄漏，本卡未过
 
