@@ -826,15 +826,30 @@ class SourceSubscriptionService:
         本轮各排一次队；抓取落地时映射就位，之后的轮次就收敛了。这与 D-V9-01 登记的
         "存量首次再入库各多一次抓取"是同一族代价。
         """
-        pairs: list[tuple[ArticleManifest, str]] = [(row, str(row.article_key)) for row in rows]
         # token 一律由 `parse_wechat_url` 给：它在 `/s/` 之前已经过 `host == WECHAT_HOST` 这道闸
         # （`article_identity.py:82`），与 `canonical_article_key` 采纳 `s:` 支的条件是**同一个条件**。
         # 在这里自己判 host/末段会造出第二个口径——`kb.py:_is_short_link` 那种子串判定就是前车之鉴
         # （已发布为 P-20）。非微信 host 的 `/s/x` 到这里一律空串 ⇒ 不查表、不并键、不误判已入库。
-        token_of = {row.id: parse_wechat_url(row.url).short_token if row.url else "" for row in rows}
-        wanted = sorted({token for token in token_of.values() if token})
+        def token_of(url: str | None) -> str:
+            return parse_wechat_url(url).short_token if url else ""
+
+        # 在途面必须按**解析后的键**减。`@ci` 真库实测到的那条红就是这里：入列的那一支完全可能
+        # 是短链行，它 `article_key` 存的是 `s:` 一支，只拿候选行解析出来的长链键去查
+        # `ArticleManifest.article_key IN (长链键)` 永远命中不了它 ⇒ 同一篇的长链形态在下一轮
+        # 绕过在途保护再排一次队。所以把在途的那些清单行**也**做一次同样的解析。
+        inflight = (
+            await self._session.execute(
+                select(ArticleManifest.id, ArticleManifest.article_key, ArticleManifest.url)
+                .join(JobItem, JobItem.manifest_id == ArticleManifest.id)
+                .where(JobItem.job_id.in_(self._active_sync_job_ids(subscription_id)))
+            )
+        ).all()
+        wanted = sorted(
+            {t for t in (token_of(row.url) for row in rows) if t}
+            | {t for t in (token_of(url) for (_i, _k, url) in inflight) if t}
+        )
         if not wanted:
-            return pairs
+            return [(row, str(row.article_key)) for row in rows]
         mapped: dict[str, str] = {
             short_key: long_key
             for short_key, long_key in (
@@ -845,45 +860,35 @@ class SourceSubscriptionService:
                 )
             ).all()
         }
-        resolved: dict[str, str] = {}
-        for row in rows:
-            long_key = mapped.get(token_of[row.id])
-            if long_key:
-                resolved[row.id] = long_key
-        if not resolved:
-            return pairs
-        # 收敛出来的长链键若已入库或在途，短链这一支整条剔除（同篇不重排、不重抓）
-        vals = sorted(set(resolved.values()))
-        present = set(
-            (
-                await self._session.scalars(
-                    select(ContentAsset.external_id).where(
-                        ContentAsset.source_id == source_id,
-                        ContentAsset.status == "READY",
-                        ContentAsset.external_id.in_(vals),
-                    )
-                )
-            ).all()
-        )
-        present |= {
-            key
-            for key in (
-                await self._session.scalars(
-                    select(ArticleManifest.article_key)
-                    .join(JobItem, JobItem.manifest_id == ArticleManifest.id)
-                    .where(
-                        JobItem.job_id.in_(self._active_sync_job_ids(subscription_id)),
-                        ArticleManifest.article_key.in_(vals),
-                    )
-                    .distinct()
-                )
-            ).all()
-            if key
+
+        def effective_key(stored: str | None, url: str | None) -> str:
+            """这一行在收敛坐标上的身份：有短链映射就用它指向的长链键，否则用存量键。"""
+            return mapped.get(token_of(url)) or str(stored)
+
+        pairs = [(row, effective_key(row.article_key, row.url)) for row in rows]
+        # 在途行的坐标集合；`if stored` 那一路是 NULL 守卫的另一半——没有键的行不该参与并键
+        inflight_keys = {
+            effective_key(stored, url) for (_iid, stored, url) in inflight if stored
         }
         out: list[tuple[ArticleManifest, str]] = []
-        for row, own_key in pairs:
-            key = resolved.get(row.id, own_key)
-            if key in present:
+        # 只对"解析后换了键"的那些行去补查 READY 资产：存量键那一支 SQL 层已经减过了，
+        # 重复查只会多要一次往返。
+        probe_vals = sorted({key for row, key in pairs if str(row.article_key) != key})
+        ready_hit: set[str] = set()
+        if probe_vals:
+            ready_hit = set(
+                (
+                    await self._session.scalars(
+                        select(ContentAsset.external_id).where(
+                            ContentAsset.source_id == source_id,
+                            ContentAsset.status == "READY",
+                            ContentAsset.external_id.in_(probe_vals),
+                        )
+                    )
+                ).all()
+            )
+        for row, key in pairs:
+            if key in ready_hit or key in inflight_keys:
                 continue
             out.append((row, key))
         return out

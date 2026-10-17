@@ -280,6 +280,12 @@ class _CapturingSession:
     async def scalar(self, stmt: Any) -> int:
         return self.backlog
 
+    async def execute(self, stmt: Any) -> _FakeResult:
+        # STEP-04 的在途面改成"按解析后的键减"之后，Diff 每轮都会先取一次在途清单行
+        # （`SELECT article_manifests.id, ...`）。这里默认回空集 = 没有在途行，
+        # 需要它在途语义的用例走 `_UnifySession`，它有分派。
+        return _FakeResult([])
+
     async def flush(self) -> None:
         self.flushed += 1
 
@@ -596,12 +602,15 @@ class _UnifySession:
         rows: list[ArticleManifest],
         mapped: list[tuple[str, str]],
         ready: list[str],
-        inflight: list[str],
+        inflight_rows: list[tuple[str, str, str]] | None = None,
     ) -> None:
         self.rows = rows
         self.mapped = mapped
         self.ready = ready
-        self.inflight = inflight
+        # 在途面的替身从"键列表"改成 **(id, article_key, url) 三元组**：实现现在要先取在途行、
+        # 再对它们做同一套短链解析（`@ci` 真库那条红证明按存量键查在途是查不到的）。
+        # 默认空集而不是省略参数——省略会让"忘了传"读成"没有在途"。
+        self.inflight_rows = inflight_rows or []
         self.map_reads = 0
 
     async def scalars(self, stmt: Any) -> _FakeResult:
@@ -611,8 +620,6 @@ class _UnifySession:
         sql = _sql(stmt)
         if sql.startswith("SELECT CONTENT_ASSETS.EXTERNAL_ID"):
             return _FakeResult(self.ready)
-        if sql.startswith("SELECT DISTINCT ARTICLE_MANIFESTS.ARTICLE_KEY"):
-            return _FakeResult(self.inflight)
         if sql.startswith("SELECT ARTICLE_MANIFESTS.ID"):
             return _FakeResult(self.rows)
         raise AssertionError(f"替身会话认不出这条查询：{sql[:160]}")
@@ -622,6 +629,10 @@ class _UnifySession:
 
     async def execute(self, stmt: Any) -> _FakeRows:
         sql = _sql(stmt)
+        # 在途行取数走 execute（三元组），短链映射也走 execute——两条必须分得开，
+        # 否则"根本没查映射"和"查了映射"在这条判据上长成同一个样子。
+        if sql.startswith("SELECT ARTICLE_MANIFESTS.ID, ARTICLE_MANIFESTS.ARTICLE_KEY"):
+            return _FakeRows(self.inflight_rows)
         assert "FROM SHORT_LINK_MAPS" in sql, f"并键只该读 short_link_maps：{sql[:160]}"
         self.map_reads += 1
         return _FakeRows(self.mapped)
@@ -653,15 +664,46 @@ async def test_short_form_row_is_subtracted_when_its_long_key_is_already_ready()
     在短链形态上复活。并键之后才谈得上减资产——这里判的就是这一步有没有真的发生。
     """
     row = _short_manifest("src-1", "m-short")
-    svc = _unify_svc(_UnifySession(rows=[row], mapped=[(_SHORT_TOKEN, KEY_A)], ready=[KEY_A], inflight=[]))
+    svc = _unify_svc(_UnifySession(rows=[row], mapped=[(_SHORT_TOKEN, KEY_A)], ready=[KEY_A]))
     assert await svc._compute_new_manifests("src-1", "sub-1") == [], "长链已 READY，短链形态不该再入列"
 
 
 async def test_short_form_row_is_subtracted_when_its_long_key_is_in_flight() -> None:
-    """在途面的跨形态半边：长链那一支挂在活动 Job 下时，短链这一支也不能再排一次队。"""
+    """在途面的跨形态半边（正向）：长链那一支挂在活动 Job 下时，短链这一支也不能再排一次队。"""
     row = _short_manifest("src-1", "m-short")
-    svc = _unify_svc(_UnifySession(rows=[row], mapped=[(_SHORT_TOKEN, KEY_A)], ready=[], inflight=[KEY_A]))
+    svc = _unify_svc(
+        _UnifySession(
+            rows=[row],
+            mapped=[(_SHORT_TOKEN, KEY_A)],
+            ready=[],
+            inflight_rows=[("m-long", KEY_A, URL_A)],
+        )
+    )
     assert await svc._compute_new_manifests("src-1", "sub-1") == [], "同篇长链在途，短链形态绕过了在途保护"
+
+
+async def test_long_form_row_is_subtracted_when_the_short_form_is_in_flight() -> None:
+    """在途面的跨形态半边（反向）——**这一条是 `@ci` 真库实测出来的红**。
+
+    入列的那一支完全可能是短链行：它挂在活动 Job 下，但 `article_key` 存的是 `s:<token>`。
+    只拿候选行解析出来的长链键去查 `ArticleManifest.article_key IN (长链键)`，那条在途的短链行
+    **命中不了**，于是同一篇的长链形态在下一轮绕过在途保护再排一次队（run 39016275296 的
+    `test_two_url_forms_of_one_article_enqueue_once` 就是这么红的）。
+    修法是让在途行也过一遍同一套解析：短链在途行 → 长链键 → 候选行长链键命中 → 剔除。
+    """
+    long_row = _manifest(MANIFEST_STATUS_DISCOVERED)  # 存量键 = KEY_A（长链一支）
+    short_inflight = ("m-short-queued", KEY_SHORT, URL_SHORT)
+    svc = _unify_svc(
+        _UnifySession(
+            rows=[long_row],
+            mapped=[(_SHORT_TOKEN, KEY_A)],
+            ready=[],
+            inflight_rows=[short_inflight],
+        )
+    )
+    assert await svc._compute_new_manifests("src-1", "sub-1") == [], (
+        "同篇的短链形态已在途，长链这一支绕过了在途保护"
+    )
 
 
 async def test_unification_never_fakes_a_convergence_when_the_map_is_missing() -> None:
@@ -671,8 +713,7 @@ async def test_unification_never_fakes_a_convergence_when_the_map_is_missing() -
     而那正是把不可得的行为写成绿的形状。
     """
     row = _short_manifest("src-1", "m-short")
-    svc = SourceSubscriptionService(_UnifySession(rows=[row], mapped=[], ready=[], inflight=[]))  # type: ignore[arg-type]
-    svc._item_repo = _FakeItemRepo()  # type: ignore[assignment]
+    svc = _unify_svc(_UnifySession(rows=[row], mapped=[], ready=[]))
     out = await svc._compute_new_manifests("src-1", "sub-1")
     assert [m.id for m in out] == ["m-short"], "无映射时的正确行为是入列，而不是被并键逻辑吞掉"
 
@@ -695,7 +736,7 @@ async def test_a_non_wechat_host_never_consults_the_short_link_map() -> None:
         content_hash="h",
         status=MANIFEST_STATUS_DISCOVERED,
     )
-    session = _UnifySession(rows=[row], mapped=[(_SHORT_TOKEN, KEY_A)], ready=[KEY_A], inflight=[])
+    session = _UnifySession(rows=[row], mapped=[(_SHORT_TOKEN, KEY_A)], ready=[KEY_A])
     out = await _unify_svc(session)._compute_new_manifests("src-1", "sub-1")
     assert session.map_reads == 0, "非微信 host 也去查了 short_link_maps ⇒ 并键的入口条件放宽了"
     assert [m.id for m in out] == ["m-evil"], "不许凭一个来路不明的 s: 键把这行吞掉"

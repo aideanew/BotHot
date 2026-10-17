@@ -61,7 +61,7 @@ def _run_child() -> dict[str, dict[str, object]]:
         **os.environ,
         "APP_ENV": "development",
         # 10.255.255.1 是 RFC5737 保留地址：不路由、丢包不回 RST ⇒ 正是"黑洞"形态。
-        "DATABASE_URL": "postgresql+psycopg://probe:probe@10.255.255.1:5432/probe",
+        "DATABASE_URL": "postgresql+psycopg://probe@10.255.255.1:5432/probe",
         "REDIS_URL": "redis://127.0.0.1:1/0",
         "LANGBOT_BASE_URL": "http://127.0.0.1:1",
         "SECRET_KEY": "0" * 32,

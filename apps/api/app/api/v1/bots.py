@@ -110,6 +110,12 @@ def _validate_channel_type(channel_type: str) -> None:
         raise RequestInvalidError(f"未知渠道类型: {channel_type}（合法：{', '.join(sorted(valid))}）")
 
 
+# 读接口的角色门一律写 `require_roles("operator")`，**不要**顺手抄成同文件写接口那行
+# `require_roles("admin", "operator")`：`_required_rank` 取请求角色里的**最高**秩
+# （`app/services/roles.py:44` 的 `max(...)`），所以那两个参数实际要的是 admin，operator 会被判
+# 10004。本卡目标句是「rank<operator 得 403、operator 得 200」，只有最低秩写法才满足。
+# 写接口那 8 处仍是 admin-only——这一事实连同待裁决点登记为 P-23。
+
 def _serialize_channel(ch: BotChannel) -> dict:
     """序列化渠道。
 
@@ -226,7 +232,7 @@ async def list_channels(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
+    _: str = Depends(require_roles("operator")),
 ):
     """查询渠道列表（分页）。"""
     q = select(BotChannel)
@@ -330,7 +336,7 @@ async def list_push_tasks(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
+    _: str = Depends(require_roles("operator")),
 ):
     """查询推送任务列表。"""
     q = select(PushTask)
@@ -511,7 +517,7 @@ async def run_push_task_now(
 async def get_channel(
     channel_id: str,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
+    _: str = Depends(require_roles("operator")),
 ):
     """查询单个渠道详情。"""
     ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
@@ -640,7 +646,7 @@ async def list_push_logs(
     page_size: int = Query(20, ge=1, le=100),
     status: str | None = Query(None, description="按投递状态过滤: success/failed/dead"),
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
+    _: str = Depends(require_roles("operator")),
 ):
     """查询某渠道的推送日志（R3.1：分页既有，补 status 过滤）。"""
     ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()

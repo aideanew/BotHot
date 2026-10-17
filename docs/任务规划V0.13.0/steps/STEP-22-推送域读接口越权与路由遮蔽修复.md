@@ -55,7 +55,7 @@ rank < operator 的登录用户访问推送域任一读接口得 `403/10004` 且
 3. [x] **S22.2.2** 列出前端全部 `/api/v1/bots*` 调用点（`grep -rn "/api/v1/bots" apps/web/lib apps/web/app`）及其页面，写进 EVD；确认均位于需 operator 的管理页
    - ✅ 14 个调用点 + `apps/web/app/bots/page.tsx` / `PushTasksTab.tsx` / `TopBar.tsx:120` 已入 EVD §4。**卡面那句"确认均位于需 operator 的管理页"只成立一半**：`/bots` 是管理页，但导航项 `PrivateNavItem` 只按**登录**门禁 ⇒ 残余 UX 登记为 **P-21**（本卡禁止改 `apps/web/**`）。阻塞条件（普通用户功能依赖这些读接口）**未触发**，不走 fable 升级
 4. [x] **S22.2.3** 四个读接口加 `_: str = Depends(require_roles("admin", "operator"))`（与同文件写接口同形）；`list_channel_types`(:166，只回类型枚举、不含实例数据) **不加**，在 EVD 写明理由
-   - ✅ 四支齐（`require_roles` 调用点由 8 增至 12）；白名单理由 + "类型枚举里没有任何实例数据"的断言入 EVD §5 与 `test_channel_types_stays_readable_for_a_plain_user`。另更正 `_serialize_channel` 的假文案（原写"不暴露 secret"，实际回显 webhook 与解密后的 `extra_config`），见 EVD §6
+   - ✅ 四支齐；**但门写成 `require_roles("operator")` 而不是卡面说的"与同文件写接口同形"**——`_required_rank` 取的是请求角色里的最高秩（`roles.py:44` `max(...)`），所以照抄`require_roles("admin","operator")` 会要求 admin，卡面目标句「operator 得 200」永不成立（`@ci` run 39016275296 实测 operator 拿 403/10004）。写接口那 8 处的 admin-only 现状连同待裁决点登记为 **P-23 / D-V10-09**，`roles.py` 与 `deps.py` 是本卡禁止修改面。白名单理由 + "类型枚举里没有任何实例数据"的断言入 EVD §5 与 `test_channel_types_stays_readable_for_a_plain_user`。另更正 `_serialize_channel` 的假文案（原写"不暴露 secret"，实际回显 webhook 与解密后的 `extra_config`），见 EVD §6
 ### S22.3 防复发
 5. [x] **S22.3.1** 在新测试文件加"路由面守卫"：枚举 `app.routes` 中前缀 `/api/v1/bots` 的所有 GET/PUT/POST/DELETE（复用 `tests/test_idor_matrix.py` 的递归摊平写法），除白名单 `list_channel_types` 外每个端点的依赖树必须含 `require_roles` ⇒ 将来新增读接口忘加门会红
    - ✅ `_ordered_bots_routes()` 走 `.original_router.routes` 摊平（照 `test_idor_matrix.py` 那条已踩过的坑）；反证已做：临时删掉 `list_channels` 那道门 ⇒ 守卫红、判据自检仍绿，还原后 sha 一致（EVD §3）
