@@ -34,15 +34,17 @@ jobs:
       # STEP-23 返工轮新增 2 条连库用例 ⇒ run 39035688934 @2a7195d 读到 `total_skipped=443`
       # 而 baseline 还是 441 ⇒ 门红，且 `failed=0`、未知族=0、构成里 `PG-DSN-未设置` 从 332 变 334。
       # 这就是"零余量"的代价与用途：每张加连库用例的卡都必须**重测**一遍，而不是把红灯当噪声。
-      # 读数锚：head_sha=2a7195d、run 39035688934 = `1125 passed / 443 skipped / 0 failed in 983.59s`
-      # （7a252f4 那次是 `1105 / 443`；两次 skipped 相同，说明增量确实只来自 DSN 族那 2 条）。
-      # 443 的构成（未知族 = 0）：
-      #   PG 类 438 = `AIDEANBOT_TEST_PG_DSN 未设置` 334 + `PG 不可达`/`PG:5433 不可达` 104
+      # 读数锚：head_sha=db7e63b、run 39038290651 = `1132 passed / 444 skipped / 0 failed in 983.46s`，
+      # 门打的是 `total_skipped=444 baseline=443`、`未知族=0`、`PG-DSN-未设置` 由 334 变 335
+      # ⇒ 增量精确等于 STEP-23 第二轮新增的那 1 条端到端连库用例。
+      # 前一次同形态：`2a7195d` run 39035688934 = `1125 / 443 / 0`（STEP-23 返工轮 +2 条）。
+      # 444 的构成（未知族 = 0）：
+      #   PG 类 439 = `AIDEANBOT_TEST_PG_DSN 未设置` 335 + `PG 不可达`/`PG:5433 不可达` 104
       #   非 PG 类 5 = Redis 3 + LangBot :5300 1 + 代理变量 1
       # 交叉核对：同 sha 的 ubuntu job 非 PG 类也是这几族，两侧分母相同（本机 @win 复现过 441 那版）。
       # ⚠️ 不许留余量：余量就是"同数换因"那个洞的宽度（详见 docs/04_engineering/cross-platform.md
       # 的「新增连库用例必做的第二步」）。
-      SKIP_BASELINE_WIN: "443"
+      SKIP_BASELINE_WIN: "444"
     defaults:
       run:
         shell: bash
