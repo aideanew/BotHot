@@ -22,31 +22,39 @@ import sys
 
 # 本步引入的形状：降级后必须全部消失，再升级后必须全部回来
 COLUMNS: dict[str, str] = {"article_manifests": "article_key", "job_items": "manifest_id"}
-INDEXES: tuple[str, ...] = ("ix_manifest_source_article_key", "ix_job_items_manifest_id")
+# 索引也带**表坐标**。同一批改动刚把 AST 门从"两表索引名并集"改成按表判，
+# 探针若只按名字判就等于留下两个精度不同的判据；PG 里索引名在 schema 内唯一，
+# 所以这里能抓到的不是"第二支同名索引"，而是"建到别的表上"那一类错。
+INDEXES: dict[str, str] = {
+    "ix_manifest_source_article_key": "article_manifests",
+    "ix_job_items_manifest_id": "job_items",
+}
 
 
 def evaluate(
     have_columns: set[tuple[str, str]],
-    have_indexes: set[str],
+    have_indexes: set[tuple[str, str]],
     expect: str,
 ) -> list[str]:
-    """返回违规清单（空 = 通过）。`expect` 取 "present" 或 "absent"。"""
+    """返回违规清单（空 = 通过）。`expect` 取 "present" 或 "absent"；两个集合的元素都是 `(表名, 名字)`。"""
     if expect not in ("present", "absent"):
         return [f"未知的 expect={expect!r}（只支持 present/absent）"]
     want_cols = set(COLUMNS.items())
-    want_idx = set(INDEXES)
+    want_idx = {(table, name) for name, table in INDEXES.items()}
     if expect == "present":
         missing_cols = sorted(want_cols - have_columns)
         missing_idx = sorted(want_idx - have_indexes)
         return [
             *(f"缺列 {t}.{c}" for t, c in missing_cols),
-            *(f"缺索引 {i}" for i in missing_idx),
+            *(f"缺索引 {t}.{i}" for t, i in missing_idx),
         ]
     leaked_cols = sorted(want_cols & have_columns)
-    leaked_idx = sorted(want_idx & have_indexes)
+    # absent 侧按**名字**判（不按表）：索引名在 PG 的 schema 内全局唯一，
+    # 所以降级后只要还留着这个名字就是"没拆干净"，哪怕它报在别的表上也要出声。
+    leaked_idx = sorted({p for p in have_indexes if p[1] in INDEXES})
     return [
         *(f"降级后仍在：列 {t}.{c}" for t, c in leaked_cols),
-        *(f"降级后仍在：索引 {i}" for i in leaked_idx),
+        *(f"降级后仍在：索引 {t}.{i}" for t, i in leaked_idx),
     ]
 
 
@@ -55,7 +63,10 @@ def query_shape(dsn: str) -> tuple[set[tuple[str, str]], set[str]]:
 
     两条查询都只用 `= ANY(%s)`（列表参数在 psycopg3 里自适应成 ARRAY），
     不写 `(table_name, column_name) IN %s` 那种行构造器——它在不同驱动版本下的
-    参数展开不一样，而探针本身必须是零歧义的那一方。表名归属在 Python 侧过滤。
+    参数展开不一样，而探针本身必须是零歧义的那一方。
+    列按 `(表, 列)` 在 Python 侧收敛（同名列可能属于别的表），
+    索引则**保留 SQL 返回的全部 `(表, 名)` 对**——名字在 schema 内全局唯一，
+    降级后不管它报在哪张表上都算"没拆干净"。
     """
     import psycopg  # 延迟 import：离线判据（单测）不该依赖驱动
 
@@ -75,9 +86,9 @@ def query_shape(dsn: str) -> tuple[set[tuple[str, str]], set[str]]:
             if t in COLUMNS and COLUMNS[t] == c
         }
         idx = {
-            r[0]
-            for r in conn.execute(
-                "SELECT indexname FROM pg_indexes WHERE indexname = ANY(%s)", (list(INDEXES),)
+            (t, n)
+            for t, n in conn.execute(
+                "SELECT tablename, indexname FROM pg_indexes WHERE indexname = ANY(%s)", (sorted(INDEXES),)
             ).fetchall()
         }
     finally:

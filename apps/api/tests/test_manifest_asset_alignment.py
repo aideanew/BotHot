@@ -398,7 +398,7 @@ def test_roundtrip_probe_has_polarity() -> None:
     """
     probe = _load_probe()
     want_cols = set(probe.COLUMNS.items())
-    want_idx = set(probe.INDEXES)
+    want_idx = {(t, n) for n, t in probe.INDEXES.items()}
 
     # 正例：升级后齐全 / 降级后全空，两种模式各应一次绿
     assert probe.evaluate(want_cols, want_idx, "present") == []
@@ -406,12 +406,21 @@ def test_roundtrip_probe_has_polarity() -> None:
 
     # 反例（这才是判定力）：降级后仍留着列或索引 ⇒ absent 必须点名
     assert probe.evaluate({("job_items", "manifest_id")}, set(), "absent") == ["降级后仍在：列 job_items.manifest_id"]
-    assert probe.evaluate(set(), {"ix_manifest_source_article_key"}, "absent") == [
-        "降级后仍在：索引 ix_manifest_source_article_key"
+    assert probe.evaluate(set(), {("article_manifests", "ix_manifest_source_article_key")}, "absent") == [
+        "降级后仍在：索引 article_manifests.ix_manifest_source_article_key"
     ]
     # 升级后少建 ⇒ present 必须点名，且两列都缺时给两条而不是一条（合并成一条会丢信息）
     assert probe.evaluate({("article_manifests", "article_key")}, want_idx, "present") == ["缺列 job_items.manifest_id"]
     assert len(probe.evaluate(set(), set(), "present")) == 4
+
+    # 精度与 AST 门那一层保持一致：索引**名字对但表不对**时 present 必须算没建
+    stray = {("job_items", "ix_manifest_source_article_key"), ("job_items", "ix_job_items_manifest_id")}
+    assert probe.evaluate(want_cols, stray, "present") == ["缺索引 article_manifests.ix_manifest_source_article_key"]
+    # 而 absent 反过来按**名字**判（索引名在 schema 内全局唯一）：不管残留报在哪张表上都要出声
+    assert probe.evaluate(set(), {("someone_elses_table", "ix_job_items_manifest_id")}, "absent") == [
+        "降级后仍在：索引 someone_elses_table.ix_job_items_manifest_id"
+    ]
+
     # 升级后齐全 ⇒ present 绿而 absent 红；降级后全空 ⇒ absent 绿而 present 红。
     # 这两行就是"探针不是恒真"的直接证明——任何一种"全绿"都只在一个极上不绿。
     assert probe.evaluate(want_cols, want_idx, "absent") != []
