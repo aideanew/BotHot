@@ -669,6 +669,3 @@ async def list_push_logs(
             "page_size": page_size,
         }
     )
-
-
-

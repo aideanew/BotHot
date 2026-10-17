@@ -21,12 +21,11 @@ import json
 import uuid
 from typing import Any
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from starlette.routing import Match
 
-from app.api.deps import get_current_user_id, get_db
+from app.api.deps import get_current_sub, get_db
 from app.core.config import get_settings
 from app.core.secret_crypto import encrypt_extra_config
 from app.main import create_app
@@ -136,25 +135,40 @@ def test_every_bots_operation_except_the_whitelist_has_a_role_gate() -> None:
     assert not offenders, f"推送域这些操作没有角色门（普通登录用户可读明文凭据）：{offenders}"
 
 
-@pytest.mark.parametrize(
-    "path",
-    [
-        f"{BOTS_PREFIX}",
-        f"{BOTS_PREFIX}/channels",
-        f"{BOTS_PREFIX}/tasks",
-    ],
-)
-def test_static_bots_paths_are_not_shadowed_by_the_param_route(path: str) -> None:
-    """S22.3.2：静态段必须命中自己。`GET /bots/tasks` 现读被 `/{channel_id}` 吃掉 ⇒ 恒 404。
+def _static_bots_get_paths() -> list[str]:
+    """从**路由表**枚举静态段 GET 路径，不是硬编码清单。
 
-    FastAPI 按**声明顺序**匹配，所以这条判的是文件里的排列纪律；把 `/tasks` 挪到
-    `/{channel_id}` 之前才算修好（S22.2.1）。
+    上一版这里是写死的三条参数，第一轮验证者判它是"装饰"：将来有人新增一个静态段
+    却声明在 `/{channel_id}` 之后，那条守卫根本不知道有新路由 ⇒ 永不复红。
+    守卫必须随路由表长大而变长，这条卡防的才是它自己声称防的那个复发型态。
     """
-    winner = _first_full_match("GET", path)
-    assert winner is not None, f"{path} 无人认领"
-    handler = getattr(winner.endpoint, "__name__", "?")
-    expected_owner = winner.path
-    assert expected_owner == path, f"GET {path} 的首个 FULL 匹配落在 {expected_owner}（{handler}）⇒ 被遮蔽"
+    return sorted(
+        {
+            route.path
+            for route in _ordered_bots_routes()
+            if "{" not in route.path and "GET" in set(route.methods or ())
+        }
+    )
+
+
+def test_every_static_bots_get_path_owns_its_own_match() -> None:
+    """S22.3.2：每个静态段 GET 的首个 FULL 匹配必须是它自己。
+
+    `GET /bots/tasks` 改前被 `/{channel_id}` 吃掉（恒 404/30004，
+    `evidence/314d7f2/route_shadow_bots_tasks.txt`）；FastAPI 按声明顺序匹配，
+    所以这条判的是文件里的排列纪律（S22.2.1 的前置）。
+    """
+    paths = _static_bots_get_paths()
+    assert paths, "静态段枚举读空了——`app.routes` 的形状又变了，本文件的摊平假设失效"
+    assert f"{BOTS_PREFIX}/tasks" in paths, "本卡修的那条必须在判据面里，否则这条守卫是空转"
+    shadowed: list[str] = []
+    for path in paths:
+        winner = _first_full_match("GET", path)
+        winner_path = getattr(winner, "path", None)
+        if winner_path != path:
+            handler = getattr(getattr(winner, "endpoint", None), "__name__", "?")
+            shadowed.append(f"GET {path} -> 命中 {winner_path}（{handler}）")
+    assert not shadowed, f"静态段被通配路由遮蔽：{shadowed}"
 
 
 # ── 2. 真读一遍（连库，`@ci` 判）──────────────────────────────────────────────
@@ -196,11 +210,20 @@ async def _seed_user(db_session: Any, sub: str, role: str) -> User:
     return user
 
 
-def _client(db_session: Any, user_id: str | None) -> TestClient:
+def _client(db_session: Any, user: User | None) -> TestClient:
+    """按 `sub` 注入身份，**让真实的授权链跑完**而不是抄近路覆写 `get_current_user_id`。
+
+    第一轮独立验证实测出我原来的写法是错的：`bots.py:51` 在 **router 层**挂了
+    `dependencies=[Depends(get_current_sub)]`，而 `get_current_user_id` 本身也依赖 `get_current_sub`
+    ——只覆写 `get_current_user_id` 时，请求在进任何角色门**之前**就被登录门挡成 `401/10001`
+    （`auth/service.py` 的会话校验早于任何 DB 访问），于是这里的 403 与 200 断言全都到不了判据。
+    覆写 `get_current_sub` 才是这条链的入口：`sub → users 行 → has_min_rank`，
+    与生产同路径，也顺带证明 P-21 担心的"口径不同源"没发生在后端。
+    """
     app = create_app()
     app.dependency_overrides[get_db] = lambda: db_session
-    if user_id is not None:
-        app.dependency_overrides[get_current_user_id] = lambda: user_id
+    if user is not None:
+        app.dependency_overrides[get_current_sub] = lambda: user.sub
     return TestClient(app)
 
 
@@ -215,7 +238,7 @@ async def test_plain_user_cannot_read_any_bots_endpoint(
     """
     cid = await _seed_channel(db_session)
     plain = await _seed_user(db_session, "s22-plain", "user")
-    client = _client(db_session, plain.id)
+    client = _client(db_session, plain)
 
     for path in (f"{BOTS_PREFIX}?page_size=100", f"{BOTS_PREFIX}/{cid}", f"{BOTS_PREFIX}/{cid}/logs"):
         resp = client.get(path)
@@ -240,11 +263,17 @@ async def test_operator_reads_the_task_list_and_the_channel_detail(
     """
     cid = await _seed_channel(db_session)
     op = await _seed_user(db_session, "s22-op", "operator")
-    client = _client(db_session, op.id)
+    client = _client(db_session, op)
 
     detail = client.get(f"{BOTS_PREFIX}/{cid}")
     assert detail.status_code == 200 and detail.json()["code"] == 0, detail.json()
     assert detail.json()["data"]["id"] == cid
+    # **正控**（第一轮验证者指出缺它就没有这条判据）：普通用户那条"响应体不含凭据"是恒真的，
+    # 除非同一份数据在放行者眼里**确实**含凭据。没有这两行，"403 且看不到密钥"可以只因
+    # 为响应体是个空壳而通过——那正是"泄露已封堵"与"接口压根没返回数据"读成同一个绿。
+    detail_text = json.dumps(detail.json(), ensure_ascii=False)
+    assert _MARKER_WEBHOOK in detail_text, "operator 眼里 webhook 令牌必须可见，否则负控没有对照物"
+    assert _MARKER_SECRET in detail_text, "operator 眼里 app_secret 必须可见（S2.1 的回显语义）"
 
     listing = client.get(f"{BOTS_PREFIX}/tasks")
     assert listing.status_code == 200, f"GET /bots/tasks 实得 {listing.status_code}：{listing.json()}"
@@ -269,7 +298,7 @@ async def test_channel_types_stays_readable_for_a_plain_user(db_session: Any) ->
     这条守着 S22.2.3 的例外本身——顺手给整片加门会把前端新建渠道的下拉框打死。
     """
     plain = await _seed_user(db_session, "s22-plain2", "user")
-    resp = _client(db_session, plain.id).get(f"{BOTS_PREFIX}/channels")
+    resp = _client(db_session, plain).get(f"{BOTS_PREFIX}/channels")
     assert resp.status_code == 200 and resp.json()["code"] == 0, resp.json()
     body_text = json.dumps(resp.json(), ensure_ascii=False)
     assert _MARKER_WEBHOOK not in body_text and _MARKER_SECRET not in body_text

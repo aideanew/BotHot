@@ -130,3 +130,22 @@ FAILED tests/test_bots_read_authz.py::test_every_bots_operation_except_the_white
 ②在 `@win` 本机（不是 CI-Windows）也复现了"`/health` 不返回"，与"PG 探针无
 `connect_timeout` + Windows 回环不回 RST"的机制预测一致。`部分确认` 的那半截
 （"CI-Windows 上就是它"）仍只能由 `@ci` 判。
+
+## 9. 第一轮独立验证判 FAIL，与本轮返工（2026-10-17 18:0x）
+
+验证者（30 次调用预算内，用了 34 次）总体判定 **FAIL**：本卡的**代码改动本体**经它独立复核
+"正确，无需返工"，红在**我的判据面**。四条逐条处置：
+
+| # | 验证者的发现 | 我的复核 | 处置 |
+|---|---|---|---|
+| D-1 (P1) | `_client()` 只覆写 `get_current_user_id`，而 `bots.py:51` 在 **router 层**挂了 `dependencies=[Depends(get_current_sub)]`；它本机实测三条路径全回 `401/10001`（会话校验早于任何 DB 访问）⇒ 403/200 断言**到不了角色门**，CI 上必红 | 成立。我自己读了 `bots.py:46-51` 与 `deps.py:61-69`（`get_current_user_id` 本身依赖 `get_current_sub`），结构上不可能被单覆写绕过。`test_discovery.py:227` 那个"只覆写 user_id"的先例属于**没有 router 级依赖**的 admin 面，不能照抄 | `_client()` 改为覆写 `get_current_sub = lambda: user.sub`，让 `sub → users 行 → has_min_rank` 这条**真实授权链**跑完（顺带证明 P-21 担心的口径不同源没发生在后端） |
+| D-2 (P2) | 无正控 ⇒ 普通用户那条"响应体不含凭据"是**恒真断言**——403 的响应体本来就没有渠道字段 | 成立，且这正是本仓库反复登记的那族错（判据只会陪绿） | 在 operator 那条用例里加两行正控：`_MARKER_WEBHOOK in detail_text` 与 `_MARKER_SECRET in detail_text`。没有正控，"泄露已封堵"和"接口压根没返回数据"读成同一个绿 |
+| D-3 (P3) | 遮蔽守卫是 `@pytest.mark.parametrize` **硬编码三条** ⇒ 将来新增静态段却声明在 `/{channel_id}` 之后时不会红，是装饰 | 成立。一条防"复发型态"的守卫如果判据面不随路由表增长，它就只防住了历史 | 改为 `_static_bots_get_paths()` 从路由表**枚举**静态段 GET；另加两条自锁：枚举为空即红、`/bots/tasks` 必须在枚举面内。**极性已证**：在 `/{channel_id}` 之后注入一条 `@router.get("/newadmin-only-path")` ⇒ 守卫当场 `1 failed`，随后逐字删除并 `grep` 证明无残留 |
+| D-4 (P3) | 角色守卫放过 HEAD/OPTIONS；`bots.py` 尾部多 3 个空行 | 放过 HEAD/OPTIONS 是对的（Starlette 为 GET 自动加 HEAD，router 层登录门对所有方法生效），不改；尾部空行是我的移动脚本多写的 | 尾部收敛为单个换行（`bytes 22712 → 22706`），ruff 全绿 |
+
+另两条验证者给的"文档偏乐观"提醒也照改：卡面第 1 条验收从 `[x]` 降为 `[~] 部分确认`
+（连库那半从未绿过），卡头状态从"🟢 全部交付"降为"🟡 已交付 + 已返工，Done 仍待 `@ci`"。
+
+返工后本机读数：`tests/test_bots_read_authz.py` = `3 passed / 5 skipped`（5 条连库仍只能由
+`@ci` 判），ruff 全绿。**D-1 是这条判据链上唯一的阻断项**，它修好之前，"P0 已封堵"这句话
+在本卡上只有结构守卫作保、没有端到端作保——所以状态仍是 `部分确认` 而不是"已确认"。

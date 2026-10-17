@@ -1,9 +1,11 @@
 # STEP-22 推送域读接口越权与路由遮蔽修复（V0.13.0 新增 · P0 安全）
 
-> 状态：**🟢 6 个三级任务全部交付**（2026-10-17，`@win` 本机）。四支读接口已加 `require_roles("admin","operator")`、
-> `/tasks*` 已前置、两道防复发守卫在位且各带一发反证。读数与前端调用点分析在
-> `docs/06_validation/evidence/EVD-V13-22/s22_readings.md`。
-> **仍未 Done**：验收里「探针不再是 200」与「真库全量 `failed = 0`」两条只能由 `@ci` ubuntu 判（本机无 PG，5 条连库用例 skip；skip ≠ 通过）。
+> 状态：**🟡 6 个三级任务已交付，第一轮独立验证判 FAIL 后已返工**（2026-10-17）。四支读接口已加
+> `require_roles("admin","operator")`、`/tasks*` 已前置、两道防复发守卫在位（遮蔽守卫已从硬编码
+> 改成**枚举路由表**，并用一发"在 `/{channel_id}` 之后新增静态段"的注入证明它会红）。
+> 读数、前端调用点分析与返工全过程在 `docs/06_validation/evidence/EVD-V13-22/s22_readings.md`（§1–§9）。
+> **仍未 Done**：验收里「探针不再是 200」与「真库全量 `failed = 0`」两条只能由 `@ci` ubuntu 判
+> （本机无 PG，5 条连库用例 skip；skip ≠ 通过）。
 > 残余 UX 缺陷（`/bots` 入口只按登录门禁）已发布为 **P-21**，归 STEP-15b/14b；本卡禁止改 `apps/web/**`。
 
 | 字段 | 值 |
@@ -61,7 +63,7 @@ rank < operator 的登录用户访问推送域任一读接口得 `403/10004` 且
    - ✅ 三条参数化（`/bots`、`/bots/channels`、`/bots/tasks`）全绿；改前只有 `/bots/tasks` 红，说明判据有区分度而不是一刀切
 
 ## 验收标准（2026-10-17 执行后逐项状态）
-- [x] 新测试在 314d7f2 红、本卡提交绿（两份原始输出入 EVD）—— `部分确认`：红/绿两份本机读数已入 EVD §1/§2，但"在 314d7f2 上红"的**连库那一半**本机只能 skip
+- [~] 新测试在 314d7f2 红、本卡提交绿（两份原始输出入 EVD）—— **部分确认**：两道结构守卫的红/绿两份本机读数已入 EVD §1/§2；但连库那一半**从未绿过**，且第一轮独立验证查出我的测试假面接错了授权入口（`get_current_sub` 未覆写 ⇒ 到不了角色门），已返工重写（EVD §9），待 `@ci` 复跑
 - [ ] `python evidence/314d7f2/probe_bots_read_by_plain_user.py` 前两行不再是 200，且两列 `leaks` 均为 `False`（探针注入的身份不在 `users` 表，`require_roles` 经 `get_current_user_id` 会先给 `401/10001`——与对照组 PUT 同形；带真实 `users` 行、role=user 的 403/10004 判据由 S22.1.1 的 pytest 负责）—— `待 @ci`（本机无 PG）
 - [x] 路由面守卫的反证：临时删掉任一读接口的 `require_roles` ⇒ 守卫红（输出入 EVD，然后还原）—— 已做，还原经 sha256 校验
 - [ ] 真库全量 `failed = 0`；`@ci` `CI` success —— `待 @ci`
