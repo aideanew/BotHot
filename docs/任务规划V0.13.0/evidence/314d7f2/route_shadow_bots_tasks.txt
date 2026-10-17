@@ -1,0 +1,7 @@
+# 路由声明顺序 · main@314d7f2 · 2026-10-17 12:57 CST · FastAPI 按声明顺序匹配；/{channel_id}(bots.py:250) 先于 /tasks(bots.py:479)
+0 /api/v1/bots/channels  ->  list_channel_types
+1 /api/v1/bots  ->  list_channels
+2 /api/v1/bots/{channel_id}  ->  get_channel
+3 /api/v1/bots/{channel_id}/logs  ->  list_push_logs
+4 /api/v1/bots/tasks  ->  list_push_tasks
+GET /api/v1/bots/tasks 首个 FULL 匹配 = get_channel

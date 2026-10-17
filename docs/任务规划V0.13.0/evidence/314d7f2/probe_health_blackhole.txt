@@ -1,0 +1,3 @@
+# @linux /health 黑洞探针 复跑 · main@314d7f2 · 2026-10-17 12:45 CST
+# create_app 两次 schema 告警时间戳 04:45:14Z / 04:45:17Z（相隔 3.02s，00W 上界生效）；之后 GET /health 无返回直至 timeout 45s
+# rc=124 wall=46s

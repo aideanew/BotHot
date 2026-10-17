@@ -1,0 +1,7 @@
+# @linux 探针 · main@314d7f2 · 2026-10-17 13:10 CST · PG16@5547 bothot_test · PUSH_SECRET_MASTER_KEY=每次随机生成、只在进程环境（未落盘）
+# 命令：python probe_bots_read_by_plain_user.py（身份经 dependency_overrides 注入为无角色普通登录用户；播种行结束时删除）
+/api/v1/bots/062c600d-323f-4be8-9008-8b460cc34aa4 -> 200 code= 0 | leaks webhook token: True | leaks decrypted app_secret: True
+/api/v1/bots?page_size=100 -> 200 code= 0 | leaks webhook token: True | leaks decrypted app_secret: True
+/api/v1/bots/062c600d-323f-4be8-9008-8b460cc34aa4/logs -> 200 code= 0 | leaks webhook token: False | leaks decrypted app_secret: False
+/api/v1/bots/tasks -> 404 code= 30004 | leaks webhook token: False | leaks decrypted app_secret: False
+PUT (对照：有 require_roles) -> 401 10001
