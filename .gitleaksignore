@@ -59,3 +59,10 @@ de78125b91434caa3ef711e5382d6e955d8557af:docs/06_validation/evidence/EVD-V2-00R/
 798f2638124b75ab164855c6d16d69be545dbcdf:docs/03_solution/decisions/adr-0010-externalize-connection-strings.md:connection-string-embedded-password:15
 798f2638124b75ab164855c6d16d69be545dbcdf:docs/04_planning/current-plan.md:connection-string-embedded-password:796
 798f2638124b75ab164855c6d16d69be545dbcdf:docs/05_execution/tasks/TASK-004.md:connection-string-embedded-password:21
+
+# ── 8) 5e5ab178 一条：STEP-00H 黑洞探针用例的连接串 ────────────────────────
+# 该行的 user:pass 是我自己为一台不存在的库编的占位（probe:probe@10.255.255.1，
+# RFC5737 保留地址、不可路由），没有任何服务会接受它；它的唯一作用是让 psycopg 拿到一个
+# 用户名。工作树里这一行已在下一个提交（15470ee）改成无密码形态，命中只活在历史 blob 里，
+# 而 gitleaks 扫的是历史——所以只能在此登记，不能靠改文件消掉。
+5e5ab178a4371dafb8023a640da4d1efff87d768:apps/api/tests/test_health_probe_bounded.py:connection-string-embedded-password:64
