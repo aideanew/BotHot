@@ -105,6 +105,11 @@ gitleaks（00S 用）：`python scripts\entry.py scan-secrets`。
 ## 7. 只在 Linux/CI 做的事（明确不伪装成跨平台）
 
 - alembic upgrade→downgrade→upgrade 往返与单头断言（`@ci ubuntu`，STEP-04 的出门判据）
+  - 执行者：`.github/workflows/ci.yml` backend job 的两步 "Assert single alembic head" 与
+    "Migration roundtrip (upgrade head → downgrade -1 → upgrade head)"。往返**只覆盖当前 head 那一个版本**
+    （`downgrade -1`）：祖先迁移里有 ab1005w5b 那类刻意单向的 downgrade，`downgrade base` 会红在历史上。
+    此步跑在任何测试写入之前 ⇒ 判的是 DDL 可逆，不是"降级不丢数据"。
+    （2026-10-17 之前这两条口径只有单头断言有执行者，往返步是 S4.2 验证轮补上的。）
 - Playwright e2e（需 `pnpm exec playwright install --with-deps chromium`；Windows runner 上 `--with-deps` 无 sudo 语义）
 - compose 栈（read_only/tmpfs/cap_drop）与 `/ready` 探针
 - `rotate_keys.sh` 等**仅上线用**脚本：标「仅 Linux」，不做跨平台改造

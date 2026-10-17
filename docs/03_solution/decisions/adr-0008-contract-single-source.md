@@ -16,7 +16,7 @@ related: [CURRENT-PLAN-20261012, DESIGN-001]
 - `errors.py` 自身登记表缺 50003，而 `ConfigurationError.code = 50003`（`errors.py:222-225`）。
 - 前端 `apps/web/lib/api/http.ts:26-46` 另有一份错误表，缺 8 个后端码、多 5 个后端不存在的码。
 - 域 DTO 是实体镜像，不是 API 响应形状（`packages/contracts/src/index.ts` 头注）。
-- `scripts/gen_contracts.py --check` 已是 CI 门禁（`ci.yml:97-98`），但不覆盖 errors.ts 与响应形状。
+- `scripts/gen_contracts.py --check` 已是 CI 门禁（`ci.yml` backend job 的 "Contract drift gate (gen_contracts --check)" 步），但不覆盖 errors.ts 与响应形状。
 
 ## 决定（提议）
 1. 错误码唯一源 = `apps/api/app/core/errors.py`（`ERROR_CODES` + 子类 `http_status`）。

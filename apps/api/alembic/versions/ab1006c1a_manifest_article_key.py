@@ -60,6 +60,8 @@ def downgrade() -> None:
 
     D-V2-02 的硬要求是 `upgrade → downgrade → upgrade` 在 CI ubuntu 上跑通，
     因此这里刻意**不**写成 `raise RuntimeError`（与 ab1005w5b 那类单向加固不同）。
+    执行者：`.github/workflows/ci.yml` backend job 的 "Migration roundtrip" 步
+    （只往返当前 head 那一个版本；此步跑在任何测试写入之前，判的是 DDL 可逆，不是"降级不丢数据"）。
     """
     op.drop_index("ix_job_items_manifest_id", table_name="job_items")
     op.drop_constraint("fk_job_items_manifest_id", "job_items", type_="foreignkey")

@@ -12,8 +12,11 @@
 2. **迁移 ↔ 模型逐列对齐**：从迁移 AST 里读出 add_column/create_index/create_foreign_key，
    与 SQLAlchemy metadata 的列名、可空性、类型长度、索引列序、FK 目标与 ondelete 一一比。
    任一侧单独改动都必须让这里红。
-3. **可逆性**：`downgrade()` 必须真的拆掉 `upgrade()` 建的四件事（不许写 `raise`，
-   因为 D-V2-02 要求 CI 上跑 `upgrade → downgrade → upgrade` 往返）。
+3. **可逆性**：`downgrade()` 必须真的拆掉 `upgrade()` 建的四件事（不许写 `raise`）。
+   D-V2-02 要求 CI ubuntu 上跑 `upgrade → downgrade → upgrade`，这条现在是**机检**：
+   `.github/workflows/ci.yml` backend job 的 "Migration roundtrip" 步（2026-10-17 补，
+   补之前该步不存在——本文件的这条说法曾连续两天是"文档里有、门禁里没有"）。
+   本门判的是 AST 形状（不需要 PG 就能红），CI 那步判的是真库执行，两者不是同一件事。
 
 另外钉一条 D-V9-04 的形状：契约侧 `article_key` 必填、DB 侧可空，这是**故意不对称**
 （未回填的行不该对外序列化）；而 `""` 与裸末段 `s` 都不是合法键，写侧绝不能用它们占位。
@@ -181,14 +184,48 @@ def _migration_src(rev: str = NEW_REV) -> str:
     return next(p for p in VERSIONS.glob(f"{rev}*.py")).read_text(encoding="utf-8-sig")
 
 
-def test_shape_guard_bites_on_the_four_ways_it_could_be_broken() -> None:
-    """判据自己的反证：把迁移改坏四种，每种都必须**与模型不一致**（不咬人的门等于没有门）。
+# 本步**应当**建的两个索引，写成显式期望而不是"从迁移里读出来再跟模型并集比"：
+# 并集判据被验证轮（2026-10-17）实测击穿——把 ix_manifest_source_article_key 从
+# ArticleManifest 挪到 JobItem 仍然绿（两支名字进了同一个集合，没人管它建在哪张表上），
+# 而模型多声明、迁移少建也绿（循环只单向遍历迁移侧）。
+_REQUIRED_INDEXES: dict[str, tuple[str, list[str]]] = {
+    "ix_manifest_source_article_key": ("article_manifests", ["source_id", "article_key"]),
+    "ix_job_items_manifest_id": ("job_items", ["manifest_id"]),
+}
+_MODEL_BY_TABLE = {"article_manifests": ArticleManifest, "job_items": JobItem}
+# ⑤的锚：迁移里给 job_items 建索引那一行（原文里唯一，反证靠删它）
+_IDX_ON_JOB_ITEMS = '    op.create_index("ix_job_items_manifest_id", "job_items", ["manifest_id"])\n'
 
-    这四发就是"以后有人这么改就会红"的具体形状。全部在内存里做，不碰磁盘。
+
+def _model_index_names_by_table() -> dict[str, set[str]]:
+    """{表名: 该表模型声明的索引名}——**按表分桶**，不分桶就判不出"建错了表"。"""
+    return {t: {i.name for i in m.__table__.indexes} for t, m in _MODEL_BY_TABLE.items()}
+
+
+def _assert_indexes_agree(migration_idx: dict[str, tuple[str, list[str]]], model_idx: dict[str, set[str]]) -> None:
+    """迁移侧与模型侧的索引必须**集合相等**且**逐表对号**；不符就抛 AssertionError（判据本体，畸形输入要用它）。"""
+    missing = sorted(set(_REQUIRED_INDEXES) - set(migration_idx))
+    extra = sorted(set(migration_idx) - set(_REQUIRED_INDEXES))
+    assert not missing and not extra, (
+        f"迁移建的索引与设计要求不符：模型声明而迁移没建 {missing}、迁移多建 {extra}"
+    )
+    for name, (table, cols) in _REQUIRED_INDEXES.items():
+        assert migration_idx[name] == (table, cols), f"{name} 的所属表或列序漂了：{migration_idx[name]}"
+        assert name in model_idx.get(table, set()), (
+            f"{name} 没声明在 {table} 的模型上——声明到别的表 = 建到别的表，"
+            f"这支复合索引等于没建（模型实得 {sorted(model_idx.get(table, set()))}）"
+        )
+
+
+def test_shape_guard_bites_on_the_six_ways_it_could_be_broken() -> None:
+    """判据自己的反证：把迁移/模型改坏六种，每种都必须让对应判据红（不咬人的门等于没有门）。
+
+    这六发就是"以后有人这么改就会红"的具体形状。全部在内存里做，不碰磁盘。
     """
     src = _migration_src()
     base_cols = _add_columns(_fn_src(src, "upgrade"))
     base_idx, base_fk = _index_and_fk_shapes(_fn_src(src, "upgrade"))
+    real_model_idx = _model_index_names_by_table()
 
     # ① 把新列改成 NOT NULL —— 与模型的 nullable=True 分叉
     m1 = src.replace('sa.Column("article_key", sa.String(length=128), nullable=True)',
@@ -217,29 +254,48 @@ def test_shape_guard_bites_on_the_four_ways_it_could_be_broken() -> None:
     assert [n for n in ast.walk(_fn_src(m4, "downgrade")) if isinstance(n, ast.Raise)], "④应有一个 Raise 节点"
     assert not [n for n in ast.walk(_fn_src(src, "downgrade")) if isinstance(n, ast.Raise)]
 
+    # ⑤ 模型声明了、迁移却少建一个 —— 库里没这支索引，Diff 全表扫；
+    #    旧判据（并集 + 单向循环）对这一发完全放行，这是它必须咬住的形状。
+    m5 = src.replace(_IDX_ON_JOB_ITEMS, "")
+    assert m5 != src, "锚漂了：⑤没删掉那行 create_index，等于没测"
+    dropped_idx = _index_and_fk_shapes(_fn_src(m5, "upgrade"))[0]
+    assert "ix_job_items_manifest_id" not in dropped_idx, "⑤的删除没生效：迁移侧仍读得到那支索引"
+    with pytest.raises(AssertionError, match="模型声明而迁移没建"):
+        _assert_indexes_agree(dropped_idx, real_model_idx)
+
+    # ⑥ 索引声明挪到了别的表（名字不变、形状不变）—— 只有按表判才拦得住。
+    #    构造直接从真实模型侧派生，不手写别的索引名：写死的名字一旦与模型不符，
+    #    这一发就在验证我自己的臆造而不是验证判据。
+    relocated = {
+        "article_manifests": real_model_idx["article_manifests"] - {"ix_manifest_source_article_key"},
+        "job_items": real_model_idx["job_items"] | {"ix_manifest_source_article_key"},
+    }
+    assert "ix_manifest_source_article_key" not in relocated["article_manifests"], "⑥的构造本身没成立"
+    with pytest.raises(AssertionError, match="没声明在 article_manifests"):
+        _assert_indexes_agree(base_idx, relocated)
+
     # 反证的反证：锚若失效（上面每发的 `assert m != src`），这一发就必须红——用空替换验证计数不骗人
     assert src.count('ondelete="SET NULL",') == 1, "③的锚在源码里出现多次，替换会漏改"
     assert src.count("    op.drop_index(\"ix_job_items_manifest_id\"") == 1, "④的锚不唯一"
+    assert src.count(_IDX_ON_JOB_ITEMS) == 1, "⑤的锚不唯一"
 
 
 def test_indexes_and_foreign_key_line_up_with_the_model() -> None:
     indexes, fks = _index_and_fk_shapes(_fn_body(NEW_REV, "upgrade"))
-    assert indexes.get("ix_manifest_source_article_key") == ("article_manifests", ["source_id", "article_key"]), (
-        f"清单侧复合索引形状变了：{indexes.get('ix_manifest_source_article_key')}"
-    )
-    assert indexes.get("ix_job_items_manifest_id") == ("job_items", ["manifest_id"]), (
-        f"job_items.manifest_id 索引缺失或列序不对：{indexes.get('ix_job_items_manifest_id')}"
-    )
-    # 模型侧索引必须同时声明，否则 autogenerate 会想把它们再建一遍（漂移的第二种形状）
-    idx_names = {i.name for i in ArticleManifest.__table__.indexes} | {i.name for i in JobItem.__table__.indexes}
-    for name in indexes:
-        assert name in idx_names, f"{name} 只在迁移里存在、模型里没声明 ⇒ 元数据与库会分叉"
+    # 形状 + 集合相等 + 逐表对号，三件事一次判完（判据本体见 _assert_indexes_agree，反证见六发那一条）
+    _assert_indexes_agree(indexes, _model_index_names_by_table())
     assert "fk_job_items_manifest_id" in fks
     table, ref_table, local, remote, ondelete = fks["fk_job_items_manifest_id"]
     assert (table, ref_table, local, remote) == ("job_items", "article_manifests", ["manifest_id"], ["id"])
     assert ondelete == "SET NULL", f"FK 删除行为应为 SET NULL（在途条目不该随清单消失），实得 {ondelete}"
     mapped_fk = next(iter(JobItem.__table__.columns["manifest_id"].foreign_keys))
     assert mapped_fk.ondelete == "SET NULL", "模型侧 ondelete 与迁移不一致"
+    # FK 的**名字**两侧不必一致，且这是仓库既有形态而不是本步引入的漂移：
+    # env.py 没有 naming_convention，模型侧 13 支 FK 全部匿名、迁移侧一律显式命名
+    # （先例 `ab1004m3b_engine_key_registration.py:15` 把名字拼成 SQLAlchemy 默认式）。
+    # 判据因此只比"存在 + 目标 + ondelete"，不把名字的不对称伪装成一条会红的规则——
+    # 那会让下一位读者以为两侧名字是同步的。真要同步得给全库加 naming_convention，属 STEP-12 之外的独立裁决。
+    assert len(JobItem.__table__.columns["manifest_id"].foreign_keys) == 1, "manifest_id 上出现了第二支 FK"
 
 
 def test_downgrade_reverses_everything_upgrade_builds() -> None:

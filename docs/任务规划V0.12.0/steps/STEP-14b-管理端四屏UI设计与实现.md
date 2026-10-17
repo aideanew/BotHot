@@ -72,7 +72,7 @@ stub-fetch 单测），本卡才有东西可画。
 ## V0.9.0 → V0.10.0 本卡变更（基线 main@81cb997）
 
 - **阻塞变更**：同 15，00E 前置解除；仍依赖 15 与 D-V3-06。
-- 构建门：本卡验收命令的 `pnpm build` 必须带 `NEXT_PUBLIC_API_MOCK=false`（生产守卫，ci.yml:275）。
+- 构建门：本卡验收命令的 `pnpm build` 必须带 `NEXT_PUBLIC_API_MOCK=false`（生产守卫，`ci.yml` frontend job "Build" 步的 `env:`；原记 `ci.yml:275` 已因 2026-10-17 backend job 插入 "Migration roundtrip" 步而下移，故按步名定位）。
 
 ## 裁决已签（V0.11.0 第四节第 2 步 · 2026-10-15 12:04）
 | 项 | 变化 |

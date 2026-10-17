@@ -91,6 +91,26 @@ jobs:
             exit 1
           fi
           echo "✅ 单一 alembic head"
+      # STEP-04 S4.2 验证轮（2026-10-17）抓出的口径谎：D-V2-02 签署的硬要求、STEP-04 卡面、
+      # docs/04_engineering/cross-platform.md:10/107 都写着「CI ubuntu 跑 upgrade→downgrade→upgrade
+      # 往返」，而本文件当时 `downgrade` **零命中**——裁决写了、文档引了、门禁没跑。
+      # 修法是把要求变成机检，而不是把五处口径降级成"未执行"。
+      # 只对**当前 head 那一个版本**往返（`downgrade -1`）：祖先迁移里有 ab1005w5b 那类刻意单向的
+      # downgrade（D-V9-04 记着这个差异），`downgrade base` 会当场红在历史而不是新形状上。
+      # 局限（读这条时别当成"可逆性全证明"）：
+      #   · 判的是 **DDL 可逆**——此步跑在任何测试写入之前，库里没数据，不证明降级不丢内容；
+      #   · 只覆盖 head 一个版本；历史版本的往返要逐版补 downgrade 才能纳进来。
+      - name: Migration roundtrip (upgrade head → downgrade -1 → upgrade head)
+        run: |
+          set -e
+          python -m alembic downgrade -1
+          python -m alembic upgrade head
+          cur="$(python -m alembic current)"
+          echo "$cur"
+          case "$cur" in
+            *"(head)"*) echo "✅ 往返后回到单一 head：schema 可逆且终态正确" ;;
+            *) echo "❌ 往返后 alembic current 不含 (head)：$cur"; exit 1 ;;
+          esac
       # S3.4/R1.1（2026-10-08）：契约漂移门禁。dto.ts 由模型内省生成，后端模型
       # 变更而未重生成契约时此处红——把「契约与模型同步」从自觉变成机检。
       # 脚本以 __file__ 定位仓库根，任意 cwd 可跑；alembic head 探测 fail-open 不阻断。

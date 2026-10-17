@@ -3386,7 +3386,8 @@ def test_decision_log_has_no_glued_rows() -> None:
 def test_generated_artifact_matches_current_model() -> None:
     """有人改了模型却没重跑生成器时，这条必须红——**每个域都查**。
 
-    `--check` 只在 CI 跑（`ci.yml:97-98`），提交前那段窗口本地是裸的；
+    `--check` 只在 CI 跑（`.github/workflows/ci.yml` backend job 的
+    "Contract drift gate (gen_contracts --check)" 步），提交前那段窗口本地是裸的；
     而 `compare_defs()` 读的是**两个文件**，模型改了在本地全组测试照样绿
     （第三轮验证点名的空档）。这里在进程内 import 生成器重算，不落盘。
 

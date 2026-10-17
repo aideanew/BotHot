@@ -20,7 +20,7 @@
 - 文档：`01` F-10/F-15、`04` §1/§6、V0.8.0 §4（其 PG 实例 `/tmp/pgd` 被并发会话清除）
 - 契约：`contracts/api.envelope.schema.json`（前端契约层要打的真实 API）
 - 代码/配置锚：`scripts/test-env.sh`（V0.6.0 S0R.3.1 提到需 docker 执行者）、`apps/api/tests/conftest.py:106-107,125-126`（无 PG ⇒ skip，**不是 fail**）、`.github/workflows/ci.yml:73+`（CI 有 postgres service）、`apps/api/pyproject.toml:46-64`（ruff/mypy 钉版）、`apps/web/package.json`（pnpm 9.15.9 口径）、`docker/compose.yml`（端口 3300/5433/6380）
-- 前置状态：单头迁移 `ab1005w5b`；`SKIP_BASELINE=6`（`ci.yml:106-134`）
+- 前置状态：单头迁移 **`ab1006c1a`**（2026-10-17 现读更正；本卡起草时是 `ab1005w5b`，STEP-04 S4.2.1 把它往前推了一格）；`SKIP_BASELINE=6`（`ci.yml` backend job 的 "Tests (pytest) + coverage + skip gate" 步内，原记 `:106-134` 已因同文件插入 "Migration roundtrip" 步整体下移，故改按步名定位）
 
 ## 输出（文件）
 - `scripts/test-env.sh`（补：起停 + 端口冲突自检 + 健康等待）、新增 `docker/compose.test.yml`（测试专用，只 PG+Redis，不拉业务栈）

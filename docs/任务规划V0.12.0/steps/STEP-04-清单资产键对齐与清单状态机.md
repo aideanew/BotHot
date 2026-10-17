@@ -1,6 +1,8 @@
 # STEP-04 清单资产键对齐与清单状态机
 
-> 基线 main@61358c3｜状态：⚪ 未开始
+> 基线 main@61358c3｜状态：🟡 进行中（2026-10-17 起）——**只交付了 S4.2 的形状层**（迁移 `ab1006c1a` + 模型两列 + 形状门），
+> S4.1 先红、S4.3 写侧、S4.4 Diff/状态机、S4.5 验收都还没做，所以**来源卡的 P-2 读数今天仍是 1 不是 0**
+> （Diff 判据一行未动）。读数与"本步没做的事"见 `10-执行过程-独立执行段第三批.md` §9，补完轮见 §10。
 
 | 字段 | 内容 |
 |---|---|
@@ -38,3 +40,14 @@
 | D-V3-01 | Diff 判据改用 `article_key`，渠道 id 不参与跨层匹配 |
 | 验收面 | 本卡 Done 只能由 `@ci` **ubuntu-latest** 判定；`@win` 读数只算开发烟测，`@linux` 为依赖机本地验证 |
 | 标签 | 依 D-V6-01，本卡 `@dep` 已全部改写为 `@linux`/`@ci` |
+
+## 本卡口径更正（2026-10-17，S4.2 交付与其补完轮）
+
+四条都是"卡面写的与仓库现读不符"，按现读改卡、不改代码去凑卡：
+
+| # | 卡面原说 | 现读 | 处置 |
+|---|---|---|---|
+| C-1 | 所有权列 `packages/contracts/src/subscription/dto.ts（生成）` | `ArticleManifest` **不在 TS 契约生成集里**：`grep -rn "^export interface" packages/contracts/src/*/dto.ts` 无该模型，`subscription/dto.ts` 也不含它。S4.2 唯一的契约落点是 `ingest/dto.ts` 的 `JobItem.manifest_id: string \| null`（+1 行） | 契约层的 `article_key` 目前只在 pydantic 侧（`app/contracts/collection.py`，形状门 `test_placeholder_values_are_not_valid_keys_and_the_asymmetry_is_deliberate` 判它必填）。**要不要把 ArticleManifest 纳入 TS 生成集**是新增裁决点，归 01（契约冻结）判，不在本卡偷做 |
+| C-2 | 「迁移必须可 downgrade，并在 CI ubuntu 上跑往返」（D-V2-02 硬要求，卡面 §1 亦列为验收） | 该步 **2026-10-17 之前无人执行**：`.github/workflows/` 全量搜 `downgrade` 零命中，CI 只有 `upgrade head` | 已补：`ci.yml` backend job 新增 "Migration roundtrip (upgrade head → downgrade -1 → upgrade head)"。这条改动**越出本卡所有权**（CI 由 00C/00E 家族持有），按"裁决已签而执行面缺失"处理，越界记录在 `10-…第三批.md` §10.2 |
+| C-3 | 卡行 13「禁止修改：迁移目录（需 DDL 停转 ADR）」与来源卡所有权「`apps/api/alembic/versions/ab1006c1a_*.py（新）`」 | 两条互相顶：本卡的 S4.2.1 就是**要**新增一个迁移文件，而 D-V2-02 已签该迁移的形状 | 按来源卡所有权 + 已签裁决执行（新增文件不等于改既有迁移）。**请规划方裁定**行 13 是否应改写为"禁止修改已入库迁移的既有步骤" |
+| C-4 | 卡面 §1 的 `P-2` = 已 READY 篇下轮 Diff 新增数应为 0 | 同号在 00-README §4 = glossary 锚漂移、在 02 §1 = M-2 多源串号 | 三套编号并存，不改号（重编会撞歪九份执行记录的交叉引用）；引用一律带来源标注，声明见 `00-README.md` §4 抬头 |
