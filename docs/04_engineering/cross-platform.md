@@ -119,3 +119,37 @@ gitleaks（00S 用）：`python scripts\entry.py scan-secrets`。
 - Playwright e2e（需 `pnpm exec playwright install --with-deps chromium`；Windows runner 上 `--with-deps` 无 sudo 语义）
 - compose 栈（read_only/tmpfs/cap_drop）与 `/ready` 探针
 - `rotate_keys.sh` 等**仅上线用**脚本：标「仅 Linux」，不做跨平台改造
+
+## 8. 新增连库用例时，`CI-Windows` 的第二步（每张卡都要做，不是"CI 坏了"）
+
+`windows-dev` job 不起 PG/Redis/LangBot 服务 ⇒ 该平台**必然**把所有连库用例 skip 掉。
+为了区分"环境使然的 skip"与"用例被无条件标记 skip（静默放行）"，那道门是这么设的：
+
+```
+SKIP_BASELINE_WIN = 当次测量的 skip 总数（**零余量**）
+判定 = failed 必须 0 ⇒ 未知原因族必须 0 ⇒ 总数不得超过基线
+```
+
+于是新增一条连库用例 ⇒ Windows 侧 skip +1 ⇒ **门红**。这不是 CI 坏了，也不是回归：
+门在要求"有人显式重测一遍再放行"。**把它调回绿的动作只有两个合法步骤**：
+
+1. 先读那一步打出的**族构成**（不是前 12 条样本，是按原因族记账的计数），确认
+   `未知族 = 0`。若未知族 > 0，**停**：那是本门真正要抓的形态，抬阈值是掩盖。
+2. `failed = 0` 且未知族 = 0 时，把 `SKIP_BASELINE_WIN` 抬到新的测量值，并在同一段注释里
+   重算构成、写上 `head_sha` 与 `run id`（D-V6-02：读数必须可被下游引用）。
+
+为什么不留 ±N 余量：这道门的判定力全在"总数 == 测量值"上。留 4 条余量，就等于允许
+4 条用例在被无条件 skip 的同时总数不越线——而 skip 的**原因**与**数量**是可以互相抵的
+（加一条合法 PG skip、同时把一条真用例标成 skip，总数纹丝不动）。
+所以数闸必须贴死，另配**原因族闸**抓"同数换因"那一半；两道闸合起来才判得住。
+
+已知边界（写在门旁边而不是藏在心里）：
+- 冒充已知族原文的无条件 skip 仍会放行（族闸认的是理由文本）；
+- skip 总数**下降**不触发门（模块级 `allow_module_level` 把 60 条折成 1 条时门反而更绿）；
+  抓它需要再钉一个 collected 总数常数，代价是每张新增用例的卡都得改本文件——目前选择不加。
+- 常驻反证：`apps/api/tests/test_ci_windows_skip_gate.py` 跑的是从 `ci-windows.yml` 抽出来的
+  **同一段脚本**（合成 junit + 四发极性：基线值放行 / +1 红 / 未知族红且点名 / 有 failed 即红）。
+  它不依赖 Windows，所以 `@ci ubuntu` 也在判这道门的逻辑。
+
+2026-10-17 的实际两次收紧：320（猜的上界）→ 441（S00H.2.1 首跑测量）→ 443
+（STEP-23 返工轮新增 2 条连库用例，被同一道门顶红；构成里 `PG-DSN-未设置` 332→334）。

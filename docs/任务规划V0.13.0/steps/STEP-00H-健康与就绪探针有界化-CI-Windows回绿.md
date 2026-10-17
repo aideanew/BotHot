@@ -83,6 +83,12 @@
    判据是三个 0 计数 + `failed=0`。
 6. [ ] ~~**S00H.2.2**~~ **不执行**（卡面条件：仅 S00H.2.1 仍卡时）。H3 未被单独证伪，留给下游按需重开
 7. [ ] **S00H.2.3** 连续 2 次 `CI-Windows` success 后：`--timeout=300 → 120`；在本目录 `07` 与 `docs/04_engineering/cross-platform.md` 各写一句"多平台门已绿"，附两个 run id；关闭 P-5 / U-23
+   — **仍未满足**，而且原因值得记：阈值收紧之后 `6925850`（run 39033863921）拿到**第一次 success**，
+   紧接着我自己的两个提交把它顶红两次（`7a252f4` run 39034593829、`2a7195d` run 39035688934，
+   都是 `failed=0 / 未知族=0 / skipped 443 > 基线 441`）——因为我新增的 2 条连库用例把 Windows
+   侧的 skip 抬了 2。**连续计数因此清零重来**，不是回归也不是门坏了。
+   已把"新增连库用例 ⇒ 同批重测并抬基线"写成程序（`cross-platform.md` §8）并登记 `D-V10-11`；
+   `--timeout` 的 300→120 收紧要等两次真 success，不催。
 
 ## 验收标准
 - [ ] `@linux` `timeout 20 python evidence/b8d27ff/probe_health_blackhole.py`（同一黑洞环境变量）rc=0，`/health` 墙钟 ≤ 5s（改前 rc=124）

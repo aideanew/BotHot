@@ -30,20 +30,19 @@ jobs:
     timeout-minutes: 35
     env:
       PYTHONUTF8: "1"
-      # 测量值，不是猜的（原写 320，注释自己标了"保守上界，不是测量值……首跑读数回来后收紧"）。
-      # 读数锚：head_sha=10c1019、CI-Windows run=39030366312 的 junit 汇总
-      # `1098 passed, 441 skipped, 0 failed in 987.74s`，本机 @win 同 sha 复跑
-      # `1098 passed, 441 skipped, 0 failed in 1038.71s`——两台机器逐项相同。
-      # 441 的构成（8 个原因串、5 个族，全部是"本 job 故意不起依赖服务"的后果）：
-      #   436 PG 类（332 `AIDEANBOT_TEST_PG_DSN 未设置` + 99/4/1 `PG 不可达`/`PG:5433 不可达`）
-      #   + 3 Redis 不可达 + 1 LangBot :5300 不可达 + 1 代理变量未设 = 441
-      # 交叉核对：同 sha 的 ubuntu job 是 `1533 passed / 6 skipped`，两边总数都是 1539；
-      # ubuntu 那 6 条就是非 PG 族，Windows 侧 441-6=435 与 PG 门控用例数一致
-      # （本机数到 436 是因为其中一条全链冒烟在 Windows 上以 DSN 理由 skip、在 ubuntu 以 LangBot 理由 skip）。
-      # ⚠️ 收紧的同时把闸门的判定力**加强了**（见下一步的"未知原因族即红"）：
-      # 光把阈值抬到 441 会开一个"同数换因"的洞——把一条合法 PG skip 换成一条无条件 skip，
-      # 总数不变而门恒绿。所以现在按原因族记账，任何不属于已知族的 skip 直接红。
-      SKIP_BASELINE_WIN: "441"
+      # 测量值，不是猜的。第一次收紧（320→441）之后**同一批我自己把它顶红了**：
+      # STEP-23 返工轮新增 2 条连库用例 ⇒ run 39035688934 @2a7195d 读到 `total_skipped=443`
+      # 而 baseline 还是 441 ⇒ 门红，且 `failed=0`、未知族=0、构成里 `PG-DSN-未设置` 从 332 变 334。
+      # 这就是"零余量"的代价与用途：每张加连库用例的卡都必须**重测**一遍，而不是把红灯当噪声。
+      # 读数锚：head_sha=2a7195d、run 39035688934 = `1125 passed / 443 skipped / 0 failed in 983.59s`
+      # （7a252f4 那次是 `1105 / 443`；两次 skipped 相同，说明增量确实只来自 DSN 族那 2 条）。
+      # 443 的构成（未知族 = 0）：
+      #   PG 类 438 = `AIDEANBOT_TEST_PG_DSN 未设置` 334 + `PG 不可达`/`PG:5433 不可达` 104
+      #   非 PG 类 5 = Redis 3 + LangBot :5300 1 + 代理变量 1
+      # 交叉核对：同 sha 的 ubuntu job 非 PG 类也是这几族，两侧分母相同（本机 @win 复现过 441 那版）。
+      # ⚠️ 不许留余量：余量就是"同数换因"那个洞的宽度（详见 docs/04_engineering/cross-platform.md
+      # 的「新增连库用例必做的第二步」）。
+      SKIP_BASELINE_WIN: "443"
     defaults:
       run:
         shell: bash

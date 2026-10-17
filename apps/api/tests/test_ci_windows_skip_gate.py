@@ -153,12 +153,17 @@ def test_family_tokens_still_exist_verbatim_in_the_test_sources() -> None:
     assert missing == [], f"族表里的原因原文在测试源码里找不到：{missing}"
 
 
-def test_declared_baseline_is_written_as_a_measurement() -> None:
-    """阈值必须写成 §7.3 的测量值，且收紧依据就写在 env 旁边。
+def test_declared_baseline_carries_its_own_measurement_anchor() -> None:
+    """阈值必须写成测量值，且**收紧依据就地可查**（run id + head_sha + "测量值"字样）。
 
-    这条判不了 CI 上的真值（那是 `@ci` 的读数），它判的是"这个数有没有被当常量抄来抄去"：
-    数值对不上、或者注释里"测量值"那句被删掉，都算红。
+    这条故意**不**把 441/443 这类数字写死：数字一写死，下一张加连库用例的卡就会为了绿而
+    把断言改掉——那正是这道门要防的行为。数字本身由 CI 的门判（对不上就红），
+    这里判的是"这个数有没有被人当常量抄来抄去"。
     """
     raw = WF_PATH.read_text(encoding="utf-8")
-    assert re.search(r'SKIP_BASELINE_WIN:\s*"441"', raw), "阈值与 S00H.2.1/§7.3 的测量值不符"
-    assert "测量值" in raw, "收紧依据必须写在 env 旁边，否则下一轮没人知道这个数从哪来"
+    m = re.search(r'SKIP_BASELINE_WIN:\s*"(\d+)"', raw)
+    assert m and int(m.group(1)) > 320, f"阈值看起来又回到了猜的量级：{m and m.group(1)}"
+    block = raw[max(0, m.start() - 1600) : m.start()]
+    assert "测量值" in block, "收紧依据必须写在 env 旁边，否则下一轮没人知道这个数从哪来"
+    assert re.search(r"run\s*\d{9,}", block), "依据里必须有可复查的 run id（D-V6-02）"
+    assert re.search(r"[0-9a-f]{7}", block), "依据里必须有 head_sha，否则读数无法归因到提交"
