@@ -702,7 +702,10 @@ async def test_two_url_forms_of_one_article_enqueue_once(db_session) -> None:
     job.status = "SUCCEEDED"
     db_session.add(_asset(src.id, _ART_KEY))
     await db_session.flush()
-    db_session.expire_all()
+    # 这里**不**用 `expire_all()`：`@ci` 真库跑出来的第一条红就是它——expire 之后在 async 会话里
+    # 同步访问 `src.id` 会触发一次隐式刷新，SQLAlchemy 直接 `MissingGreenlet`（本机无 PG 时这条
+    # 用例整体 skip，所以这个错只在真库上现形）。`flush()` 已经让新资产对后续 SELECT 可见，
+    # Diff 每次都是新查询，不需要靠 expire 来"看得见"。
     assert await svc._compute_new_manifests(src.id, "sub-forms") == []
 
 
@@ -786,7 +789,11 @@ async def test_recover_stale_rolls_back_orphan_enqueued_manifest(db_session) -> 
         manifest_enqueued_ttl_seconds=60,
     )
     assert await worker.recover_stale() == 0, "本轮没有 stale job，返回值不该被清单回退污染"
-    db_session.expire_all()
+    # 逐行 `await refresh(...)` 而不是 `expire_all()`：后者把整个 identity map 清空，
+    # 之后 `stale.status` 这类**同步**属性访问就在 async 会话里触发隐式刷新 ⇒
+    # `MissingGreenlet`（`@ci` 真库上的第二条红）。显式 refresh 是 async 会话里唯一合法的再读法。
+    for row in (stale, fresh, held, untouched):
+        await db_session.refresh(row)
 
     assert stale.status == MANIFEST_STATUS_DISCOVERED, "超时且无人认领的 ENQUEUED 必须回 DISCOVERED，否则永久卡死"
     assert fresh.status == MANIFEST_STATUS_ENQUEUED, "没超时也被回退 ⇒ 时间锚失去判定力"

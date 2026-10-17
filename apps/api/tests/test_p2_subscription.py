@@ -337,6 +337,8 @@ async def test_p2_subscription_visibility_fields(db_session) -> None:  # type: i
     """T1.4.3/T1.4.4（N11）：订阅响应透出 discoveredCount/lastSuccessAt/consecutiveEmptySyncs。
 
     - discoveredCount = 该源 DISCOVERED 清单计数（U6"预计篇数"权威口径）；
+      **四态接线之后这个口径的实际含义变了**：入列即离开 DISCOVERED，所以它是"尚未入列的篇数"
+      而不是"该源发现的总篇数"——这一条产品语义变更已发布为 P-22，不在本卡顺手改计数式。
     - lastSuccessAt=""、consecutiveEmptySyncs=0：worker/调度器（大纲 T2.3/T2.4）未建成前
       的诚实缺口呈现，不造假数据。
     """
@@ -348,7 +350,15 @@ async def test_p2_subscription_visibility_fields(db_session) -> None:  # type: i
     assert subs_total == 1
     assert len(subs) == 1
     s = subs[0]
-    assert s["discoveredCount"] == 3
+    # 这条读数在 STEP-04 S4.3.2 之后**变了**，而且是应该变：`subscribe` 会把当轮 Diff 命中的
+    # DISCOVERED 行同事务置 `ENQUEUED`，所以订阅之后"DISCOVERED 计数"必然是 0。
+    # 原来的 `== 3` 编码的是四态没接线时的旧世界（清单永远停在 DISCOVERED，P-2 就是这么藏住的）。
+    # 双向钉：光判 0 会把"三行根本没入列"也读成绿，所以必须同时判它们在 ENQUEUED 上。
+    assert s["discoveredCount"] == 0, "subscribe 已把当轮清单置 ENQUEUED ⇒ DISCOVERED 计数应为 0"
+    statuses = (
+        await db_session.scalars(select(ArticleManifest.status).where(ArticleManifest.source_id == src["sourceId"]))
+    ).all()
+    assert sorted(statuses) == ["ENQUEUED"] * 3, f"三行都该被入列置位，实得 {sorted(statuses)}"
     assert s["nextRunAt"] != "", "subscribe 已置 next_run_at，须透出"
     assert s["lastSuccessAt"] == ""
     assert s["consecutiveEmptySyncs"] == 0
