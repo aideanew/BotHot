@@ -109,6 +109,10 @@ async def _seed_task(db_session: Any, channel_id: str) -> str:
     tid = str(uuid.uuid4())
     owner = User(sub=f"s23-owner-{tid[:8]}", email=f"s23-owner-{tid[:8]}@s23.test", nickname="s23-owner")
     db_session.add(owner)
+    # **必须先 flush 再读 `owner.id`**：`User.id` 是 Python 侧默认值（`default=gen_uuid`），
+    # SQLAlchemy 要到 flush 才把它落到对象上——上一版我把 add 与构造 PushTask 连在一起写，
+    # 于是 `created_by` 拿到的就是 None，`@ci` 报的还是同一条 NotNullViolation。
+    await db_session.flush()
     db_session.add(
         PushTask(
             id=tid,
