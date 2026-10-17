@@ -41,6 +41,7 @@ from app.models.base import gen_uuid
 from app.models.bothot_entities import BotChannel, PushLog, PushTask
 from app.providers.push import PushMessage, make_push_provider, registered_channels
 from app.services.cron_expr import parse_cron_next, validate_cron
+from app.services.push_scheduler import persist_web_notification
 from app.services.push_template import validate_template
 
 router = APIRouter(
@@ -467,7 +468,11 @@ async def run_push_task_now(
 
     provider = make_push_provider(ch.channel_type)
     content = task.content_template or "BotHot 推送通知"
+    # TASK-016 同口径：web 渠道在投递前自铸 id，使 SSE 实时帧与 notifications 行同值
+    # （`Notification.id` 是 Python 侧默认值，取回要等 flush ⇒ 只能提前铸）。
+    notification_id = gen_uuid() if ch.channel_type == "web" else ""
     push_msg = PushMessage(
+        notification_id=notification_id,
         message=content,
         title=task.name,
         webhook_url=ch.webhook_url,
@@ -498,6 +503,13 @@ async def run_push_task_now(
     # cron 任务执行后补算 next_run_at
     if task.trigger_type == "cron" and task.cron_expr and task.status == "active":
         task.next_run_at = parse_cron_next(task.cron_expr, now)
+
+    # STEP-23（REQ-F-001 的未闭环项）：web 渠道投递成功 → 补写站内通知历史。
+    # 复用调度器同一个落库函数，不在这里自己构造通知行：广播/定向判定
+    # （`external_user_id` 有无）与 id 口径必须只有一处实现，否则两条路径会漂移。
+    # 放在 commit 之前 ⇒ 与 PushLog/计数同事务；函数内部的 savepoint 保证落库失败只回滚通知行。
+    if ch.channel_type == "web" and result.delivered:
+        await persist_web_notification(db, push_msg)
 
     await db.commit()
 
@@ -598,7 +610,10 @@ async def test_push(
         raise RequestInvalidError(f"渠道已禁用: {channel_id}")
 
     provider = make_push_provider(ch.channel_type)
+    # 同 `/tasks/{id}/run`：web 渠道预铸 id，让实时帧与历史行同值（D-V10-05 选"也进"）。
+    notification_id = gen_uuid() if ch.channel_type == "web" else ""
     push_msg = PushMessage(
+        notification_id=notification_id,
         external_user_id=ch.user_id or "",
         message=message,
         title=title,
@@ -624,6 +639,13 @@ async def test_push(
     ch.total_push_count += 1
     if result.delivered:
         ch.success_push_count += 1
+
+    # STEP-23（REQ-F-001 的未闭环项）：web 渠道投递成功 → 补写站内通知历史。
+    # 复用调度器同一个落库函数，不在这里自己构造通知行：广播/定向判定
+    # （`external_user_id` 有无）与 id 口径必须只有一处实现，否则两条路径会漂移。
+    # 放在 commit 之前 ⇒ 与 PushLog/计数同事务；函数内部的 savepoint 保证落库失败只回滚通知行。
+    if ch.channel_type == "web" and result.delivered:
+        await persist_web_notification(db, push_msg)
 
     await db.commit()
 

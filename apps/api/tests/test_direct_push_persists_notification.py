@@ -1,0 +1,222 @@
+"""STEP-23：手动 / 测试直投也要写站内通知历史（REQ-F-001 的未闭环项）。
+
+需求原文把"手动"与"定时、事件"并列为三种触发方式，而 `persist_web_notification` 在
+314d7f2 上只有**一个**调用点（`services/push_scheduler.py:229`）⇒ web 渠道走 Cron/事件会进
+离线补投历史，走"手动触发 / 一键测试"**永不进历史**。需求文档自己登记了这条不一致，
+V0.12.0 的 31 张卡无一张认领（`grep -rn persist_web_notification docs/任务规划V0.12.0/steps` 0 命中）。
+
+两层判据，因为这两层能在不同机器上判：
+
+- **第 1 节（本机 `@win` 可判）**：结构性守卫——两条直投函数必须调用 `persist_web_notification`
+  且带 `web ∧ delivered` 的门槛。这一层不需要数据库，也正是它能立刻抓住缺陷的原因。
+- **第 2 节（连库，`@ci` ubuntu 判，D-V4-01）**：真的数 `notifications` 行。
+  本机无 PG 时这些用例 skip，**skip 不是通过**。
+
+CI 侧为什么用桩 provider 而不是 HTTP：web provider 的第一件事是问 Redis
+（`providers/push/web.py:30-31`，不可用就 `delivered=False`），而 `backend` job 没有 Redis 服务。
+用桩把"投递成功"这件事与被测的落库面解耦，才是本卡要判的那条——否则在 CI 上会拿到一个
+"因为环境没 Redis 所以没落库"的假红。
+"""
+
+from __future__ import annotations
+
+import inspect
+import uuid
+from typing import Any
+
+import pytest
+from sqlalchemy import func, select
+
+from app.api.v1 import bots as bots_module
+from app.models.bothot_entities import BotChannel, Notification, PushTask
+from app.providers.push.base import PushMessage, PushResult
+
+
+class _StubProvider:
+    """可指定回执的 provider：只回答"投递成没成"，不碰网络、不碰 Redis。"""
+
+    def __init__(self, result: PushResult) -> None:
+        self._result = result
+        self.sent: list[PushMessage] = []
+
+    async def push(self, message: PushMessage) -> PushResult:
+        self.sent.append(message)
+        return self._result
+
+
+# ── 1. 结构守卫（本机可判）────────────────────────────────────────────────────
+
+_DIRECT_CALLERS = ("test_push", "run_push_task_now")
+
+
+def _calls_persist(fn: Any) -> bool:
+    return "persist_web_notification(" in inspect.getsource(fn)
+
+
+def test_structural_guard_predicate_has_both_polarities() -> None:
+    """判据自检：对**不该**落库的函数必须为 False，否则下一节的绿没有含义。
+
+    `list_channels` 是纯读函数；若这个扫描器恒真，第二节的四条连库用例即使全 skip
+    也会让本卡看起来"已交付"。
+    """
+    assert _calls_persist(bots_module.list_push_logs) is False
+    assert _calls_persist(bots_module.list_channels) is False
+
+
+@pytest.mark.parametrize("name", _DIRECT_CALLERS)
+def test_direct_push_paths_delegate_to_the_shared_persist_fn(name: str) -> None:
+    """S23.1.2 的机械面：两条直投都必须复用**同一个**落库函数，且不复制函数体。
+
+    D-V10-05 的取舍是"直投复用调度器同一落库函数"。复制一份 `Notification(...)` 构造会造出
+    第二个落库真源——广播/定向判定（`external_user_id` 有无）与 id 口径就会在两处漂移。
+    """
+    fn = getattr(bots_module, name)
+    src = inspect.getsource(fn)
+    assert _calls_persist(fn), f"{name} 没有调用 persist_web_notification ⇒ 手动/测试推送永不进历史"
+    assert "Notification(" not in src, f"{name} 自己构造了 Notification 行（第二个落库真源）"
+    assert 'channel_type == "web"' in src and "result.delivered" in src, (
+        f"{name} 的落库没有 web ∧ delivered 门槛：失败或非 web 渠道也会被写进历史"
+    )
+
+
+# ── 2. 真落库（连库，@ci 判）───────────────────────────────────────────────────
+
+
+async def _seed_channel(db_session: Any, channel_type: str = "web") -> str:
+    cid = str(uuid.uuid4())
+    db_session.add(
+        BotChannel(
+            id=cid,
+            name=f"s23-{channel_type}-{cid[:6]}",
+            channel_type=channel_type,
+            webhook_url="https://example.invalid/hook/s23" if channel_type != "web" else "",
+            status="active",
+            user_id=None,
+        )
+    )
+    await db_session.flush()
+    return cid
+
+
+async def _seed_task(db_session: Any, channel_id: str) -> str:
+    tid = str(uuid.uuid4())
+    db_session.add(
+        PushTask(
+            id=tid,
+            name=f"s23-task-{tid[:6]}",
+            bot_channel_id=channel_id,
+            trigger_type="manual",
+            content_template="S23 直投正文",
+            status="active",
+        )
+    )
+    await db_session.flush()
+    return tid
+
+
+async def _count_notifications(db_session: Any, title: str) -> int:
+    return int(
+        (
+            await db_session.scalar(
+                select(func.count()).select_from(Notification).where(Notification.title == title)
+            )
+        )
+        or 0
+    )
+
+
+async def test_test_push_on_web_channel_writes_one_notification(db_session: Any) -> None:
+    """S23.1.1 的正体（改前红）：`POST /bots/{id}/test` 成功投递后 `notifications` +1 行。
+
+    D-V10-05 明确选"也进"：web 渠道的一次"测试"对收件人就是一条真实到达的消息，
+    历史缺它会让离线补投漏发。若产品改意，删掉那一行调用即可（可逆）。
+    """
+    cid = await _seed_channel(db_session)
+    title = f"s23-test-{uuid.uuid4().hex[:8]}"
+    stub = _StubProvider(PushResult("web", True, "ok"))
+    original = bots_module.make_push_provider
+    bots_module.make_push_provider = lambda _t: stub
+    try:
+        await bots_module.test_push(cid, message="S23 测试正文", title=title, db=db_session)
+    finally:
+        bots_module.make_push_provider = original
+
+    assert stub.sent, "provider 根本没被调用，那条 +1 就无从谈起"
+    # 预铸的 id 必须真的进了载荷：没有它，落库行与 SSE 帧会是两个 id，前端把同一条消息显示两遍
+    # （TASK-016 的口径；`test_notification_frame_id.py` 里"直投不预铸"那句已被本卡推翻，见 P-24）。
+    assert stub.sent[-1].notification_id, "web 直投未预铸 notification_id ⇒ 帧与行无法同 id"
+    assert await _count_notifications(db_session, title) == 1, "web 直投没有写站内通知历史"
+
+
+async def test_run_now_on_web_channel_writes_one_notification(db_session: Any) -> None:
+    """另一半（需求原文的"手动"触发）：`POST /bots/tasks/{id}/run` 也必须 +1 行。
+
+    这条与上一条各判一个调用点——只修一处会留下"手动触发仍不进历史"的半个缺陷，
+    而两处的症状在页面上是同一个。
+    """
+    cid = await _seed_channel(db_session)
+    task_id = await _seed_task(db_session, cid)
+    stub = _StubProvider(PushResult("web", True, "ok"))
+    original = bots_module.make_push_provider
+    bots_module.make_push_provider = lambda _t: stub
+    try:
+        await bots_module.run_push_task_now(task_id, db=db_session)
+    finally:
+        bots_module.make_push_provider = original
+
+    rows = int(
+        (
+            await db_session.scalar(
+                select(func.count()).select_from(Notification).where(Notification.channel_type == "web")
+            )
+        )
+        or 0
+    )
+    assert rows == 1, f"/run 之后 web 通知应有 1 行，实得 {rows}"
+    # 载荷里的 id 与落库行同值（TASK-016 的帧/行同 id 口径，直投也遵守）
+    row = (await db_session.scalars(select(Notification).where(Notification.channel_type == "web"))).one()
+    assert row.id == stub.sent[-1].notification_id, "直投预铸的 id 与落库行不同 ⇒ SSE 帧与历史行会各说一遍"
+
+
+async def test_failed_delivery_writes_no_notification(db_session: Any) -> None:
+    """反向：投递**失败**不得留下历史行。
+
+    没有这条，"无条件落库"也能通过上面两条——而"通知历史"记的是"用户收到过"，
+    把失败也算进去会让补投逻辑对同一条消息二次打扰。
+    """
+    cid = await _seed_channel(db_session)
+    title = f"s23-fail-{uuid.uuid4().hex[:8]}"
+    stub = _StubProvider(PushResult("web", False, "对端拒绝"))
+    original = bots_module.make_push_provider
+    bots_module.make_push_provider = lambda _t: stub
+    try:
+        await bots_module.test_push(cid, message="S23 失败正文", title=title, db=db_session)
+    finally:
+        bots_module.make_push_provider = original
+
+    assert stub.sent, "provider 未被调用则这条用例是空转"
+    assert await _count_notifications(db_session, title) == 0, "失败的投递也进了站内通知历史"
+
+
+async def test_non_web_channel_writes_no_notification(db_session: Any) -> None:
+    """反向：非 web 渠道（飞书）投递成功也不许进**站内**历史。
+
+    它有自己的 PushLog；写进 notifications 会让站内铃铛出现一条"根本没在站内发生过"的消息。
+    """
+    cid = await _seed_channel(db_session, channel_type="feishu")
+    stub = _StubProvider(PushResult("feishu", True, "ok"))
+    original = bots_module.make_push_provider
+    bots_module.make_push_provider = lambda _t: stub
+    before = int(
+        (
+            await db_session.scalar(select(func.count()).select_from(Notification))
+        )
+        or 0
+    )
+    try:
+        await bots_module.test_push(cid, message="S23 飞书正文", title=f"s23-fs-{uuid.uuid4().hex[:8]}", db=db_session)
+    finally:
+        bots_module.make_push_provider = original
+
+    after = int((await db_session.scalar(select(func.count()).select_from(Notification))) or 0)
+    assert after == before, "非 web 渠道被写进了站内通知历史"

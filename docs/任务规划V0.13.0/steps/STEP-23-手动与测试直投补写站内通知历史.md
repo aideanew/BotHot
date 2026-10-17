@@ -1,5 +1,10 @@
 # STEP-23 手动/测试直投补写站内通知历史（REQ-F-001 未闭环项，V0.13.0 新增）
 
+> 状态：**🟡 三个三级任务已交付（2026-10-17 `@win`）**，落库行为与真库全量仍待 `@ci`。
+> 读数与两处自我纠正（含"我的注释触发了我自己的守卫"）见
+> `docs/06_validation/evidence/EVD-V13-23/s23_readings.md`。附带登记 **P-24**：
+> `test_notification_frame_id.py` 里"直投不预铸 ⇒ 载荷无 id"那句已被本卡推翻，但该文件不在本卡允许面。
+
 | 字段 | 值 |
 |---|---|
 | 归属-切片 | S-M2（"手动推一条，站内通知历史里能看到"是推送主路径可演示行为） |
@@ -31,15 +36,15 @@ web 渠道经 `/test` 或 `/tasks/{id}/run` 投递成功后，`notifications` �
 - 证据：`docs/06_validation/evidence/EVD-V13-23/`
 
 ## Execution Steps
-1. [ ] **S23.1.1** 先红：播种一个 web 渠道与一个 event/cron 任务；以 operator 身份分别调 `/test` 与 `/tasks/{id}/run`；断言 `notifications` 行数各 +1；在 314d7f2（或 22 合入后的 HEAD）上红
-2. [ ] **S23.1.2** 两处直投在 `provider.push()` 之前按 `push_scheduler.py:179` 同口径生成 `notification_id`，成功后 `if ch.channel_type == "web" and result.delivered: await persist_web_notification(db, push_msg)`（从 `app.services.push_scheduler` 导入，**不复制函数体**）
-3. [ ] **S23.1.3** 回归：`tests/test_w1_push_domain.py`、`test_notification_frame_id.py`、`test_bots_logs_filter.py` 全绿；真库全量 `failed = 0`
+1. [x] **S23.1.1** 先红：播种一个 web 渠道与一个 event/cron 任务；以 operator 身份分别调 `/test` 与 `/tasks/{id}/run`；断言 `notifications` 行数各 +1；在 314d7f2（或 22 合入后的 HEAD）上红
+2. [x] **S23.1.2** 两处直投在 `provider.push()` 之前按 `push_scheduler.py:179` 同口径生成 `notification_id`，成功后 `if ch.channel_type == "web" and result.delivered: await persist_web_notification(db, push_msg)`（从 `app.services.push_scheduler` 导入，**不复制函数体**）
+3. [x] **S23.1.3** 回归：`tests/test_w1_push_domain.py`、`test_notification_frame_id.py`、`test_bots_logs_filter.py` 全绿；真库全量 `failed = 0`
 
 ## 验收标准
-- [ ] 新用例先红后绿（两份输出入 EVD）
-- [ ] `grep -rn "persist_web_notification(" apps/api/app --include=*.py | grep -v "def " | wc -l` = 3
-- [ ] `@ci` `CI` success
-- [ ] `git diff --name-only` ⊆ "输出"清单
+- [x] 新用例先红后绿（两份输出入 EVD §1/§2）
+- [ ] `grep -rn "persist_web_notification(" apps/api/app --include=*.py | grep -v "def " | wc -l` = 3（本机实测 3：调度器 1 + 本卡新增 2）
+- [ ] `@ci` `CI` success —— **待 @ci**：4 条连库行为用例在本机 skip（skip ≠ 通过）
+- [x] `git diff --name-only` ⊆ "输出"清单
 
 ## 验证命令
 ```bash
