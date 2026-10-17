@@ -21,6 +21,7 @@ CI 侧为什么用桩 provider 而不是 HTTP：web provider 的第一件事是�
 from __future__ import annotations
 
 import inspect
+import json
 import uuid
 from typing import Any
 
@@ -28,6 +29,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.api.v1 import bots as bots_module
+from app.api.v1 import system as system_module
 from app.models.bothot_entities import BotChannel, Notification, PushTask
 from app.models.entities import User
 from app.providers.push.base import PushMessage, PushResult
@@ -309,3 +311,36 @@ def test_direct_push_does_not_feed_channel_user_id_straight_into_the_recipient_a
     src = inspect.getsource(bots_module.test_push)
     assert "external_user_id=ch.user_id" not in src, "又回到把 users.id 直接当收件人锚的写法"
     assert "User.sub" in src, "没有解析 SSO sub 这一步，定向行就会写成谁都查不到的死行"
+
+
+async def test_recipient_actually_reads_the_directed_row_back_through_the_history_api(
+    db_session: Any,
+) -> None:
+    """卡目标的下半句「对收件人可见」的**端到端**判据：写完必须能用收件人身份读回来。
+
+    上一轮我判"落库行的 `sub` 等于收件人 sub"就收工了，独立复核指出那还只是**写侧**：
+    真正决定用户看不看得见的是读侧谓词 `_notification_scope`（`system.py:394-396`），
+    而它从来没有与本卡的写入连过一次线。这里直接调读端点函数（不走 HTTP 栈，
+    因此不需要路由依赖的覆盖），把"写进去 ⇒ 读得回来"钉成一条。
+    """
+    uid, usub = await _seed_user(db_session)
+    cid = await _seed_channel(db_session, user_id=uid)
+    title = f"s23-e2e-{uuid.uuid4().hex[:8]}"
+    stub = _StubProvider(PushResult("web", True, "ok"))
+    original = bots_module.make_push_provider
+    bots_module.make_push_provider = lambda _t: stub
+    try:
+        await bots_module.test_push(cid, message="S23 端到端正文", title=title, db=db_session)
+        response = await system_module.notifications_history(sub=usub, session=db_session, paging=(50, 0))
+    finally:
+        bots_module.make_push_provider = original
+
+    payload = json.loads(response.body)
+    data = payload.get("data", payload)
+    titles = [item["title"] for item in data["items"]]
+    assert title in titles, f"收件人按自己的 sub 读历史读不到刚写入的行：{titles}"
+    # 反面对照：换一个人（另一个 sub）不许看到这条定向消息——否则"可见"是靠把它变成广播换来的
+    other = await _seed_user(db_session)
+    other_response = await system_module.notifications_history(sub=other[1], session=db_session, paging=(50, 0))
+    other_titles = [item["title"] for item in json.loads(other_response.body).get("data", {}).get("items", [])]
+    assert title not in other_titles, "定向消息泄漏给了别的收件人"

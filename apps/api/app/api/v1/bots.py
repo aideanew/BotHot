@@ -509,7 +509,9 @@ async def run_push_task_now(
     # STEP-23（REQ-F-001 的未闭环项）：web 渠道投递成功 → 补写站内通知历史。
     # 复用调度器同一个落库函数，不在这里自己构造通知行：广播/定向判定
     # （`external_user_id` 有无）与 id 口径必须只有一处实现，否则两条路径会漂移。
-    # 放在 commit 之前 ⇒ 与 PushLog/计数同事务；函数内部的 savepoint 保证落库失败只回滚通知行。
+    # 放在 commit 之前 ⇒ 与 PushLog/计数同事务。⚠️ 不要读成"落库失败只回滚通知行"：
+    # `db.add(log)` 已在上面发生，`persist_web_notification` 内部的 savepoint 回滚会把**尚未 flush
+    # 的 PushLog 一并撤销**，再由 commit 重新插入 ⇒ 最终行都在，但那是"整体延后重插"不是"局部回滚"。
     if ch.channel_type == "web" and result.delivered:
         await persist_web_notification(db, push_msg)
 
@@ -657,7 +659,9 @@ async def test_push(
     # STEP-23（REQ-F-001 的未闭环项）：web 渠道投递成功 → 补写站内通知历史。
     # 复用调度器同一个落库函数，不在这里自己构造通知行：广播/定向判定
     # （`external_user_id` 有无）与 id 口径必须只有一处实现，否则两条路径会漂移。
-    # 放在 commit 之前 ⇒ 与 PushLog/计数同事务；函数内部的 savepoint 保证落库失败只回滚通知行。
+    # 放在 commit 之前 ⇒ 与 PushLog/计数同事务。⚠️ 不要读成"落库失败只回滚通知行"：
+    # `db.add(log)` 已在上面发生，`persist_web_notification` 内部的 savepoint 回滚会把**尚未 flush
+    # 的 PushLog 一并撤销**，再由 commit 重新插入 ⇒ 最终行都在，但那是"整体延后重插"不是"局部回滚"。
     if ch.channel_type == "web" and result.delivered:
         await persist_web_notification(db, push_msg)
 

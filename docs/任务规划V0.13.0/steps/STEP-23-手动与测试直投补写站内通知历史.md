@@ -63,6 +63,23 @@ web 渠道经 `/test` 或 `/tasks/{id}/run` 投递成功后，`notifications` �
     升级成全站通知）；②`test_direct_push_does_not_feed_channel_user_id_straight_into_the_recipient_anchor`
     ——本机可判的源码早期线（判不到行为，只防回退）
   - [ ] S23.4.4 `@ci`：新增两条连库用例在真库上绿，且全量 `failed = 0`
+- [ ] **S23.5（第二轮复核追进）** 写侧判据不等于"可见"
+  - [x] S23.5.1 端到端判据：`test_recipient_actually_reads_the_directed_row_back_through_the_history_api`
+    ——写入后用收件人自己的 sub 调 `system.notifications_history` 读回来，并加一条"换个人读不到"的反证
+    （否则"可见"可能是靠把它变成广播换来的）。不走 HTTP 栈 ⇒ 不需要路由依赖覆盖，也不碰别人的文件
+  - [x] S23.5.2 注释按实现改窄：两处直投原写"savepoint 保证落库失败**只回滚通知行**"比实现强——
+    `db.add(log)` 在 persist 之前，回滚会把尚未 flush 的 PushLog 一并撤销再由 commit 重插
+    （最终行都在，但那是"整体延后重插"）。调度器 `persist → add(log)` 与直投 `add(log) → persist`
+    的顺序不一致 + `persist` 吞掉所有异常且无计数器，一并登记 **P-30**
+  - [x] S23.5.3 复核的一条 claim 复算后**否掉**：「全仓调用计数实际是 4」——按卡面命令原样跑只有 3 行，
+    第 4 条是把 `bots.py:45` 的 import 行算进去（我的模式带左括号，import 行不含括号）。
+    记这条是为了说明：**不现跑就直接改卡，卡上那条就会变成迁就某次读数的判据**
+  - [ ] S23.5.4 `@ci`：S23.4 + S23.5 的新增连库用例在真库上绿
+- [ ] **卡目标句的诚实降格**：上一轮提交标题写"REQ-F-001 那条不一致闭环"**超售**——
+  REQ-F-001 的"手动"其实有**第三条**路径（`services/push.py:40-61`，`POST /admin/push` 的服务面
+  自铸 `PushMessage` 直接投递、不写历史），它不在本卡允许面（只允许 `bots.py` 两处直投函数体）。
+  已登记 **P-29**，默认值 A=补落库 + 一条按收件人 sub 读回的连库用例；B=有意不进历史，
+  则必须把 `push.py` 与可见性口径各写一句"此路径不进历史"
 
 ## 验证命令
 ```bash
