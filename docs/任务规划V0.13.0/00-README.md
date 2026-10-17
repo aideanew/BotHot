@@ -13,7 +13,7 @@
 
 **CI-Windows 自拆出以来一直红（314d7f2 之前最近 5 次全部 failure，`evidence/314d7f2/workflow_runs_main.json`），本版把根因怀疑面换了回来。** V0.12.0 结论是"卡在 TestClient/anyio portal，与 psycopg 无关"。我逐条对过：被卡的三条用例**只做一件事——`GET /system/health`**；`/health` 串行等三个探针，redis 2s、langbot 3s 都有上界，**唯独 PG 探针用业务引擎、没有 `connect_timeout`**；Windows 回环不回 RST（执行方自己的读数），CI-Windows 又没有 PG ⇒ 每次 `/health` 都是一次无上界的黑洞连接。`@linux` 黑洞 DSN 下 `/health` 在 314d7f2 上挂满 45s。portal 线程停在 `selectors._select` 正是"路由协程在等 connect"的样子。→ **STEP-00H（P0）**，`部分确认`：机制已证，"Windows 上就是它"待 `@ci` 读数。
 
-**进度**：`@linux` 真库全量 **1478 passed / 5 skipped / 0 failed，覆盖率 85%，108.7s**（V0.12.0 基线是 1058 / 79%）；`CI`、`Security` 在 314d7f2 均 success；02、03 已交付；04 的形状层（迁移 `ab1006c1a`）已交付，**行为层（Diff 与四态）一行未动**——采集主线真正的剩余核心仍在 04→05/06→07。
+**进度**：`@linux` 真库全量 **1478 passed / 5 skipped / 0 failed，覆盖率 85%，108.7s**（V0.12.0 基线是 1058 / 79%）；`CI`、`Security` 在 314d7f2 均 success；02、03 已交付；04 的形状层（迁移 `ab1006c1a`）与**行为层（Diff 改判 + 清单四态）在 `ef63bf9` 均已交付**（本机 `33 passed / 5 skipped`，影响面 21 文件 `477 passed / 237 skipped / 0 failed`；5 条连库用例只能由 `@ci` 判）。其中 S4.1.2「同篇短链/长链两形态只入列一次」**带成立条件**：短链与长链的 `article_key` 分属 `s:`/`b:` 两支、永不相等，靠既有表 `short_link_maps` 并键才减得到，**该表还没有映射行时两种形态各排一次队**（一次性代价，见 D-V9-06）——采集主线真正的剩余核心仍在 05/06→07。
 
 ## 1. 本版相对 V0.12.0 的变化
 
@@ -29,7 +29,7 @@
 | 8 | 新裁决 **D-V10-01～D-V10-08**；签入两条拖了一天的 BLOCKING：**D-V8-05、D-V8-08 取 A**（用户 2026-10-15 授权规划方代选） | `03` §1；`docs/03_solution/decisions/decision-log.md` |
 | 9 | **新增 STEP-23**：REQ-F-001 自己登记、五天无人认领的缺口——手动/测试直投不写站内通知历史（`persist_web_notification` 全仓仍只有 1 个调用点） | `product-requirements.md:66-74`；`push_scheduler.py:229` |
 | 10 | `make evidence-check` 在 314d7f2 红（证据脚本 AST 抽函数陈旧，非生产缺陷），作为 STEP-00T 首个迁移对象 | `evidence/314d7f2/evidence_check.txt` |
-| 11 | 规模：**37 卡 / 235 三级任务 / 38.25 人日**；**剩余 166 项 ≈ 27.5 人日**（继承剩余 131 项 ≈20.0 + 新增 35 项 7.5） | `04` §2 |
+| 11 | 规模：**37 卡 / 235 三级任务 / 38.25 人日**；落盘时**剩余 166 项 ≈ 27.5 人日**（继承剩余 131 项 ≈20.0 + 新增 35 项 7.5）；2026-10-17 `ef63bf9` 交付 04 行为层 7 项后复算为 **159 项 ≈ 26.5 人日**（`04` §2.1 脚本实测 `37 235 38.25 159`） | `04` §2 |
 
 ## 2. 阅读顺序
 0. `06-入库与双端一致.md` 的文件清单即本版落盘清单
