@@ -3173,7 +3173,7 @@ def test_baseline_doc_names_the_open_blocking_signoffs() -> None:
     且锚点行号早已漂移。基线文档写着"全签了"，任何下游 Agent 都会据此跳过人判步骤。
     """
     total, signed, unsigned = blocking_rows_state()
-    assert (total, signed) == (13, 11), (
+    assert (total, signed) == (13, 13), (
         f"台账 BLOCKING 状态变成 总 {total} 已签 {signed} 未签 {unsigned} ⇒ 本断言要跟着改，"
         "同时把 01 的 F-12 与 00-README 的相应叙述一起改（三处必须同时成立，缺一处就是假话）"
     )
