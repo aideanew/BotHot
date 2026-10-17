@@ -36,6 +36,7 @@ from app.models.entities import (
 )
 from app.repositories.space import SpaceRepository
 from app.repositories.user import SqlAlchemyUserStore
+from app.services.article_identity import canonical_article_key
 from app.services.scheduler import IncrementalScheduler
 
 PG_DSN = os.environ.get("AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot")
@@ -196,11 +197,14 @@ async def _seed_manifests(
     ext_ids = [f"{prefix}{i}" for i in range(count)]
     async with factory() as session:
         for ext in ext_ids:
+            url = f"https://mp.weixin.qq.com/s/{ext}"
             session.add(
                 ArticleManifest(
                     source_id=source_id,
                     external_id=ext,
-                    url=f"https://mp.weixin.qq.com/s/{ext}",
+                    # STEP-04 S4.4.1：Diff 按 `article_key` 减资产/减在途，铺数据必须带规范键
+                    article_key=canonical_article_key(url),
+                    url=url,
                     title=f"T24清单{ext}",
                     content_hash=f"hash-{ext}",
                     status="DISCOVERED",

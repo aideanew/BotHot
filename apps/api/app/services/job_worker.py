@@ -26,11 +26,12 @@ import contextlib
 import json
 import time
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
 import structlog
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings, assert_production_ready, get_settings
@@ -41,10 +42,17 @@ from app.core.errors import (
     RateLimitedUpstreamError,
     SourceUrlUnrecognizedError,
 )
+from app.models.entities import ArticleManifest, Job, JobItem
 from app.repositories.job import JobItemRepository, JobRepository
+from app.services.manifest import (
+    MANIFEST_STATUS_DISCOVERED,
+    MANIFEST_STATUS_ENQUEUED,
+    MANIFEST_STATUS_FAILED,
+    MANIFEST_STATUS_INGESTED,
+)
 from app.services.process_heartbeat import BEACON_MIN_INTERVAL_SECONDS, BeaconGate
 from app.services.process_heartbeat import beacon as _heartbeat
-from app.services.state_machine import validate_transition
+from app.services.state_machine import can_transition, validate_transition
 
 logger = structlog.get_logger(__name__)
 
@@ -61,6 +69,51 @@ ITEM_STATUS_FAILED = "FAILED"
 
 PAUSED_PREFIX = "paused:rate_limited"
 _ERROR_MAX_LEN = 500
+
+
+def manifest_status_for_item_outcome(
+    *,
+    error_type: str,
+    throttled: bool,
+    retryable: bool,
+) -> str | None:
+    """JobItem 这一轮的结果 → 清单该置成什么；`None` = 留在 ENQUEUED 不动（S4.4.2）。
+
+    判据本体刻意做成**不连库的纯函数**：四态映射是这一步真正要钉住的东西，
+    把它绑在 `_drain_items` 的事务里就等于"只有有 PG 的人才能验证它"（本机跑不起来时，
+    读数会长期停在 @ci 那一侧）。分支顺序与 `_drain_items` 逐字对齐：
+    成功 → INGESTED；限流暂停或仍可重试 → 不动（条目回 PENDING，篇还没结局）；
+    其余（永久失败 **或重试次数耗尽**）→ FAILED。
+    """
+    if not error_type:
+        return MANIFEST_STATUS_INGESTED
+    if throttled or retryable:
+        return None
+    return MANIFEST_STATUS_FAILED
+
+
+async def _apply_manifest_status(session: AsyncSession, manifest_id: str | None, target: str | None) -> bool:
+    """把清单行推到 `target`；返回是否真的写了。
+
+    非法流转**不抛穿** worker：条目结果已经落库，为一次簿记边的越界把整批消费打断，
+    代价是"更多条目没人收"。这里选择结构化告警出声（`manifest.status.illegal`），
+    既不伪装成功，也不静默吞——已知的一个不可达来源是重试面：admin retry 把 FAILED 条目
+    复位 PENDING 后，本篇清单还停在 FAILED，`FAILED → INGESTED` 因此非法（发布项 P-18 已记，
+    修复点在 retry 路径里同事务做 `FAILED → DISCOVERED`）。
+    """
+    if manifest_id is None or target is None:
+        return False
+    row = await session.get(ArticleManifest, manifest_id)
+    if row is None:
+        # FK 是 SET NULL：清单行可以比 JobItem 先消失（删号/清理）。没有行就没有状态可写，
+        # 但这是**可见**的缺失（warning），不是"回写成功"。
+        logger.warning("manifest.status.row_missing", manifest_id=manifest_id, target=target)
+        return False
+    if not can_transition("manifest", row.status, target):
+        logger.warning("manifest.status.illegal", manifest_id=manifest_id, old=row.status, target=target)
+        return False
+    row.status = target
+    return True
 
 # W2：无 JobItem 的单作业类型——claim 后直接跑处理函数，不走 _drain_items/_finalize
 # （后者按 JobItem counts 收敛，对无 item 的 Job 会误判 total=0 → FAILED）。
@@ -151,6 +204,7 @@ class JobWorker:
         item_interval_seconds: float | None = None,
         max_item_retries: int | None = None,
         stale_job_seconds: int | None = None,
+        manifest_enqueued_ttl_seconds: int | None = None,
         idle_sleep_seconds: float | None = None,
         sleep: Callable[[float], Awaitable[None]] | None = None,
         heartbeat_enabled: bool = True,
@@ -169,6 +223,20 @@ class JobWorker:
         self._stale_seconds = (
             stale_job_seconds if stale_job_seconds is not None else int(getattr(s, "job_worker_stale_seconds", 300))
         )
+        # 清单 stale 回退的滞后期：它不是"多久算崩溃"（那是上面的心跳阈值），而是
+        # "给正常收敛留多少余地"——Job 终态化后回写若没做成，行要在这里等一拍才被回收。
+        # 默认 1800s 取"比一个大 Job 的 finalize 延迟更宽"，而不是比心跳阈值更宽。
+        self._manifest_enqueued_ttl = (
+            manifest_enqueued_ttl_seconds
+            if manifest_enqueued_ttl_seconds is not None
+            else int(getattr(s, "manifest_enqueued_ttl_seconds", 1800))
+        )
+        # 回退巡检的节流门。`article_manifests.status` **没有索引**（本卡只被授权加
+        # `ab1006c1a` 的两个形状，加索引要再占一个迁移号并与 08 卡撞号），而 `run_forever`
+        # 的空转间隔只有 5 秒——不加闸门就是每 5 秒一次全表扫描，把一个正确性功能变成
+        # 常态负载源。取 `max(60, ttl/4)`：比回收窗口细得多、比空闲间隔粗得多，且首次调用必过
+        # （`BeaconGate._last = -inf`），测试直调 `recover_stale` 不会被闸门挡掉。
+        self._manifest_sweep = BeaconGate(max(60.0, self._manifest_enqueued_ttl / 4.0))
         self._idle_sleep = (
             idle_sleep_seconds
             if idle_sleep_seconds is not None
@@ -202,17 +270,78 @@ class JobWorker:
     # ------------------------------------------------------------------ 自愈
 
     async def recover_stale(self) -> int:
-        """崩溃自愈：心跳超时的 RUNNING job → QUEUED，其 RUNNING item → PENDING。"""
+        """崩溃自愈：心跳超时的 RUNNING job → QUEUED，其 RUNNING item → PENDING，
+        并把**没有活动 Job 认领**的超时 ENQUEUED 清单回退 DISCOVERED（S4.4.3）。
+
+        清单回退不依附"本轮有没有 stale job"：条目可以在 Job 终态化前后任一处断掉
+        （崩溃在 commit 与 finalize 之间、限流暂停后进程再没起来），那时没有任何活动 Job
+        会再去回写它——只跟着 stale job 走会让这些行永远停在 ENQUEUED，
+        而"停在 ENQUEUED"在观测面上和"正在入库"一模一样。
+        """
         async with self._factory() as session:
             stale_ids = await JobRepository(session).requeue_stale_running(self._stale_seconds)
-            if not stale_ids:
-                return 0
             item_repo = JobItemRepository(session)
             for jid in stale_ids:
                 await item_repo.requeue_running(jid)
+            rolled_back = await self._rollback_stale_enqueued(session)
+            if not stale_ids and not rolled_back:
+                return 0
             await session.commit()
-            logger.warning("job_worker 自愈回退 %d 件滞留 job: %s", len(stale_ids), stale_ids)
+            if stale_ids:
+                logger.warning("job_worker 自愈回退 %d 件滞留 job: %s", len(stale_ids), stale_ids)
+            if rolled_back:
+                logger.warning(
+                    "job_worker 清单 stale 回退 %d 行（ENQUEUED→DISCOVERED，ttl=%ds）",
+                    rolled_back,
+                    self._manifest_enqueued_ttl,
+                )
             return len(stale_ids)
+
+    async def _rollback_stale_enqueued(self, session: AsyncSession) -> int:
+        """把"超时且无活动 Job"的 ENQUEUED 清单退回 DISCOVERED；返回回退行数。
+
+        时间锚用 `ArticleManifest.updated_at`（`TimestampMixin` 的 `onupdate=func.now()`），
+        **不新立列**——S4.2 的迁移号只带两个形状列，加时间锚要再占一个迁移号并与 08 卡撞号。
+        已知代价（写在读数里，不藏在代码里）：入列后若同一行被重新发现并更新（改题/换链），
+        `updated_at` 会被刷新，stale 时钟随之归零，回退最多推迟一个同步轮而不是失效。
+
+        "有没有活动 Job"用**一条** DISTINCT 查询取回在途 manifest_id 集合再在 Python 侧判，
+        不走逐行 count——几千行 ENQUEUED 滞留时 N+1 会把自愈巡检变成新的负载源。
+        """
+        if not self._manifest_sweep.ready():
+            return 0  # 节流：见构造函数里那条"status 无索引"的理由
+        cutoff = datetime.now(UTC) - timedelta(seconds=self._manifest_enqueued_ttl)
+        rows = (
+            await session.scalars(
+                select(ArticleManifest).where(
+                    ArticleManifest.status == MANIFEST_STATUS_ENQUEUED,
+                    ArticleManifest.updated_at < cutoff,
+                )
+            )
+        ).all()
+        if not rows:
+            return 0
+        in_flight = set(
+            await session.scalars(
+                select(JobItem.manifest_id)
+                .join(Job, Job.id == JobItem.job_id)
+                .where(
+                    JobItem.manifest_id.is_not(None),
+                    Job.status.in_((JOB_STATUS_QUEUED, JOB_STATUS_RUNNING)),
+                )
+                .distinct()
+            )
+        )
+        rolled = 0
+        for row in rows:
+            if row.id in in_flight:
+                continue  # 还在 QUEUED/RUNNING 的 Job 名下：账归 worker，不抢
+            if not can_transition("manifest", row.status, MANIFEST_STATUS_DISCOVERED):
+                logger.warning("manifest.rollback.illegal", manifest_id=row.id, old=row.status)
+                continue
+            row.status = MANIFEST_STATUS_DISCOVERED
+            rolled += 1
+        return rolled
 
     # ------------------------------------------------------------------ 主循环
 
@@ -331,6 +460,9 @@ class JobWorker:
                 if item is None:
                     return
                 item_id, url, attempts = item.id, item.url, int(item.retry_count or 0)
+                # 清单关联在**取件的同一会话**里读出来带走：后面的写回发生在另一个会话里，
+                # 那时条目已经换过状态，再回查一次既多一跳又可能被并发面改到。
+                manifest_id = item.manifest_id
 
             error_type, error_msg = "", ""
             throttled = False
@@ -361,6 +493,15 @@ class JobWorker:
                     await repo.bump_retry(item_id)
                 else:
                     await repo.set_status(item_id, ITEM_STATUS_FAILED, error_msg[:_ERROR_MAX_LEN])
+                # S4.4.2：清单四态回写与条目终态**同事务**提交（本块末尾的 commit）。
+                # 分开提交会留下"条目已 SUCCEEDED 而清单还写 ENQUEUED"的可见中间态。
+                await _apply_manifest_status(
+                    session,
+                    manifest_id,
+                    manifest_status_for_item_outcome(
+                        error_type=error_type, throttled=throttled, retryable=retryable
+                    ),
+                )
                 await self._touch(job_id, session)
                 await session.commit()
 

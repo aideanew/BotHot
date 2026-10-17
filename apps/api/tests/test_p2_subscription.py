@@ -19,6 +19,7 @@ from test_repositories import _make_user  # noqa: F401  (复用用户锚夹具)
 from app.core.errors import RequestInvalidError
 from app.models.entities import ArticleManifest, Job, JobItem, Source, SourceSubscription
 from app.repositories.space import SpaceRepository
+from app.services.article_identity import canonical_article_key
 from app.services.subscription import SourceSubscriptionService
 
 # 通过 register_source 的形态校验（R8 L1-3：须 M 前缀 Base64 __biz），值本身仍是测试专用
@@ -48,11 +49,16 @@ async def _seed_manifests(db_session, source_id: str, count: int) -> None:
     幂等键 (source_id, external_id) 与真实清单写入同构，RedFox 客户端接入后由真实写入方落盘。
     """
     for i in range(count):
+        url = f"https://mp.weixin.qq.com/s/{BIZ_TEST}-{i}"
         db_session.add(
             ArticleManifest(
                 source_id=source_id,
                 external_id=f"{BIZ_TEST}-work-{i}",
-                url=f"https://mp.weixin.qq.com/s/{BIZ_TEST}-{i}",
+                # STEP-04 S4.4.1：Diff 改按 `article_key` 减，铺数据必须带规范键——
+                # 生产写侧（`_map_row`）就是这么算的，测试不跟着改就会集体变成"0 篇入列"，
+                # 红记在实现上，其实是夹具前提过期（STEP-02 的 6 条红正是这一族）。
+                article_key=canonical_article_key(url),
+                url=url,
                 title=f"清单文章{i}",
                 content_hash=f"hash-{BIZ_TEST}-{i}",
                 status="DISCOVERED",

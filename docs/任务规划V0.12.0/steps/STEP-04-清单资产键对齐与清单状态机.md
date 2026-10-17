@@ -1,10 +1,18 @@
 # STEP-04 清单资产键对齐与清单状态机
 
-> 基线 main@61358c3｜状态：🟡 进行中（2026-10-17 起）——**S4.2 形状层已判 Done**（`ab1006c1a` + 模型两列 + 形状门 +
-> D-V2-02 往返门禁；`@ci` run 38995802669 = success，backend `1477 passed / 6 skipped`、覆盖率 85.46%、`pg_unreachable=0`），
-> 但 S4.1 先红、S4.3 写侧、S4.4 Diff/状态机、S4.5 验收都还没做，所以**来源卡的 P-2 读数今天仍是 1 不是 0**
-> （Diff 判据一行未动，`article_key` 列存在却无人写值）。剩余 8 个三级任务；读数与"本步没做的事"见
-> `10-执行过程-独立执行段第三批.md` §9，两轮复审补完见 §10–§11.7。
+> 基线 main@61358c3｜状态：🟡 进行中（2026-10-17 起）——**S4.1 / S4.2 / S4.3 / S4.4 已交付**：
+> `ab1006c1a` 形状 + 形状门（7 条含 7 发反证）+ 写侧算 `article_key`（URL 变了键跟着重算）+
+> 入列同事务写 `JobItem.manifest_id` 并置 `ENQUEUED` + Diff 改按 `article_key` 减资产与减在途
+> （S4.1.2 的同轮收敛）+ worker 终态回写 `INGESTED/FAILED` + `recover_stale` 回退超时无人认领的
+> `ENQUEUED`。**剩 S4.5.1 验收**（P-2 复跑 = 0、全量双环境 0 failed、CI 双绿），只能由 `@ci` 判。
+> S4.1.2 那句「同篇短链/长链两形态只入列一次」的成立条件写在 **D-V9-06**：短链与长链的
+> `article_key` 本来就分属 `s:`/`b:` 两支、永不相等，靠既有表 `short_link_maps` 把短链那支并到
+> 长链键上才谈得上减资产与减在途；**该表还没有映射行时两种形态各排一次队**（首抓后就位，一次性代价）。
+> 本机证据面：`test_manifest_state_machine.py` **23 条**、`test_manifest_asset_alignment.py` **15 条**
+> （其中 5 条连库用例本机 skip，等 @ci），合跑 `33 passed / 5 skipped`；
+> 三发的变异反证各自咬住（并键关掉 ⇒ 2 条红；回写挪到 commit 之后 ⇒ 2 条红；空值守卫删掉 ⇒ 1 条红）。
+> 遗留后果与裁决写在 **D-V9-05**（在途面按键减、NULL 键行停入列并计数告警、非法边不抛穿 worker），
+> 重试面未接四态已发布为 **P-18**。历史行文（含"只交付形状层"那段）按当时读数保留，不回改。
 
 | 字段 | 内容 |
 |---|---|
@@ -53,3 +61,5 @@
 | C-2 | 「迁移必须可 downgrade，并在 CI ubuntu 上跑往返」（D-V2-02 硬要求，卡面 §1 亦列为验收） | 该步 **2026-10-17 之前无人执行**：`.github/workflows/` 全量搜 `downgrade` 零命中，CI 只有 `upgrade head` | 已补：`ci.yml` backend job 新增 "Migration roundtrip (upgrade head → downgrade -1 → upgrade head)"。这条改动**越出本卡所有权**（CI 由 00C/00E 家族持有），按"裁决已签而执行面缺失"处理，越界记录在 `10-…第三批.md` §10.2 |
 | C-3 | 卡行 13「禁止修改：迁移目录（需 DDL 停转 ADR）」与来源卡所有权「`apps/api/alembic/versions/ab1006c1a_*.py（新）`」 | 两条互相顶：本卡的 S4.2.1 就是**要**新增一个迁移文件，而 D-V2-02 已签该迁移的形状 | 按来源卡所有权 + 已签裁决执行（新增文件不等于改既有迁移）。**请规划方裁定**行 13 是否应改写为"禁止修改已入库迁移的既有步骤" |
 | C-4 | 卡面 §1 的 `P-2` = 已 READY 篇下轮 Diff 新增数应为 0 | 同号在 00-README §4 = glossary 锚漂移、在 02 §1 = M-2 多源串号 | 三套编号并存，不改号（重编会撞歪九份执行记录的交叉引用）；引用一律带来源标注，声明见 `00-README.md` §4 抬头 |
+| C-5 | 所有权矩阵的 W 列只点名 `manifest.py / subscription.py / job_worker.py / entities.py` | S4.4 落地必然还要动两处：`app/services/state_machine.py`（加 `"manifest"` 域——四态迁移表的既有真源，不加就等于在 manifest 里另养一份迁移表）与 `app/core/config.py`（卡面 S4.4.3 自己点名的 `manifest_enqueued_ttl`） | 两处都在 04 §5 的 **API 列**（`apps/api/app/services/**` 是整列所有权，`app/core/**` 未列入矩阵），所以**不构成跨列越界**，但确实超出本卡"点名的函数"清单——按 00W 的跨所有权先例在此声明，请规划方复核矩阵是否该把 `app/core/config.py` 补进某一列 |
+

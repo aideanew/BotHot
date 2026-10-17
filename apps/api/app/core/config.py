@@ -144,6 +144,10 @@ class Settings(BaseSettings):
     job_worker_item_interval_seconds: float = 2.0  # 逐篇间隔（per-source 串行=并发 1）
     job_worker_max_retries: int = 3  # 单篇最大重试次数（超限 → FAILED → 进 PARTIAL 分母）
     job_worker_stale_seconds: int = 300  # RUNNING 心跳超时阈值（超时 → 自愈回退 QUEUED）
+    # STEP-04 S4.4.3：清单 ENQUEUED 的滞后期。与上面的心跳阈值不是一回事——
+    # 后者判"worker 是不是死了"，这个判"没人认领的在途篇还要给多少余地才回收"。
+    # 取 1800s 是因为它要比一个正常大 Job 的收敛延迟更宽，否则自愈会去抢正在入库的篇。
+    manifest_enqueued_ttl_seconds: int = 1800
     job_worker_idle_sleep_seconds: float = 5.0  # 无活空转间隔
 
     # T2.4 增量调度器（整号采集触发端）：next_run_at 驱动 + consecutiveEmpty 退避

@@ -37,13 +37,20 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.contracts.collection import ManifestStatus
 from app.core.config import Settings
 from app.models.entities import ArticleManifest
 from app.services.article_identity import canonical_article_key
 
 logger = structlog.get_logger(__name__)
 
-MANIFEST_STATUS_DISCOVERED = "DISCOVERED"
+# 四态的真源是契约枚举（`app/contracts/collection.py:ManifestStatus`，D-V2-02），
+# 这里只取它的值——迁移表在 `app/services/state_machine.py` 的 "manifest" 域。
+# 再写一份字符串字面量就等于给状态机造第二个真源（本仓库为这类重复付过多次费）。
+MANIFEST_STATUS_DISCOVERED = ManifestStatus.DISCOVERED.value
+MANIFEST_STATUS_ENQUEUED = ManifestStatus.ENQUEUED.value
+MANIFEST_STATUS_INGESTED = ManifestStatus.INGESTED.value
+MANIFEST_STATUS_FAILED = ManifestStatus.FAILED.value
 DEFAULT_MAX_PAGES = 20
 
 # 广域库 `publishTime` 为无时区北京时间串；按 UTC 解析会整体早 8 小时（L1-1 修复）
@@ -185,9 +192,17 @@ def _map_row(row: dict[str, Any]) -> dict[str, Any] | None:
 
     S3.3.3（P-1 的消费端那一半）：**缺 id 不再丢整行**——有 URL 就用
     `canonical_article_key(url)` 兜底建键（判据在 `_row_identity`，与 `sync_source`
-    的计数同一个真源）。仍然返回 None 的只剩一种：连 URL 都没有的行——
-    那种行没有正文地址，建出来的键只是空壳哈希，落库等于把脏数据固化，
-    所以它必须是 skipped 而不是 discovered。
+    的计数同一个真源）。返回 None 的只剩一种：**id 与 URL 都没有**的行——那种行
+    既没有渠道身份也没有正文地址，落库等于把脏数据固化，所以它必须是 skipped 而不是 discovered。
+    只有 id、没有 URL 的行仍然收（它是"见过这篇"的真实记录），但它的 `article_key` 是
+    **NULL**，于是 Diff 永远不通它入列，并由 `manifest.diff.null_key_backlog` 计数出声——
+    不是静默无用行。
+
+    S4.3.1（STEP-04）：`article_key` 与 `external_id` **同时写但不同源**——前者恒为
+    `canonical_article_key(url)`（跨渠道文章身份，与 `content_assets.external_id` 同一键空间），
+    后者是渠道内幂等键。P-2 的根因正是拿后者去减资产（`D-V3-01`）。
+    URL 为空的行给 **None 而不是 `""`**：`""` 不是合法 `ArticleKey`，且会让所有无键行
+    在 Diff 里互相撞成同一个键（`D-V9-04`）。
     """
     external_id, _fallback = _row_identity(row)
     if not external_id:
@@ -202,6 +217,7 @@ def _map_row(row: dict[str, Any]) -> dict[str, Any] | None:
             break
     return {
         "external_id": external_id,
+        "article_key": canonical_article_key(url) if url else None,
         "url": url,
         "title": title,
         "publish_time": publish_time,
@@ -335,10 +351,26 @@ class ManifestSyncService:
 
     @staticmethod
     def _apply_update(existing: ArticleManifest, mapped: dict[str, Any]) -> str:
-        """可变字段差异更新；全等则计 unchanged（幂等第二跑应为 unchanged）。"""
+        """可变字段差异更新；全等则计 unchanged（幂等第二跑应为 unchanged）。
+
+        `article_key` 在可变集里（S4.3.1.1）：同一 `(source_id, external_id)` 行的 URL
+        变了（改文、公众号换了链接形态），身份键必须跟着重算——留着旧键等于让 Diff
+        拿一篇的旧身份去减资产，正是要消灭的那族错。
+        **但空值不许覆盖已有值**：上游偶尔会回一条"有 id、没 URL"的行（`_map_row` 对这种行给
+        `url=""` 与 `article_key=None`），照单更新会把一个合法身份与可用地址一起降级——
+        该行随即从 Diff 里消失（`article_key IS NOT NULL` 挡在门外），
+        变成"身份被自己抹掉"的静默丢失。宁可留着旧值（它至多指向上一篇，可被 STEP-07 审计），
+        也不要制造一行永远不可入列的僵尸。同一条理由对 `title`/`publish_time` 一样成立
+        （上游缺字段的行没有"把标题清空"这种正当语义），所以规则对五个可变字段统一适用，
+        不挑两列特判。
+        **不**跟着改 `status`：四态由入列/回写/自愈三处持有，重新发现不该把已入库的行倒回 DISCOVERED。
+        """
         changed = False
-        for field in ("url", "title", "publish_time", "content_hash"):
+        for field in ("url", "article_key", "title", "publish_time", "content_hash"):
             new = mapped.get(field)
+            if not new:
+                # 空值不覆盖：可变集里没有任何一列有"被清空"的正当语义
+                continue
             if getattr(existing, field) != new:
                 setattr(existing, field, new)
                 changed = True

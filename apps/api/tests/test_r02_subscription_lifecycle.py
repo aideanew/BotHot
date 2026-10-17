@@ -38,6 +38,7 @@ from app.models.entities import (
     User,
 )
 from app.repositories.subscription import SourceSubscriptionRepository
+from app.services.article_identity import canonical_article_key
 from app.services.subscription import SourceSubscriptionService
 
 ID_UNKNOWN = "00000000-0000-0000-0000-000000000009"
@@ -101,11 +102,14 @@ async def _seed(
             )
         )
     for i in range(with_manifests):
+        url = f"https://mp.weixin.qq.com/s/m-{i}"
         db_session.add(
             ArticleManifest(
                 source_id=source.id,
                 external_id=f"m-{i}",
-                url=f"https://mp.weixin.qq.com/s/m-{i}",
+                # STEP-04 S4.4.1 后 Diff 按 `article_key` 减；铺数据必须带规范键（同生产写侧）
+                article_key=canonical_article_key(url),
+                url=url,
                 title=f"清单 {i}",
                 content_hash=f"mh-{i}",
                 status="DISCOVERED",

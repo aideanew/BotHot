@@ -107,6 +107,9 @@ async def _seed(db_session: Any) -> dict[str, Any]:
     db_session.add(job_second)
     await db_session.flush()
 
+    # 故意不写 `article_key`：这一行是 STEP-07 回填**之前**的存量形状（D-V9-04 的 NULL）。
+    # 本卡只拿它当"存在一条 DISCOVERED 清单"的数据面，不驱动 Diff——若哪天有人"顺手补上键"，
+    # 就把这条真实存量形状从测试面里抹掉了。
     db_session.add(ArticleManifest(source_id=src.id, external_id="w-r48-disc", url="https://x/disc"))
     await db_session.commit()  # 夹具 savepoint 模式：只释放保存点，外层回滚清场
 

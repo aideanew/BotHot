@@ -429,3 +429,366 @@ def test_roundtrip_probe_has_polarity() -> None:
     # 模式拼错时必须出声，不能悄悄当通过（CI 里 `--expect=persent` 这类手滑很常见）
     assert probe.evaluate(want_cols, want_idx, "present "), "expect 带了空格就得红"
     assert probe.evaluate(set(), set(), "") != []
+
+
+# ── S4.1 / S4.3 / S4.4 的行为面：写侧算键 + P-2 常驻 + 同篇只入列一次 + 崩溃回退 ──────
+#
+# `db_session` 那几条在**本机无 PG 时 skip**（conftest 的既有口径），`@ci ubuntu` 才是 Done 面；
+# 不连库的两条（`_map_row` / `_apply_update`）先给本机读数——它们就是 P-2 修复的写侧本体，
+# "红→绿"能在本机拿到的那部分证据全在这里（变异反证见 10-执行过程 记录 §12）。
+
+import uuid  # noqa: E402
+from datetime import UTC, datetime, timedelta  # noqa: E402
+
+from sqlalchemy import select  # noqa: E402
+from structlog.testing import capture_logs  # noqa: E402
+
+from app.models.entities import ContentAsset, Job, JobItem, ShortLinkMap, Source, User  # noqa: E402
+from app.services.article_identity import canonical_article_key  # noqa: E402
+from app.services.job_worker import JobWorker  # noqa: E402
+from app.services.manifest import (  # noqa: E402
+    MANIFEST_STATUS_DISCOVERED,
+    MANIFEST_STATUS_ENQUEUED,
+    ManifestSyncService,
+    _map_row,
+)
+from app.services.subscription import SourceSubscriptionService  # noqa: E402
+
+_ART_URL = "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ%3D%3D&mid=2650&idx=1&sn=probe-a"
+_ART_KEY = canonical_article_key(_ART_URL)
+_ALT_URL = "https://mp.weixin.qq.com/s/AAAAaaaaBBBBcccc?chksm=x&sn=AAAAaaaaBBBBcccc"
+# 短链形态的 token（`parse_wechat_url(...).short_token` 取的是 `/s/` 后面那一段，不含查询串）
+_SHORT_TOKEN = "AAAAaaaaBBBBcccc"
+
+
+def _rowmap(external_id: str, url: str) -> dict[str, object]:
+    return {"id": external_id, "workUrl": url, "title": "t", "publishTime": "2026-10-17 08:00:00"}
+
+
+def _manifest_row(
+    source_id: str,
+    external_id: str,
+    url: str,
+    key: str | None = _ART_KEY,
+    status: str = MANIFEST_STATUS_DISCOVERED,
+) -> ArticleManifest:
+    return ArticleManifest(
+        id=f"m-{uuid.uuid4().hex[:8]}",
+        source_id=source_id,
+        external_id=external_id,
+        article_key=key,
+        url=url,
+        title="t",
+        content_hash="h-" + uuid.uuid4().hex[:8],
+        status=status,
+    )
+
+
+def test_map_row_writes_the_cross_channel_key_not_the_channel_id() -> None:
+    """S4.3.1：`external_id` 与 `article_key` 同时出现，但取的是两支不同的东西。"""
+    mapped = _map_row(_rowmap("workUuid-1", _ART_URL))
+    assert mapped is not None
+    assert mapped["external_id"] == "workUuid-1", "渠道幂等键不该被规范键顶掉（uq_manifest_source_external 靠它）"
+    assert mapped["article_key"] == _ART_KEY, "Diff 要减的是这一支，P-2 就错在它当时根本不在这支键空间里"
+    # 只有 id、没有 URL：行**照收**（"见过这篇"的真实记录），但规范键是 NULL ⇒
+    # 它不会被 Diff 通入队列，只会被无键积压计数报出来（本文件那条连库用例判后果）。
+    no_url = _map_row({"id": "workUuid-2", "title": "t"})
+    assert no_url is not None and no_url["article_key"] is None and no_url["url"] == ""
+    # id 与 URL 都没有 ⇒ 整行不收（既无渠道身份也无正文地址，落库就是把脏数据固化）
+    assert _map_row({"title": "t"}) is None
+    # 无身份一律 NULL，绝不写 `""`：`""` 不是合法 ArticleKey，还会让所有无键行互撞成一支键
+    for produced in (mapped, no_url):
+        assert produced is not None and produced["article_key"] != "", "D-V9-04：不许用空串冒充身份"
+
+
+def test_url_change_makes_the_stored_key_follow() -> None:
+    """S4.3.1.1：同一 `(source, external)` 行换了 URL，规范键必须跟着重算。
+
+    留着旧键的话 Diff 会拿**上一篇**的身份去减资产——同篇两形态各排一次队，
+    而 P-2 的读数会伪装成"修好了"。
+    """
+    existing = ArticleManifest(
+        id="m-x",
+        source_id="src-x",
+        external_id="workUuid-1",
+        article_key=_ART_KEY,
+        url=_ART_URL,
+        title="t",
+        content_hash="h",
+        status="DISCOVERED",
+    )
+    mapped = _map_row(_rowmap("workUuid-1", _ALT_URL))
+    assert mapped is not None and mapped["article_key"] != existing.article_key
+    assert ManifestSyncService._apply_update(existing, mapped) == "updated", "URL 变了却没算更新"
+    assert existing.article_key == mapped["article_key"] == canonical_article_key(_ALT_URL)
+    # 四态由入列/回写/自愈三处持有，重新发现不该把状态倒档
+    assert existing.status == "DISCOVERED"
+
+
+def test_an_upstream_row_missing_fields_never_blanks_the_stored_ones() -> None:
+    """`_apply_update` 的"空值不覆盖"守卫本身：删掉它这条必须红（此前全仓零覆盖）。
+
+    上游回一条"有 id、没 URL / 没标题 / 没发布时间"的行是**真实形状**（`_map_row` 对这种行给
+    `url=""`、`article_key=None`）。照单更新会把一行可用记录降级成"身份被自己抹掉"的僵尸行：
+    `article_key IS NULL` 随即被 Diff 挡在门外，而这不会有任何报错。
+    另一半同样要紧：非空的新值**必须**照覆盖，否则这条守卫会变成"永不更新"的第二个缺陷。
+    """
+    existing = ArticleManifest(
+        id="m-g",
+        source_id="src-g",
+        external_id="workUuid-1",
+        article_key=_ART_KEY,
+        url=_ART_URL,
+        title="旧标题",
+        publish_time=datetime(2026, 10, 17, 8, 0, tzinfo=UTC),
+        content_hash="h",
+        status="DISCOVERED",
+    )
+    before = (existing.url, existing.article_key, existing.title, existing.publish_time)
+
+    # 缺字段的行：五个可变列都不许被空值抹掉
+    assert (
+        ManifestSyncService._apply_update(
+            existing,
+            {"url": "", "article_key": None, "title": "", "publish_time": None, "content_hash": ""},
+        )
+        == "unchanged"
+    )
+    assert (existing.url, existing.article_key, existing.title, existing.publish_time) == before
+
+    # 反向：非空新值照常覆盖（守卫不是"停止更新"）
+    assert (
+        ManifestSyncService._apply_update(existing, {"url": _ALT_URL, "title": "新标题"}) == "updated"
+    )
+    assert existing.url == _ALT_URL and existing.title == "新标题"
+
+
+class _OneSessionCtx:
+    """让 JobWorker 复用夹具那条会话：它的 `commit()` 在 `create_savepoint` 模式下只放保存点。
+
+    不把 worker 换成假会话是有意的——`recover_stale` 的 SQL 形状（状态 + 时间锚 + 在途排除）
+    正是这一步要判的东西；假会话会把它变成"我信我自己写的谓词"。
+    """
+
+    def __init__(self, session: object) -> None:
+        self._s = session
+
+    def __call__(self) -> _OneSessionCtx:
+        return self
+
+    async def __aenter__(self) -> object:
+        return self._s
+
+    async def __aexit__(self, *exc: object) -> bool:
+        return False
+
+
+async def _noop_ingest(*args: object, **kwargs: object) -> dict[str, object]:
+    return {}
+
+
+async def _seed_source(db_session) -> Source:
+    """每条用例一套 biz：夹具只回滚外层事务，固定 biz 撞上并发会话已提交的行时，
+    `uq_source_type_external` 会把红记成"实现坏了"，其实是测试前提过期。
+    """
+    src = Source(type="wechat_oa", external_id=f"Mprobe{uuid.uuid4().hex[:12]}", name="probe")
+    db_session.add(src)
+    await db_session.flush()
+    return src
+
+
+async def _seed_user(db_session) -> User:
+    """`Job.user_id` 是 `users.id` 的 NOT NULL 外键——不种用户，建 Job 会当场 FK viol。
+
+    这条是写完用例后对着模型核出来的（本机跑不到连库分支，所以只能靠读约束清单，
+    而不是等 @ci 告诉我）。
+    """
+    user = User(sub=f"sub-probe-{uuid.uuid4().hex[:12]}", email=f"probe-{uuid.uuid4().hex[:8]}@example.invalid")
+    db_session.add(user)
+    await db_session.flush()
+    return user
+
+
+def _item(job_id: str, row: ArticleManifest) -> JobItem:
+    """在途条目：`manifest_id` 必须真指到清单行——在途面就是从这支关联减文章键的。"""
+    return JobItem(
+        id=f"i-{uuid.uuid4().hex[:8]}",
+        job_id=job_id,
+        external_id=row.external_id,
+        url=row.url,
+        manifest_id=row.id,
+    )
+
+
+def _asset(source_id: str, key: str, status: str = "READY") -> ContentAsset:
+    return ContentAsset(
+        id=f"a-{uuid.uuid4().hex[:8]}",
+        source_id=source_id,
+        external_id=key,
+        url=_ART_URL,
+        title="t",
+        content_hash="ah-" + uuid.uuid4().hex[:8],
+        content_markdown="# x",
+        status=status,
+    )
+
+
+async def test_ready_article_is_not_re_enqueued(db_session) -> None:
+    """S4.1.1：P-2 探针转常驻——已 READY 入库的篇，下一轮 Diff 新增数必须是 0。
+
+    改前这条读数是 1（清单拿 `external_id='workUuid-1'` 去减资产的 `external_id=规范键`，
+    两支键空间不相交）。反向对照同样关键：资产不是 READY 时必须立刻回到 1，
+    否则那个"0"是空种出来的假绿。
+    """
+    src = await _seed_source(db_session)
+    m = _manifest_row(src.id, "workUuid-1", _ART_URL)
+    db_session.add(m)
+    db_session.add(_asset(src.id, _ART_KEY))
+    await db_session.flush()
+
+    svc = SourceSubscriptionService(db_session)
+    assert await svc._compute_new_manifests(src.id, "sub-p2") == [], "已入库的篇又被入列 ⇒ P-2 复发"
+
+    asset = (await db_session.scalars(select(ContentAsset).where(ContentAsset.source_id == src.id))).one()
+    asset.status = "FETCHED"
+    await db_session.flush()
+    rows = await svc._compute_new_manifests(src.id, "sub-p2")
+    assert [r.id for r in rows] == [m.id], "反向对照没回到 1 条，说明上面那个 0 是空种出来的"
+
+
+async def test_two_url_forms_of_one_article_enqueue_once(db_session) -> None:
+    """S4.1.2：同篇短链/长链两形态各一条清单 ⇒ 一轮只入列一次，入库后两条都不再入列。
+
+    这一条以前是**恒真**的：它写了 `second.article_key = first.article_key`，把要证的等式当成
+    前提。真实的 `canonical_article_key` 对两支 URL 给的是**不同的键**
+    （长链 `b:<biz>:<mid>:<idx>`、短链 `s:<token>`，见 `article_identity.py:162-170`），
+    所以"按 article_key 减"自己并不能把两种形态并起来。能并的唯一既有真源是
+    `short_link_maps`——生产里由 `kb.py:_save_short_link` 在短链首抓拿到长链后落一行。
+    本用例显式播那一行，并把三个面各钉一次：同轮收敛、跨形态在途、跨形态已入库。
+    """
+    src = await _seed_source(db_session)
+    long_row = _manifest_row(src.id, "workUuid-long", _ART_URL)
+    short_row = _manifest_row(src.id, "workUuid-short", _ALT_URL, key=canonical_article_key(_ALT_URL))
+    assert short_row.article_key == f"s:{_SHORT_TOKEN}"
+    assert short_row.article_key != long_row.article_key, "前提：两支键空间本就不同，减键本身并不了形态"
+    db_session.add_all([long_row, short_row])
+    db_session.add(ShortLinkMap(short_key=_SHORT_TOKEN, article_key=_ART_KEY, biz=""))
+    await db_session.flush()
+
+    svc = SourceSubscriptionService(db_session)
+    rows = await svc._compute_new_manifests(src.id, "sub-forms")
+    # 断言"只剩一行"而不钉死是哪一行：`created_at` 是**事务**时间戳，同批 flush 的两行它全等，
+    # 排序靠 `id` 做 tie-break（见 `_compute_new_manifests`），所以赢的是"确定同一行"而不是"最早那一行"。
+    assert len(rows) == 1, f"同篇两形态一轮只该入列一次，实得 {len(rows)} 行"
+    again = await svc._compute_new_manifests(src.id, "sub-forms")
+    assert [r.id for r in again] == [r.id for r in rows], "同一份数据的收敛结果必须可重复，不能靠查询计划"
+
+    # 在途面跨形态：把入列的那一支挂进活动 Job，被收敛掉的那一支也不能再排一次队
+    user = await _seed_user(db_session)
+    job = Job(
+        type="sync_account",
+        user_id=user.id,
+        idempotency_key=f"sync_account:sub-forms:{uuid.uuid4().hex[:8]}",
+        status="QUEUED",
+    )
+    db_session.add(job)
+    await db_session.flush()
+    db_session.add(_item(job.id, rows[0]))
+    rows[0].status = MANIFEST_STATUS_ENQUEUED
+    await db_session.flush()
+    assert await svc._compute_new_manifests(src.id, "sub-forms") == [], "同篇第二形态绕过了在途保护"
+
+    # 入库完成：Job 终态 + READY 资产（资产锚的是长链键），两条都该被减掉
+    job.status = "SUCCEEDED"
+    db_session.add(_asset(src.id, _ART_KEY))
+    await db_session.flush()
+    db_session.expire_all()
+    assert await svc._compute_new_manifests(src.id, "sub-forms") == []
+
+
+async def test_two_forms_without_a_short_link_map_enqueue_twice(db_session) -> None:
+    """把 `_with_effective_keys` 的**局限**钉成事实，而不是写在 docstring 里等人信。
+
+    短链 token 没有映射行 = 这篇还没被真实抓过（映射由首抓写入），此时两种形态本轮各排一次队。
+    代价是**一次性**的（抓取落地后映射就位，后续轮次收敛），与 D-V9-01 登记的
+    "存量首次再入库各多一次抓取"同族。这条用例的反面就是上面那条：删掉映射行 ⇒ 读数从 1 变 2。
+    """
+    src = await _seed_source(db_session)
+    db_session.add_all(
+        [
+            _manifest_row(src.id, "workUuid-long", _ART_URL),
+            _manifest_row(src.id, "workUuid-short", _ALT_URL, key=canonical_article_key(_ALT_URL)),
+        ]
+    )
+    await db_session.flush()
+
+    svc = SourceSubscriptionService(db_session)
+    rows = await svc._compute_new_manifests(src.id, "sub-nomap")
+    assert len(rows) == 2, "没有短链映射时不该假装收敛——把不可得的行为改成 1 就是自研判据的那一型假绿"
+
+
+async def test_null_key_manifest_waits_for_backfill_and_is_counted(db_session) -> None:
+    """D-V9-04 的后果必须可见：`article_key IS NULL` 的存量行不入列，但要计数告警。
+
+    两头都钉：① 不被静默丢掉（告警事件名可查）；② 也不被"顺手拿 external_id 顶一下"放进来
+    ——那正是 P-2 的复发形状。这条同时是 STEP-07 回填的**门槛读数**：回填前后各跑一次，
+    事件里的行数应当从 >0 变 0。
+    """
+    src = await _seed_source(db_session)
+    m = _manifest_row(src.id, "workUuid-nokey", _ART_URL, key=None)
+    db_session.add(m)
+    await db_session.flush()
+
+    svc = SourceSubscriptionService(db_session)
+    with capture_logs() as logs:
+        rows = await svc._compute_new_manifests(src.id, "sub-null")
+    assert rows == [], "无规范键的行不该入列（拿 NULL 去减资产会让所有无键行互撞成一支键）"
+    events = [e for e in logs if e.get("event") == "manifest.diff.null_key_backlog"]
+    assert events and events[0]["rows"] >= 1, f"无键积压没出声：{[e.get('event') for e in logs]}"
+    assert m.status == MANIFEST_STATUS_DISCOVERED, "Diff 里不该顺手改状态"
+
+
+async def test_recover_stale_rolls_back_orphan_enqueued_manifest(db_session) -> None:
+    """S4.4.3.1：worker 崩溃后，超时且无人认领的 ENQUEUED 回 DISCOVERED——三条对照各拦一种假绿。
+
+    - 超时 + 无活动 Job ⇒ 回退（正例）
+    - **没超时** + 无活动 Job ⇒ 不回退（证明时间锚有判定力，而不是"见 ENQUEUED 就退"）
+    - 超时 + 有 QUEUED Job 认领 ⇒ 不回退（证明在途保护在起作用，worker 不与自己抢同一篇）
+    - DISCOVERED 的旧行 ⇒ 不动（证明回退面只认 ENQUEUED）
+    """
+    src = await _seed_source(db_session)
+    stale = _manifest_row(src.id, "w-stale", _ART_URL, status=MANIFEST_STATUS_ENQUEUED)
+    stale.updated_at = datetime.now(UTC) - timedelta(hours=1)
+    fresh = _manifest_row(src.id, "w-fresh", _ART_URL, status=MANIFEST_STATUS_ENQUEUED)
+    held = _manifest_row(src.id, "w-held", _ART_URL, status=MANIFEST_STATUS_ENQUEUED)
+    held.updated_at = datetime.now(UTC) - timedelta(hours=1)
+    untouched = _manifest_row(src.id, "w-disc", _ART_URL, status=MANIFEST_STATUS_DISCOVERED)
+    untouched.updated_at = datetime.now(UTC) - timedelta(hours=1)
+    db_session.add_all([stale, fresh, held, untouched])
+    await db_session.flush()
+
+    user = await _seed_user(db_session)
+    job = Job(
+        type="sync_account",
+        user_id=user.id,
+        idempotency_key=f"sync_account:stale:{uuid.uuid4().hex[:8]}",
+        status="QUEUED",
+    )
+    db_session.add(job)
+    await db_session.flush()
+    db_session.add(_item(job.id, held))
+    await db_session.flush()
+
+    worker = JobWorker(
+        _OneSessionCtx(db_session),  # type: ignore[arg-type]
+        _noop_ingest,  # type: ignore[arg-type]
+        heartbeat_enabled=False,
+        manifest_enqueued_ttl_seconds=60,
+    )
+    assert await worker.recover_stale() == 0, "本轮没有 stale job，返回值不该被清单回退污染"
+    db_session.expire_all()
+
+    assert stale.status == MANIFEST_STATUS_DISCOVERED, "超时且无人认领的 ENQUEUED 必须回 DISCOVERED，否则永久卡死"
+    assert fresh.status == MANIFEST_STATUS_ENQUEUED, "没超时也被回退 ⇒ 时间锚失去判定力"
+    assert held.status == MANIFEST_STATUS_ENQUEUED, "有 QUEUED Job 认领还被回退 ⇒ 自愈会与在途条目抢同一篇"
+    assert untouched.status == MANIFEST_STATUS_DISCOVERED

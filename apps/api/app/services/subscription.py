@@ -20,7 +20,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import structlog
-from sqlalchemy import delete, func, select
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -31,12 +31,16 @@ from app.models.entities import (
     Job,
     JobItem,
     KnowledgeSpace,
+    ShortLinkMap,
     Source,
     SourceSubscription,
     User,
 )
 from app.repositories.job import JobItemRepository, JobRepository
 from app.repositories.space import SpaceRepository
+from app.services.article_identity import parse_wechat_url
+from app.services.manifest import MANIFEST_STATUS_DISCOVERED, MANIFEST_STATUS_ENQUEUED
+from app.services.state_machine import validate_transition
 
 logger = structlog.get_logger(__name__)
 
@@ -793,37 +797,183 @@ class SourceSubscriptionService:
         await self._session.flush()
         return job
 
-    async def _compute_new_manifests(self, source_id: str, subscription_id: str) -> list[ArticleManifest]:
-        """Manifest Diff（T2.4）：本订阅**尚未入列且未入库**的 DISCOVERED 清单行。
+    def _active_sync_job_ids(self, subscription_id: str) -> Select:
+        """本订阅**仍在途**（QUEUED/RUNNING）的 `sync_account` Job id 子查询。
 
-        真差量口径（承 1.2 冻结「Diff 同步基准」）：
-          DISCOVERED 清单
-            − 已有 READY ContentAsset 的篇（同源 + 同 external_id，= 已成功入库）
-            − 已挂在**活动**（QUEUED/RUNNING）sync_account Job 下的篇（= 在途，防轮询撞车重复入列）
-        减第二项是为 T2.4 调度器服务：一轮入列后 Job 未跑完前，下个 tick 不得再把同篇
-        重复入列（幂等键 `sync_account:{订阅}` 前缀收敛到本订阅的 Job 族）。
+        Diff 的在途面与短链收敛面共用它：两处必须认同一个"什么算在途"。
         """
-        ready_ext = select(ContentAsset.external_id).where(
-            ContentAsset.source_id == source_id,
-            ContentAsset.status == "READY",
-        )
-        active_job_ids = select(Job.id).where(
+        return select(Job.id).where(
             Job.type == "sync_account",
             Job.idempotency_key.like(f"sync_account:{subscription_id}%"),
             Job.status.in_(("QUEUED", "RUNNING")),
         )
-        enqueued_ext = select(JobItem.external_id).where(JobItem.job_id.in_(active_job_ids))
+
+    async def _with_effective_keys(
+        self, source_id: str, subscription_id: str, rows: list[ArticleManifest]
+    ) -> list[tuple[ArticleManifest, str]]:
+        """给每条候选行定出**跨形态收敛用的键**，并剔掉该键已入库/已在途的形态。
+
+        为什么需要这一步：`article_key` 存的是 `canonical_article_key(url)`，同一篇文章的短链
+        给 `s:<token>`、长链给 `b:<biz>:<mid>:<idx>`（`article_identity.py:162-170` 的两条分支），
+        **两支天生不相等**——只在 Diff 里按键减的话 S4.1.2 要的"同篇两形态只入列一次"不成立，
+        短链那一支还永远减不到 READY 资产（资产锚的是长链键）。
+
+        并键的唯一既有真源是 `short_link_maps`：`kb.py:_save_short_link` 在短链**首抓**拿到长链后
+        写入 `短链 token → 长链规范键`。本函数只读它，不自己再算一份键（键的算法定位在
+        `canonical_article_key`，这是 S2.3.3 漂移守卫要保住的那条单一来源）。
+
+        局限（一次性，不是每轮）：短链 token 还没有映射行 = 这篇还没被真实抓过，此时两种形态
+        本轮各排一次队；抓取落地时映射就位，之后的轮次就收敛了。这与 D-V9-01 登记的
+        "存量首次再入库各多一次抓取"是同一族代价。
+        """
+        pairs: list[tuple[ArticleManifest, str]] = [(row, str(row.article_key)) for row in rows]
+        token_of = {
+            row.id: parse_wechat_url(row.url).short_token if row.url else "" for row in rows
+        }
+        wanted = sorted({token for token in token_of.values() if token})
+        if not wanted:
+            return pairs
+        mapped: dict[str, str] = {
+            short_key: long_key
+            for short_key, long_key in (
+                await self._session.execute(
+                    select(ShortLinkMap.short_key, ShortLinkMap.article_key).where(
+                        ShortLinkMap.short_key.in_(wanted)
+                    )
+                )
+            ).all()
+        }
+        resolved: dict[str, str] = {}
+        for row in rows:
+            long_key = mapped.get(token_of[row.id])
+            if long_key:
+                resolved[row.id] = long_key
+        if not resolved:
+            return pairs
+        # 收敛出来的长链键若已入库或在途，短链这一支整条剔除（同篇不重排、不重抓）
+        vals = sorted(set(resolved.values()))
+        present = set(
+            (
+                await self._session.scalars(
+                    select(ContentAsset.external_id).where(
+                        ContentAsset.source_id == source_id,
+                        ContentAsset.status == "READY",
+                        ContentAsset.external_id.in_(vals),
+                    )
+                )
+            ).all()
+        )
+        present |= {
+            key
+            for key in (
+                await self._session.scalars(
+                    select(ArticleManifest.article_key)
+                    .join(JobItem, JobItem.manifest_id == ArticleManifest.id)
+                    .where(
+                        JobItem.job_id.in_(self._active_sync_job_ids(subscription_id)),
+                        ArticleManifest.article_key.in_(vals),
+                    )
+                    .distinct()
+                )
+            ).all()
+            if key
+        }
+        out: list[tuple[ArticleManifest, str]] = []
+        for row, own_key in pairs:
+            key = resolved.get(row.id, own_key)
+            if key in present:
+                continue
+            out.append((row, key))
+        return out
+
+    async def _compute_new_manifests(self, source_id: str, subscription_id: str) -> list[ArticleManifest]:
+        """Manifest Diff（T2.4 / STEP-04 S4.4.1）：本订阅**尚未入列且未入库**的 DISCOVERED 清单行。
+
+        差量口径（D-V3-01 改键，承 1.2 冻结「Diff 同步基准」）：
+          DISCOVERED  ∧ article_key 非空
+            − 已有 READY ContentAsset 的**同一规范键**（= 已成功入库）
+            − 同一规范键已挂在**活动**（QUEUED/RUNNING）sync_account Job 下的行（= 在途）
+          先按 `short_link_maps` 把 `s:` 形态换成它的长链键，再对剩余行**按这个键收敛到一行**
+          （同篇两形态一轮只入列一次，S4.1.2；见 `_with_effective_keys` 的成立条件与局限）
+
+        为什么键必须是 `article_key` 而不是 `external_id`（P-2 的整条根因）：
+        `external_id` 是渠道内幂等键（`workUuid`），`content_assets.external_id` 装的是
+        `canonical_article_key(url)`——两支键空间只在"上游缺 id 走兜底"时部分相交，
+        于是 `external_id NOT IN (ready)` 恒真、已入库的篇每轮都被重新入列一次。
+        在途面同理按键减：只按 `manifest_id` 减的话，同篇的第二种 URL 形态会在下一轮
+        绕过在途保护再排一次队。
+
+        两条 **NULL 守卫不是装饰**：
+        ① `JobItem.manifest_id` 可空（S4.2.1 / D-V9-04），而 SQL 的 `x NOT IN (子查询)`
+           一旦子查询含 NULL 就整体恒 UNKNOWN ⇒ 候选会被**全部**滤光，Diff 从"永远 1 条"
+           变成"永远 0 条"，比原 bug 更坏，所以子查询显式 `isnot(None)`；
+        ② `article_key IS NULL` 的存量行**故意不入列**（它们还没有跨渠道身份，拿 NULL 去减
+           资产等于让所有无键行互撞）。这不是把它们藏起来：回填归 STEP-07，而"因此停采"这件事
+           由下面的 `null_key_backlog` 计数告警出声。
+        """
+        ready_keys = select(ContentAsset.external_id).where(
+            ContentAsset.source_id == source_id,
+            ContentAsset.status == "READY",
+        )
+        active_job_ids = self._active_sync_job_ids(subscription_id)
+        # 在途面按**文章键**减，不是按 manifest_id 减：同一篇的两种形态是两个 manifest_id，
+        # 只按 id 减的话，第二轮会把还没入库的那一行也放进来（同篇二次入列，P-2 的另一半）。
+        # 这里减的是**同键空间**的那一对；`s:`/`b:` 两支跨键空间的形态由 `_with_effective_keys` 并。
+        # `is_not(None)` 同样是 NULL 守卫，不是装饰。
+        inflight_keys = (
+            select(ArticleManifest.article_key)
+            .join(JobItem, JobItem.manifest_id == ArticleManifest.id)
+            .where(JobItem.job_id.in_(active_job_ids), ArticleManifest.article_key.is_not(None))
+            .distinct()
+        )
         stmt = (
             select(ArticleManifest)
             .where(
                 ArticleManifest.source_id == source_id,
-                ArticleManifest.status == "DISCOVERED",
-                ArticleManifest.external_id.not_in(ready_ext),
-                ArticleManifest.external_id.not_in(enqueued_ext),
+                ArticleManifest.status == MANIFEST_STATUS_DISCOVERED,
+                ArticleManifest.article_key.isnot(None),
+                ArticleManifest.article_key.not_in(ready_keys),
+                ArticleManifest.article_key.not_in(inflight_keys),
             )
-            .order_by(ArticleManifest.created_at)
+            .order_by(ArticleManifest.created_at, ArticleManifest.id)
         )
-        return list((await self._session.scalars(stmt)).all())
+        rows = list((await self._session.scalars(stmt)).all())
+        # 短链形态先收敛到长链规范键，再按这个键做同轮去重（S4.1.2 的两形态就是 `s:` 与 `b:`）
+        pairs = await self._with_effective_keys(source_id, subscription_id, rows)
+        # 同一轮内的同篇多形态收敛成一次入列（S4.1.2）。
+        # 剩下的行仍是 DISCOVERED，等这一篇入库后由 `ready_keys` 那一条减掉——
+        # 所以这不是"少采"，是"同一篇只排一次队"。
+        # 排序带 `id` 做 tie-break 不是讲究：`created_at` 是 `func.now()` = **事务**时间戳，
+        # 同一批 flush 出来的行它全等，只按它排的话"留哪一行"由查询计划决定，
+        # 用例就会今天过明天红。留的是"确定同一行"，不是"最早那一行"。
+        unique: list[ArticleManifest] = []
+        seen_keys: set[str] = set()
+        for row, effective_key in pairs:
+            if effective_key in seen_keys:
+                continue
+            seen_keys.add(effective_key)
+            unique.append(row)
+        backlog = int(
+            await self._session.scalar(
+                select(func.count())
+                .select_from(ArticleManifest)
+                .where(
+                    ArticleManifest.source_id == source_id,
+                    ArticleManifest.status == MANIFEST_STATUS_DISCOVERED,
+                    ArticleManifest.article_key.is_(None),
+                )
+            )
+            or 0
+        )
+        if backlog:
+            logger.warning(
+                "manifest.diff.null_key_backlog",
+                source_id=source_id,
+                subscription_id=subscription_id,
+                rows=backlog,
+                hint="这些 DISCOVERED 行还没有 article_key，按 D-V9-04 故意不入列；回填在 STEP-07",
+            )
+        return unique
 
     async def _populate_job_items(
         self,
@@ -837,6 +987,13 @@ class SourceSubscriptionService:
 
         `manifests` 已由调用方算出时直接复用（省一次 Diff 查询）；未传则现场算。
 
+        S4.3.2（STEP-04）：一次入列同时做三件事——建 JobItem、写 `JobItem.manifest_id`、
+        把清单置 `ENQUEUED`。分两步写（建条目、由别处再置位）会留一个崩溃窗口：
+        条目已在队列里而清单仍是 DISCOVERED，下一轮 Diff 会把同篇**再入列一次**——
+        那还是 P-2 的形状，只是触发条件从"键空间不相交"换成"进程中途死"。
+        置位走 `state_machine.validate_transition`：非法流转当场 30005，
+        而不是让四态变成"只有 DISCOVERED 被写过"的装饰字段。
+
         真实 redfox 清单源需 REDFOX_API_KEY（env 注入）；
         未配置时不使用 fixture 占位（证据：后续按 REDFOX_API_KEY 配置接入）。
         """
@@ -845,9 +1002,20 @@ class SourceSubscriptionService:
         if not manifests:
             logger.info("P2 无新增 Manifest，JobItem 保持空，待 REDFOX_API_KEY 配置后接入")
             return 0
+        # 为什么这里只校验、不"顺手把 ENQUEUED/FAILED 回退一下"：Diff 只选 DISCOVERED，
+        # 而 `_create_sync_job` 的两个调用点要么传 None（现算 Diff）要么传**当轮**新鲜 Diff 的结果，
+        # 永远不会把非 DISCOVERED 的行带进来——那条回退是死代码（第三轮验证实测）。
+        # 真有人绕过 Diff 塞行进来，撞 30005 出声才是对的；自造一条
+        # `ENQUEUED→DISCOVERED→ENQUEUED` 只会把校验变成装饰。
         for m in manifests:
+            # 校验放在建条目**之前**：先 create 再抛 30005 会留下一条没人认领的 JobItem，
+            # 而调用方捕获异常时并不一定会回滚（`_create_sync_job` 之外还有调度器的 savepoint 面）。
+            validate_transition("manifest", m.status, MANIFEST_STATUS_ENQUEUED)
             item = await self._item_repo.create(job_id=job_id, external_id=m.external_id, url=m.url or "")
+            item.manifest_id = m.id
+            m.status = MANIFEST_STATUS_ENQUEUED
             await self._item_repo.set_status(item.id, "PENDING")
+        await self._session.flush()
         return len(manifests)
 
     async def run_incremental_sync(self, sub: SourceSubscription, run_token: str) -> int:
