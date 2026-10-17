@@ -1,5 +1,12 @@
 # STEP-00H 健康与就绪探针有界化 + CI-Windows 回绿（V0.13.0 新增）
 
+> 状态：**🟡 S00H.1.1–1.3 已交付（`@win` 本机，2026-10-17）**，S00H.1.4 与 S00H.2.* 只能由
+> `@ci` 判（本机无 PG）。读数在 `docs/06_validation/evidence/EVD-V13-00H/s00h_readings.md`。
+> 最有分量的一条：`tests/test_security_middleware.py`（5 条打 `/health`）改前**本机整文件跑不完**，
+> 改后与 `test_health_ready.py` 合跑 `71 passed / 0 failed / 39.64s`。
+> 过程中被实测推翻两个判断（`gather` 并发不等于总上界；我自己的"并发判据"原本是恒真的），
+> 并追出一个新缺陷（限流豁免集的死条目）——都写在 EVD §4/§5。
+
 | 字段 | 值 |
 |---|---|
 | 归属-切片 | S-M0 前提固定（步行骨架的"健康检查"一环） |
@@ -38,6 +45,7 @@
 
 ## 输出（文件）
 - 改：`apps/api/app/db.py`（业务引擎默认带 `connect_timeout`，可由 `DB_CONNECT_TIMEOUT` 覆盖）
+- 改：`apps/api/app/core/security.py`（**越界声明**：不在本卡输出清单。限流豁免集里 `/live`、`/ready` 两条是**死条目**——匹配是 `scope["path"]` 精确相等，而探针挂在 `/api/v1/system` 前缀下 ⇒ `/ready` 一直被限流，Redis 不可达时先在处理器之前吃一次 2s 连接超时。不改它，卡面目标句「`/ready` ≤5s」在 `@win` 上无法达成；`core/metrics.py:90` 用的是完整路径，两处口径本来就不一致。理由与双向判据见 `EVD-V13-00H` §5）
 - 改：`apps/api/app/api/v1/system.py`（三个探针各套 `asyncio.wait_for`；`/health` 用 `asyncio.gather`；`_check_schema` 同样有上界）
 - 新：`apps/api/tests/test_health_probe_bounded.py`
 - 改（仅 S00H.2.2 触发时）：`apps/api/tests/conftest.py`（每个 TestClient 结束后 `dispose` 缓存引擎的夹具）
@@ -47,13 +55,13 @@
 ## Execution Steps
 
 ### S00H.1 先红后绿（`@linux`）
-1. [ ] **S00H.1.1** 新增 `tests/test_health_probe_bounded.py`：子进程设 `DATABASE_URL=postgresql+psycopg://x@10.255.255.1:5432/x`、`REDIS_URL=redis://127.0.0.1:1/0`、`LANGBOT_BASE_URL=http://127.0.0.1:1`，用 `TestClient(create_app())` 依次打 `/api/v1/system/health`、`/api/v1/system/ready`，父进程 `timeout=20` 计时；断言 rc=0、两次请求各 ≤ 5s、`deps.postgres == "unreachable"`
+1. [x] **S00H.1.1** 新增 `tests/test_health_probe_bounded.py`：子进程设 `DATABASE_URL=postgresql+psycopg://x@10.255.255.1:5432/x`、`REDIS_URL=redis://127.0.0.1:1/0`、`LANGBOT_BASE_URL=http://127.0.0.1:1`，用 `TestClient(create_app())` 依次打 `/api/v1/system/health`、`/api/v1/system/ready`，父进程 `timeout=20` 计时；断言 rc=0、两次请求各 ≤ 5s、`deps.postgres == "unreachable"`
    - S00H.1.1.1 在 314d7f2 上跑出**红**（期望：子进程超时），读数入 EVD——证明用例抓得到缺陷
-2. [ ] **S00H.1.2** `app/db.py`：`create_engine_and_session` 在 `connect_args` 未给 `connect_timeout` 时补 `connect_timeout=int(os.environ.get("DB_CONNECT_TIMEOUT", "3"))`；显式传入的 `connect_args` 优先（00W 的启动探测调用不受影响）
+2. [x] **S00H.1.2** `app/db.py`：`create_engine_and_session` 在 `connect_args` 未给 `connect_timeout` 时补 `connect_timeout=int(os.environ.get("DB_CONNECT_TIMEOUT", "3"))`；显式传入的 `connect_args` 优先（00W 的启动探测调用不受影响）
    - S00H.1.2.1 新增常量旁写一行注释：为什么是 3（与 redis 2s、langbot 3s 同量级；生产慢库首连 < 3s 的依据见 `evidence/314d7f2/pytest_314d7f2.txt` 真库全量 0 失败）
-3. [ ] **S00H.1.3** `system.py`：抽 `_bounded(coro, seconds)` = `asyncio.wait_for` + `TimeoutError → "unreachable"`；`/health` 改 `pg, redis, langbot = await asyncio.gather(_bounded(_check_pg()), _bounded(_check_redis()), _bounded(_check_langbot()))`；`_check_schema` 内 `read_current_version_async` 同样套上界，超时按现有 `current is None → unreachable` 分支走
+3. [x] **S00H.1.3** `system.py`：抽 `_bounded(coro, seconds)` = `asyncio.wait_for` + `TimeoutError → "unreachable"`；`/health` 改 `pg, redis, langbot = await asyncio.gather(_bounded(_check_pg()), _bounded(_check_redis()), _bounded(_check_langbot()))`；`_check_schema` 内 `read_current_version_async` 同样套上界，超时按现有 `current is None → unreachable` 分支走
    - S00H.1.3.1 `PROBE_TIMEOUT_S = 3.0`，模块级常量，不进 Settings（不新增配置面）
-4. [ ] **S00H.1.4** `@linux` 真库全量回归：`passed ≥ 1478`、`failed = 0`、覆盖率不低于 85%；S00H.1.1 用例由红转绿
+4. [ ] **S00H.1.4** `@linux`/`@ci` 真库全量回归（**本机无 PG，判不了**）：`passed ≥ 1478`、`failed = 0`、覆盖率不低于 85%；S00H.1.1 用例由红转绿
 
 ### S00H.2 Windows 判别与收口（`@ci`）
 5. [ ] **S00H.2.1** 推送后读 `CI-Windows`：若 `test_envelope.py` 不再出现 `Timeout`，H2 判**已确认**，跳过 S00H.2.2；读数（run id、head_sha、junit 汇总、日志中 `Timeout` 计数 = 0）入 EVD

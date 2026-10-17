@@ -70,12 +70,20 @@ _BODY_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 # 豁免路径：探活/指标/API 文档。探活被编排系统高频轮询，限它没有安全收益却有
 # 误伤风险（compose healthcheck 一旦被 429，容器会被反复重启）。
+#
+# **必须是完整路径**：匹配用的是 `path in _EXEMPT_PATHS`（对 `scope["path"]` 精确相等），
+# 而探针实际挂在 `system` 路由的 `/api/v1/system` 前缀下。原来这两行写的是裸 `/live`、
+# `/ready`——仓库里根本没有这两条路由，于是它们是**死条目**：`/ready` 一直在被限流，
+# 而限流器在 Redis 不可达时要先吃一次自己的连接超时（`socket_connect_timeout=2`）**串在
+# 处理器之前**。STEP-00H 本机实测 `/ready` 5.46s，比端点预算 4s 多出来的那 ~2.1s 就是它——
+# 同仓库的 `core/metrics.py:90` 用的是完整路径，两处的口径本来就不一致。
+# 判据见 `tests/test_health_probe_bounded.py::every_probe_path_is_exempt_in_both_middleware_layers`。
 _EXEMPT_PATHS = frozenset(
     {
         "/api/v1/system/health",
+        "/api/v1/system/live",
+        "/api/v1/system/ready",
         "/metrics",
-        "/live",
-        "/ready",
         "/docs",
         "/redoc",
         "/openapi.json",

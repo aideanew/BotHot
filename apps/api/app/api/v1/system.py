@@ -6,12 +6,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Coroutine
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 import structlog
 from fastapi import APIRouter, Depends, Request
@@ -30,6 +31,69 @@ from app.providers.push.web import _CHANNEL_PREFIX
 
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
 logger = structlog.get_logger(__name__)
+
+#: 单探针上界（S00H.1.3）。**不进 Settings**：这是探针自身的实现常数，
+#: 调它等于调 `/health` 的行为契约，不是给运维的旋钮（配置面归 04 卡的 settings）。
+#: 取 3.0 与 redis 2s / langbot 3s / 业务引擎 `connect_timeout` 3s 同量级。
+PROBE_TIMEOUT_S = 3.0
+
+#: 端点总预算（= 单探针上界 + 1s 装配余量）。见 `_settle` 为什么要存在。
+PROBE_BUDGET_S = PROBE_TIMEOUT_S + 1.0
+
+
+async def _bounded(coro: Awaitable[str], seconds: float = PROBE_TIMEOUT_S) -> str:
+    """给一个返回状态字符串的协程套上界；超时按 `unreachable` 报，而不是抛出。
+
+    为什么不抛：`/health` 的契约是"永远给得出答案"。一次依赖黑洞如果变成 500，
+    编排层就分不清"探针挂了"和"服务挂了"，反而把可观测性故障升级成流量事故。
+    """
+    try:
+        return await asyncio.wait_for(coro, timeout=seconds)
+    except TimeoutError:
+        return "unreachable"
+
+
+def _settle(task: asyncio.Task[object], fallback: object) -> object:
+    """在预算内没跑完的探针，按 `fallback`（unreachable）报，并把它取消掉。
+
+    这一层是**必需的**而不是保险：`asyncio.gather` 只保证"并发发起"，不保证总耗时
+    等于单探针上界。本机黑洞库实测 `/ready` 5.34s——PG 的 `SELECT 1` 与 alembic 版本读
+    各自要向连接池要一条新连接，而建连是互斥的，于是两个 3s 上界**串起来**了
+    （redis 那支确实并发，它是 2.11s 叠在第一个 3s 里）。卡面反 4 担心的"加了上界只是
+    把无限变成 3s×N"在这台机器上成立，所以端点必须有自己的总预算，而不是指望每个依赖
+    都可取消、可并发。
+    """
+    if task.done() and not task.cancelled() and task.exception() is None:
+        return task.result()
+    if not task.done():
+        task.cancel()
+    return fallback
+
+
+async def _run_probes(probes: dict[str, Awaitable[object]], fallbacks: dict[str, object]) -> dict[str, object]:
+    """并发发起全部探针，但整段只等 `PROBE_BUDGET_S`；未决的按各自 `fallbacks` 收口。
+
+    回退值**必须逐探针给**：`/health` 的三项是状态字符串，而 `/ready` 的 schema 项是一个
+    明细 dict——统一回退成 `"unreachable"` 会让 `checks["schema"]["ok"]` 在超时时炸成 500，
+    于是"依赖慢"被放大成"探针本身挂了"，正是这条卡要消灭的那类误判。
+    """
+    tasks: dict[str, asyncio.Task[object]] = {
+        name: asyncio.create_task(cast("Coroutine[Any, Any, object]", coro)) for name, coro in probes.items()
+    }
+    _, pending = await asyncio.wait(tasks.values(), timeout=PROBE_BUDGET_S)
+    for task in pending:
+        # 只 cancel、**不等**它落地：黑洞里的 psycopg 建连不是可取消点，`await` 一支取消中的
+        # 任务会把预算省下的时间再还回去（实测多花 1.17s，正好把 4s 预算顶成 5.17s 而破判据）。
+        # 用 done callback 把异常消费掉，避免"Task exception was never retrieved"。
+        task.cancel()
+        task.add_done_callback(_consume_result)
+    return {name: _settle(task, fallbacks[name]) for name, task in tasks.items()}
+
+
+def _consume_result(task: asyncio.Task[object]) -> None:
+    """把已完成任务的异常读走（取消与失败都不该在解释器退出时炸出未读异常）。"""
+    if not task.cancelled():
+        task.exception()
 
 
 async def _check_pg() -> str:
@@ -91,10 +155,12 @@ async def health() -> object:
     任一非 ok 说明功能降级（如 Redis 不可达→会话回退 memory，LangBot 不可达→检索/入库不可用）。
     """
     settings = get_settings()
-    pg = await _check_pg()
-    redis = await _check_redis()
-    langbot = await _check_langbot()
-    deps = {"postgres": pg, "redis": redis, "langbot": langbot}
+    # 三个探针并发发起、整段只等一个预算（S00H.1.3，理由见 `_settle`）。
+    deps = cast("dict[str, str]", await _run_probes({
+        "postgres": _bounded(_check_pg()),
+        "redis": _bounded(_check_redis()),
+        "langbot": _bounded(_check_langbot()),
+    }, {"postgres": "unreachable", "redis": "unreachable", "langbot": "unreachable"}))
     all_ok = all(v == "ok" for v in deps.values())
     return success(
         data={
@@ -114,7 +180,15 @@ async def _check_schema() -> dict[str, object]:
     from app.db import get_engine
 
     head = schema_guard.get_alembic_head()
-    current = await schema_guard.read_current_version_async(get_engine())
+    # `/ready` 走的也是业务引擎，所以它同样需要上界（S00H.1.3 的第三处）：
+    # 超时按现有的 `current is None → unreachable` 分支走——判据不改，只是给它一条**能走完**的路。
+    # 不加这层的后果就是本机实测的那条红：黑洞库下 `/ready` 墙钟 5.29s（> 卡面 5s 判据）。
+    try:
+        current = await asyncio.wait_for(
+            schema_guard.read_current_version_async(get_engine()), timeout=PROBE_TIMEOUT_S
+        )
+    except TimeoutError:
+        current = None
     if head is None:
         return {"ok": True, "state": "head_unknown", "current": current, "head": head}
     if current is None:
@@ -137,9 +211,26 @@ async def ready() -> JSONResponse:
 
     全部 ok → 200；任一失败 → 503，body 仍为标准信封，`data.checks` 点名失败项，
     让编排器（compose/k8s readiness）在依赖未就绪时摘流量而非把故障当健康。"""
-    pg = await _check_pg()
-    redis = await _check_redis()
-    schema = await _check_schema()
+    # 与 `/health` 同一纪律（S00H.1.3）：并发发起 + 整段一个预算。这里原本串行跑三项，
+    # 本机黑洞库实测 5.34s——即便改成并发，PG ping 与版本读仍会因连接池建连互斥而串行，
+    # 所以真正的上界在 `_run_probes` 的预算上，未决项按 `unreachable` 报。
+    settled = await _run_probes(
+        {
+            "postgres": _bounded(_check_pg()),
+            "redis": _bounded(_check_redis()),
+            "schema": _check_schema(),
+        },
+        {
+            "postgres": "unreachable",
+            "redis": "unreachable",
+            # schema 超时也要给一份**dict**：`checks["schema"]["ok"]` 后面会被读，
+            # 给字符串会在超时那一刻把 503 变成 500。
+            "schema": {"ok": False, "state": "unreachable", "current": None, "head": None},
+        },
+    )
+    pg = str(settled["postgres"])
+    redis = str(settled["redis"])
+    schema = cast("dict[str, object]", settled["schema"])
     checks = {
         "postgres": {"ok": pg == "ok", "state": pg},
         "redis": {"ok": redis == "ok", "state": redis},

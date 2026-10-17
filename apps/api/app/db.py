@@ -52,12 +52,24 @@ def create_engine_and_session(
 
     池参数取模块常量（env 可覆盖）；pool_recycle 前置回收防 idle 断连。
 
-    `connect_args` **默认 None 时行为与改动前逐字一致**（业务连接池不引入任何新语义）。
-    它存在的唯一理由：STEP-00W 的启动期 schema 探测需要一条"必带上界"的一次性连接——
-    黑洞地址（丢包而非拒连）下 psycopg 默认会挂到 TCP 自行放弃（@win 实测 >40s 未返回），
-    而那条探测跑在 import 期，进程连端口都没绑上，健康检查读不到任何东西。
+    `connect_args` 的两条语义要分清（STEP-00H 改了默认值，这里是改后的事实）：
+    - **调用方显式传入时逐字照用**：00W 的启动期 schema 探测自带它自己的上界，
+      不能被这里的默认值覆盖掉。黑洞地址（丢包而非拒连）下 psycopg 会挂到 TCP 自行放弃
+      （@win 实测 >40s 未返回），而那条探测跑在 import 期，进程连端口都没绑上。
+    - **不传时不再是"无 connect_args"**：STEP-00H 起补一个 `connect_timeout`
+      （env `DB_CONNECT_TIMEOUT`，默认 3s）。原来的"行为与改动前逐字一致"是**故意**被打破的——
+      业务引擎被 `/health`、`/ready` 与所有请求共享，没有首连上界就等于把一次网络黑洞
+      放大成探针永不返回（U-23 的怀疑面）。
     """
     database_url = url or get_settings().database_url
+    # STEP-00H S00H.1.2：业务引擎默认带 `connect_timeout`。取 3 秒的理由：同进程里另外两个
+    # 外部依赖已经各自有上界（redis `socket_connect_timeout=2`、langbot `httpx timeout=3`），
+    # 慢库首连 < 3s 有真库全量读数作依据；更重要的是 `/health` 现在把三个探针并发跑，
+    # 单探针上界就是总上界，3s 让"依赖全挂"仍能在 3~4s 内给出 degraded 答案。
+    # **显式传入的 connect_args 优先**——00W 的启动期探测自带它自己的上界，不该被这里覆盖。
+    merged_connect_args: dict[str, object] = dict(connect_args or {})
+    if "connect_timeout" not in merged_connect_args:
+        merged_connect_args["connect_timeout"] = int(os.environ.get("DB_CONNECT_TIMEOUT", "3"))
     engine = create_async_engine(
         database_url,
         pool_pre_ping=True,
@@ -65,7 +77,7 @@ def create_engine_and_session(
         max_overflow=_DB_MAX_OVERFLOW,
         pool_recycle=_DB_POOL_RECYCLE,
         # 空 dict 就是 SQLAlchemy 的默认值 ⇒ 不传 connect_args 时行为与改动前逐字一致
-        connect_args=dict(connect_args or {}),
+        connect_args=merged_connect_args,
     )
     factory = async_sessionmaker(engine, expire_on_commit=False)
     return engine, factory
