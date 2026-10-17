@@ -17,6 +17,10 @@
    `.github/workflows/ci.yml` backend job 的 "Migration roundtrip" 步（2026-10-17 补，
    补之前该步不存在——本文件的这条说法曾连续两天是"文档里有、门禁里没有"）。
    本门判的是 AST 形状（不需要 PG 就能红），CI 那步判的是真库执行，两者不是同一件事。
+4. **CI 探针自己的极性**（`test_roundtrip_probe_has_polarity`）：CI 那步的第二层直查
+   `information_schema` / `pg_indexes`，因为"版本戳变了"不等价于"形状被拆了"——
+   `downgrade()` 空操作也会重标版本（先例 `ab1004w1a_secret_aes.py:119-121`）。
+   探针是工具，工具也要被钉住两个极性，否则第一次真跑才发现它恒绿。
 
 另外钉一条 D-V9-04 的形状：契约侧 `article_key` 必填、DB 侧可空，这是**故意不对称**
 （未回填的行不该对外序列化）；而 `""` 与裸末段 `s` 都不是合法键，写侧绝不能用它们占位。
@@ -158,26 +162,39 @@ def test_model_declares_exactly_the_columns_the_migration_adds() -> None:
         assert str(mapped.type) == f"VARCHAR({length})", f"{col_name} 模型侧长度漂了：{mapped.type}"
 
 
-def _index_and_fk_shapes(fn: ast.FunctionDef) -> tuple[dict, dict]:
-    """从 upgrade() 的 AST 里读 create_index / create_foreign_key 的形状（纯函数，畸形输入要用它）。"""
+def _index_and_fk_shapes(fn: ast.FunctionDef) -> tuple[dict, dict, list[str]]:
+    """从 upgrade() 的 AST 里读 create_index / create_foreign_key 的形状，外加**重名清单**。
+
+    重名要单独返回：dict 是后写覆盖的，"同名索引建了两次、正确那支在后"会被静默吞掉
+    （第二轮验证抓出的最后一个 AST 盲区）。真库上它会撞 PG 的重名错误、由 "Migrate schema" 步先红，
+    但那属于"靠另一层兜住"，不是"本层有判定力"。
+    """
     indexes: dict[str, tuple[str, list[str]]] = {}
     fks: dict[str, tuple] = {}
+    idx_seen: list[str] = []
+    fk_seen: list[str] = []
     for call in _calls(fn):
         name = _op_name(call)
         if name == "create_index":
-            indexes[ast.literal_eval(call.args[0])] = (
+            idx_name = ast.literal_eval(call.args[0])
+            idx_seen.append(idx_name)
+            indexes[idx_name] = (
                 ast.literal_eval(call.args[1]),
                 ast.literal_eval(call.args[2]),  # 整个 List 节点求值；逐元素 literal_eval 会去迭代 AST 本身
             )
         elif name == "create_foreign_key":
-            fks[ast.literal_eval(call.args[0])] = (
+            fk_name = ast.literal_eval(call.args[0])
+            fk_seen.append(fk_name)
+            fks[fk_name] = (
                 ast.literal_eval(call.args[1]),
                 ast.literal_eval(call.args[2]),
                 ast.literal_eval(call.args[3]),
                 ast.literal_eval(call.args[4]),
                 _kw(call, "ondelete"),
             )
-    return indexes, fks
+    # 两类各判各的重名：索引名与约束名在 PG 里不是同一个命名空间，混判会报假违例
+    dup = sorted({n for n in idx_seen if idx_seen.count(n) > 1} | {n for n in fk_seen if fk_seen.count(n) > 1})
+    return indexes, fks, dup
 
 
 def _migration_src(rev: str = NEW_REV) -> str:
@@ -202,8 +219,13 @@ def _model_index_names_by_table() -> dict[str, set[str]]:
     return {t: {i.name for i in m.__table__.indexes} for t, m in _MODEL_BY_TABLE.items()}
 
 
-def _assert_indexes_agree(migration_idx: dict[str, tuple[str, list[str]]], model_idx: dict[str, set[str]]) -> None:
+def _assert_indexes_agree(
+    migration_idx: dict[str, tuple[str, list[str]]],
+    model_idx: dict[str, set[str]],
+    dup_names: list[str] | tuple[str, ...] = (),
+) -> None:
     """迁移侧与模型侧的索引必须**集合相等**且**逐表对号**；不符就抛 AssertionError（判据本体，畸形输入要用它）。"""
+    assert not dup_names, f"同一个 upgrade() 里重名建了多次：{sorted(dup_names)}——dict 后写覆盖前写，形状会被静默吞掉"
     missing = sorted(set(_REQUIRED_INDEXES) - set(migration_idx))
     extra = sorted(set(migration_idx) - set(_REQUIRED_INDEXES))
     assert not missing and not extra, (
@@ -217,14 +239,15 @@ def _assert_indexes_agree(migration_idx: dict[str, tuple[str, list[str]]], model
         )
 
 
-def test_shape_guard_bites_on_the_six_ways_it_could_be_broken() -> None:
-    """判据自己的反证：把迁移/模型改坏六种，每种都必须让对应判据红（不咬人的门等于没有门）。
+def test_shape_guard_bites_on_the_seven_ways_it_could_be_broken() -> None:
+    """判据自己的反证：把迁移/模型改坏七种，每种都必须让对应判据红（不咬人的门等于没有门）。
 
-    这六发就是"以后有人这么改就会红"的具体形状。全部在内存里做，不碰磁盘。
+    这些发就是"以后有人这么改就会红"的具体形状。全部在内存里做，不碰磁盘。
     """
     src = _migration_src()
     base_cols = _add_columns(_fn_src(src, "upgrade"))
-    base_idx, base_fk = _index_and_fk_shapes(_fn_src(src, "upgrade"))
+    base_idx, base_fk, base_dup = _index_and_fk_shapes(_fn_src(src, "upgrade"))
+    assert not base_dup, f"现状就该没有重名：{base_dup}"
     real_model_idx = _model_index_names_by_table()
 
     # ① 把新列改成 NOT NULL —— 与模型的 nullable=True 分叉
@@ -274,6 +297,21 @@ def test_shape_guard_bites_on_the_six_ways_it_could_be_broken() -> None:
     with pytest.raises(AssertionError, match="没声明在 article_manifests"):
         _assert_indexes_agree(base_idx, relocated)
 
+    # ⑦ 同名索引建了两次、**正确那支在后** —— dict 后写覆盖，形状层必须靠重名清单出声
+    #    （第二轮验证给的最后一个 AST 盲区；真库上它会撞 PG 的重名错，但那是不属于本层的兜底）
+    dup_src = src.replace(
+        _IDX_ON_JOB_ITEMS,
+        '    op.create_index("ix_manifest_source_article_key", "job_items", ["manifest_id"])\n' + _IDX_ON_JOB_ITEMS,
+    )
+    assert dup_src != src, "锚漂了：⑦没注入第二支同名索引"
+    dup_idx, _, dup_names = _index_and_fk_shapes(_fn_src(dup_src, "upgrade"))
+    assert dup_names == ["ix_manifest_source_article_key"], f"⑦的重名没被提取器看见：{dup_names}"
+    assert dup_idx["ix_manifest_source_article_key"] == ("job_items", ["manifest_id"]), (
+        "⑦的构造本身要成立：覆盖后读到的必须是**错的那一支**，否则这发测的是别的东西"
+    )
+    with pytest.raises(AssertionError, match="重名建了多次"):
+        _assert_indexes_agree(dup_idx, real_model_idx, dup_names)
+
     # 反证的反证：锚若失效（上面每发的 `assert m != src`），这一发就必须红——用空替换验证计数不骗人
     assert src.count('ondelete="SET NULL",') == 1, "③的锚在源码里出现多次，替换会漏改"
     assert src.count("    op.drop_index(\"ix_job_items_manifest_id\"") == 1, "④的锚不唯一"
@@ -281,9 +319,10 @@ def test_shape_guard_bites_on_the_six_ways_it_could_be_broken() -> None:
 
 
 def test_indexes_and_foreign_key_line_up_with_the_model() -> None:
-    indexes, fks = _index_and_fk_shapes(_fn_body(NEW_REV, "upgrade"))
-    # 形状 + 集合相等 + 逐表对号，三件事一次判完（判据本体见 _assert_indexes_agree，反证见六发那一条）
-    _assert_indexes_agree(indexes, _model_index_names_by_table())
+    indexes, fks, dup_names = _index_and_fk_shapes(_fn_body(NEW_REV, "upgrade"))
+    # 形状 + 集合相等 + 逐表对号 + 重名，四件事一次判完（判据本体见 _assert_indexes_agree，
+    # 它的反证在 test_shape_guard_bites_on_the_seven_ways_it_could_be_broken 里逐发给出）
+    _assert_indexes_agree(indexes, _model_index_names_by_table(), dup_names)
     assert "fk_job_items_manifest_id" in fks
     table, ref_table, local, remote, ondelete = fks["fk_job_items_manifest_id"]
     assert (table, ref_table, local, remote) == ("job_items", "article_manifests", ["manifest_id"], ["id"])
@@ -335,3 +374,49 @@ def test_placeholder_values_are_not_valid_keys_and_the_asymmetry_is_deliberate()
     assert ArticleManifest.__table__.columns["article_key"].nullable is True
     field = ManifestDto.model_fields["article_key"]
     assert field.is_required(), "契约侧 article_key 必须保持必填：回填前的行不该被序列化出去"
+
+
+def _load_probe():
+    """按文件路径加载 CI 用的探针（scripts/ 不在包路径里，与 test_collection_contract 同法）。"""
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[3] / "scripts" / "migration_roundtrip_probe.py"
+    spec = importlib.util.spec_from_file_location("migration_roundtrip_probe", path)
+    assert spec and spec.loader, f"探针文件不在位：{path}"
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_roundtrip_probe_has_polarity() -> None:
+    """CI 往返步的形状探针必须在"没真降级"时出声——这是它唯一不能是恒真的地方。
+
+    为什么这条要存在（第二轮验证的原话大意）：`alembic current` 比字符串只证明**版本戳变了**，
+    而 `downgrade()` 里什么都不做也会重标版本（先例 `ab1004w1a_secret_aes.py:119-121`）。
+    探针直查 information_schema / pg_indexes，但探针自己也是个会撒谎的工具，所以它的判据
+    `evaluate()` 要在这里被钉住两个极性，而不是等到 CI 上第一次真跑才发现它恒绿。
+    """
+    probe = _load_probe()
+    want_cols = set(probe.COLUMNS.items())
+    want_idx = set(probe.INDEXES)
+
+    # 正例：升级后齐全 / 降级后全空，两种模式各应一次绿
+    assert probe.evaluate(want_cols, want_idx, "present") == []
+    assert probe.evaluate(set(), set(), "absent") == []
+
+    # 反例（这才是判定力）：降级后仍留着列或索引 ⇒ absent 必须点名
+    assert probe.evaluate({("job_items", "manifest_id")}, set(), "absent") == ["降级后仍在：列 job_items.manifest_id"]
+    assert probe.evaluate(set(), {"ix_manifest_source_article_key"}, "absent") == [
+        "降级后仍在：索引 ix_manifest_source_article_key"
+    ]
+    # 升级后少建 ⇒ present 必须点名，且两列都缺时给两条而不是一条（合并成一条会丢信息）
+    assert probe.evaluate({("article_manifests", "article_key")}, want_idx, "present") == ["缺列 job_items.manifest_id"]
+    assert len(probe.evaluate(set(), set(), "present")) == 4
+    # 升级后齐全 ⇒ present 绿而 absent 红；降级后全空 ⇒ absent 绿而 present 红。
+    # 这两行就是"探针不是恒真"的直接证明——任何一种"全绿"都只在一个极上不绿。
+    assert probe.evaluate(want_cols, want_idx, "absent") != []
+    assert probe.evaluate(set(), set(), "present") != []
+
+    # 模式拼错时必须出声，不能悄悄当通过（CI 里 `--expect=persent` 这类手滑很常见）
+    assert probe.evaluate(want_cols, want_idx, "present "), "expect 带了空格就得红"
+    assert probe.evaluate(set(), set(), "") != []

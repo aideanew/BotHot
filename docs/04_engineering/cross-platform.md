@@ -106,10 +106,16 @@ gitleaks（00S 用）：`python scripts\entry.py scan-secrets`。
 
 - alembic upgrade→downgrade→upgrade 往返与单头断言（`@ci ubuntu`，STEP-04 的出门判据）
   - 执行者：`.github/workflows/ci.yml` backend job 的两步 "Assert single alembic head" 与
-    "Migration roundtrip (upgrade head → downgrade -1 → upgrade head)"。往返**只覆盖当前 head 那一个版本**
-    （`downgrade -1`）：祖先迁移里有 ab1005w5b 那类刻意单向的 downgrade，`downgrade base` 会红在历史上。
-    此步跑在任何测试写入之前 ⇒ 判的是 DDL 可逆，不是"降级不丢数据"。
-    （2026-10-17 之前这两条口径只有单头断言有执行者，往返步是 S4.2 验证轮补上的。）
+    "Migration roundtrip (upgrade head → downgrade -1 → upgrade head)"。后者分三层判：
+    ① 版本极性（降级后 `current` 不得再含 `(head)`、再升级后必须回到起点那一行）；
+    ② 形状探针 `scripts/migration_roundtrip_probe.py` 直查 `information_schema` / `pg_indexes`，
+    降级后两列两索引必须全不在、升级后必须全回来；③ 终态回到 head，后面的 pytest 才有 schema 可用。
+  - 为什么要有第②层：`alembic downgrade -1` 即使 `downgrade()` 里**什么都不做**也会把版本戳重标成父版本
+    （先例 `ab1004w1a_secret_aes.py:119-121` 的 downgrade 只打一行 warning 就返回），
+    所以"版本变了"根本不等价于"形状被拆掉了"——第一轮那条 `case` 断言因此被批"近似恒真"。
+  - 边界：只覆盖**当前 head 那一个版本**（`downgrade base` 会撞 `ab1005w5b` 那类 downgrade 直接 raise 的历史迁移）；
+    此步跑在任何测试写入之前、库是空的 ⇒ 判的是 DDL 可逆，不是"降级不丢数据"。
+    （2026-10-17 之前这两条口径只有单头断言有执行者，往返步与其三层判据是 S4.2 验证轮补上的。）
 - Playwright e2e（需 `pnpm exec playwright install --with-deps chromium`；Windows runner 上 `--with-deps` 无 sudo 语义）
 - compose 栈（read_only/tmpfs/cap_drop）与 `/ready` 探针
 - `rotate_keys.sh` 等**仅上线用**脚本：标「仅 Linux」，不做跨平台改造

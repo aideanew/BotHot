@@ -92,7 +92,7 @@ version: 1.0
 - [x] 运行期告警（三类）— `core/alerting.py` `run_alert_checks`（心跳缺失/Job 积压/推送连败），复用既有 push provider；接线 `push_scheduler.py:86-88`（`ALERTING_ENABLED` 未置真即短路，开发零副作用）
 - [x] 连接池容量守卫 — `db.py:85 assert_pool_capacity()`（进程数×池容量 ≤ PG max_connections，测试强制；启动 lifespan 自动调用待接）
 - [x] 告警生产装配 — `compose.yml` 已注入 `ALERTING_ENABLED`/`ALERT_CHANNEL`/`ALERT_TARGET`/`ALERT_PUSH_FAIL_WINDOW`/`ALERT_JOB_BACKLOG` 五变量（默认关闭，`1eaa9b7`，S2.2 闭环；`docker/compose.yml:227-231`）
-- [ ] 治理脚本入 CI 强制步 — `check_docs_consistency.py`/`gen_contracts.py` 就绪，CI 尚未编排为门禁 step（剩余项 R1.4）
+- [x] 治理脚本入 CI 强制步 — `check_docs_consistency.py`/`gen_contracts.py` 早已就绪却长期写着"CI 尚未编排"；**2026-10-17 现读更正为已完成**：`.github/workflows/ci.yml` backend job 的 "Contract drift gate (gen_contracts --check)" 与 "Docs reference consistency gate (check_docs_consistency)" 两步都在跑（`d639ce1` 那次 run 38993915005 两步皆 success）。剩余项 R1.4 若另有所指，请写清楚判据再重开。
 
 ## v0.7 — 目录结构迁移
 
