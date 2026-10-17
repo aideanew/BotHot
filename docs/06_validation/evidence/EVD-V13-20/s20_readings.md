@@ -122,3 +122,31 @@ STEP-03 与 STEP-20 的归属者是同一个执行侧角色，见证文本里"�
    "任何 HTTP 错误码都不再打断兜底链"，不保证真实数据能解析出正文——后者是 STEP-10 的事。
 4. 本卡的 `@ci` 读数（`CI` success + backend `failed = 0`）待推送后补在本文件 §7，
    **在那之前本卡状态是"已交付待 @ci"，不是已验收**（D-V4-01）。
+
+## 7. 返工轮读数（2a7195d 之后，2026-10-17 21:5x，`@win`）
+
+| 项 | 读数 |
+|---|---|
+| `tests/test_provider_defects_p15_p17.py` | **32 passed**（返工前 25 条里含 2 条恒真/可凑数的守卫；净增 7 条 = 6 条同族空值 + 1 条 AST 极性自检） |
+| 消费面合跑（provider 两份 + `test_discovery` + `test_manifest_sync` + `test_redfox_client` + `test_rss_provider` + `test_manifest_asset_alignment` + `test_manifest_state_machine` + `test_resolver`） | **343 passed / 28 skipped / 0 failed（98.31s）** |
+| 四家覆盖率 | `dajiala 117/0=100%`、`justoneapi 159/1=99%`、`tikhub 135/0=100%`、`wellbyte 167/1=99%` ⇒ 新增的 `_as_dict` 与三个 helper 都在覆盖内 |
+| `ruff check app tests` / `mypy app` | All checks passed / Success: no issues found in 112 source files |
+| `grep -rn "fromtimestamp(.*tz=None" app` | 0 命中（卡面那条 grep 形式本身是对的，错的是我抄进用例里的正则） |
+
+### 7.1 现跑复现的记录（复核 claims 的复算，不是我读代码读出来的）
+
+```
+$ python -X utf8 -c "...MockTransport 回 {'code':0,'data':{'MsgList':{'Msg':[good, {'AppMsg':None,...}]}}}..."
+wellbyte    抛穿: AttributeError 'NoneType' object has no attribute 'get'
+justoneapi  抛穿: AttributeError 'NoneType' object has no attribute 'get'
+tikhub      抛穿: AttributeError 'NoneType' object has no attribute 'get'
+```
+
+同一条判据在**修完之后**变成：好行仍在清单里、不再抛（`test_p17_family_*` 三条 + 真值非对象一条）。
+
+### 7.2 上一版 §4 的 P-17 那段有一句话是错的，按实测改在 §4b
+
+原写"其余命中不改，因为下游有既有守卫"。真相：那层守卫是 `if not isinstance(msg, dict)`，
+它管不到 `msg` **里面的键**；`AppMsg`/`BaseInfo` 两处没有别的守卫，所以一处 `null` 直接抛穿整轮。
+这条不是措辞问题，是**判断依据错**——我按"文件里有 isinstance"推断"这一处也被保护"，
+而没有跑一遍。修正与新增的 6 条用例都在 §4b/§7。

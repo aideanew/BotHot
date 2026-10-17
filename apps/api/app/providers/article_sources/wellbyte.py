@@ -63,6 +63,16 @@ _TIME_MAP = {
 }
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    """嵌套对象的空值兜法：`get(k, {})` 的默认值只在**键缺失**时生效，上游给 `null` 拿到的是 None。
+
+    一处 `null` 就让整轮付费抓取抛穿（P-17 同族：一行坏 = 全页丢、钱白烧），
+    所以统一用"or {} 之后还要判 isinstance"这两件套——同一个文件清单侧 `:142-143` 早就是这么写的，
+    真值但非对象（`"AppMsg": "字符串"`）那一支 `or {}` 兜不住。
+    """
+    return value if isinstance(value, dict) else {}
+
+
 class WellbyteClient:
     """Wellbyte 数井 HTTP 客户端。
 
@@ -150,8 +160,8 @@ class WellbyteClient:
         for msg in msgs:
             if not isinstance(msg, dict):
                 continue
-            app_msg = msg.get("AppMsg", {})
-            base_info = msg.get("BaseInfo", {})
+            app_msg = _as_dict(msg.get("AppMsg"))
+            base_info = _as_dict(msg.get("BaseInfo"))
             url = str(app_msg.get("ContentUrl", "") or "").strip()
             row: dict[str, Any] = {
                 "id": work_list_row_id(url),
@@ -220,13 +230,9 @@ class WellbyteClient:
         for item in items:
             if not isinstance(item, dict):
                 continue
-            source_info = item.get("source") or {}
-            # JSON 的 `null` 不走 `get` 的默认值（默认值只在**键缺失**时生效），所以要 `or {}`；
-            # 再判一次 isinstance：`"source": "字符串"` 这类**真值但非对象**同样会在下一行炸掉整页，
-            # 那是同一个缺陷（一行坏 = 全页丢、155cr 白烧），不是另一种。
-            # 两件套的仓内先例就在同一个文件的清单侧：`:142` 用 `or {}`，`:143` 紧跟 isinstance。
-            if not isinstance(source_info, dict):
-                source_info = {}
+            # P-17 的正身：JSON 的 `null` 不走 `get` 的默认值（默认值只在**键缺失**时生效），
+            # 一行坏 = 整页丢、155cr 白烧。兜法与清单侧统一走 `_as_dict`（真值非对象那一支同样兜住）。
+            source_info = _as_dict(item.get("source"))
             # dateTime 可能是 "4分钟前" 或时间戳
             publish_time: datetime | None = None
             dt = source_info.get("dateTime", "")

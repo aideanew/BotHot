@@ -25,9 +25,9 @@
 
 from __future__ import annotations
 
+import ast
 import inspect
 import pathlib
-import re
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
@@ -297,43 +297,183 @@ async def test_p17_whole_response_shape_and_single_row_dirty_are_two_layers() ->
     assert len(rows) == 1, "单行 null 被处理成了整次空返回——换了代价，没换缺陷"
 
 
+# ── P-17 同族（返工轮）：清单侧一处 `null` 同样打挂整轮付费抓取 ─────────────────
+
+_DISCOVERY_NULL_CASES = (
+    pytest.param("wellbyte", "AppMsg", id="wellbyte的AppMsg为null"),
+    pytest.param("wellbyte", "BaseInfo", id="wellbyte的BaseInfo为null"),
+    pytest.param("justoneapi", "AppMsg", id="justoneapi的AppMsg为null"),
+    pytest.param("justoneapi", "BaseInfo", id="justoneapi的BaseInfo为null"),
+)
+
+
+@pytest.mark.parametrize(("channel", "key"), _DISCOVERY_NULL_CASES)
+async def test_p17_family_null_nested_object_keeps_the_rest_of_the_page(channel: str, key: str) -> None:
+    """`msg.get("AppMsg", {})` 的默认值只在**键缺失**时生效：上游给 `null` 拿到 None ⇒ 整轮抛穿。
+
+    这是 P-17 的同一缺陷类换了入口（清单侧而非搜索侧），由独立复核现跑证实：
+    单行 `{"AppMsg": null}` 让 `query_work_list` 抛 `AttributeError`，钱已经花了。
+    判据只钉一件事：**好行必须还在**（坏行自己怎么处置按各文件既有分支，不新造语义）。
+    """
+    good = {"AppMsg": {"ContentUrl": _ARTICLE_URL, "Title": "好行", "CreateTime": _EPOCH}, "BaseInfo": {}}
+    bad = dict(good)
+    bad["AppMsg"] = {"ContentUrl": f"{_ARTICLE_URL}&sn=bad", "Title": "坏行"}
+    bad[key] = None
+    payload = {"code": 0, "data": {"MsgList": {"Msg": [good, bad]}}}
+    provider, seen = _provider(channel, payload)
+    try:
+        rows, _total = await provider.query_work_list(_IDENTIFIER, 1)
+    finally:
+        await provider.aclose()
+    assert len(seen) == 1, "上游根本没被调用，那条「页保住了」就是空的"
+    urls = [r["url"] for r in rows]
+    assert _ARTICLE_URL in urls, f"{channel} 的一处 `{key}: null` 让整轮清单丢了（P-17 同族）"
+    # 坏行自己怎么处置按既有分支：AppMsg 炸 ⇒ url 空 ⇒ 被 `if row["url"]` 丢掉；
+    # 只有 BaseInfo 炸 ⇒ url 还在 ⇒ 该行照常入列。**这里不把两种情况钉成同一个期望**，
+    # 因为"该不该留这一行"不是本卡的缺陷面，把它写死就等于替别人的语义做主。
+    assert len(urls) in (1, 2), f"清单行数超出两种既有语义：{urls}"
+
+
+async def test_p17_family_tikhub_nested_null_keeps_the_page() -> None:
+    """TikHub 清单侧的两个嵌套对象同形：`app_msg_ext_info` / `comm_msg_info` 为 null。"""
+    good = {"app_msg_ext_info": {"content_url": _ARTICLE_URL, "title": "好行"}, "comm_msg_info": {"id": 1}}
+    for key in ("app_msg_ext_info", "comm_msg_info"):
+        bad = dict(good)
+        bad[key] = None
+        provider, seen = _provider("tikhub", {"code": 0, "data": {"data": [good, bad]}})
+        try:
+            rows, _ = await provider.query_work_list(_IDENTIFIER, 1)
+        finally:
+            await provider.aclose()
+        assert len(seen) == 1
+        assert any(r.get("url") == _ARTICLE_URL for r in rows), f"{key}: null 让 TikHub 整轮清单抛穿或全丢"
+
+
+async def test_p17_family_truthy_nested_object_is_not_treated_as_a_dict() -> None:
+    """真值但非对象（`"AppMsg": ["数组"]`）走同一支：不许只兜住 `null` 就宣布修完。"""
+    payload = {
+        "code": 0,
+        "data": {
+            "MsgList": {
+                "Msg": [
+                    {"AppMsg": {"ContentUrl": _ARTICLE_URL, "Title": "好行"}, "BaseInfo": {}},
+                    {"AppMsg": ["这不是对象"], "BaseInfo": 7},
+                ]
+            }
+        },
+    }
+    provider, _ = _provider("wellbyte", payload)
+    try:
+        rows, _ = await provider.query_work_list(_IDENTIFIER, 1)
+    finally:
+        await provider.aclose()
+    assert [r["url"] for r in rows if r.get("url")] == [_ARTICLE_URL]
+
+
 # ── 结构守卫：这三处的修法不许漂回第二种形态 ─────────────────────────────────
 
 _APP_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
-def test_structure_no_provider_left_the_naive_form_in_repo() -> None:
-    """`fromtimestamp(... tz=None` 在整个 `app/` 必须 0 命中（卡面验收第一条的常驻版）。
+def _naive_timestamp_offenders(source: str, label: str) -> list[str]:
+    """AST 扫一处源码：每个 `fromtimestamp(...)` 调用必须带一个不是 `None` 的 `tz=` 关键字。
 
-    写成用例而不是只写进验收清单，是因为这条会被"新加一家 provider"重新引入。
+    为什么不用子串正则：上一版写的是 `fromtimestamp\\([^)]*tz=None`，而真实代码是
+    `fromtimestamp(int(post_time), tz=None)` —— `[^)]*` 跨不过 `int(...)` 的右括号，
+    **在改前的树上也是 0 命中**（独立复核实测出来的，等于这条常驻守卫从来没在工作）。
+    AST 不受嵌套括号影响，还顺带抓住同形的另一种：`fromtimestamp(x)` 干脆不给 `tz`
+    （隐式本机时区，和 P-15 是同一件事）。
     """
-    hits = [
-        str(py.relative_to(_APP_ROOT.parent))
-        for py in (_APP_ROOT / "app").rglob("*.py")
-        if re.search(r"fromtimestamp\([^)]*tz=None", py.read_text(encoding="utf-8"))
-    ]
-    assert hits == [], f"又出现 tz=None 的写法：{hits}"
+    tree = ast.parse(source, filename=label)
+    offenders = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr == "fromtimestamp"):
+            continue
+        tz_kw = next((kw for kw in node.keywords if kw.arg == "tz"), None)
+        if tz_kw is None or (isinstance(tz_kw.value, ast.Constant) and tz_kw.value.value is None):
+            offenders.append(f"{label}:{node.lineno}")
+    return offenders
 
 
-def test_structure_wellbyte_search_guard_is_the_prescribed_form() -> None:
-    """P-17 只钉「改过的那一处不许回退」，不逼同文件其余两处同形。
+def test_structure_no_naive_timestamp_left_in_app() -> None:
+    """整个 `app/` 里不许再有裸的或 `tz=None` 的 `fromtimestamp`（卡面验收第一条的常驻版）。"""
+    offenders: list[str] = []
+    for py in sorted((_APP_ROOT / "app").rglob("*.py")):
+        offenders += _naive_timestamp_offenders(py.read_text(encoding="utf-8"), py.name)
+    assert offenders == [], f"这些 `fromtimestamp` 少了 tz= 或写成 tz=None（P-15 同形）：{offenders}"
 
-    其余两处（`:153/:154`）归 `test_provider_contract.py` 的行级守卫，动它们不属本卡。
+
+def test_structure_naive_timestamp_guard_has_polarity() -> None:
+    """判据自检：这条守卫必须**咬得住改前那一行**，也要放过修好的写法。
+
+    没有这一条，上一版的空正则可以一直"绿"下去——那正是它已经发生过的事实。
     """
-    src = (_APP_ROOT / "app/providers/article_sources/wellbyte.py").read_text(encoding="utf-8")
-    assert 'item.get("source", {})' not in src, "P-17 的写法又回来了：JSON null 会再打挂一次整页"
-    assert re.search(r'item\.get\("source"\)\s+or\s+\{\}', src), "必须显式 `or {}`，不是别的等价花活"
-    assert re.search(r"isinstance\(source_info,\s*dict\)", src), "真值非对象那一支必须有 isinstance 兜住"
+    assert _naive_timestamp_offenders(
+        "import datetime\nx = datetime.datetime.fromtimestamp(int(p), tz=None)\n", "old"
+    ) == ["old:2"], "改前的形态抓不到 ⇒ 这条守卫还是空的"
+    assert _naive_timestamp_offenders(
+        "import datetime\nx = datetime.datetime.fromtimestamp(int(p))\n", "implicit"
+    ) == ["implicit:2"], "`fromtimestamp` 不给 tz 也是同形缺陷（隐式本机时区）"
+    assert _naive_timestamp_offenders(
+        "import datetime\nfrom datetime import UTC\nx = datetime.datetime.fromtimestamp(int(p), tz=UTC)\n",
+        "new",
+    ) == [], "修好的形态被判红 ⇒ 守卫在逼大家写别的花活"
+
+
+def test_structure_no_bare_default_dict_get_left_at_the_fixed_sites() -> None:
+    """五处已修站点不许漂回 `.get(key, {})`（它兜不住上游给的 JSON `null`）。
+
+    刻意**不**写成"整个 app 禁止这个写法"：`wellbyte.py` 的 `AccountInfo` 也用了它，
+    但下一行紧跟 `isinstance` 守卫，是安全的。闸门的宽度应该等于缺陷的宽度，
+    多宽一寸就会逼下一张卡去改与自己无关的形状。
+    """
+    forbidden = (
+        'msg.get("AppMsg", {})',
+        'msg.get("BaseInfo", {})',
+        'item.get("app_msg_ext_info", {})',
+        'item.get("comm_msg_info", {})',
+        'item.get("source", {})',
+    )
+    corpus = {
+        name: (_APP_ROOT / "app/providers/article_sources" / f"{name}.py").read_text(encoding="utf-8")
+        for name in ("dajiala", "justoneapi", "tikhub", "wellbyte")
+    }
+    hits = [f"{name} :: {pat}" for name, text in corpus.items() for pat in forbidden if pat in text]
+    assert hits == [], f"漂回兜不住 null 的写法：{hits}"
+    # 同一个兜法：三家的 helper 定义 3 处 + 五处调用点，少于 8 就说明有人改回了就地写法
+    assert sum(text.count("_as_dict") for text in corpus.values()) >= 8, "五处站点必须都走 `_as_dict`"
 
 
 def test_structure_tikhub_degrade_wraps_both_call_sites_not_the_shared_handler() -> None:
-    """P-16 的落点是**两个兜底调用点**，不是 `_handle_response` 本身。
+    """P-16 的落点是**两个兜底调用点**，不是 `_handle_response`，也不是 `query_work_list`。
 
-    写进结构判据的理由：改 `_handle_response` 让所有码返回 None 一样能让上面几条绿，
-    而那会同时改掉 `query_work_list` 的语义（本卡明确不许）。
+    写进结构判据的理由：改共用处理器让所有码返回 None 一样能让行为用例绿，
+    而那会同时改掉 discovery 的语义（本卡明确不许）。用 AST 找 `try/except AppError`
+    所在的方法，而不是数文本——文本计数能被注释凑够，也能被别人合法新增的 `except` 误判。
     """
-    src = pathlib.Path(tikhub.__file__).read_text(encoding="utf-8")
-    handler = src[src.index("async def _handle_response") :]
-    assert "suppress_all" not in handler, "不许为兜底给共用处理器加一个「全部降级」开关"
-    body = src[: src.index("async def _handle_response")]
-    assert body.count("except AppError") == 2, "detail/search 两个调用点各兜一次，多一处少一处都算红"
+    tree = ast.parse(pathlib.Path(tikhub.__file__).read_text(encoding="utf-8"), filename="tikhub.py")
+    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "TikhubClient")
+
+    def catches_app_error(fn: ast.FunctionDef) -> bool:
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.ExceptHandler) or node.type is None:
+                continue
+            names = (
+                [node.type]
+                if not isinstance(node.type, ast.Tuple)
+                else list(node.type.elts)
+            )
+            if any(isinstance(n, ast.Name) and n.id == "AppError" for n in names):
+                return True
+        return False
+
+    methods = {n.name: n for n in cls.body if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)}
+    assert catches_app_error(methods["fetch_article_detail"]), "detail 入口没兜领域异常"
+    assert catches_app_error(methods["search_articles"]), "search 入口没兜领域异常"
+    assert not catches_app_error(methods["_handle_response"]), (
+        "共用处理器被加了降级 ⇒ discovery 的 5xx 会一起变静默空页"
+    )
+    assert not catches_app_error(methods["query_work_list"]), "清单主失败不许被兜成空页"

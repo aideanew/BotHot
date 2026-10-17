@@ -48,6 +48,14 @@ UPSTREAM_NAME = "tikhub"
 ITEM_SHOW_ALL = 0
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    """嵌套对象的空值兜法：`get(k, {})` 的默认值只在**键缺失**时生效，上游给 `null` 拿到的是 None。
+
+    一处 `null` 就让整轮付费抓取抛穿（P-17 同族：一行坏 = 全页丢），真值非对象那一支同理。
+    """
+    return value if isinstance(value, dict) else {}
+
+
 class TikhubClient:
     """TikHub HTTP 客户端。
 
@@ -136,8 +144,8 @@ class TikhubClient:
             if not isinstance(item, dict):
                 continue
             # 微信原始结构：app_msg_ext_info 或 comm_msg_info 内含标题/URL
-            app_msg = item.get("app_msg_ext_info", {})
-            comm_msg = item.get("comm_msg_info", {})
+            app_msg = _as_dict(item.get("app_msg_ext_info"))
+            comm_msg = _as_dict(item.get("comm_msg_info"))
             url = str(app_msg.get("content_url", "") or item.get("content_url", "") or "").strip()
             row: dict[str, Any] = {
                 "id": work_list_row_id(url),

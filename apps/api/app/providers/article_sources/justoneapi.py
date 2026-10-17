@@ -47,6 +47,15 @@ UPSTREAM_NAME = "justoneapi"
 _CODE_OK = 0
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    """嵌套对象的空值兜法：`get(k, {})` 的默认值只在**键缺失**时生效，上游给 `null` 拿到的是 None。
+
+    一处 `null` 就让整轮付费抓取抛穿（P-17 同族：一行坏 = 全页丢、钱白烧）。
+    真值但非对象（字符串/数组）那一支也必须兜住，所以不是 `or {}` 就够了。
+    """
+    return value if isinstance(value, dict) else {}
+
+
 class JustOneApiClient:
     """JustOneAPI HTTP 客户端。
 
@@ -130,8 +139,8 @@ class JustOneApiClient:
         for msg in msgs:
             if not isinstance(msg, dict):
                 continue
-            app_msg = msg.get("AppMsg", {})
-            base_info = msg.get("BaseInfo", {})
+            app_msg = _as_dict(msg.get("AppMsg"))
+            base_info = _as_dict(msg.get("BaseInfo"))
             url = str(app_msg.get("ContentUrl", "") or "").strip()
             row: dict[str, Any] = {
                 "id": work_list_row_id(url),
