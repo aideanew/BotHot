@@ -119,3 +119,106 @@ TestClient 下 /ready   5.46s   ← 走 HTTP 时不是这个数
 | S00H.2.2 判 H3 | **暂不执行**（条件步：仅 S00H.2.1 仍卡时才做） |
 | S00H.2.3 `--timeout` 收紧 | **暂不执行**（需连续 2 次 CI-Windows success） |
 | 新发现的限流死条目 | **已确认并修复**（本机 `71 passed`），越界声明见 §5 |
+
+## 7. `@ci` 读数回来：S00H.1.4 与 S00H.2.1 同批判定（2026-10-17 20:0x，本机 `@win` 取数）
+
+### 7.1 S00H.1.4 真库全量（ubuntu `CI`，run **39030366256** @ `10c1019`）
+
+| 卡面判据 | 实测 | 判定 |
+|---|---|---|
+| `passed ≥ 1478` | `1533 passed, 6 skipped, 1 warning in 81.84s` | ✅ |
+| `failed = 0` | 汇总行无 failed；job conclusion=success | ✅ |
+| 覆盖率 ≥ 85% | `TOTAL 9161 1288 86%` / `Total coverage: 85.94%` | ✅（贴线，见 §7.4） |
+| S00H.1.1 用例由红转绿 | 该用例不需要 PG（子进程打黑洞地址），在 CI 上随全量执行且 0 失败 | ✅ |
+
+同一 job 的 skip 门禁打的是 `total_skipped=6 baseline=6 pg_unreachable=0`——这行是本卡最要紧的
+一条旁证：**PG 不可达类 = 0**，所以 435 条连库用例是真跑了而不是静默 skip（D-XX「skip ≠ 通过」）。
+
+### 7.2 S00H.2.1 `CI-Windows`（run **39030366312** @ `10c1019`）
+
+判据要的三件（run id + head_sha + junit 汇总 + `Timeout` 计数 = 0）：
+
+```
+step "Backend tests（连库用例在本平台会 skip，只记账不主张）" = success
+  1098 passed, 441 skipped, 1 warning in 987.74s (0:16:27)
+step "Windows skip 门禁" 独立算的 junit：failed=0 total_skipped=441
+```
+
+`Timeout` 计数数的是**失败形态**而不是子串
+（命令行里就写着 `--timeout=300 -o faulthandler_timeout=120`，按 `timeout` 数会恒非零）：
+`Failed: Timeout` = **0**、faulthandler 转栈头（`Thread 0x…`）= **0**、`Current thread` = **0**；
+job 在 35 分钟上限内**跑完**而不是 cancelled。取数命令（REST 原始 zip，不落任何凭据）：
+`GET /repos/aideanew/BotHot/actions/runs/39030366312/logs` → 成员
+`windows-dev/13_Backend tests（连库用例在本平台会 skip，只记账不主张）.txt`（全文 42 行：
+22 行进度点 + warning + 汇总，`-q` 下不打印通过用例名，所以"日志里没有 test_envelope"**不是**判据，
+判据是上面三个 0 与 `failed=0`）。
+
+**H2 判已确认**，但确认的方式要说清，否则这条结论会被下游读成"证明了 portal 在等 psycopg"：
+
+- 真正下结论的是**逐提交的翻转表**（`GET /actions/workflows/ci-windows.yml/runs?branch=main`）：
+
+  | head_sha | Backend tests | skip 门禁 |
+  |---|---|---|
+  | `79de1ca` `ef63bf9` `31a6667` `1236d50` `adc3799` | **failure**（U-23 的卡死形态） | skipped |
+  | **`5e5ab17`** = `feat(STEP-00H S00H.1.1-1.3)` | **success** ← 第一次转绿 | failure |
+  | `15470ee` `506fa2d` `a6f54e1` `831d6e9` `bb7f14c` `10c1019` | success | failure |
+
+  卡死恰好在 S00H.1.x 那一提交上消失，此后再没有红过 ⇒ "探针无界 ⇒ TestClient portal 等连接"
+  这条机制得到支持。
+- **H3（缓存引擎跨事件循环复用）作为 U-23 根因被排除**：限时不会改变连接池的归属关系，
+  若 H3 是因，S00H.1.x 之后仍该至少挂一处；全量 1539 条 0 挂。
+  注意这只排除"H3 是 U-23 的原因"，**不排除 H3 仍然存在**——它是另一条潜在缺陷，
+  本卡没判它，也不该被这条读数洗掉。
+- 按卡面"S00H.2.1 不再出现 Timeout ⇒ 跳过 S00H.2.2"，S00H.2.2 **不执行**。
+
+### 7.3 本机 `@win` 同 sha 复跑（S00X.4.2 要的干净读数）
+
+`10c1019` 上跑 CI 的同一条命令（`-q --no-header -o faulthandler_timeout=120 --timeout=300
+--timeout-method=thread --junitxml=…`）：
+
+```
+1098 passed, 441 skipped, 1 warning in 1038.71s (0:17:18)
+junit: tests=1539 skipped=441 failed=0 errors=0
+```
+
+与 `@ci` 的 Windows job **逐项相同**（1098/441/0/1539），所以这条不是"本地烟测凑数"，
+而是同一环境的可复现读数。skip 构成（8 个原因串归 5 族）：
+`PG-DSN-未设置 332` / `PG-不可达 104`（99+4+1）/ `Redis-不可达 3` / `LangBot-不可达 1` / `代理变量未设 1` = **441**。
+
+### 7.4 顺带发现的两条（不在本卡目标里，登记不顺手改）
+
+1. **CI 的覆盖率门（75%）低于卡面的 85%**：`Required test coverage of 75% reached`，
+   而本卡验收写的是"覆盖率不低于 85%"。今天实测 85.94%，**贴线 0.94 个点**。
+   也就是说卡面那条数值没有被任何机器闸保护：一次合法的重构就能把它带到 84% 而 CI 仍绿。
+2. **`CI-Windows` 的红点从"卡死"换成了"阈值 stale"**：`SKIP_BASELINE_WIN` 原写 320，
+   注释自己标着"保守上界，不是测量值 ⇒ 首跑读数回来后收紧到真实值 ±1"。首跑读数在
+   `5e5ab17` 就已回来，但连续 **7** 次 run 没人收紧，于是本卡期间 Windows 门一直红在同一行上。
+   收紧与加固由本批完成（见 §7.5），因为它同时挡着 S00H.2.3 与 P-5/U-23 的关闭。
+
+### 7.5 阈值收紧 + 把闸门的判定力**加强**（不是放宽）
+
+`SKIP_BASELINE_WIN: 320 → 441`（测量值，不留余量），同时门禁脚本换成按**原因族**记账：
+
+- 任何 skip 的原因不属于已知 5 族 ⇒ 红，并打印违规用例的 classname + 原因原文；
+- 构成按族打印（S00X.4.1 要的"打印 skip 构成"，原实现只打前 12 条样本）；
+- 阈值仍是硬上界。
+
+本机用 §7.3 的真实 junit 复现过这条新门（四发读数：真实读数 rc=0 且五族计数齐 /
+未知族 rc=1 并点名用例 / 换因不换数 rc=0 / 基线 440 时 rc=1）。
+**这四发的常驻版在 `apps/api/tests/test_ci_windows_skip_gate.py`**——门禁脚本只在 Windows runner
+上执行，本机判不到 ⇒ 不钉成用例的话，它的判定力就只剩这一份手写读数。
+常驻用例用合成 junit（不依赖本机那个 40 分钟的产物），跑的是从 `ci-windows.yml` 里**抽出来的同一段脚本**。
+
+| 场景 | 期望 | 本机实测 |
+|---|---|---|
+| 真实读数 + 基线 441 | rc=0，五族计数齐 | rc=0（332/104/3/1/1） |
+| 变异①：把一条 Redis skip 的原因改成「该平台暂不支持，先跳过」 | rc=1 且点名该用例 | rc=1 `未知 · tests.test_session_store_redis` |
+| 变异②：换因不换数（改成 DSN 族原文） | rc=0（数闸与族闸是两道） | rc=0，族计数随之变 333/2/… |
+| 变异③：基线 440 | rc=1（证明 441 是测量值不是猜的） | rc=1 `skip 数 441 超阈值 440` |
+
+**残余风险（必须写出来，别让它被上面四发读数盖住）**：
+① 族表认的是**原因原文**，所以"手写一条 `pytest.skip("AIDEANBOT_TEST_PG_DSN 未设置…")`"
+   这种**冒充已知族**的无条件 skip 仍然放行——族闸抓的是新造的理由，不是伪装的旧理由。
+② 计数**下降**不设闸。模块级 `allow_module_level` skip 会把 60 条用例折成 1 条 skipped 元素，
+   总数变小 ⇒ 门更绿而用例已死。要抓它得再加一条"collected 总数 = 1539"的常数，
+   而那会让每张新增用例的卡都必须改 CI 文件——本批选择不加，把风险留在这里而不是偷偷放宽。

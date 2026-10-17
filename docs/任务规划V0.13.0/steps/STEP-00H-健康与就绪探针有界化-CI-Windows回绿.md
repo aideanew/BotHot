@@ -1,9 +1,12 @@
 # STEP-00H 健康与就绪探针有界化 + CI-Windows 回绿（V0.13.0 新增）
 
-> 状态：**🟡 S00H.1.1–1.3 已交付（`@win` 本机，2026-10-17）**，S00H.1.4 与 S00H.2.* 只能由
-> `@ci` 判（本机无 PG）。读数在 `docs/06_validation/evidence/EVD-V13-00H/s00h_readings.md`。
+> 状态：**🟢 S00H.1.1–1.4 与 S00H.2.1 全部已确认（2026-10-17 `@ci`）**；S00H.2.2 按卡面跳过
+> （2.1 已确认 ⇒ 条件步不执行），S00H.2.3 仍待"连续 2 次 `CI-Windows` success"。
+> 读数在 `docs/06_validation/evidence/EVD-V13-00H/s00h_readings.md` §7。
 > 最有分量的一条：`tests/test_security_middleware.py`（5 条打 `/health`）改前**本机整文件跑不完**，
 > 改后与 `test_health_ready.py` 合跑 `71 passed / 0 failed / 39.64s`。
+> ⚠️ 本卡期间查明：`CI-Windows` 从 `5e5ab17` 起就再没卡过，之后的每一次红都换在了
+> `SKIP_BASELINE_WIN=320` 这条 stale 阈值上（收紧属 STEP-00X，见 §7.5）。
 > 过程中被实测推翻两个判断（`gather` 并发不等于总上界；我自己的"并发判据"原本是恒真的），
 > 并追出一个新缺陷（限流豁免集的死条目）——都写在 EVD §4/§5。
 
@@ -61,11 +64,24 @@
    - S00H.1.2.1 新增常量旁写一行注释：为什么是 3（与 redis 2s、langbot 3s 同量级；生产慢库首连 < 3s 的依据见 `evidence/314d7f2/pytest_314d7f2.txt` 真库全量 0 失败）
 3. [x] **S00H.1.3** `system.py`：抽 `_bounded(coro, seconds)` = `asyncio.wait_for` + `TimeoutError → "unreachable"`；`/health` 改 `pg, redis, langbot = await asyncio.gather(_bounded(_check_pg()), _bounded(_check_redis()), _bounded(_check_langbot()))`；`_check_schema` 内 `read_current_version_async` 同样套上界，超时按现有 `current is None → unreachable` 分支走
    - S00H.1.3.1 `PROBE_TIMEOUT_S = 3.0`，模块级常量，不进 Settings（不新增配置面）
-4. [ ] **S00H.1.4** `@linux`/`@ci` 真库全量回归（**本机无 PG，判不了**）：`passed ≥ 1478`、`failed = 0`、覆盖率不低于 85%；S00H.1.1 用例由红转绿
+4. [x] **S00H.1.4** `@linux`/`@ci` 真库全量回归（**本机无 PG，判不了**）：`passed ≥ 1478`、`failed = 0`、覆盖率不低于 85%；S00H.1.1 用例由红转绿
+   — **已确认**（`@ci` run 39030366256 @ `10c1019`：`1533 passed / 6 skipped / 0 failed`，
+   `Total coverage: 85.94%`，同 job 的 skip 门禁打的是 `pg_unreachable=0` ⇒ 那 435 条连库用例是真跑的）。
+   ⚠️ 顺带查出一条**卡面数值没有机器闸**：CI 的 `--cov-fail-under` 用的是 `COV_BASELINE=75`，
+   而本卡验收写 85%——今天 85.94% 只比卡面高 0.94 个点，一次合法重构就能把它带到线下而 CI 仍绿。
 
 ### S00H.2 Windows 判别与收口（`@ci`）
-5. [ ] **S00H.2.1** 推送后读 `CI-Windows`：若 `test_envelope.py` 不再出现 `Timeout`，H2 判**已确认**，跳过 S00H.2.2；读数（run id、head_sha、junit 汇总、日志中 `Timeout` 计数 = 0）入 EVD
-6. [ ] **S00H.2.2**（仅 S00H.2.1 仍卡时）判 H3：conftest 加 autouse 夹具，在每个用例结束后 `asyncio.run(get_engine().dispose())` （`_engine` 是 `db.py:77` 的 import 期单例，dispose 只清池不换对象）；再读一次 `CI-Windows`。仍卡 ⇒ **熔断**（D-14：第 2 次失败），停止改代码，把两次栈并排写进 EVD 并升级 fable 裁决
+5. [x] **S00H.2.1** 推送后读 `CI-Windows`：若 `test_envelope.py` 不再出现 `Timeout`，H2 判**已确认**，跳过 S00H.2.2；读数（run id、head_sha、junit 汇总、日志中 `Timeout` 计数 = 0）入 EVD
+   — **已确认**（run 39030366312 @ `10c1019`：Backend tests = success，junit
+   `1098 passed / 441 skipped / 0 failed in 987.74s`；`Failed: Timeout` = 0、
+   faulthandler 转栈头 = 0、job 在 35 分钟上限内跑完而非 cancelled）。
+   **归因不靠"最后一次读数"**：逐提交翻转表显示 `Backend tests` 恰在 `5e5ab17`
+   （= `feat(STEP-00H S00H.1.1-1.3)`）第一次转绿，其前 5 个提交全是 failure。
+   H3（缓存引擎跨事件循环）**作为 U-23 根因被排除**——限时不改池的归属关系，若 H3 是因则仍该挂；
+   但"排除它是 U-23 的原因"≠"排除它存在"，这条区分写在 EVD §7.2。
+   判据细节：`-q` 下日志本来就不打印通过用例名，所以"日志里没有 test_envelope"**不能**当判据，
+   判据是三个 0 计数 + `failed=0`。
+6. [ ] ~~**S00H.2.2**~~ **不执行**（卡面条件：仅 S00H.2.1 仍卡时）。H3 未被单独证伪，留给下游按需重开
 7. [ ] **S00H.2.3** 连续 2 次 `CI-Windows` success 后：`--timeout=300 → 120`；在本目录 `07` 与 `docs/04_engineering/cross-platform.md` 各写一句"多平台门已绿"，附两个 run id；关闭 P-5 / U-23
 
 ## 验收标准

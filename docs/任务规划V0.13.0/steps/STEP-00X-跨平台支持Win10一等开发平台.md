@@ -54,7 +54,14 @@
 8. [ ] 🛠 **S00X.4.1** `.github/workflows/ci.yml` 新增 `windows-latest` job：装 Python 3.12 + Node（按 `apps/web/.nvmrc`）→ 后端 `ruff`/`mypy`/`pytest`（**需真库的用例按标记 skip**，并在 summary 里打印 skip 构成）→ 前端 `typecheck`/`lint`/`vitest`/`build`（`NEXT_PUBLIC_API_MOCK=false`）
    - S00X.4.1.1 `ubuntu-latest` job 一行不改（正式验收面语义必须稳定）；windows job **不**跑 alembic upgrade/downgrade 往返（那是 @ci ubuntu 的出门判据，见 STEP-04）
    - S00X.4.1.2 windows job 的 `SKIP_BASELINE` 与 ubuntu 分开设定，否则"平台差异"会伪装成"回归"
-9. [ ] ✅ **S00X.4.2** 验收读数 `@ci`：push 后取 ubuntu-latest 与 windows-latest 两个 job 的 **run id + conclusion + head_sha**，按 D-V6-02 存成证据文件（`gh` 或 GitHub REST 原始响应均可，只抄 run 号不算）
+9. [x] ✅ **S00X.4.2** 验收读数 `@ci`：push 后取 ubuntu-latest 与 windows-latest 两个 job 的 **run id + conclusion + head_sha**，按 D-V6-02 存成证据文件（`gh` 或 GitHub REST 原始响应均可，只抄 run 号不算）
+   — **已确认**（REST 原始响应取数，D-V4-04：本机没有 `gh` 且不装）：
+   同 `head_sha=10c1019` 三连 `CI=success`(39030366256) / `Security=success`(39030366246) /
+   `CI-Windows=failure`(39030366312)，而 Windows 这一次红的**不是平台性断裂**而是
+   `SKIP_BASELINE_WIN=320` 这条被注释自己标为"保守上界，不是测量值"的 stale 阈值。
+   读数与构成记在 `EVD-V5-00X/win_dev_platform_readings.md` 补记 3；收紧动作（320→441 +
+   按原因族记账 + 常驻反证用例）在同一批。**Windows job 的 success 仍待下一轮 `@ci`**，
+   所以本卡的 Done 判据「两个 job 均 success」此刻是**部分确认**，不是已交付。
 
 ## 验收标准（Done 判据，全部标机器）
 - [ ] `@ci` `windows-latest` 与 `ubuntu-latest` 两个 job 均 success（run id/conclusion/head_sha 存证）
