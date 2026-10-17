@@ -409,3 +409,57 @@ def test_non_string_input_raises_instead_of_a_constant_key():
         except TypeError:
             continue
         raise AssertionError(f"normalize_url 非 str 入参未抛：{bad!r}")
+
+
+# ── S2.4（V0.13.0 重开）：`mid`/`idx` 的数字段规范化 ─────────────────────────
+
+
+def _long(mid: str, idx: str) -> str:
+    """按 `mid`/`idx` 的字面写法造一条长链（本节的判据就是要区分"写法"不同、"文章"同一篇）。"""
+    return f"https://{WECHAT_HOST}/s?__biz={BIZ_A}&mid={mid}&idx={idx}&sn=probe-a"
+
+
+def test_leading_zero_mid_and_idx_share_the_key_with_the_plain_form() -> None:
+    """S2.4.1 的第一半：`mid=02650&idx=01` 与 `mid=2650&idx=1` 必须是**同一个键**。
+
+    证据 `docs/任务规划V0.13.0/evidence/314d7f2/probe_leading_zero.txt`（@linux 现跑）：
+    改动前同一篇文章拿到 `b:…:2650:1` 与 `b:…:02650:01` 两支键，直接违反本模块的不变量①
+    "同文同键"。微信服务端把 `mid`/`idx` 按整数解析，所以带不带前导零是同一篇文章。
+    """
+    plain = _long(mid="2650", idx="1")
+    padded = _long(mid="02650", idx="01")
+    assert canonical_article_key(padded) == canonical_article_key(plain), (
+        f"前导零裂成两键：{canonical_article_key(padded)} != {canonical_article_key(plain)}"
+    )
+    assert parse_wechat_url(padded).mid == "2650"
+    assert parse_wechat_url(padded).idx == "1"
+
+
+def test_zero_valued_segments_normalize_without_collapsing_to_empty() -> None:
+    """`mid=0` 与 `mid=00` 同键，但规范化**不许把值抹成空串**。
+
+    空 `mid` 在本模块有独立语义（走 `h:` 兜底支，见 `test_malformed_long_link_falls_back_to_hash_branch`）；
+    如果 `str(int("0"))` 被写成 `""` 或 `0`，`mid=0` 的文章会被静默降级成哈希身份，
+    那是把一种身份坍缩换成另一种。
+    """
+    assert canonical_article_key(_long(mid="0", idx="1")) == canonical_article_key(_long(mid="00", idx="1"))
+    parts = parse_wechat_url(_long(mid="0", idx="0"))
+    assert parts.mid == "0" and parts.idx == "0", f"零被抹掉了：{parts.mid!r}/{parts.idx!r}"
+    assert canonical_article_key(_long(mid="0", idx="1")).startswith("b:"), "mid=0 不该掉出 b: 支"
+
+
+def test_non_numeric_and_non_ascii_segments_are_passed_through_untouched() -> None:
+    """规范化的边界：只对**纯 ASCII 十进制**生效，其余原样保留。
+
+    两个极性：
+    - `mid=12a` 不是整数，`str(int(...))` 会抛——原样保留才交给现有 `ArticleKey` pattern 把关；
+    - **`"²".isdigit()` 在 Python 里是 True 而 `int("²")` 抛 ValueError**（同样还有阿拉伯-印度数字）。
+      只判 `isdigit()` 就是拿一个"看起来是数字"的字符串去 `int()`，把一个数据质量问题
+      变成 `parse_wechat_url` 运行期崩——而它被 `Source.url` 这类自由字段直接调用。
+    """
+    assert parse_wechat_url(_long(mid="12a", idx="1")).mid == "12a"
+    for weird in ("²", "٥", "1_0"):
+        parts = parse_wechat_url(_long(mid=weird, idx="1"))  # 不许抛
+        assert parts.mid == weird, f"非 ASCII 十进制被改写了：{weird!r} -> {parts.mid!r}"
+    # 原样保留不等于"键不可用"：现有 hash 兜底/ pattern 把关仍要接住它
+    assert canonical_article_key(_long(mid="12a", idx="1"))

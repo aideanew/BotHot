@@ -100,12 +100,12 @@
 - 存量键会不会失配？存量里若真有前导零键（`证据不足`，无生产只读访问），会与新键并存——与 D-V9-01 已签的"存量不迁移、兼容层只读兜底、清理归 STEP-07"同一处理口径，**不新增裁决**，只在 STEP-07 输入清单加一行。
 
 ### Execution Steps
-1. [ ] **S2.4.1** 先红：`tests/test_article_identity.py`（或现有规范键测试文件）新增参数化用例 `mid=02650&idx=01` 与 `mid=2650&idx=1` 同键、`mid=0` 与 `mid=00` 同键、`mid=12a`（非数字）原样保留；在 314d7f2 上红。然后在 `parse_wechat_url` 返回前对 `mid`/`idx` 做 `_canon_int(x) = str(int(x)) if x.isdigit() else x`（`idx` 缺省值 `'1'` 不变）
-2. [ ] **S2.4.2** 漂移守卫：S2.3.3 的"单一键真源"守卫仍绿；`canonical_article_key` 的四条不变量测试全绿；在 `docs/03_solution/decisions/adr-0011-canonical-article-key.md` 末尾追加一段"数字段规范化"（一段话 + 本证据路径）；STEP-07 卡输入清单加"前导零存量键（若有）"
+1. [x] **S2.4.1** 先红：`tests/test_article_identity.py`（或现有规范键测试文件）新增参数化用例 `mid=02650&idx=01` 与 `mid=2650&idx=1` 同键、`mid=0` 与 `mid=00` 同键、`mid=12a`（非数字）原样保留；在 314d7f2 上红。然后在 `parse_wechat_url` 返回前对 `mid`/`idx` 做 `_canon_int(x) = str(int(x)) if x.isdigit() else x`（`idx` 缺省值 `'1'` 不变）
+2. [x] **S2.4.2** 漂移守卫：S2.3.3 的"单一键真源"守卫仍绿；`canonical_article_key` 的四条不变量测试全绿；在 `docs/03_solution/decisions/adr-0011-canonical-article-key.md` 末尾追加一段"数字段规范化"（一段话 + 本证据路径）；STEP-07 卡输入清单加"前导零存量键（若有）"
 
 ### 验收标准
-- [ ] 新用例 314d7f2 红、本卡提交绿
-- [ ] `python -c "from app.services.article_identity import canonical_article_key as k; assert k('https://mp.weixin.qq.com/s?__biz=MzA5NzY4ODk2Mg==&mid=02650&idx=01')==k('https://mp.weixin.qq.com/s?__biz=MzA5NzY4ODk2Mg==&mid=2650&idx=1')"` 退出码 0
+- [x] 新用例 314d7f2 红、本卡提交绿（本机改前 `2 failed, 1 passed`；改后 `test_article_identity.py` 29 passed）
+- [x] `python -c "from app.services.article_identity import canonical_article_key as k; assert k('https://mp.weixin.qq.com/s?__biz=MzA5NzY4ODk2Mg==&mid=02650&idx=01')==k('https://mp.weixin.qq.com/s?__biz=MzA5NzY4ODk2Mg==&mid=2650&idx=1')"` 退出码 0
 - [ ] 真库全量 `failed = 0`；`@ci` `CI` success
 
 ### 验证命令

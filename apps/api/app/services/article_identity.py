@@ -59,6 +59,24 @@ def _first(query: dict[str, list[str]], name: str) -> str:
     return values[0] if values else ""
 
 
+def _canon_int(value: str) -> str:
+    """纯 ASCII 十进制段去掉前导零（`02650` → `2650`、`01` → `1`），其余原样返回。
+
+    S2.4（V0.13.0 重开，证据 `docs/任务规划V0.13.0/evidence/314d7f2/probe_leading_zero.txt`）：
+    微信服务端把 `mid`/`idx` 按**整数**解析，所以 `mid=02650&idx=01` 与 `mid=2650&idx=1`
+    是同一篇文章；原样拼接会让它拿到两支键，违反本模块不变量①"同文同键"。
+
+    判据刻意不是 `value.isdigit()`：**`"²".isdigit()` 与 `"٥".isdigit()` 都是 True，
+    而 `int("²")` 抛 ValueError**——用 `isdigit()` 会把一个数据质量问题变成
+    `parse_wechat_url` 运行期崩溃，而它被 `Source.url` 这类自由文本字段直接调用。
+    也不许把值写成 `int` 或空串：`mid="0"` 必须还是 `"0"`，否则 `mid=0` 的文章会
+    静默掉进 `h:` 兜底支，那是把一种身份坍缩换成另一种。
+    """
+    if value.isascii() and value.isdigit():
+        return str(int(value))
+    return value
+
+
 def parse_wechat_url(url: str) -> WechatUrlParts:
     """URL → `WechatUrlParts`；`__biz` 优先于 `biz`，`idx` 缺省 `'1'`，短链取路径末段为 token。
 
@@ -83,8 +101,8 @@ def parse_wechat_url(url: str) -> WechatUrlParts:
         short_token = parsed.path[len(_SHORT_PATH_PREFIX) :].strip("/")
     return WechatUrlParts(
         biz=_first(query, "__biz") or _first(query, "biz"),
-        mid=_first(query, "mid"),
-        idx=_first(query, "idx") or _DEFAULT_IDX,
+        mid=_canon_int(_first(query, "mid")),
+        idx=_canon_int(_first(query, "idx")) or _DEFAULT_IDX,
         sn=_first(query, "sn"),
         short_token=short_token,
         host=host,

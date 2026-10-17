@@ -37,3 +37,11 @@
 | D-V2-06 | 已签 A：只读审计 → dry-run 报告 → **先在测试库实跑并验证可回滚** → **生产实跑前必须先备份**。生产库凭据属**外部凭据**：缺则停在「生产实跑」一步向用户索取，其余步骤照做 |
 | 验收面 | 本卡 Done 只能由 `@ci` **ubuntu-latest** 判定；`@win` 读数只算开发烟测，`@linux` 为依赖机本地验证 |
 | 标签 | 依 D-V6-01，本卡 `@dep` 已全部改写为 `@linux`/`@ci` |
+
+## 回填输入清单（执行方追加，2026-10-17；STEP-02 S2.4 与 STEP-04 交付后现读）
+
+| # | 待处置的存量形状 | 来源 | 回填时必须怎么做 |
+|---|---|---|---|
+| 1 | `article_manifests.article_key IS NULL` 的历史行（列由 `ab1006c1a` 可空引入） | STEP-04 S4.4.1 + D-V9-04：NULL 键行故意不入列，Diff 每轮以 `manifest.diff.null_key_backlog` 计数报出 | 用 `canonical_article_key(url)` 逐行重算；回填前后各跑一次该告警，行数应从 >0 变 0（这是门槛读数，不是日志装饰） |
+| 2 | 迁移前的**裸 token** 键（`content_assets.external_id` 与 `short_link_maps.article_key` 老行） | D-V9-01 / D-V9-03；`kb.py` 的兼容层只读兜底、不改写旧行 | 按 `content_assets.url` 重算，**不许给旧键加前缀**（末段键非单射）；并一并处置第二条 asset、第二条 doc、引擎孤儿文件与 `hit_count` 合并 |
+| 3 | **前导零形态的 `b:` 键**（若生产真有 `mid=02650` 这类上游书写） | STEP-02 S2.4（`evidence/314d7f2/probe_leading_zero.txt`）：S2.4 之后新行一律 `str(int(x))` 规范化，历史里若存在带零的键就与新键**并存** | 审计先量出有多少条（`证据不足`，本机与 CI 都无生产只读访问）；若 >0 则按规范化键合并，并复查是否已因两键产生第二条 asset/doc；若为 0 请在本表明确写"实测无此类"，不要留空 |

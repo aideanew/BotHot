@@ -105,3 +105,21 @@ grep -rn 'rsplit("/")' app/services/kb.py app/services/batch_ingest.py     # 期
 判据侧的反证已进 `docs/06_validation/evidence/EVD-V2-02/prove_article_identity.py` 的 `MUTANTS`
 （新增三条：摘掉 b: 验证 / 摘掉 s: 验证 / 让脏输入重新折叠），`--self-test` 逐条确认指定用例变红。
 §7 的三条验收命令不变，仍然有效。
+
+## 8. 数字段规范化（2026-10-17，V0.13.0 STEP-02 S2.4 追加）
+
+`b:` 支里的 `mid`/`idx` 是**整数语义**：微信服务端按数字解析它们，所以
+`mid=02650&idx=01` 与 `mid=2650&idx=1` 指向同一篇文章。键函数因此对这两段做
+`_canon_int`：纯 ASCII 十进制才 `str(int(x))`（去前导零），其余**原样保留**，
+再由 `ArticleKey` 的 pattern 把关。两个边界是这条规范化的成立条件，不是实现细节：
+
+- `"²".isdigit()` / `"٥".isdigit()` 在 Python 里为真而 `int("²")` 抛 ValueError ⇒ 判据必须是
+  `isascii() and isdigit()`，否则一条脏 URL 会把解析函数变成运行期崩溃；
+- `mid="0"` 规范化后仍是 `"0"` 而不是空串 ⇒ 空 `mid` 在本 ADR 里有独立语义（掉 `h:` 兜底支），
+  把零抹成空等于把一种身份坍缩换成另一种。
+
+同一篇文章的**短链与长链**仍是两支不同的键（`s:<token>` 与 `b:<biz>:<mid>:<idx>`），这不在
+本 ADR 的"同文同键"范围内解决：并键的读侧真源是 `short_link_maps`，见决策台账 D-V9-06
+与 `docs/06_validation/evidence/EVD-V13-22/`、STEP-04 卡头。
+证据：`docs/任务规划V0.13.0/evidence/314d7f2/probe_leading_zero.txt`；
+判据：`apps/api/tests/test_article_identity.py` 的 S2.4 三条（含两条反极性）。
