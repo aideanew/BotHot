@@ -45,15 +45,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from datetime import UTC
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
-from pydantic import ValidationError
 
-from app.contracts.collection import WorkListRow
 from app.core.config import Settings
 from app.core.errors import (
     ConfigurationError,
@@ -72,7 +69,7 @@ from app.providers.article_sources.justoneapi import JustOneApiClient
 from app.providers.article_sources.tikhub import TikhubClient
 from app.providers.article_sources.wellbyte import WellbyteClient
 from app.providers.redfox.client import RedfoxClient
-from app.services.manifest import _ID_KEYS, _TITLE_KEYS, _URL_KEYS, _first_str, _map_row, _parse_time
+from app.services.manifest import _ID_KEYS, _TITLE_KEYS, _URL_KEYS, _first_str, _map_row
 
 SAMPLE_DIR = Path(__file__).parent / "fixtures" / "provider_payloads"
 
@@ -988,33 +985,6 @@ async def test_tikhub_degrades_to_none_on_402_and_404(make_upstream_provider, kw
     assert await provider.search_articles(_KEYWORD) == []
 
 
-async def test_tikhub_detail_and_search_raise_instead_of_degrading_defect_witness(
-    make_upstream_provider,
-) -> None:
-    """⚠️ 生产缺陷见证（本卡只登记不改）：TikHub 的 4xx/5xx **抛**异常，而协议写死返回 None。
-
-    `base.py:91-97` 的契约是「返回 None 表示该平台不支持详情或获取失败（不抛异常，由
-    coordinator 降级）」，`tikhub.py:168` 的 docstring 也自述「失败时降级返回 None
-    （suppress_errors），不抛异常」——但 `_handle_response` 只对 402/404 降级，
-    5xx 抛 `DependencyUnavailableError`、其余 4xx 抛 `DiscoveryFailedError`，
-    详情与搜索两个调用点都没有 `except AppError` 兜住（对照 dajiala.py:145、
-    justoneapi 的 suppress_errors=True 两支都是降级的）。
-    眼下唯一的遮羞布是 `article_detail_fallback.py:99` 那个宽 `except Exception`：
-    今天它把异常吞成「兜底未命中」，代价是 STEP-10 的详情接线一旦按协议写「None 即降级」，
-    TikHub 那条路径就会把整条采集链打断。
-
-    本条钉的是**今天的实际行为**（抛穿），所以它同时是修复的绊线：
-    给 TikHub 补上降级之后，本条会转红，必须由修复者更新记录。
-    """
-    for status, expected in ((500, DependencyUnavailableError), (400, DiscoveryFailedError)):
-        detail_provider, seen = make_upstream_provider("tikhub", status=status, body_text="upstream bad")
-        with pytest.raises(expected):
-            await detail_provider.fetch_article_detail(_ARTICLE_URL)
-        assert len(seen) == 1
-
-        search_provider, _ = make_upstream_provider("tikhub", status=status, body_text="upstream bad")
-        with pytest.raises(expected):
-            await search_provider.search_articles(_KEYWORD)
 
 
 async def test_tikhub_search_maps_rows_with_doc_url_priority(make_upstream_provider) -> None:
@@ -1313,29 +1283,6 @@ async def test_wellbyte_search_payload_shape_defence(
     assert all(r.url == _ARTICLE_URL for r in results)
 
 
-async def test_wellbyte_search_crashes_on_null_source_defect_witness(make_upstream_provider) -> None:
-    """⚠️ 生产缺陷见证（本卡只登记不改）：`source` 键存在但为 null ⇒ 整次搜索抛 AttributeError。
-
-    `wellbyte.py:223` 写的是 `item.get("source", {})`——默认值只在**键缺失**时生效，
-    上游给 `"source": null` 时拿到的是 None，下一行 `source_info.get("dateTime")` 就炸。
-    同一文件里 142/145 两处都用的是 `... or {}`（能兜住 null），只有这里换了写法。
-    代价不是抛个错那么轻：列表里**已经映射好的行**也一起丢，一次 155cr 白烧。
-    红的变异：把它改成 `item.get("source") or {}` ⇒ 本条转红（那时该把这段见证删掉）。
-    """
-    provider, _ = make_upstream_provider(
-        "wellbyte",
-        payload={
-            "code": 0,
-            "data": {
-                "data": [
-                    {"title": "本来能映射的行", "doc_url": _ARTICLE_URL},
-                    {"title": "source 为 null 的行", "doc_url": "https://example.invalid/x", "source": None},
-                ]
-            },
-        },
-    )
-    with pytest.raises(AttributeError):
-        await provider.search_articles(_KEYWORD)
 
 
 async def test_wellbyte_search_without_key_returns_empty_without_calling(make_upstream_provider) -> None:
@@ -1472,53 +1419,10 @@ async def test_wellbyte_discovery_nested_shape_defence(make_upstream_provider) -
     assert rows[1]["publishTime"] == str(_EPOCH + 60)
 
 
-_TZ_DIVERGENCE_CASES = [
-    pytest.param("dajiala", "dajiala_detail", "post_time", id="dajiala详情"),
-    pytest.param("justoneapi", "justoneapi_detail", "create_time", id="justoneapi详情"),
-    pytest.param("wellbyte", "wellbyte_search", "source.dateTime", id="wellbyte搜索"),
-]
-
-
-@pytest.mark.parametrize(("channel", "sample", "key_label"), _TZ_DIVERGENCE_CASES)
-async def test_provider_timestamps_are_naive_local_while_the_frozen_contract_demands_aware(
-    channel: str, sample: str, key_label: str, make_upstream_provider
-) -> None:
-    """⚠️ 生产缺陷见证（本卡只登记不改）：详情/搜索的时间解析产出**无时区的本机时间**，
-    而清单消费路径同一个上游数字解出来的是 aware UTC——两套规范并存于同一条链上。
-
-    三段判据各钉一件事，缺一不可：
-    1. provider 此刻确实给出 `tzinfo is None`（`fromtimestamp(ts, tz=None)` = 主机时区的墙上钟）；
-    2. 把这个值原样喂进冻结契约 `WorkListRow.publish_time`（`AwareDatetime`，稿面字段说明
-       自己写着「provider 内即转为带时区时间」）⇒ `ValidationError: timezone_aware`。
-       **这就是代价**：STEP-10 的详情接线把 ArticleDetail 落到契约面时会当场红在这里；
-    3. 与消费端 `_parse_time` 对照：同一个数字串两条路径解出的**瞬间相同、类型不同**——
-       换一台主机（UTC 容器 vs 北京时间宿主机）provider 那侧的墙上钟读数就会差 8 小时，
-       而 manifest 那侧恒定。这一条抓的是「同一时间戳两处各判一套」那族（STEP-02 同族）。
-
-    红的变异：把 `tz=None` 改成 `tz=UTC` ⇒ 第 1、2 段立刻红（那时这段见证就该整段删掉），
-    第 3 段仍绿——正是我们要的形状：修复者必须显式处理记录，不能顺手改掉。
-    """
-    provider, _ = make_upstream_provider(channel, sample=sample)
-    if channel == "wellbyte":
-        produced = (await provider.search_articles(_KEYWORD))[0].publish_time
-    else:
-        detail = await provider.fetch_article_detail(_ARTICLE_URL)
-        assert detail is not None, f"{key_label} 那侧的详情映射本身坏了，本条的时区判据失去意义"
-        produced = detail.publish_time
-
-    assert produced is not None, f"{key_label} 没能解出时间，本条要判的东西不存在"
-    assert produced.tzinfo is None, "今天产出的是无时区的本机墙上时间"
-
-    with pytest.raises(ValidationError) as excinfo:
-        WorkListRow(id="s341", url=_ARTICLE_URL, title="T", publish_time=produced)
-    assert excinfo.value.errors()[0]["type"] == "timezone_aware"
-
-    WorkListRow(id="s341", url=_ARTICLE_URL, title="T", publish_time=produced.replace(tzinfo=UTC))
-
-    consumer_side = _parse_time(str(_EPOCH))
-    assert consumer_side is not None and consumer_side.tzinfo is not None
-    assert consumer_side.timestamp() == produced.timestamp(), "同一上游数字必须是同一瞬间"
-
+# ── STEP-20 退役了三条「生产缺陷见证」（P-15 naive 时间 / P-16 TikHub 4xx-5xx 抛穿 / P-17 source:null 打挂整页）──
+# 它们的原文各自写着「修好后本条转红，那时该把这段见证删掉/更新」，所以这三处红是**修复的证据**
+# 而不是回归。修复后的判据与极性反证在 apps/api/tests/test_provider_defects_p15_p17.py；
+# 登记见发布清单 P-27，读数见 docs/06_validation/evidence/EVD-V13-20/。
 
 def test_article_source_factory_fails_loudly_on_unknown_and_unconfigured_names() -> None:
     """工厂的两条显式失败：名字不在册、名字在册但没配 key——都不许返回一个空壳 provider。

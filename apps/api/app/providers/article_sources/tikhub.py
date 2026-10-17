@@ -25,6 +25,7 @@ import httpx
 import structlog
 
 from app.core.errors import (
+    AppError,
     DependencyUnavailableError,
     DiscoveryFailedError,
 )
@@ -183,7 +184,13 @@ class TikhubClient:
             logger.warning("TikHub v2 detail 不可达: %s", exc)
             return None
 
-        payload = await self._handle_response(resp, "v2/fetch_article_detail_h5", suppress_402=True)
+        try:
+            payload = await self._handle_response(resp, "v2/fetch_article_detail_h5", suppress_402=True)
+        except AppError as exc:
+            # P-16：兜底入口按协议降级（`base.py` 与本方法 docstring 都写「失败返回 None，不抛异常」）。
+            # 只兜领域异常 ⇒ 本仓自己的 bug（KeyError/AttributeError 一类）仍然抛穿，不会被伪装成"上游没内容"。
+            logger.warning("TikHub v2 detail 上游失败，降级返回 None: %s", exc)
+            return None
         if payload is None:
             return None
 
@@ -231,7 +238,11 @@ class TikhubClient:
             logger.warning("TikHub 搜索不可达: %s", exc)
             return []
 
-        payload = await self._handle_response(resp, "fetch_search", suppress_402=True)
+        try:
+            payload = await self._handle_response(resp, "fetch_search", suppress_402=True)
+        except AppError as exc:
+            logger.warning("TikHub 搜索上游失败，降级返回空列表: %s", exc)
+            return []
         if payload is None:
             return []
 

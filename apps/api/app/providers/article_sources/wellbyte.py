@@ -26,7 +26,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -220,13 +220,19 @@ class WellbyteClient:
         for item in items:
             if not isinstance(item, dict):
                 continue
-            source_info = item.get("source", {})
+            source_info = item.get("source") or {}
+            # JSON 的 `null` 不走 `get` 的默认值（默认值只在**键缺失**时生效），所以要 `or {}`；
+            # 再判一次 isinstance：`"source": "字符串"` 这类**真值但非对象**同样会在下一行炸掉整页，
+            # 那是同一个缺陷（一行坏 = 全页丢、155cr 白烧），不是另一种。
+            # 两件套的仓内先例就在同一个文件的清单侧：`:142` 用 `or {}`，`:143` 紧跟 isinstance。
+            if not isinstance(source_info, dict):
+                source_info = {}
             # dateTime 可能是 "4分钟前" 或时间戳
             publish_time: datetime | None = None
             dt = source_info.get("dateTime", "")
             if isinstance(dt, int | float) and dt > 0:
                 try:
-                    publish_time = datetime.fromtimestamp(int(dt), tz=None)
+                    publish_time = datetime.fromtimestamp(int(dt), tz=UTC)
                 except (ValueError, OSError):
                     pass
 

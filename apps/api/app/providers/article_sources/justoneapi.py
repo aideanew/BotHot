@@ -21,7 +21,7 @@ POST/GET 口径：history=POST form；detail v1/v5=GET query（同平台参数�
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -193,7 +193,7 @@ class JustOneApiClient:
         create_time = item.get("create_time") or item.get("public_time")
         if isinstance(create_time, int | float) and create_time > 0:
             try:
-                publish_time = datetime.fromtimestamp(int(create_time), tz=None)
+                publish_time = datetime.fromtimestamp(int(create_time), tz=UTC)
             except (ValueError, OSError):
                 pass
 

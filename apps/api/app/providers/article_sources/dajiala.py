@@ -21,7 +21,7 @@ manifest._map_row 的别名（url/title/digest/post_time）。
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -159,7 +159,7 @@ class DajialaClient:
         post_time = data.get("post_time")
         if isinstance(post_time, int | float) and post_time > 0:
             try:
-                publish_time = datetime.fromtimestamp(int(post_time), tz=None)
+                publish_time = datetime.fromtimestamp(int(post_time), tz=UTC)
             except (ValueError, OSError):
                 pass
 
