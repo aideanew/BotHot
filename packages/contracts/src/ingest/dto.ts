@@ -24,6 +24,7 @@ export interface JobItem {
   id: string;
   job_id: string;
   external_id: string;
+  manifest_id: string | null;
   url: string;
   status: string;
   error: string;

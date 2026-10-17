@@ -7,7 +7,7 @@ SSO 铁律（ADR-0002 / 主平台接入指南）：
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy import text as sa_text
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -97,7 +97,19 @@ class SourceSubscription(TimestampMixin, Base):
 
 
 class ArticleManifest(TimestampMixin, Base):
-    """发现快照：Redfox 清单行，Diff 同步基准（幂等键 = source_id + external_id）。"""
+    """发现快照：渠道清单行，Diff 同步基准（幂等键 = source_id + external_id）。
+
+    两个键不是一回事（D-V3-01）：`external_id` 是**渠道内**幂等键（redfox 的 `workUuid`，
+    STEP-03 后上游缺 id 时才退成规范键），`article_key` 是**跨渠道**文章身份键
+    （= `canonical_article_key(url)`，与 `content_assets.external_id` 同一键空间，ADR-0011）。
+    P-2 的根因正是"拿前者去减后者"——两键空间只在兜底情形下部分相交。
+
+    `article_key` 可空是裁决 **D-V9-04** 的落点：NULL 表示"尚未有身份"（存量待 STEP-07 回填），
+    而**不是**空串——`""` 不是合法 `ArticleKey`（契约 `collection.py:40-48` 要求 `b:`/`s:`/`h:`
+    前缀且 ≥8），灌进去会让所有未回填行在 Diff 里互相撞成同一个键。
+    契约侧该字段仍是**必填**：没回填的行本来就不该对外序列化（这条不对称由
+    `tests/test_manifest_asset_alignment.py` 钉住，不靠注释）。
+    """
 
     __tablename__ = "article_manifests"
 
@@ -106,13 +118,19 @@ class ArticleManifest(TimestampMixin, Base):
         String(36), ForeignKey("sources.id", ondelete="CASCADE"), nullable=False, index=True
     )
     external_id: Mapped[str] = mapped_column(String(128), nullable=False)  # workUuid
+    article_key: Mapped[str | None] = mapped_column(String(128), nullable=True)  # D-V9-04
     url: Mapped[str] = mapped_column(String(512), default="", nullable=False)
     title: Mapped[str] = mapped_column(String(512), default="", nullable=False)
     publish_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     content_hash: Mapped[str] = mapped_column(String(64), default="", nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="DISCOVERED", nullable=False)
 
-    __table_args__ = (UniqueConstraint("source_id", "external_id", name="uq_manifest_source_external"),)
+    __table_args__ = (
+        UniqueConstraint("source_id", "external_id", name="uq_manifest_source_external"),
+        # 刻意非唯一：同篇多行是旧末段键非单射留下的既成事实，唯一约束会让存量直接建不起来；
+        # "同篇是否该唯一"要等 STEP-07 读完存量才有资格判（见 ab1006c1a 迁移注释）。
+        Index("ix_manifest_source_article_key", "source_id", "article_key"),
+    )
 
 
 class ContentAsset(TimestampMixin, Base):
@@ -214,6 +232,11 @@ class JobItem(TimestampMixin, Base):
         String(36), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True
     )
     external_id: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    # STEP-04 S4.2.1：清单关联。可空且 SET NULL——JobItem 的生命周期属于 Job，
+    # 删清单不该连带删掉在途条目；留一个指向已消失清单的 id 更糟，宁可让"未关联"成为可见状态。
+    manifest_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("article_manifests.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     url: Mapped[str] = mapped_column(String(512), default="", nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="PENDING", nullable=False)
     error: Mapped[str] = mapped_column(Text, default="", nullable=False)
