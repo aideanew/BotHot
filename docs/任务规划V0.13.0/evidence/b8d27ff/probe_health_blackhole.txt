@@ -1,0 +1,5 @@
+# @linux /api/v1/system/health 黑洞探针 · main@b8d27ff · 2026-10-17
+# 命令：APP_ENV=development DATABASE_URL=postgresql+psycopg://x@10.255.255.1:5432/x REDIS_URL=redis://127.0.0.1:1/0 LANGBOT_BASE_URL=http://127.0.0.1:1 timeout 60 python probe_health_blackhole.py
+# 结果：rc=124（60s 未返回）；create_app 本身因 00W 的 3s/5s 探测上界在 ~3s 内返回（两次 schema 告警时间戳相隔 3.04s），挂死发生在 GET /health → _check_pg → get_engine()（app/db.py 业务引擎，无 connect_timeout）
+2026-10-17T01:17:59.162299 [warning  ] ⚠️ schema/code 版本不一致：DB=None, HEAD=ab1005w5b（开发环境仅告警） [app.main]
+2026-10-17T01:18:02.201826 [warning  ] ⚠️ schema/code 版本不一致：DB=None, HEAD=ab1005w5b（开发环境仅告警） [app.main]

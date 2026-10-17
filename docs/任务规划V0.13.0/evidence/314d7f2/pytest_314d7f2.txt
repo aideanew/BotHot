@@ -1,0 +1,44 @@
+# @linux 后端全量 · main@314d7f2 · 2026-10-17 12:42 CST · Debian / Py3.12 / PG16@5547 库 bothot_test
+# 命令：alembic upgrade head && python -m pytest tests/ -q --no-header -p no:cacheprovider --cov=app --cov-report=term -o faulthandler_timeout=120
+INFO  [alembic.runtime.migration] Running upgrade ab1005w5b -> ab1006c1a, STEP-04 S4.2.1：清单加规范键 `article_key` + JobItem 加关联 `manifest_id`（纯 DDL）。
+# alembic heads: ab1006c1a (head)
+........................................................................ [  4%]
+........................................................................ [  9%]
+...............................ss....................................... [ 14%]
+........................................................................ [ 19%]
+........................................................................ [ 24%]
+........................................................................ [ 29%]
+........................................................................ [ 33%]
+........................................................................ [ 38%]
+........................................................................ [ 43%]
+........................................................................ [ 48%]
+........................................................................ [ 53%]
+........................................................................ [ 58%]
+........................................................................ [ 63%]
+........................................................................ [ 67%]
+........................................................................ [ 72%]
+........................................................................ [ 77%]
+........................................................................ [ 82%]
+........................................................................ [ 87%]
+...................................................ss................... [ 92%]
+........................................................................ [ 97%]
+..........................................s                              [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.15-final-0 _______________
+
+Name                                          Stmts   Miss  Cover
+-----------------------------------------------------------------
+-----------------------------------------------------------------
+TOTAL                                          9025   1312    85%
+1478 passed, 5 skipped, 2 warnings in 108.72s (0:01:48)
+# WALL 120 s

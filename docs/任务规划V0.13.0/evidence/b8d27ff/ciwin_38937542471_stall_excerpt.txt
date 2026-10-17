@@ -1,0 +1,63 @@
+# CI-Windows run 38937542471 job 117096704798 head b8d27ff conclusion=failure；日志取自 GET /actions/jobs/117096704798/logs，逐字片段
+578:2026-10-16T17:11:26.0072172Z ##[group]Run python -m pytest tests/ -q --no-header -o faulthandler_timeout=120 --timeout=300 --timeout-method=thread --junitxml=pytest-report-win.xml
+591:2026-10-16T17:13:44.6132511Z .....ss...........................................s....s................ [  4%]
+592:2026-10-16T17:13:58.3060768Z ...................................................ss...ssssss.....sssss [  9%]
+593:2026-10-16T17:14:10.5158991Z ssssss.sssss...................ss....................................... [ 14%]
+594:2026-10-16T17:14:10.7746040Z ........................................................................ [ 19%]
+595:2026-10-16T17:14:11.8796167Z ................................................................ss...... [ 24%]
+596:2026-10-16T17:17:02.6228516Z Timeout (0:02:00)!
+636:2026-10-16T17:17:02.6269819Z   File "D:\a\BotHot\BotHot\apps\api\tests\test_envelope.py", line 48 in test_health_envelope_and_request_id_header
+669:2026-10-16T17:21:32.1530735Z Timeout (0:02:00)!
+709:2026-10-16T17:21:32.1566624Z   File "D:\a\BotHot\BotHot\apps\api\tests\test_envelope.py", line 60 in test_request_id_is_transparently_passed_through
+742:2026-10-16T17:24:38.3519715Z ...............sssssssssssssssssssssssss....................s........... [ 29%]
+743:2026-10-16T17:26:50.7259691Z Timeout (0:02:00)!
+783:2026-10-16T17:26:50.7296622Z   File "D:\a\BotHot\BotHot\apps\api\tests\test_envelope.py", line 165 in test_request_id_context_isolated_between_requests
+816:2026-10-16T17:29:50.7684709Z ..+++++++++++++++++++++++++++++++++++ Timeout +++++++++++++++++++++++++++++++++++
+916:2026-10-16T17:29:50.7790041Z   File "D:\a\BotHot\BotHot\apps\api\tests\test_envelope.py", line 166, in test_request_id_context_isolated_between_requests
+940:2026-10-16T17:29:50.7814696Z +++++++++++++++++++++++++++++++++++ Timeout +++++++++++++++++++++++++++++++++++
+596:2026-10-16T17:17:02.6228516Z Timeout (0:02:00)!
+597-2026-10-16T17:17:02.6232504Z Thread 0x0000091c (most recent call first):
+598-2026-10-16T17:17:02.6233908Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\concurrent\futures\thread.py", line 90 in _worker
+599-2026-10-16T17:17:02.6235373Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1012 in run
+600-2026-10-16T17:17:02.6236659Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1075 in _bootstrap_inner
+601-2026-10-16T17:17:02.6238079Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1032 in _bootstrap
+602-2026-10-16T17:17:02.6238678Z 
+603-2026-10-16T17:17:02.6238983Z Thread 0x00000170 (most recent call first):
+604-2026-10-16T17:17:02.6239998Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\selectors.py", line 314 in _select
+605-2026-10-16T17:17:02.6241124Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\selectors.py", line 323 in select
+606-2026-10-16T17:17:02.6242606Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\asyncio\base_events.py", line 1961 in _run_once
+607-2026-10-16T17:17:02.6244066Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\asyncio\base_events.py", line 645 in run_forever
+608-2026-10-16T17:17:02.6245011Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\asyncio\base_events.py", line 678 in run_until_complete
+609-2026-10-16T17:17:02.6245738Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\asyncio\runners.py", line 118 in run
+610-2026-10-16T17:17:02.6246601Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\anyio\_backends\_asyncio.py", line 2548 in run
+611-2026-10-16T17:17:02.6247952Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\anyio\_core\_eventloop.py", line 83 in run
+612-2026-10-16T17:17:02.6248889Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\anyio\from_thread.py", line 538 in run_blocking_portal
+613-2026-10-16T17:17:02.6249713Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1012 in run
+614-2026-10-16T17:17:02.6250484Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1075 in _bootstrap_inner
+615-2026-10-16T17:17:02.6254316Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1032 in _bootstrap
+616-2026-10-16T17:17:02.6254837Z 
+617-2026-10-16T17:17:02.6255030Z Thread 0x000012bc (most recent call first):
+618-2026-10-16T17:17:02.6255623Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 359 in wait
+619-2026-10-16T17:17:02.6256367Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 655 in wait
+620-2026-10-16T17:17:02.6257045Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1431 in run
+621-2026-10-16T17:17:02.6257791Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1075 in _bootstrap_inner
+622-2026-10-16T17:17:02.6258545Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1032 in _bootstrap
+623-2026-10-16T17:17:02.6258936Z 
+624-2026-10-16T17:17:02.6259136Z Thread 0x00000f2c (most recent call first):
+625-2026-10-16T17:17:02.6259687Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 355 in wait
+626-2026-10-16T17:17:02.6260453Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\concurrent\futures\_base.py", line 451 in result
+627-2026-10-16T17:17:02.6261293Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\anyio\from_thread.py", line 340 in call
+628-2026-10-16T17:17:02.6262434Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\starlette\testclient.py", line 351 in handle_request
+629-2026-10-16T17:17:02.6263349Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\httpx\_client.py", line 1014 in _send_single_request
+630-2026-10-16T17:17:02.6264274Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\httpx\_client.py", line 979 in _send_handling_redirects
+631-2026-10-16T17:17:02.6265181Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\httpx\_client.py", line 942 in _send_handling_auth
+632-2026-10-16T17:17:02.6266045Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\httpx\_client.py", line 914 in send
+633-2026-10-16T17:17:02.6266854Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\httpx\_client.py", line 825 in request
+634-2026-10-16T17:17:02.6268140Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\starlette\testclient.py", line 457 in request
+635-2026-10-16T17:17:02.6268971Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\httpx\_client.py", line 1053 in get
+636-2026-10-16T17:17:02.6269819Z   File "D:\a\BotHot\BotHot\apps\api\tests\test_envelope.py", line 48 in test_health_envelope_and_request_id_header
+637-2026-10-16T17:17:02.6270697Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\python.py", line 167 in pytest_pyfunc_call
+638-2026-10-16T17:17:02.6271581Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_execution.py", line 147 in _multicall
+639-2026-10-16T17:17:02.6272432Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_manager.py", line 183 in _hookexec
+640-2026-10-16T17:17:02.6273293Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pluggy\_caller.py", line 197 in __call__
+641-2026-10-16T17:17:02.6274090Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\python.py", line 1707 in runtest

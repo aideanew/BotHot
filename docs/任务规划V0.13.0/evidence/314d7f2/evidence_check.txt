@@ -1,0 +1,13 @@
+# @linux make evidence-check（= python scripts/guards.py evidence-check）· main@314d7f2 · 2026-10-17 13:15 CST
+  File "/workspace/work/BotHot/docs/06_validation/evidence/EVD-V2-00/prove_provider_shapes.py", line 509, in main
+    check_rss_execution()
+  File "/workspace/work/BotHot/docs/06_validation/evidence/EVD-V2-00/prove_provider_shapes.py", line 376, in check_rss_execution
+    mapped = [m for m in (map_row(r) for r in rows) if m]
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/work/BotHot/docs/06_validation/evidence/EVD-V2-00/prove_provider_shapes.py", line 376, in <genexpr>
+    mapped = [m for m in (map_row(r) for r in rows) if m]
+                          ^^^^^^^^^^
+  File "/workspace/work/BotHot/apps/api/app/services/manifest.py", line 192, in _map_row
+    external_id, _fallback = _row_identity(row)
+                             ^^^^^^^^^^^^^
+NameError: name '_row_identity' is not defined
