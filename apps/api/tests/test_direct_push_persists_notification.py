@@ -83,7 +83,7 @@ def test_direct_push_paths_delegate_to_the_shared_persist_fn(name: str) -> None:
 # ── 2. 真落库（连库，@ci 判）───────────────────────────────────────────────────
 
 
-async def _seed_channel(db_session: Any, channel_type: str = "web") -> str:
+async def _seed_channel(db_session: Any, channel_type: str = "web", user_id: str | None = None) -> str:
     cid = str(uuid.uuid4())
     db_session.add(
         BotChannel(
@@ -92,11 +92,29 @@ async def _seed_channel(db_session: Any, channel_type: str = "web") -> str:
             channel_type=channel_type,
             webhook_url="https://example.invalid/hook/s23" if channel_type != "web" else "",
             status="active",
-            user_id=None,
+            user_id=user_id,
         )
     )
     await db_session.flush()
     return cid
+
+
+async def _seed_user(db_session: Any, sub: str | None = None) -> tuple[str, str]:
+    """种一个"两个锚天然不同"的用户：`User.id` 是本地 UUID、`User.sub` 是 SSO 锚。
+
+    本卡的收件人判据只有在 `sub != id` 时才判得出东西——如果测试夹具让两者相等，
+    "写错锚"和"写对锚"会同时通过。
+    """
+    sid = str(uuid.uuid4())
+    user = User(
+        id=sid,
+        sub=sub if sub is not None else f"s23-sub-{sid[:8]}",
+        email=f"s23-{sid[:8]}@s23.test",
+        nickname="s23-owner",
+    )
+    db_session.add(user)
+    await db_session.flush()
+    return sid, user.sub
 
 
 async def _seed_task(db_session: Any, channel_id: str) -> str:
@@ -130,11 +148,7 @@ async def _seed_task(db_session: Any, channel_id: str) -> str:
 
 async def _count_notifications(db_session: Any, title: str) -> int:
     return int(
-        (
-            await db_session.scalar(
-                select(func.count()).select_from(Notification).where(Notification.title == title)
-            )
-        )
+        (await db_session.scalar(select(func.count()).select_from(Notification).where(Notification.title == title)))
         or 0
     )
 
@@ -221,12 +235,7 @@ async def test_non_web_channel_writes_no_notification(db_session: Any) -> None:
     stub = _StubProvider(PushResult("feishu", True, "ok"))
     original = bots_module.make_push_provider
     bots_module.make_push_provider = lambda _t: stub
-    before = int(
-        (
-            await db_session.scalar(select(func.count()).select_from(Notification))
-        )
-        or 0
-    )
+    before = int((await db_session.scalar(select(func.count()).select_from(Notification))) or 0)
     try:
         await bots_module.test_push(cid, message="S23 飞书正文", title=f"s23-fs-{uuid.uuid4().hex[:8]}", db=db_session)
     finally:
@@ -234,3 +243,69 @@ async def test_non_web_channel_writes_no_notification(db_session: Any) -> None:
 
     after = int((await db_session.scalar(select(func.count()).select_from(Notification))) or 0)
     assert after == before, "非 web 渠道被写进了站内通知历史"
+
+
+# ── 3. 收件人锚（返工轮：卡目标第二句"对收件人可见"的正面判据）──────────────────
+
+
+async def test_directed_web_channel_history_row_is_keyed_by_the_recipient_sub(db_session: Any) -> None:
+    """渠道绑了用户时，历史行的 `sub` 必须是**收件人的 SSO sub**，不是 `users.id`。
+
+    这是 STEP-23 返工轮新增的一条，起因是独立复核抓到我第一版的夹具全都 `user_id=None`
+    ⇒ 四条用例判的**只有广播那一支**，而定向那一支会把 `bot_channels.user_id`（users.id）
+    原样写进 `Notification.sub`。`_notification_scope` 按 `sub == 当前用户的 SSO sub` 过滤，
+    所以那条行是**死行**：写了，谁都查不到，而卡面那句"对收件人可见"恰好没被任何用例判过。
+    """
+    uid, usub = await _seed_user(db_session)
+    cid = await _seed_channel(db_session, user_id=uid)
+    title = f"s23-anchor-{uuid.uuid4().hex[:8]}"
+    stub = _StubProvider(PushResult("web", True, "ok"))
+    original = bots_module.make_push_provider
+    bots_module.make_push_provider = lambda _t: stub
+    try:
+        await bots_module.test_push(cid, message="S23 锚点正文", title=title, db=db_session)
+    finally:
+        bots_module.make_push_provider = original
+
+    row = (await db_session.scalars(select(Notification).where(Notification.title == title))).one()
+    assert row.sub == usub, f"历史行写的是 {row.sub!r}，收件人按 sub 过滤查不到 ⇒ 又是一条死行"
+    assert row.sub != uid, "sub 被填成了 users.id：这正是本卡第一版的形态"
+    assert row.is_broadcast is False, "定向渠道的测试推送不许标成广播（那会让全站都看到别人的定向消息）"
+    # 实时帧与历史行同锚：订阅侧 `system.py:_notification_channels` 同时挂 sub 与 users.id，
+    # 所以"帧收到了"从来不能证明"行能查到"——这里判的是两处用同一个锚。
+    assert stub.sent[-1].external_user_id == usub, "载荷锚与落库锚不同 ⇒ 帧与行各说一遍"
+
+
+async def test_unresolvable_sub_never_upgrades_a_directed_push_to_broadcast(db_session: Any) -> None:
+    """反向（返工轮的极性）：解析不到 sub 时**退回 users.id**，不许退回空串。
+
+    空串在这条链上不是"没有收件人"，而是 `is_broadcast=True`（`persist_web_notification` 的
+    分支就写在那里）。所以"为了健壮起见兜个默认值"会把一个身份缺陷换成**越权缺陷**：
+    一条定向测试推送变成全站可见。这条用例就是为了让那种好心的改法当场红。
+    """
+    uid, _ = await _seed_user(db_session, sub="")
+    cid = await _seed_channel(db_session, user_id=uid)
+    title = f"s23-nosub-{uuid.uuid4().hex[:8]}"
+    stub = _StubProvider(PushResult("web", True, "ok"))
+    original = bots_module.make_push_provider
+    bots_module.make_push_provider = lambda _t: stub
+    try:
+        await bots_module.test_push(cid, message="S23 无 sub 正文", title=title, db=db_session)
+    finally:
+        bots_module.make_push_provider = original
+
+    row = (await db_session.scalars(select(Notification).where(Notification.title == title))).one()
+    assert row.is_broadcast is False, "定向渠道落成了广播行"
+    assert row.sub == uid, f"退回锚应是 users.id，实得 {row.sub!r}"
+
+
+def test_direct_push_does_not_feed_channel_user_id_straight_into_the_recipient_anchor() -> None:
+    """本机可判的**早期线**（不是行为判据）：`test_push` 必须显式解析 `User.sub`。
+
+    写在这儿的理由是"等 CI 告诉我"太晚：这条返工在 `@ci` 上不会被任何既有用例抓住
+    （原有四条全是广播形态夹具），而源码形态是本机就能判的。
+    行为判据是上面两条连库用例（`@ci` ubuntu 判，D-V4-01）——**这条过了不代表锚点是对的**。
+    """
+    src = inspect.getsource(bots_module.test_push)
+    assert "external_user_id=ch.user_id" not in src, "又回到把 users.id 直接当收件人锚的写法"
+    assert "User.sub" in src, "没有解析 SSO sub 这一步，定向行就会写成谁都查不到的死行"

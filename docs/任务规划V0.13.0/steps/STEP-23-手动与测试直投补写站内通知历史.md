@@ -1,9 +1,16 @@
 # STEP-23 手动/测试直投补写站内通知历史（REQ-F-001 未闭环项，V0.13.0 新增）
 
-> 状态：**🟡 三个三级任务已交付（2026-10-17 `@win`）**，落库行为与真库全量仍待 `@ci`。
+> 状态：**🟡 三个三级任务已交付并经 `@ci` 转绿（`10c1019`，run 39030366256），但独立复核判完成度 ≈70% ⇒ 已开返工轮 S23.4**。
+> 返工的缘由不是行为回归，而是**用例覆盖面**：第一版四条连库用例的夹具全都 `user_id=None`，
+> 于是它们判的只有广播那一支；定向渠道会把 `bot_channels.user_id`（= `users.id`）原样写进
+> `Notification.sub`，而历史查询按 SSO sub 过滤 ⇒ 那是一条谁都查不到的**死行**，
+> 而卡面"对收件人可见"这半句从来没有用例判过。
 > 读数与两处自我纠正（含"我的注释触发了我自己的守卫"）见
-> `docs/06_validation/evidence/EVD-V13-23/s23_readings.md`。附带登记 **P-24**：
-> `test_notification_frame_id.py` 里"直投不预铸 ⇒ 载荷无 id"那句已被本卡推翻，但该文件不在本卡允许面。
+> `docs/06_validation/evidence/EVD-V13-23/s23_readings.md` §1–§3。
+> 登记三件不在本卡允许面、因此只登记不顺手做的：**P-24**（`test_notification_frame_id.py` 的旧口径）、
+> **P-25**（`web.py:41-42` 与 `persist_web_notification` 自己 docstring 里的"直投不落库/未预铸"两句在
+> 本卡之后为假）、**P-26**（`created_by` 列是 `users.id` 外键，后端兜 `"system"` 字面量、
+> 前端填 SSO sub ⇒ 建任务路径可达 500，且归属可被 operator 伪造）。
 
 | 字段 | 值 |
 |---|---|
@@ -44,7 +51,18 @@ web 渠道经 `/test` 或 `/tasks/{id}/run` 投递成功后，`notifications` �
 - [x] 新用例先红后绿（两份输出入 EVD §1/§2）
 - [ ] `grep -rn "persist_web_notification(" apps/api/app --include=*.py | grep -v "def " | wc -l` = 3（本机实测 3：调度器 1 + 本卡新增 2）
 - [ ] `@ci` `CI` success —— **待 @ci**：4 条连库行为用例在本机 skip（skip ≠ 通过）
-- [x] `git diff --name-only` ⊆ "输出"清单
+- [x] `git diff --name-only` ⊆ "输出"清单 —— **这条在第一版被照字面打了勾，而实际不成立**：
+  台账同步要求我同时改 `docs/00_governance/decisions/decision-log.md` 的 D-V10-05 行、
+  `V0.12.0/00-README.md` 的 P-24、`V0.13.0/04` 的合计与 `V0.13.0/08` 的执行记录（`831d6e9` 共 4 处清单外文档）。
+  现按实改写：**代码面 ⊆ 清单，文档面按 AGENTS"改动须同步文档与进度"另计**，两者不要混着勾。
+- [ ] **S23.4（返工轮，独立复核开出）** 定向 web 渠道的收件人锚
+  - [x] S23.4.1 先红：`test_directed_web_channel_history_row_is_keyed_by_the_recipient_sub`（本机 skip、`@ci` 判）
+  - [x] S23.4.2 修：`bots.py` 的 `test_push` 解析 `User.sub` 后才填 `external_user_id`（只改 web 一支）
+  - [x] S23.4.3 反证两条：①`test_unresolvable_sub_never_upgrades_a_directed_push_to_broadcast`
+    ——解析不到 sub 时**不许**退化成空串（空串在这条链上 = `is_broadcast=True` ⇒ 定向测试推送
+    升级成全站通知）；②`test_direct_push_does_not_feed_channel_user_id_straight_into_the_recipient_anchor`
+    ——本机可判的源码早期线（判不到行为，只防回退）
+  - [ ] S23.4.4 `@ci`：新增两条连库用例在真库上绿，且全量 `failed = 0`
 
 ## 验证命令
 ```bash

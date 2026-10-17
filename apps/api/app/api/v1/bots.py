@@ -39,6 +39,7 @@ from app.core.secret_crypto import (
 )
 from app.models.base import gen_uuid
 from app.models.bothot_entities import BotChannel, PushLog, PushTask
+from app.models.entities import User
 from app.providers.push import PushMessage, make_push_provider, registered_channels
 from app.services.cron_expr import parse_cron_next, validate_cron
 from app.services.push_scheduler import persist_web_notification
@@ -116,6 +117,7 @@ def _validate_channel_type(channel_type: str) -> None:
 # （`app/services/roles.py:44` 的 `max(...)`），所以那两个参数实际要的是 admin，operator 会被判
 # 10004。本卡目标句是「rank<operator 得 403、operator 得 200」，只有最低秩写法才满足。
 # 写接口那 8 处仍是 admin-only——这一事实连同待裁决点登记为 P-23。
+
 
 def _serialize_channel(ch: BotChannel) -> dict:
     """序列化渠道。
@@ -612,9 +614,21 @@ async def test_push(
     provider = make_push_provider(ch.channel_type)
     # 同 `/tasks/{id}/run`：web 渠道预铸 id，让实时帧与历史行同值（D-V10-05 选"也进"）。
     notification_id = gen_uuid() if ch.channel_type == "web" else ""
+    # 收件人锚：`Notification.sub` 与 SSE 频道 `bothot:notifications:{sub}` 用的都是 **users.sub**
+    # （AGENTS 关键约束 2），而 `bot_channels.user_id` 是 users.id。直接把 id 当收件人写进历史行，
+    # 历史查询按 sub 过滤就永远匹配不上——实时帧之所以还能到，只是因为订阅侧同时挂了两个锚
+    # （`system.py:_notification_channels`），那不是"写错锚也行"的理由。
+    # 只改 web 一支：`wechat_clawbot` 等渠道把 `external_user_id` 解释成自己的收件人语义。
+    recipient = ch.user_id or ""
+    if ch.channel_type == "web" and ch.user_id:
+        bound_sub = await db.scalar(select(User.sub).where(User.id == ch.user_id)) or ""
+        # 解析不到 sub 时退回原锚，**绝不退回空串**：`external_user_id=""` 在
+        # `persist_web_notification` 里等于 `is_broadcast=True` ⇒ 一条定向测试推送
+        # 会升级成全站可见的站内通知，那是把身份缺陷换成越权缺陷。
+        recipient = bound_sub or ch.user_id
     push_msg = PushMessage(
         notification_id=notification_id,
-        external_user_id=ch.user_id or "",
+        external_user_id=recipient,
         message=message,
         title=title,
         webhook_url=ch.webhook_url,
@@ -678,9 +692,7 @@ async def list_push_logs(
     q = select(PushLog).where(PushLog.bot_channel_id == channel_id)
     if status is not None:
         if status not in {"success", "failed", "dead"}:
-            raise RequestInvalidError(
-                f"非法 status: {status}（合法：success/failed/dead）"
-            )
+            raise RequestInvalidError(f"非法 status: {status}（合法：success/failed/dead）")
         q = q.where(PushLog.status == status)
     q = q.order_by(PushLog.created_at.desc())
     count_q = select(func.count()).select_from(q.subquery())
