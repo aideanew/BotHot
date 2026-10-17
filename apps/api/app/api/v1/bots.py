@@ -111,7 +111,13 @@ def _validate_channel_type(channel_type: str) -> None:
 
 
 def _serialize_channel(ch: BotChannel) -> dict:
-    """序列化渠道（不暴露 secret）。"""
+    """序列化渠道。
+
+    这里**会**回显 `webhook_url` 原文与解密后的 `extra_config`（飞书 app_secret、钉钉
+    access_token 等）：对飞书/钉钉/企业微信而言 webhook URL 本身就是投递凭据，持有即可向群里
+    发消息。所以这两个字段不是"不暴露 secret"，而是**只暴露给 operator 及以上**——
+    调用方的角色门是这份回显成立的前提（D-V10-07 / STEP-22 S22.2.3），不是可选的加固。
+    """
     return {
         "id": ch.id,
         "name": ch.name,
@@ -220,6 +226,7 @@ async def list_channels(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_roles("admin", "operator")),
 ):
     """查询渠道列表（分页）。"""
     q = select(BotChannel)
@@ -240,165 +247,6 @@ async def list_channels(
     return success(
         {
             "items": [_serialize_channel(ch) for ch in rows],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        }
-    )
-
-
-@router.get("/{channel_id}")
-async def get_channel(channel_id: str, db: AsyncSession = Depends(get_db)):
-    """查询单个渠道详情。"""
-    ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
-    if ch is None:
-        raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
-    return success(_serialize_channel(ch))
-
-
-@router.put("/{channel_id}")
-async def update_channel(
-    channel_id: str,
-    payload: ChannelUpdateRequest,
-    db: AsyncSession = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
-):
-    """更新渠道配置。Optional 字段 None = 不修改（显式空串 = 清空）。"""
-    ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
-    if ch is None:
-        raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
-
-    if payload.name is not None:
-        name = payload.name.strip()
-        if not name:
-            raise RequestInvalidError("渠道名称不能为空")
-        if len(name) > MAX_NAME_CHARS:
-            raise RequestInvalidError(f"渠道名称过长（上限 {MAX_NAME_CHARS} 字符）")
-        ch.name = name
-    if payload.webhook_url is not None:
-        if len(payload.webhook_url) > MAX_WEBHOOK_CHARS:
-            raise RequestInvalidError(f"webhook_url 过长（上限 {MAX_WEBHOOK_CHARS} 字符）")
-        ch.webhook_url = payload.webhook_url
-    if payload.secret:
-        ch.secret_enc = encrypt_channel_secret(ch.id, payload.secret)
-    if payload.extra_config is not None:
-        ch.extra_config = payload.extra_config
-    if payload.status is not None:
-        if payload.status not in ("active", "disabled"):
-            raise RequestInvalidError(f"状态非法: {payload.status}（合法：active, disabled）")
-        ch.status = payload.status
-
-    await db.commit()
-    await db.refresh(ch)
-    return success(_serialize_channel(ch))
-
-
-@router.delete("/{channel_id}")
-async def delete_channel(
-    channel_id: str,
-    db: AsyncSession = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
-):
-    """删除渠道（软删除：status → deleted）。"""
-    ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
-    if ch is None:
-        raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
-
-    ch.status = "deleted"
-    await db.commit()
-    return success({"id": channel_id, "status": "deleted"})
-
-
-# ── 测试推送 ──────────────────────────────────────────────────────────
-
-
-@router.post("/{channel_id}/test")
-async def test_push(
-    channel_id: str,
-    message: str = "BotHot 测试推送 —— 如果您收到此消息，说明渠道配置正确！",
-    title: str = "BotHot 测试推送",
-    db: AsyncSession = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
-):
-    """向指定渠道发送测试消息。"""
-    ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
-    if ch is None:
-        raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
-    if ch.status != "active":
-        raise RequestInvalidError(f"渠道已禁用: {channel_id}")
-
-    provider = make_push_provider(ch.channel_type)
-    push_msg = PushMessage(
-        external_user_id=ch.user_id or "",
-        message=message,
-        title=title,
-        webhook_url=ch.webhook_url,
-        secret=decrypt_channel_secret(ch.id, ch.secret_enc),
-        # S2.1：投递前解密（存量明文兼容读，密文 fail-closed）
-        extra_config=decrypt_extra_config(ch.id, ch.extra_config),
-    )
-
-    result = await provider.push(push_msg)
-
-    # 记录日志
-    log = PushLog(
-        bot_channel_id=ch.id,
-        status="success" if result.delivered else "failed",
-        content_preview=message[:200],
-        error_message=result.reason if not result.delivered else "",
-        response_summary=result.response_data[:500],
-    )
-    db.add(log)
-
-    # 更新统计
-    ch.total_push_count += 1
-    if result.delivered:
-        ch.success_push_count += 1
-
-    await db.commit()
-
-    return success(
-        {
-            "delivered": result.delivered,
-            "reason": result.reason,
-            "channel": result.channel,
-        }
-    )
-
-
-# ── 推送日志 ──────────────────────────────────────────────────────────
-
-
-@router.get("/{channel_id}/logs")
-async def list_push_logs(
-    channel_id: str,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    status: str | None = Query(None, description="按投递状态过滤: success/failed/dead"),
-    db: AsyncSession = Depends(get_db),
-):
-    """查询某渠道的推送日志（R3.1：分页既有，补 status 过滤）。"""
-    ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
-    if ch is None:
-        raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
-
-    q = select(PushLog).where(PushLog.bot_channel_id == channel_id)
-    if status is not None:
-        if status not in {"success", "failed", "dead"}:
-            raise RequestInvalidError(
-                f"非法 status: {status}（合法：success/failed/dead）"
-            )
-        q = q.where(PushLog.status == status)
-    q = q.order_by(PushLog.created_at.desc())
-    count_q = select(func.count()).select_from(q.subquery())
-    total = (await db.execute(count_q)).scalar() or 0
-
-    q = q.offset((page - 1) * page_size).limit(page_size)
-    rows = (await db.execute(q)).scalars().all()
-
-    return success(
-        {
-            "items": [_serialize_log(log) for log in rows],
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -482,6 +330,7 @@ async def list_push_tasks(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_roles("admin", "operator")),
 ):
     """查询推送任务列表。"""
     q = select(PushTask)
@@ -653,3 +502,173 @@ async def run_push_task_now(
             "channel": result.channel,
         }
     )
+
+
+# 顺序约束（S22.2.1）：FastAPI 按**声明顺序**匹配，`/{channel_id}` 是一条能吞掉任意单段的
+# 通配路由。静态段（`/tasks`、`/channels`……）一律声明在它**之前**，否则请求会被
+# 当成「查一个 id 等于该段名的渠道」。守卫见 `tests/test_bots_read_authz.py`。
+@router.get("/{channel_id}")
+async def get_channel(
+    channel_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_roles("admin", "operator")),
+):
+    """查询单个渠道详情。"""
+    ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
+    if ch is None:
+        raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
+    return success(_serialize_channel(ch))
+
+
+@router.put("/{channel_id}")
+async def update_channel(
+    channel_id: str,
+    payload: ChannelUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_roles("admin", "operator")),
+):
+    """更新渠道配置。Optional 字段 None = 不修改（显式空串 = 清空）。"""
+    ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
+    if ch is None:
+        raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
+
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise RequestInvalidError("渠道名称不能为空")
+        if len(name) > MAX_NAME_CHARS:
+            raise RequestInvalidError(f"渠道名称过长（上限 {MAX_NAME_CHARS} 字符）")
+        ch.name = name
+    if payload.webhook_url is not None:
+        if len(payload.webhook_url) > MAX_WEBHOOK_CHARS:
+            raise RequestInvalidError(f"webhook_url 过长（上限 {MAX_WEBHOOK_CHARS} 字符）")
+        ch.webhook_url = payload.webhook_url
+    if payload.secret:
+        ch.secret_enc = encrypt_channel_secret(ch.id, payload.secret)
+    if payload.extra_config is not None:
+        ch.extra_config = payload.extra_config
+    if payload.status is not None:
+        if payload.status not in ("active", "disabled"):
+            raise RequestInvalidError(f"状态非法: {payload.status}（合法：active, disabled）")
+        ch.status = payload.status
+
+    await db.commit()
+    await db.refresh(ch)
+    return success(_serialize_channel(ch))
+
+
+@router.delete("/{channel_id}")
+async def delete_channel(
+    channel_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_roles("admin", "operator")),
+):
+    """删除渠道（软删除：status → deleted）。"""
+    ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
+    if ch is None:
+        raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
+
+    ch.status = "deleted"
+    await db.commit()
+    return success({"id": channel_id, "status": "deleted"})
+
+
+# ── 测试推送 ──────────────────────────────────────────────────────────
+
+
+@router.post("/{channel_id}/test")
+async def test_push(
+    channel_id: str,
+    message: str = "BotHot 测试推送 —— 如果您收到此消息，说明渠道配置正确！",
+    title: str = "BotHot 测试推送",
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_roles("admin", "operator")),
+):
+    """向指定渠道发送测试消息。"""
+    ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
+    if ch is None:
+        raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
+    if ch.status != "active":
+        raise RequestInvalidError(f"渠道已禁用: {channel_id}")
+
+    provider = make_push_provider(ch.channel_type)
+    push_msg = PushMessage(
+        external_user_id=ch.user_id or "",
+        message=message,
+        title=title,
+        webhook_url=ch.webhook_url,
+        secret=decrypt_channel_secret(ch.id, ch.secret_enc),
+        # S2.1：投递前解密（存量明文兼容读，密文 fail-closed）
+        extra_config=decrypt_extra_config(ch.id, ch.extra_config),
+    )
+
+    result = await provider.push(push_msg)
+
+    # 记录日志
+    log = PushLog(
+        bot_channel_id=ch.id,
+        status="success" if result.delivered else "failed",
+        content_preview=message[:200],
+        error_message=result.reason if not result.delivered else "",
+        response_summary=result.response_data[:500],
+    )
+    db.add(log)
+
+    # 更新统计
+    ch.total_push_count += 1
+    if result.delivered:
+        ch.success_push_count += 1
+
+    await db.commit()
+
+    return success(
+        {
+            "delivered": result.delivered,
+            "reason": result.reason,
+            "channel": result.channel,
+        }
+    )
+
+
+# ── 推送日志 ──────────────────────────────────────────────────────────
+
+
+@router.get("/{channel_id}/logs")
+async def list_push_logs(
+    channel_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status: str | None = Query(None, description="按投递状态过滤: success/failed/dead"),
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_roles("admin", "operator")),
+):
+    """查询某渠道的推送日志（R3.1：分页既有，补 status 过滤）。"""
+    ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
+    if ch is None:
+        raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
+
+    q = select(PushLog).where(PushLog.bot_channel_id == channel_id)
+    if status is not None:
+        if status not in {"success", "failed", "dead"}:
+            raise RequestInvalidError(
+                f"非法 status: {status}（合法：success/failed/dead）"
+            )
+        q = q.where(PushLog.status == status)
+    q = q.order_by(PushLog.created_at.desc())
+    count_q = select(func.count()).select_from(q.subquery())
+    total = (await db.execute(count_q)).scalar() or 0
+
+    q = q.offset((page - 1) * page_size).limit(page_size)
+    rows = (await db.execute(q)).scalars().all()
+
+    return success(
+        {
+            "items": [_serialize_log(log) for log in rows],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
+
+
+

@@ -1,5 +1,11 @@
 # STEP-22 推送域读接口越权与路由遮蔽修复（V0.13.0 新增 · P0 安全）
 
+> 状态：**🟢 6 个三级任务全部交付**（2026-10-17，`@win` 本机）。四支读接口已加 `require_roles("admin","operator")`、
+> `/tasks*` 已前置、两道防复发守卫在位且各带一发反证。读数与前端调用点分析在
+> `docs/06_validation/evidence/EVD-V13-22/s22_readings.md`。
+> **仍未 Done**：验收里「探针不再是 200」与「真库全量 `failed = 0`」两条只能由 `@ci` ubuntu 判（本机无 PG，5 条连库用例 skip；skip ≠ 通过）。
+> 残余 UX 缺陷（`/bots` 入口只按登录门禁）已发布为 **P-21**，归 STEP-15b/14b；本卡禁止改 `apps/web/**`。
+
 | 字段 | 值 |
 |---|---|
 | 归属-切片 | S-M0 前提固定（安全缺陷，阻塞任何对外部署） |
@@ -39,21 +45,27 @@ rank < operator 的登录用户访问推送域任一读接口得 `403/10004` 且
 
 ## Execution Steps
 ### S22.1 先红
-1. [ ] **S22.1.1** 把探针改写成 pytest（`db_session` 夹具 + `dependency_overrides`）：①无角色用户读四个接口 → 期望 403/10004 且响应文本不含播种令牌；②operator 读 `GET /bots/tasks` → 期望 200 且 `data.items` 是列表。在 314d7f2 上跑出**红**（①得 200、②得 404）
+1. [x] **S22.1.1** 把探针改写成 pytest（`db_session` 夹具 + `dependency_overrides`）：①无角色用户读四个接口 → 期望 403/10004 且响应文本不含播种令牌；②operator 读 `GET /bots/tasks` → 期望 200 且 `data.items` 是列表。在 314d7f2 上跑出**红**（①得 200、②得 404）
+   - ✅ 本机读数（`ef63bf9` 上跑改前代码）：`2 failed, 3 passed, 5 skipped`——红落在两道**结构性**守卫上（四支漏门读接口被逐个点名；`GET /bots/tasks` 首个 FULL 匹配 = `get_channel`）。连库那 5 条本机 skip，卡面原设计的"①得 200"由 `@ci` 复现。EVD §1
 ### S22.2 修
-2. [ ] **S22.2.1** `bots.py`：把 `@router.post("/tasks")`、`@router.get("/tasks")`、`/tasks/{task_id}` 三个及 `/run` 的定义块整体上移到 `@router.get("/{channel_id}")` 之前（只移动，不改函数体）；在 `/{channel_id}` 上方留一行注释说明顺序约束
-3. [ ] **S22.2.2** 列出前端全部 `/api/v1/bots*` 调用点（`grep -rn "/api/v1/bots" apps/web/lib apps/web/app`）及其页面，写进 EVD；确认均位于需 operator 的管理页
-4. [ ] **S22.2.3** 四个读接口加 `_: str = Depends(require_roles("admin", "operator"))`（与同文件写接口同形）；`list_channel_types`(:166，只回类型枚举、不含实例数据) **不加**，在 EVD 写明理由
+2. [x] **S22.2.1** `bots.py`：把 `@router.post("/tasks")`、`@router.get("/tasks")`、`/tasks/{task_id}` 三个及 `/run` 的定义块整体上移到 `@router.get("/{channel_id}")` 之前（只移动，不改函数体）；在 `/{channel_id}` 上方留一行注释说明顺序约束
+   - ✅ 用带防呆的脚本移动（锚点整行唯一 + 移动前后代码行**多重集**相等 + 装饰器集合相等 + `ast.parse`）：`549 → 552` 代码行，丢失 0，新增只有那 3 行顺序注释。`test_idor_matrix.py` 的 93/47/31 基数锚不变
+3. [x] **S22.2.2** 列出前端全部 `/api/v1/bots*` 调用点（`grep -rn "/api/v1/bots" apps/web/lib apps/web/app`）及其页面，写进 EVD；确认均位于需 operator 的管理页
+   - ✅ 14 个调用点 + `apps/web/app/bots/page.tsx` / `PushTasksTab.tsx` / `TopBar.tsx:120` 已入 EVD §4。**卡面那句"确认均位于需 operator 的管理页"只成立一半**：`/bots` 是管理页，但导航项 `PrivateNavItem` 只按**登录**门禁 ⇒ 残余 UX 登记为 **P-21**（本卡禁止改 `apps/web/**`）。阻塞条件（普通用户功能依赖这些读接口）**未触发**，不走 fable 升级
+4. [x] **S22.2.3** 四个读接口加 `_: str = Depends(require_roles("admin", "operator"))`（与同文件写接口同形）；`list_channel_types`(:166，只回类型枚举、不含实例数据) **不加**，在 EVD 写明理由
+   - ✅ 四支齐（`require_roles` 调用点由 8 增至 12）；白名单理由 + "类型枚举里没有任何实例数据"的断言入 EVD §5 与 `test_channel_types_stays_readable_for_a_plain_user`。另更正 `_serialize_channel` 的假文案（原写"不暴露 secret"，实际回显 webhook 与解密后的 `extra_config`），见 EVD §6
 ### S22.3 防复发
-5. [ ] **S22.3.1** 在新测试文件加"路由面守卫"：枚举 `app.routes` 中前缀 `/api/v1/bots` 的所有 GET/PUT/POST/DELETE（复用 `tests/test_idor_matrix.py` 的递归摊平写法），除白名单 `list_channel_types` 外每个端点的依赖树必须含 `require_roles` ⇒ 将来新增读接口忘加门会红
-6. [ ] **S22.3.2** 新测试文件再加"路由遮蔽守卫"：对 `/api/v1/bots` 下每个静态段路径（如 `/tasks`、`/channels`），断言首个 FULL 匹配的 endpoint 就是它自己
+5. [x] **S22.3.1** 在新测试文件加"路由面守卫"：枚举 `app.routes` 中前缀 `/api/v1/bots` 的所有 GET/PUT/POST/DELETE（复用 `tests/test_idor_matrix.py` 的递归摊平写法），除白名单 `list_channel_types` 外每个端点的依赖树必须含 `require_roles` ⇒ 将来新增读接口忘加门会红
+   - ✅ `_ordered_bots_routes()` 走 `.original_router.routes` 摊平（照 `test_idor_matrix.py` 那条已踩过的坑）；反证已做：临时删掉 `list_channels` 那道门 ⇒ 守卫红、判据自检仍绿，还原后 sha 一致（EVD §3）
+6. [x] **S22.3.2** 新测试文件再加"路由遮蔽守卫"：对 `/api/v1/bots` 下每个静态段路径（如 `/tasks`、`/channels`），断言首个 FULL 匹配的 endpoint 就是它自己
+   - ✅ 三条参数化（`/bots`、`/bots/channels`、`/bots/tasks`）全绿；改前只有 `/bots/tasks` 红，说明判据有区分度而不是一刀切
 
-## 验收标准
-- [ ] 新测试在 314d7f2 红、本卡提交绿（两份原始输出入 EVD）
-- [ ] `python evidence/314d7f2/probe_bots_read_by_plain_user.py` 前两行不再是 200，且两列 `leaks` 均为 `False`（探针注入的身份不在 `users` 表，`require_roles` 经 `get_current_user_id` 会先给 `401/10001`——与对照组 PUT 同形；带真实 `users` 行、role=user 的 403/10004 判据由 S22.1.1 的 pytest 负责）
-- [ ] 路由面守卫的反证：临时删掉任一读接口的 `require_roles` ⇒ 守卫红（输出入 EVD，然后还原）
-- [ ] 真库全量 `failed = 0`；`@ci` `CI` success
-- [ ] `git diff --name-only` ⊆ "输出"清单
+## 验收标准（2026-10-17 执行后逐项状态）
+- [x] 新测试在 314d7f2 红、本卡提交绿（两份原始输出入 EVD）—— `部分确认`：红/绿两份本机读数已入 EVD §1/§2，但"在 314d7f2 上红"的**连库那一半**本机只能 skip
+- [ ] `python evidence/314d7f2/probe_bots_read_by_plain_user.py` 前两行不再是 200，且两列 `leaks` 均为 `False`（探针注入的身份不在 `users` 表，`require_roles` 经 `get_current_user_id` 会先给 `401/10001`——与对照组 PUT 同形；带真实 `users` 行、role=user 的 403/10004 判据由 S22.1.1 的 pytest 负责）—— `待 @ci`（本机无 PG）
+- [x] 路由面守卫的反证：临时删掉任一读接口的 `require_roles` ⇒ 守卫红（输出入 EVD，然后还原）—— 已做，还原经 sha256 校验
+- [ ] 真库全量 `failed = 0`；`@ci` `CI` success —— `待 @ci`
+- [x] `git diff --name-only` ⊆ "输出"清单 —— 改动落在 `apps/api/app/api/v1/bots.py`、`apps/api/tests/test_bots_read_authz.py`（新）、`docs/06_validation/evidence/EVD-V13-22/**`；文档面（卡、04 表、README P-21、08 执行记录）按"代码改动必须同步到文档"的总纪律同更，未越界改 `apps/web/**`、`deps.py`、`roles.py`、`secret_crypto.py`、契约与冻结稿
 
 ## 验证命令
 ```bash

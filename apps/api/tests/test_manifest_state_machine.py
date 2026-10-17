@@ -602,7 +602,7 @@ class _UnifySession:
         self.mapped = mapped
         self.ready = ready
         self.inflight = inflight
-        self.unified: list[str] = []
+        self.map_reads = 0
 
     async def scalars(self, stmt: Any) -> _FakeResult:
         # 按 SELECT 列表的前缀分派，而不是 `in`：候选查询的子查询里同样出现
@@ -623,6 +623,7 @@ class _UnifySession:
     async def execute(self, stmt: Any) -> _FakeRows:
         sql = _sql(stmt)
         assert "FROM SHORT_LINK_MAPS" in sql, f"并键只该读 short_link_maps：{sql[:160]}"
+        self.map_reads += 1
         return _FakeRows(self.mapped)
 
 
@@ -674,6 +675,30 @@ async def test_unification_never_fakes_a_convergence_when_the_map_is_missing() -
     svc._item_repo = _FakeItemRepo()  # type: ignore[assignment]
     out = await svc._compute_new_manifests("src-1", "sub-1")
     assert [m.id for m in out] == ["m-short"], "无映射时的正确行为是入列，而不是被并键逻辑吞掉"
+
+
+async def test_a_non_wechat_host_never_consults_the_short_link_map() -> None:
+    """并键的入口条件必须与 `canonical_article_key` 采纳 `s:` 支的条件**同一个**。
+
+    驱动这件事的证据是 `parse_wechat_url`（`article_identity.py:82`）：`/s/` 前面已经过了
+    `host == WECHAT_HOST` 那道闸。判法用"查没查表"而不是"结果对不对"：非微信 host 的行
+    一次都不该去读 `short_link_maps`——真去读了，将来某个 token 撞上一次，就会把一篇合法文章
+    误判成"已入库/已在途"而**静默不采**（本卡要消灭的冒名，反向版本）。
+    """
+    row = ArticleManifest(
+        id="m-evil",
+        source_id="src-1",
+        external_id="workUuid-evil",
+        article_key=KEY_SHORT,  # 存量里真有这种脏行：键写着 s:，host 却不是微信
+        url="https://evil.example.com/s/SHORTtoken1234",
+        title="t",
+        content_hash="h",
+        status=MANIFEST_STATUS_DISCOVERED,
+    )
+    session = _UnifySession(rows=[row], mapped=[(_SHORT_TOKEN, KEY_A)], ready=[KEY_A], inflight=[])
+    out = await _unify_svc(session)._compute_new_manifests("src-1", "sub-1")
+    assert session.map_reads == 0, "非微信 host 也去查了 short_link_maps ⇒ 并键的入口条件放宽了"
+    assert [m.id for m in out] == ["m-evil"], "不许凭一个来路不明的 s: 键把这行吞掉"
 
 
 async def test_drain_keeps_enqueued_when_the_outcome_is_not_final(
