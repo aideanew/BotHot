@@ -29,6 +29,7 @@ from sqlalchemy import func, select
 
 from app.api.v1 import bots as bots_module
 from app.models.bothot_entities import BotChannel, Notification, PushTask
+from app.models.entities import User
 from app.providers.push.base import PushMessage, PushResult
 
 
@@ -99,7 +100,15 @@ async def _seed_channel(db_session: Any, channel_type: str = "web") -> str:
 
 
 async def _seed_task(db_session: Any, channel_id: str) -> str:
+    """播种一条手动任务。
+
+    `created_by` 是 `users.id` 的 **NOT NULL 外键**（`bothot_entities.py:88-90`），
+    所以必须先有一行 user——漏了它会拿到 `NotNullViolation`，而这条只在真库上现形：
+    本机无 PG 时整组用例 skip，`skip 不是通过`。
+    """
     tid = str(uuid.uuid4())
+    owner = User(sub=f"s23-owner-{tid[:8]}", email=f"s23-owner-{tid[:8]}@s23.test", nickname="s23-owner")
+    db_session.add(owner)
     db_session.add(
         PushTask(
             id=tid,
@@ -108,6 +117,7 @@ async def _seed_task(db_session: Any, channel_id: str) -> str:
             trigger_type="manual",
             content_template="S23 直投正文",
             status="active",
+            created_by=owner.id,
         )
     )
     await db_session.flush()
