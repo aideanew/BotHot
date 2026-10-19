@@ -113,14 +113,44 @@ def test_rounds_gate_round_number_needs_a_word_boundary() -> None:
 
     没有词界时 `reorder around 3 tests` 会被判成"第 3 轮"并直接熔断——
     门一红人就停手，假红的最终代价是门被关掉（本仓已经有关掉门的先例）。
+    第 2 轮复验又补了两个同族形态：连字符前缀与下划线分隔。
     """
     assert guards._round_numbers("fix(STEP-01): tune background-3 timeout") == []
     assert guards._round_numbers("fix(STEP-01): reorder around 3 tests") == []
+    assert guards._round_numbers("fix(STEP-01): second-round 3 of the review") == []
+    assert guards._round_numbers("fix(STEP-01): back-ground-3 layout") == []
     assert guards.rounds_violations(["fix(STEP-01): tune background-3 timeout"]) == []
-    # 但真正的两种写法必须仍然计数（防"为了修假红把判据修成永远空"）
+    # 但真正的几种写法必须仍然计数（防"为了修假红把判据修成永远空"）
     assert guards._round_numbers("fix(STEP-01): round-3 closures") == [3]
     assert guards._round_numbers("fix(STEP-01): 第 3 轮返工") == [3]
     assert guards._round_numbers("fix(STEP-01): Round 3") == [3]
+    assert guards._round_numbers("fix(STEP-01): round_3 收尾") == [3]
+
+
+def test_coupling_check_refuses_when_the_base_blob_cannot_be_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """杀掉一条变异：把 `coupling_check` 里的 fail-closed 分支删掉，其余 38 例仍然全绿。
+
+    第 2 轮复验做变异测试时实测到的（"撤回接线 ⇒ 38 passed"）。纯函数 `missing_base_blobs`
+    自己的用例证明不了 `coupling_check` **真的调了它**——这正是 F-V14-06 的形态：
+    判据写在文件里，却没有任何东西保证它在执行路径上。
+    """
+    calls: list[tuple[str, ...]] = []
+
+    def fake_git(*args: str) -> tuple[int, str]:
+        calls.append(args)
+        if args[0] == "rev-parse":
+            return 0, "deadbeef"
+        if args[0] == "diff":
+            return 0, f"M\tapps/api/tests/test_seed.py\nA\t{EVIDENCE}\n"
+        if args[0] == "ls-files":
+            return 0, ""
+        if args[0] == "cat-file":
+            return 1, ""  # 基线里读不到那个 M 行的旧内容
+        return 0, ""
+
+    monkeypatch.setattr(guards, "_git", fake_git)
+    assert guards.coupling_check("HEAD") == 1, "基线取不到时必须红，不许把「读不到」当「原来没有用例」"
+    assert any(c[0] == "cat-file" for c in calls), f"根本没去核验基线 blob：{calls[:3]}"
 
 
 def test_rounds_gate_attributes_every_card_mentioned_in_a_subject() -> None:

@@ -78,16 +78,6 @@
 
 ## 5. 首轮独立评审与返工（按 D-14 口径，本卡计第 1 轮）
 
-| 项 | 状态 | 原因 |
-|---|---|---|
-| S00T.V14.3（F-14 迁移 + 脚本下线） | **暂不执行**（下一步） | 现跑已量出三处断裂与两条被推翻的在案事实，迁移要按真值重写断言，不是一行搬运 |
-| S00H.2.3（CI-Windows 连续绿收口） | **证据不足** | 规划方给的三个 run id 需我自己经 REST 复算；此刻 `git credential fill` 挂起（早前推送同一方法是通的），未复算就不写"已确认" |
-| 00T 原 9 项、00R 原 9 项 | **待执行** | 本批只交付 V14 增量 |
-| 追认项 | P-32（make 侧断裂已修，是否把 `make guard` 接进 CI）、P-33（耦合门 `<1` 与轮次门归属口径 L3-only/中文数字） | 判据解释权在规划方 |
-| STEP-24 / 25 / 26、15b、21、19、13、15、12 | **不属本会话** | 04 §5 归规划方或 Agent-API/Data；`bots.py`、`roles.py`、`hot.py`、`services/push.py` 一律未动 |
-| 并行会话脏文件 | 未 stage、未回退 | `apps/web/pnpm-lock.yaml`、`packages/contracts/src/**`（5 个 dto.ts）、`EVD-V2-02/**`（2 个）、`任务规划V0.5.0/**`（2 个）、`identity.schema.json`、`.q6.json`、`apps/api/.coverage`、`任务规划V0.4.0/V0.6.0` 的 4 个未跟踪 patch |
-## 6. 未做 / 阻塞 / 交回
-
 评审者（general-purpose 子智能体，15 次调用，一次性仓库自测）判 A/B/C/E 四条 PASS、**D 条 FAIL**、
 F 条"基本对得上，两处需追认"，给出 6 条缺陷。我逐条自己复算（不照抄），5 条成立并已修、
 1 条是卡面原文口径故保留：
@@ -109,4 +99,55 @@ ruff 净，`check_entry_parity` rc=0，`rounds-check` rc=0。
 只测"合成输入能不能触发红"是不够的——还得测**触发的方向**对不对，
 这正是我第一次端到端演示（净增 1 / 用例净增 32 ⇒ 绿）没能暴露、而一次性仓库暴露的东西。
 
+### 5b. 第 2 轮定点复验（本卡累计 2 轮，已到 D-14 上界）
 
+第 2 轮评审用了**变异测试**，因此抓到第 1 轮抓不到的东西：
+把 `coupling_check` 里「基线 blob 取不到就红」那段接线删掉，**38 例仍全绿**。
+我复算时还进一步看清：删掉接线后 `coupling_check` 因别的路径同样返回 rc=1，
+所以**只断言 rc 的用例天生抓不到这个变异** ⇒ 新增用例改断言「真的调用过 `cat-file`」，
+并用删掉接线的副本做过变异对照（`rc=1/blob=False` ⇒ 第二维必红）。
+
+同轮抓到词界残余（`second-round 3`、`back-ground-3` 仍计成第 3 轮，`my_round_3` 反而不计），
+已修并补四种真写法的正证。两处过期读数（37/38、rounds-check rc=0）就地订正：
+`rc=0` 的前提是范围非空，origin/main 追平后同一命令如实返回 rc=3——
+这正是 §3 那条第三态设计在起作用，不是缺陷。
+
+现值（脚本产生）：**38 defs / 39 collected**，`39 passed in 4.33s`。
+一条纪律性收获：**fail-closed 分支的测试必须断言它真的走了那条分支**，
+否则「判据写在文件里」和「判据在执行路径上」又是一次 F-V14-06 式的落差，只是这次发生在测试侧。
+
+
+## 6. `@ci` 读数（本轮两个推送，逐提交、不合并叙述）
+
+| 提交 | 工作流/job | 读数 | 归属判断 |
+|---|---|---|---|
+| `7a525a0`（S00R.V14.1） | frontend / backend / compose / compose-smoke / workflow-lint / 安全扫描 | 全部 **success** | — |
+| `7a525a0` | **windows-dev** | **failure** | 红在步骤 `15_Frontend typecheck + unit（vitest）`：`FAIL tests/r043-jobs-page.spec.tsx > R0.4.3 轮询纪律 > 有非终态才轮询（5s）；全部终态自动停，不空转打接口`，`Test Files 1 failed | 46 passed (47)`；日志里另有大量 `AggregateError … ::1/127.0.0.1` 的 `createConnectionError` |
+| `067ff59`（S00T.V14.1/V14.2） | 其余 6 个 job | **success** | — |
+| `067ff59` | windows-dev | 取读数时仍 `in_progress` | **未定**，落地后补 |
+
+**这不是本批引入的回归**，三条依据：
+
+1. 本批两个提交的文件集合里没有 `apps/web/**`（`git show --name-only` 可复核：
+   `7a525a0` = `apps/api/tests/test_security_middleware.py` + `EVD-V14-00R/`；
+   `067ff59` = `Makefile`、`scripts/{guards,entry,check_entry_parity}.py`、`apps/api/tests/test_guard_rounds.py` + 4 处文档）。
+2. 同一条用例本机复跑 **17 passed**（`pnpm vitest run tests/r043-jobs-page.spec.tsx`，vitest 5.0.0，5.03s）。
+   第一次我用 `--reporter=basic` 跑出 rc=1，那是 vitest 5 已移除该 reporter 的 CLI 失败，不是用例失败
+   ——记在这里是因为它差点被我读成"本地也红"。
+3. 上一个提交 `7d999db`（规划方，纯 docs）的 windows-dev 是 success ⇒ 该用例在 CI 上**时好时坏**。
+
+⇒ 定性：**Windows runner 上的时序抖动**（轮询纪律用例 + 真连接尝试），已登记 **P-34** 交前端 owner，
+不在本会话的允许面内（`apps/web/**` 归规划方）。
+本卡（Guard 线）的 Done 判据里"`@ci` 三绿且 run 的 `head_sha` 等于交付提交"这一条，
+在 `067ff59` 上**尚未成立**（windows-dev 未定），所以本卡状态写作 **部分确认**，不写"已交付并绿"。
+
+## 7. 未做 / 阻塞 / 交回
+
+| 项 | 状态 | 原因 |
+|---|---|---|
+| S00T.V14.3（F-14 迁移 + 脚本下线） | **暂不执行**（下一步） | 现跑已量出三处断裂与两条被推翻的在案事实，迁移要按真值重写断言，不是一行搬运 |
+| S00H.2.3（CI-Windows 连续绿收口） | **部分确认，动作未做** | 前置我自己复算过：规划方入库的 `evidence/fdad6dd/workflow_runs_main.json`（原始 API 转储）里 CI-Windows 恰有 3 条 run，全部 `completed/success`，head_sha 三个互不相同（`72a7a0e`/`fad54a9`/`fdad6dd`）；我又用 REST 复算了本会话两个推送（`7a525a0` windows-dev failure、`067ff59` 取数时 in_progress）。**未做收紧**的原因：`--timeout=300 → 120` 是共享 CI 门，必须先有 Windows 侧的用例耗时分布；`git credential fill` 本轮失效（GCM 缓存），改走指令里的内嵌 PAT（仅内存、输出脱敏、不落盘）后读数已拿到，缺的只是 durations 一步 |
+| 00T 原 9 项、00R 原 9 项 | **待执行** | 本批只交付 V14 增量 |
+| 追认项 | P-32（make 侧断裂已修，是否把 `make guard` 接进 CI）、P-33（耦合门 `<1` 与轮次门归属口径 L3-only/中文数字） | 判据解释权在规划方 |
+| STEP-24 / 25 / 26、15b、21、19、13、15、12 | **不属本会话** | 04 §5 归规划方或 Agent-API/Data；`bots.py`、`roles.py`、`hot.py`、`services/push.py` 一律未动 |
+| 并行会话脏文件 | 未 stage、未回退 | `apps/web/pnpm-lock.yaml`、`packages/contracts/src/**`（5 个 dto.ts）、`EVD-V2-02/**`（2 个）、`任务规划V0.5.0/**`（2 个）、`identity.schema.json`、`.q6.json`、`apps/api/.coverage`、`任务规划V0.4.0/V0.6.0` 的 4 个未跟踪 patch |

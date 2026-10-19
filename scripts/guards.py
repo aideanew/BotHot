@@ -173,7 +173,9 @@ MAX_ROUNDS = 2  # D-14：≤2 轮，第 3 轮熔断（不是 S0G.2.1 旧卡面�
 _STEP_ID_RE = re.compile(r"STEP-([0-9A-Za-z]+)")
 # `(?<![A-Za-z0-9])` 是必须的：不加词界时 `background-3`、`reorder around 3 tests`
 # 都会被当成"第 3 轮"（实测），而那是**假红**——门一红人就停手，假红的代价是门被关掉。
-_ROUND_RE = re.compile(r"第\s*(\d+)\s*轮|(?<![A-Za-z0-9])round[\s-]*(\d+)", re.IGNORECASE)
+# 第 2 轮复验又抓到同族两个漏网：`second-round 3`（`round` 前是连字符）、`back-ground-3`，
+# 所以 lookbehind 要连 `-`/`_` 一起挡；而 `round_3` 这种下划线写法仍要认 ⇒ 分隔符类加 `_`。
+_ROUND_RE = re.compile(r"第\s*(\d+)\s*轮|(?<![A-Za-z0-9_-])round[\s_-]*(\d+)", re.IGNORECASE)
 _REWORK_TOKENS = ("返工", "重做")
 _REWORK_THRESHOLD = MAX_ROUNDS + 1  # 出现「第 3 轮」这类显式轮号即红
 

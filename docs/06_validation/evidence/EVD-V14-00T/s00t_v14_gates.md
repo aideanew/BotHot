@@ -89,20 +89,20 @@ except Exception as e: print('第三处断裂:', type(e).__name__, e)
 `origin/main..HEAD` 必然为空；若空范围给 0，"检查过了"和"什么都没看"在读数上就长得一样。
 第三态沿用本仓 `evidence-check` 已有的 rc=3 口径（工具缺席 ⇒ 不是 PASS 也不是 FAIL）。
 
-## 4. 反证：37 个判据定义（收集 38 例）+ 一次性真 git 仓库端到端 10 条读数
+## 4. 反证：38 个判据定义（收集 39 例）+ 一次性真 git 仓库端到端 10 条读数
 
-> 37/38 是**首轮评审返工之后**的读数（返工前 31 定义/32 收集；§8 记了 +6 条各来自哪条缺陷）。
+> 38/39 是**第 2 轮复验之后**的读数（第 1 轮返工后 37/38，最初 31/32；§8 记第 1 轮、§11 记第 2 轮）。
 > 分组数由脚本产生（`ast.parse` + 段横幅切片）。首稿我曾按印象写成"A12+B9+C5+D3+E3"，四个组全错
 > ——这是本会话第三次手填数字，所以本版所有计数都必须有产生它的命令。
 
 | 段 | 内容 | 实测 |
 |---|---|---|
-| A | 轮次判据：2 绿 / 3 红并点名 / 裸「第3轮」即红 / 中英两种轮号写法 / 裸「返工·重做」计数 / 跨卡不误计 / 无标记不计数 / **词界反证（`background-3`、`around 3` 不算轮号）** / **跨卡提及同时计数（卡面口径）** / **L3-only 主题不归属的实测盲区** / 坏基线 fail-closed / 空范围第三态 | 13 |
+| A | 轮次判据：2 绿 / 3 红并点名 / 裸「第3轮」即红 / 中英两种轮号写法 / 裸「返工·重做」计数 / 跨卡不误计 / 无标记不计数 / **词界反证（`background-3`、`around 3`、`second-round 3`、`back-ground-3` 不算轮号，而 `round-3`/`第 3 轮`/`Round 3`/`round_3` 仍计数）** / **跨卡提及同时计数（卡面口径）** / **L3-only 主题不归属的实测盲区** / 坏基线 fail-closed / 空范围第三态 | 14 |
 | B | 耦合判据：红绿两向、净减也红、未跟踪支计入、证据脚本改名不计、**`test_` 前缀被改掉 ⇒ 旧用例计为消失**、`test_` 之间改名两侧各算、**基线 blob 取不到先证伪（不许当 0）**、删除可抵消、AST vs 行数、两个 glob 的负例、`--name-status` 解析 | 13 |
 | C | 接线判据：子命令注册、`make guard` 前置覆盖全部门、**未定义变量的多路反证（含裸 `$F` 与 `$$(shell …)`）**、`check_entry_parity` 仍绿、耦合门位置、坏基线 fail-closed、裁决编号出现在门源码里 | 7 |
 | D | 端到端（`tmp_path` 里 `git init` 造一次性真仓库）：3 轮熔断、空范围/坏基线、孤儿证据脚本被拦后放行 | 3 |
 | E | 主仓交叉核对：门的 git 侧取值 == 独立第二遍重数 | 1 |
-| | **合计 defs 37 / 收集 38**（`test_signed_rulings_are_now_named_in_the_gate_sources` 以 `D-14`、`D-V4-03` 两个 token 参数化，1→2） | |
+| | **合计 defs 38 / 收集 39**（`test_signed_rulings_are_now_named_in_the_gate_sources` 以 `D-14`、`D-V4-03` 两个 token 参数化，1→2） | |
 
 端到端那 10 条读数**已固化成 D 组 pytest 用例**（`test_end_to_end_*`），不再依赖一次性脚本；
 复现命令就是 `cd apps/api && python -X utf8 -m pytest tests/test_guard_rounds.py -q -k end_to_end`。
@@ -202,7 +202,9 @@ V0.14.0/04 §5 给 Agent-Guard 的 W 面是 `scripts/guards.py`、`Makefile`、`
 **37 个 test 定义 / 收集 38 例**（返工前 31/32，本轮回 +6 定义）；
 `pytest tests/test_guard_rounds.py` ⇒ `38 passed in 3.45s`；
 `ruff check tests/test_guard_rounds.py` ⇒ 净；`check_entry_parity.py` ⇒ rc=0；
-`guards.py rounds-check` ⇒ rc=0（范围 `origin/main..HEAD` 2 个提交）；
+`guards.py rounds-check` ⇒ rc=0（范围 `origin/main..HEAD` 2 个提交）
+【第 2 轮订正：这条的前提是范围非空。复验时 origin/main 已追平 HEAD ⇒ 同一命令如实返回 **rc=3**，
+属设计内的第三态；要复现 rc=0 需显式 `--base <祖先提交>`，实测 `--base HEAD~2` ⇒ rc=0、`--base v1.0.0` ⇒ rc=0】；
 `guards.py evidence-check --base HEAD` ⇒ 耦合门打印「证据脚本净增 0，用例净增 37」后放行，
 仍在 `prove_provider_shapes.py` 处 rc=1（F-14，归 V14.3，非本批引入）。
 
@@ -242,3 +244,33 @@ V0.14.0/04 §5 给 Agent-Guard 的 W 面是 `scripts/guards.py`、`Makefile`、`
 - 未改动：任何 `app/**` 生产代码、任何冻结契约、他人并行会话的脏文件
   （`apps/web/pnpm-lock.yaml`、`packages/contracts/src/**`、`EVD-V2-02/**`、`任务规划V0.5.0/**`、
   `identity.schema.json`、`.q6.json`、`apps/api/.coverage` 等，一律未 stage）。
+
+## 11. 第 2 轮定点复验与第二轮返工（D-14 口径：本卡累计 2 轮，已到上界）
+
+第 2 轮评审做了第 1 轮没做的事：**变异测试**（逐条撤回修复，看用例是否还绿）。
+判 5 条处置成立、**第 4 条"部分通过"**，另给 3 条新发现。逐条复算与处置：
+
+| # | 主张 | 我的复算 | 处置 |
+|---|---|---|---|
+| N1 | `coupling_check` 里"基线 blob 取不到 ⇒ 红"那段接线**删掉后 38 例仍全绿** | 成立，且看清了原因：删接线后 `coupling_check` 因别的路径**同样返回 rc=1**，所以"只看 rc"的断言抓不到这个变异 | **MED 已修**：新增 `test_coupling_check_refuses_when_the_base_blob_cannot_be_read`，用 `monkeypatch` 替换 `guards._git`，除 rc 外**再断言"真的调用过 `cat-file`"** |
+| N2 | 词界残余：`second-round 3`、`back-ground-3` 仍计成第 3 轮；`my_round_3` 反因分隔符不含下划线而不计 | 两条都复现 | **已修**：lookbehind 加连字符与下划线、分隔符类加下划线；反证同时钉住 `round-3`、`第 3 轮`、`Round 3`、`round_3` 四种真写法仍计数 |
+| N3 | 文档两处读数过期 | 成立 | 见 §4（38 defs / 39 collected，A14）与 §8 末尾那条【第 2 轮订正】 |
+
+变异对照（`.staging/mutation_check.py` 的等价做法：造一个删掉接线的副本，喂同一组 fake git）：
+
+```
+现行实现   : rc=1  核验过基线 blob=True
+变异体实现 : rc=1  核验过基线 blob=False
+  断言1 rc==1            → 仍成立（抓不到变异）
+  断言2 必须调用 cat-file → 变红（能抓到）
+结论： 这条用例是真变异杀手（第二维在变异体上必红）
+```
+
+**教训（写进 §10 的延伸）**：`rc` 相同不代表路径相同。fail-closed 分支的测试必须断言
+"它真的走了那条分支的证据"（这里是一次额外的 git 调用），否则整条判据可以被人默默摘掉——
+这与 F-V14-06"裁决签了但没有任何代码执行它"是同一个失真，只是这次发生在测试侧。
+
+第 2 轮后的计数（脚本产生）：**38 个 test 定义 / 收集 39 例**，`39 passed in 4.33s`；
+`rounds-check`：`--base HEAD~2` ⇒ rc=0、默认（origin/main==HEAD）⇒ rc=3、`--base HEAD` ⇒ rc=3；
+`check_entry_parity.py` ⇒ rc=0；`ruff check tests/test_guard_rounds.py` ⇒ 净
+（`scripts/guards.py:137` 那条 E501 是 HEAD 既有，属他人代码，未顺手改）。
