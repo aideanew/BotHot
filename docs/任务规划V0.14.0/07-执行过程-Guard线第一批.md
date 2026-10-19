@@ -218,3 +218,38 @@ ruff 净，`check_entry_parity` rc=0，`rounds-check` rc=0。
 | 收紧要登记，不许静默 | 四处收紧（ALLOW 段级、re.compile 收窄、用户名位打码、实扫 0 落第三态）全写进 §7 偏离表与 §2 |
 | 不替别人决定判据口径 | P-36 的 47 条赋值形命中（31 条表达式引用 + 16 条夹具字面量，后者只到"抽样"口径）、两条反向缺口、`secret_shape_gate.py` 自称逐字符一致实差一个字符类——都只登记不代修 |
 | 改动面越界要自曝 | 卡面禁止栏含 `apps/**`，而判据用例必须进 `apps/api/tests/**`：动机与偏离写在 §7 最后一行 |
+
+## 9. `@ci` 读数（交付提交 `56a9049`，逐条、不合并叙述）
+
+推送 `97f1d61..56a9049`；取数后用 `git fetch` 复算：`HEAD == origin/main`，
+`git rev-list --left-right --count HEAD...origin/main` = `0 0`，remote URL 无凭据残留。
+凭据一事如实记下：指令附件里去重后有 3 枚 PAT，我先用 `found[0]` 推送得到
+`403 Permission to aideanew/BotHot.git denied to nevermeetagain`，再用 API 逐枚查身份与权限
+（只打印 login 与布尔权限，不打印值）⇒ `aideanew` 那枚 `permissions.push=True`，改用它才推上去。
+**教训**：多枚凭据并存时"能 ls-remote"不等于"能 push"（本仓是 public，读通是假信号），
+选枚必须看 `/user` 的 login 与该仓的 push 权限两项。
+
+| 工作流 / job | 读数 | run id | 说明 |
+|---|---|---|---|
+| Security（pip-audit / pnpm audit / trivy / gitleaks） | completed / **success** | 39214424679 | 本提交未引入新凭据形；gitleaks 走 git 模式遍历全历史 |
+| CI（ubuntu）backend / frontend / compose / compose-smoke / workflow-lint | 五个 job 全 completed / **success** | 39214424726 | 敏感形门的 58 条新判据用例随 `pytest tests/` 进 CI 并成立 |
+| CI-Windows windows-dev | completed / **success**（17 步全绿，含第 15 步 vitest 与第 14 步 skip 门禁） | 39214424699 | 耗时约 20 分钟 ⇒ P-34 那条用例本轮没抖；skip 门禁阈值 444 与本机现读 444 同数 |
+
+⇒ 本卡的 `@ci` 面（04 §8 完成定义里的"三绿且 run 的 head_sha 等于交付提交"）**成立**，
+读数是三条不同工作流、同一 head_sha。
+
+## 10. 一条墙钟判据在负载下假红（登记 P-38，未在本会话修）
+
+同一提交集本机跑了两遍 `pytest tests/`：
+
+| 轮次 | 机器状态 | 读数 |
+|---|---|---|
+| 第一遍（`-x`） | 同时挂着 3 个 pytest 进程（前两次未杀净的后台套件） | **1 failed**：`test_startup_probe_timeout.py::test_import_time_schema_probe_is_bounded_against_blackhole_db`，断言 `assert 9.14 < 8.0` |
+| 第二遍（无 `-x`） | 独占机器 | **1273 passed / 444 skipped / rc=0**（17:46） |
+
+定性：**可疑抖动，不是本批后果**——本批没碰 `core/schema_guard`、探针实现或该用例；
+上游 CI 同提交全绿。但"一次复跑通过"不足以把它说成已排除：我只有一枚失败样本，
+因果链（负载 ⇒ 黑盒探测的墙钟）是推断而非测量。⇒ 登记 P-38 交规划方/Agent-Guard 决定口径：
+墙钟上界类判据要么给出"独占复跑才算数"的执行约定，要么改成与无界基线相比的**比值**判据。
+顺带一条纪律沉淀：**后台套件必须确认进程真的退出**（本会话 `TaskStop` 报 killed 但子进程仍在跑，
+`tasklist` 复核才确认干净），否则"我的改动导致红"会被机器负载替罪。

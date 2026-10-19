@@ -135,3 +135,10 @@ Makefile 与 `scripts/entry.py` **本轮未改**：`evidence-check` 的目标体
 本轮提交主题带着「返工」与「第 2 轮」两个记号，让 `rounds-check` 的计数与这本账互相对得上；
 **第 3 轮由门熔断**，再要动这张卡需规划方重新立案或另开卡。细则见 `EVD-V4-00P` §9。
 
+`@ci`（交付提交 `56a9049`，双端 `0 0` 已复算）：Security run `39214424679` **success**、
+CI run `39214424726` **success**（backend/frontend/compose/compose-smoke/workflow-lint 五 job 全绿，
+本卡的 58 条新判据用例随 `pytest tests/` 在 CI 上成立）、CI-Windows run `39214424699`
+**success**（17 步全绿，含第 15 步 vitest 与第 14 步 skip 门禁）。
+本机独占复跑 `pytest tests/` ⇒ 1273 passed / 444 skipped / rc=0。
+读数与一条并发负载下的墙钟假红（P-38）记在 `docs/任务规划V0.14.0/07-执行过程-Guard线第一批.md` §9-§10。
+

@@ -194,7 +194,9 @@ git diff --cached --name-only | tail -2                          # 默认口径�
 「含该步」成立，「这一维对本批 8 个路径给 0 命中」成立；
 整门在本机回到 **3 而不是 0**，原因是 §1.3 那条 Windows 专属的权威步 fail-open（P-37）——
 不是这一新步的判定。不为了凑那个 0 去放宽 §1.3 的 tripwire，改判据口径见 §11.2 的代价说明。
-「ubuntu 侧不会有这条 3」是**推论**（根因在 Git for Windows 的 system 级属性文件），本机无法现跑 ⇒ 标未验证。
+「ubuntu 侧不会有这条 3」是**推论**（根因在 Git for Windows 的 system 级属性文件）。
+本次交付提交在 ubuntu 上跑同版 gitleaks（Security run `39214424679` success）⇒ 权威扫描本身在
+ubuntu 正常；但 `guards.py` 不被任何工作流调用，所以"这条 3 只在 Windows 出现"**仍未直接验证** ⇒ 保持标未验证。
 
 最后一轮跑出的完整读数（同一批、索引未变）：
 `敏感形门（STEP-00P S00P.1.1）：待检 8 个路径（取材面=index），实扫 8，跳过 0，HIGH 0，ALLOWED 放行 0`
@@ -264,6 +266,7 @@ P-36 讲的多是「假阳性挡人」，但同一条启发式还有相反方向
 | `.gitleaksignore` 逐指纹（工作树打码不消除历史指纹） | 未动 | STEP-00S（卡面 S00P.3.1 明确不并入） |
 | 把 `make guard` / `evidence-check` 接进 CI | 未做 | 规划方（P-32 追认项）。现读：`.github/workflows/*.yml` 对 guard/evidence-check **零命中** ⇒ 这道门目前只在本机生效 |
 | `secret_shape_scan.py` 的 pytest 化 | 未做 | 00T 原 S0T.2.x 迁移队列（本卡的 §1.1 读数会被那条迁移影响，届时对账用例一并处置） |
+| 本机并发负载下一条**无关**墙钟判据假红（本会话验证路径上的观察） | 已登记 **P-38**，未修、未调阈值 | STEP-00H（探针有界化）owner；两遍读数与定性写在 `07-执行过程` §10 |
 
 ## 9. 轮次账（D-14）
 
