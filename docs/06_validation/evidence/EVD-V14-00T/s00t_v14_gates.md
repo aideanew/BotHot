@@ -12,7 +12,7 @@ D-V11-04（阈值以 D-14 为准）、F-V14-06（两条裁决在 `scripts/`、`M
 | F-V14-06：`git grep -n "D-14" scripts/` 0 命中 | `git grep -n "D-14" -- scripts/ Makefile .github/` | 0 命中（`D-V4-03` 同） | 已确认 |
 | F-V14-05：`prove_provider_shapes.py` rc=1 | `python scripts/guards.py evidence-check` | **rc=1**，`NameError: name 'ManifestStatus' is not defined`（`manifest.py:50`） | 已确认，但根因比卡面更深（见 §2） |
 | 01 §3：本机全量 1 failed（环境泄漏） | `pytest tests/test_security_middleware.py -k production_guard` + 宿主设 `PUSH_SECRET_MASTER_KEY` | `assert 7 == 8` FAILED | 已确认 ⇒ 已由 S00R.V14.1 密封 |
-| 04 §8：Done 定义引用 `make guard` | `grep -n "^guard:" Makefile` | **不存在** | 存在缺陷 ⇒ F-V14-09 |
+| 04 §7：Done 定义引用 `make guard` | `grep -n "^guard:" Makefile` | **不存在** | 存在缺陷 ⇒ F-V14-09 |
 
 ## 2. F-14 的真实形状：不是"一处 NameError"，而是"这个取证形态已经整体失效"
 
@@ -91,7 +91,7 @@ except Exception as e: print('第三处断裂:', type(e).__name__, e)
 
 ## 4. 反证：38 个判据定义（收集 39 例）+ 一次性真 git 仓库端到端 10 条读数
 
-> 38/39 是**第 2 轮复验之后**的读数（第 1 轮返工后 37/38，最初 31/32；§8 记第 1 轮、§11 记第 2 轮）。
+> 38/39 是**第 2 轮复验之后**的读数（第 1 轮返工后 37/38，最初 31/32；§7 记第 1 轮、§7 记第 2 轮）。
 > 分组数由脚本产生（`ast.parse` + 段横幅切片）。首稿我曾按印象写成"A12+B9+C5+D3+E3"，四个组全错
 > ——这是本会话第三次手填数字，所以本版所有计数都必须有产生它的命令。
 
@@ -133,11 +133,11 @@ PASS  推送后空范围 ⇒ 3
    范围因此为空。若只写"真文件 == 绿"那种判据，这个 bug 会让 demo 一直显示"绿"而无人起疑。
 2. 主仓上第一次跑耦合门 demo 判成**绿**（`净增 1，用例净增 32`），因为本批自己就带了 32 条新用例——
    也就是说"看到门打印了"不等于"门开过火"。改到一次性仓库里把用例数置零才拿到真红。
-   这条写进 §7 局限：**门的红必须在与当前批次无关的状态上证明**。
+   这条写进 §9 局限：**门的红必须在与当前批次无关的状态上证明**。
 
 ## 5. 顺带查出的 make 侧断裂（F-V14-09 / F-V14-10，已一并修）
 
-- **F-V14-09**：`docs/任务规划V0.14.0/04 §8` 的完成定义引用 `make guard`，而 Makefile 里
+- **F-V14-09**：`docs/任务规划V0.14.0/04 §7` 的完成定义引用 `make guard`，而 Makefile 里
   **没有** `guard` 目标。
 - **F-V14-10（更严重）**：`$(GUARDS)` 在 Makefile 里被 5 条 recipe 使用，却**从未定义**。
   实测 HEAD 版 Makefile：
@@ -182,7 +182,7 @@ V0.14.0/04 §5 给 Agent-Guard 的 W 面是 `scripts/guards.py`、`Makefile`、`
 两处都是"被既有机器门强制要求"而不是我自作主张扩面，请规划方在追认里判：
 是否把 `scripts/entry.py`、`scripts/check_entry_parity.py` 正式并入 Agent-Guard 的 W 面。
 
-## 8. 首轮独立评审的 6 条与本轮返工（第 1 轮，D-14 计 1 次）
+## 7. 首轮独立评审的 6 条与本轮返工（第 1 轮，D-14 计 1 次）
 
 评审者（general-purpose 子智能体，15 次调用）判 **D 条 FAIL**、其余 PASS，并给出 6 条缺陷。
 **六条我全部自己复算过**（`.staging/verify_review_claims.py` 的思路已内联成下面的命令），
@@ -215,7 +215,7 @@ V0.14.0/04 §5 给 Agent-Guard 的 W 面是 `scripts/guards.py`、`Makefile`、`
 三处 NameError 全中），并复核了 `undefined_variables(HEAD)=['GUARDS']`、`make -f old_Makefile`
 的 `Error 2`、`grep -n "^guard:" HEAD:Makefile` 无命中。
 
-## 9. 追认清单（本轮不自己批自己）
+## 8. 追认清单（本轮不自己批自己）
 
 - P-33 ①：耦合门把卡面的「用例净增 = 0 ⇒ 红」实现成 `< 1`。
 - P-33 ②：`rounds-check` 空范围返回 **rc=3** 而非 0——卡面未规定第三态，这是我加的防伪装；
@@ -225,7 +225,7 @@ V0.14.0/04 §5 给 Agent-Guard 的 W 面是 `scripts/guards.py`、`Makefile`、`
 - P-32：`make guard` 已存在且 `$(GUARDS)` 已定义；是否把它接进 CI 由规划方定。
 - 所有权：`scripts/entry.py`、`scripts/check_entry_parity.py` 本批被机器门逼着动了（§6）。
 
-## 10. 前提 / 局限 / 未验证
+## 9. 前提 / 局限 / 未验证
 
 - 前提：D-14 的归属口径是 `STEP-<id>`。**已实测的盲区**：主题只写 L3 号（如 `S1.3.2`）时不归属，
   仓内真实存在这样一条（`docs(裁决台账): …S1.3.2 的…第 7 轮熔断`），门对它放行。
@@ -245,7 +245,7 @@ V0.14.0/04 §5 给 Agent-Guard 的 W 面是 `scripts/guards.py`、`Makefile`、`
   （`apps/web/pnpm-lock.yaml`、`packages/contracts/src/**`、`EVD-V2-02/**`、`任务规划V0.5.0/**`、
   `identity.schema.json`、`.q6.json`、`apps/api/.coverage` 等，一律未 stage）。
 
-## 11. 第 2 轮定点复验与第二轮返工（D-14 口径：本卡累计 2 轮，已到上界）
+## 10. 第 2 轮定点复验与第二轮返工（D-14 口径：本卡累计 2 轮，已到上界）
 
 第 2 轮评审做了第 1 轮没做的事：**变异测试**（逐条撤回修复，看用例是否还绿）。
 判 5 条处置成立、**第 4 条"部分通过"**，另给 3 条新发现。逐条复算与处置：
@@ -254,7 +254,7 @@ V0.14.0/04 §5 给 Agent-Guard 的 W 面是 `scripts/guards.py`、`Makefile`、`
 |---|---|---|---|
 | N1 | `coupling_check` 里"基线 blob 取不到 ⇒ 红"那段接线**删掉后 38 例仍全绿** | 成立，且看清了原因：删接线后 `coupling_check` 因别的路径**同样返回 rc=1**，所以"只看 rc"的断言抓不到这个变异 | **MED 已修**：新增 `test_coupling_check_refuses_when_the_base_blob_cannot_be_read`，用 `monkeypatch` 替换 `guards._git`，除 rc 外**再断言"真的调用过 `cat-file`"** |
 | N2 | 词界残余：`second-round 3`、`back-ground-3` 仍计成第 3 轮；`my_round_3` 反因分隔符不含下划线而不计 | 两条都复现 | **已修**：lookbehind 加连字符与下划线、分隔符类加下划线；反证同时钉住 `round-3`、`第 3 轮`、`Round 3`、`round_3` 四种真写法仍计数 |
-| N3 | 文档两处读数过期 | 成立 | 见 §4（38 defs / 39 collected，A14）与 §8 末尾那条【第 2 轮订正】 |
+| N3 | 文档两处读数过期 | 成立 | 见 §4（38 defs / 39 collected，A14）与 §7 末尾那条【第 2 轮订正】 |
 
 变异对照（`.staging/mutation_check.py` 的等价做法：造一个删掉接线的副本，喂同一组 fake git）：
 
@@ -266,7 +266,7 @@ V0.14.0/04 §5 给 Agent-Guard 的 W 面是 `scripts/guards.py`、`Makefile`、`
 结论： 这条用例是真变异杀手（第二维在变异体上必红）
 ```
 
-**教训（写进 §10 的延伸）**：`rc` 相同不代表路径相同。fail-closed 分支的测试必须断言
+**教训（写进 §7 的延伸）**：`rc` 相同不代表路径相同。fail-closed 分支的测试必须断言
 "它真的走了那条分支的证据"（这里是一次额外的 git 调用），否则整条判据可以被人默默摘掉——
 这与 F-V14-06"裁决签了但没有任何代码执行它"是同一个失真，只是这次发生在测试侧。
 
@@ -274,3 +274,76 @@ V0.14.0/04 §5 给 Agent-Guard 的 W 面是 `scripts/guards.py`、`Makefile`、`
 `rounds-check`：`--base HEAD~2` ⇒ rc=0、默认（origin/main==HEAD）⇒ rc=3、`--base HEAD` ⇒ rc=3；
 `check_entry_parity.py` ⇒ rc=0；`ruff check tests/test_guard_rounds.py` ⇒ 净
 （`scripts/guards.py:137` 那条 E501 是 HEAD 既有，属他人代码，未顺手改）。
+
+
+## 11. S00T.V14.3 交付：F-14 迁移 + 脚本下线（同日续做，`evidence-check` 首次 rc=0）
+
+### 12.1 迁出来的东西
+
+`apps/api/tests/proofs/test_provider_shapes.py`（新目录 `tests/proofs/`，00T 卡 §7 的输出路径）：
+**13 个 test 定义 / pytest 收集 31 例**，按 `--collect-only` 的分组实测：
+A 组 16（5 样本合法性 + 5 主路径读取键 + 6 容器层级）、B 组 6（2 良构产行 + 2 可行消费
++ D-04 aware + Atom 两支回落）、C 组 6（4 身分真源 + 1 None 唯一条件 + 1 RedFox 对照）、
+极性反证 3。
+
+> 又抓到自己一次：先写的计数脚本把 `@pytest.mark.parametrize(("a","b"), [...])` 里的
+> **参数名元组**也乘进了用例数，得 30 且分组全错；改用 `pytest --collect-only` 逐节点数才是 31。
+> 本文件所有计数现在一律标注产生它的命令。
+判据全部改成**真 import 真执行**（`from app.services.manifest import _ID_KEYS, _URL_KEYS, _map_row`、
+`from app.providers.article_sources.rss import _parse_feed`），不再 exec 抽函数。
+
+同批从 `scripts/guards.py` 的 `EVIDENCE_PROOFS` 中移除该条目（留注释作指针），
+`git rm docs/06_validation/evidence/EVD-V2-00/prove_provider_shapes.py`，
+并在 `EVD-V2-00/README.md` 追加 §7 归档说明（原文不删，保留 S0.3.2 当时的 32 断言读数；
+历史脚本可 `git show 7d999db:…` 取回）。
+
+### 12.2 出门判据的实测
+
+```
+$ python scripts/guards.py evidence-check
+── …/prove_dsn_policy.py ── … ── …/prove_net_isolation.py --self-test ──
+── 真实工具步：ruff ──
+── 真实工具步：gitleaks ──
+✅ evidence-check 全部通过（stdlib 证据 + 真实工具两步）
+rc=0
+```
+
+这是本仓**第一次** `evidence-check` 返回 0（F-14 自 `314d7f2` 起一直红，跨 V0.13.0/V0.14.0 两版）。
+耦合门同时放行：本批 `evidence/.py` 净增 = −1（删脚本），tests 净增 +31 ⇒ 不触发。
+
+### 12.3 极性反证当场把我的一条结论打回原形（必须留原文）
+
+照抄脚本旧结论写的 C 组判据（"行键 ∩ `_ID_KEYS` 为空 ⇒ 行被丢弃"）配上反证
+「拿掉 `_ID_KEYS` 里的 `id`，行必须立刻被丢弃」后，**第一次跑就 FAILED**：
+
+```
+E  AssertionError: 拿掉 `id` 后行仍能落库 ⇒ 命中另有途径，C 组交集判据需要重定
+```
+
+读 `_row_identity` 才知道原因：`b84dc53` 之后它先查 `_ID_KEYS`，解不出就用
+`canonical_article_key(url)` 兜底，返回 None 的唯一条件是 **id 与 URL 都没有**。
+⇒ 脚本那条 WARN 的因果链今天断了**两层**，而 §2 表里我原本只写了一层（"交集非空"），
+那句修正仍不准确，以本节为准。
+
+判据据此重写为三条，且各自有独立反证：
+
+| 用例 | 判据 | 反向可测性 |
+|---|---|---|
+| `test_paid_provider_rows_reach_a_manifest_identity_source` | 行键必须命中 `_ID_KEYS` **或** `_URL_KEYS`（两条真源之一） | 提取器定位不到 `row` 字典时先红（防 F-14 式静默失效） |
+| `test_map_row_drops_only_rows_with_neither_id_nor_url` | 无 id 无 url ⇒ None；只有 id ⇒ 收且 `article_key` 为 **None 而不是 `""`**（D-V9-04）；有 url ⇒ `external_id` 与 `article_key` 都要有 | 兜底支失效 ⇒ 第三断言红 |
+| `test_polarity_row_survival_needs_both_identity_sources_removed` | 只摘 `_ID_KEYS` ⇒ 行仍存活；两条都摘 ⇒ 全丢 | 这条本身就是上面两条的反证 |
+
+其余两条反证同批落地：`_parse_rfc822` 退回 `None` 时 aware 判据必须失去成立条件（实测失去）；
+A 组提取器喂一个读 `MISSING_TODAY` 的假 Provider 时必须报缺失（实测报出）。
+
+### 12.4 本卡的完成度
+
+| 增量 | 状态 |
+|---|---|
+| S00T.V14.1 轮次门 | 已交付，两轮复验通过 |
+| S00T.V14.2 耦合门 | 已交付，两轮复验通过（含一条真变异杀手） |
+| S00T.V14.3 F-14 迁移 | **已交付**：`evidence-check` rc=0（卡面出门判据）；`pytest tests/proofs` ⇒ 31 passed |
+| 00T 原 9 项（S0T.1.x 盘点 / S0T.2.x 其余脚本迁移 / S0T.3.x 门禁） | **未执行** |
+
+注：`S0T.3.1`（proofs 目录纳入 CI pytest）在本批**顺带成立**——CI 的命令是 `pytest tests/`，
+递归收集自动覆盖 `tests/proofs/`；这条不是刻意做的，记在这里是为了让"哪项因何而闭"可考。

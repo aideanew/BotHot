@@ -410,7 +410,10 @@ def coupling_check(base: str = "origin/main") -> int:
 EVIDENCE_PROOFS = [
     "docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py",
     "docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py --self-test",
-    "docs/06_validation/evidence/EVD-V2-00/prove_provider_shapes.py",
+    # S00T.V14.3（F-14）：`prove_provider_shapes.py` 已迁成
+    # `apps/api/tests/proofs/test_provider_shapes.py`（真 import 真执行，随 pytest tests/ 进 CI），
+    # 脚本本体随之删除。留在这里的注释是**指针**，不是待办：
+    # "pytest 化 ⇒ 从本表移除"是这一卡出门判据（evidence-check rc=0）的一部分。
     "docs/06_validation/evidence/EVD-V2-00/g24_static_check.py",
     "docs/06_validation/evidence/EVD-V2-00/g24_static_check.py --self-test",
     "docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py",

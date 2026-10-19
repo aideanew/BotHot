@@ -45,6 +45,22 @@
 - 端到端在 `tmp_path` 里 `git init` 造一次性真仓库跑通：2 轮绿／3 轮红并点名／坏基线红／空范围 3／
   孤儿证据脚本被拦／补一条用例后放行。
 
+### 2b. 交付三：S00T.V14.3（F-14 证据脚本迁成 pytest 并下线）
+
+`apps/api/tests/proofs/test_provider_shapes.py`：**13 defs / 31 收集**（A16 + B6 + C6 + 极性反证 3，
+分组取自 `pytest --collect-only`）。同批把该脚本从 `EVIDENCE_PROOFS` 移除、`git rm` 脚本本体、
+在 `EVD-V2-00/README.md` 追加归档说明（原文保留，历史读数不重写）。
+
+**出门判据第一次达成**：`python scripts/guards.py evidence-check` ⇒ **rc=0**
+（F-14 自 `314d7f2` 起常红，跨两版规划无人修，因为它不在 CI 里）。耦合门同时放行：
+证据 .py 净增 −1、tests 净增 +31。
+
+一处必须记下的自纠：照抄脚本旧结论写的 C 组判据（「行键 ∩ `_ID_KEYS` 为空 ⇒ 行被丢弃」）
+配上极性反证后**第一次跑就红**——因为 `b84dc53` 之后 `_row_identity` 在 id 解不出时
+改用 URL 规范键兜底，None 的唯一条件是「id 与 URL 都没有」。判据据此重写成三条
+（命中两条真源之一 / None 的唯一条件 / 两条都摘才全丢），并留在文件里当反证。
+⇒ 又一次印证：**只证现在绿的判据不能证明它自己还有牙。**
+
 ## 3. 顺带查出并修好的 make 侧断裂（F-V14-09 / F-V14-10）
 
 - `make guard` 这个目标在 04 §8 的完成定义里被引用，但 Makefile 里**从来没有**。
@@ -93,7 +109,7 @@ F 条"基本对得上，两处需追认"，给出 6 条缺陷。我逐条自己�
 
 返工后：`test_guard_rounds.py` **37 defs / 38 collected**（返工前 31/32），`38 passed in 3.45s`，
 ruff 净，`check_entry_parity` rc=0，`rounds-check` rc=0。
-细节全在 `docs/06_validation/evidence/EVD-V14-00T/s00t_v14_gates.md` §8。
+细节全在 `docs/06_validation/evidence/EVD-V14-00T/s00t_v14_gates.md` §7。
 
 一句自我评价：**这轮的 6 条里有 4 条是"能红但方向错"**（假红 1、偏绿 3）。
 只测"合成输入能不能触发红"是不够的——还得测**触发的方向**对不对，
@@ -146,7 +162,7 @@ ruff 净，`check_entry_parity` rc=0，`rounds-check` rc=0。
 
 | 项 | 状态 | 原因 |
 |---|---|---|
-| S00T.V14.3（F-14 迁移 + 脚本下线） | **暂不执行**（下一步） | 现跑已量出三处断裂与两条被推翻的在案事实，迁移要按真值重写断言，不是一行搬运 |
+| S00T.V14.3（F-14 迁移 + 脚本下线） | **已交付**（见 §2b） | `evidence-check` rc=0；13 defs / 31 collected；极性反证当场改掉一处照抄的旧结论 |
 | S00H.2.3（CI-Windows 连续绿收口） | **部分确认，动作未做** | 前置我自己复算过：规划方入库的 `evidence/fdad6dd/workflow_runs_main.json`（原始 API 转储）里 CI-Windows 恰有 3 条 run，全部 `completed/success`，head_sha 三个互不相同（`72a7a0e`/`fad54a9`/`fdad6dd`）；我又用 REST 复算了本会话两个推送（`7a525a0` windows-dev failure、`067ff59` 取数时 in_progress）。**未做收紧**的原因：`--timeout=300 → 120` 是共享 CI 门，必须先有 Windows 侧的用例耗时分布；`git credential fill` 本轮失效（GCM 缓存），改走指令里的内嵌 PAT（仅内存、输出脱敏、不落盘）后读数已拿到，缺的只是 durations 一步 |
 | 00T 原 9 项、00R 原 9 项 | **待执行** | 本批只交付 V14 增量 |
 | 追认项 | P-32（make 侧断裂已修，是否把 `make guard` 接进 CI）、P-33（耦合门 `<1` 与轮次门归属口径 L3-only/中文数字） | 判据解释权在规划方 |

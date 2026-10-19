@@ -383,3 +383,20 @@ python -c "import json,glob;print([f for f in glob.glob('apps/api/tests/fixtures
 | 9 | `ea0ea71` 提交信息里的「最多 20 次付费调用」结论错误（不 amend，历史不改） | 记录 | 以 §6.3 为准；后续引用该缺陷时读本文件而非提交信息 |
 
 本卡代码改动均在测试侧，回滚 `git revert` 即可，无数据影响。
+
+---
+## 7. 归档说明（2026-10-19，STEP-00T S00T.V14.3）
+
+本目录的 `prove_provider_shapes.py` **已删除**，判据迁到
+`apps/api/tests/proofs/test_provider_shapes.py`（31 例，真 import 真执行，随 `pytest tests/`
+进 CI），并从 `scripts/guards.py` 的 `EVIDENCE_PROOFS` 中移除。
+
+删除理由不是「脚本坏了修不好」，而是它的取证形态本身失效——现跑实测到三处独立断裂
+（`ManifestStatus` / `_row_identity` / `_parse_rfc822` 都不在 AST 抽取后的注入命名空间里）
+与两条已被实现推翻、却仍在报 PASS/WARN 的在案事实（RFC-2822 `pubDate` 已能解析；
+四家付费源行不再因缺 id 被丢弃，且 `_row_identity` 另有 URL 规范键兜底）。
+全文见 `docs/06_validation/evidence/EVD-V14-00T/s00t_v14_gates.md` §2。
+
+本文件 §5.2、§2 表与 §6 待办第 6 行仍以「脚本存在」为措辞，属历史记录，**以本节为准**；
+不改动原文是为了保留 S0.3.2 当时的判据与读数（32 断言、PASS/FAIL 口径）。
+历史脚本本体可随时取回：`git show 7d999db:docs/06_validation/evidence/EVD-V2-00/prove_provider_shapes.py`。
