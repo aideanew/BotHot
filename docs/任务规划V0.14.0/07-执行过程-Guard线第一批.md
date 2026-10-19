@@ -51,7 +51,7 @@
 分组取自 `pytest --collect-only`）。同批把该脚本从 `EVIDENCE_PROOFS` 移除、`git rm` 脚本本体、
 在 `EVD-V2-00/README.md` 追加归档说明（原文保留，历史读数不重写）。
 
-**出门判据第一次达成**：`python scripts/guards.py evidence-check` ⇒ **rc=0**
+**出门判据达成**（口径：F-14 自 `314d7f2` 断裂以来首次回到 rc=0；断裂前 `b45777a` 曾为 ✅，故不写「第一次」）：`python scripts/guards.py evidence-check` ⇒ **rc=0**
 （F-14 自 `314d7f2` 起常红，跨两版规划无人修，因为它不在 CI 里）。耦合门同时放行：
 证据 .py 净增 −1、tests 净增 +31。
 
@@ -162,7 +162,7 @@ ruff 净，`check_entry_parity` rc=0，`rounds-check` rc=0。
 
 | 项 | 状态 | 原因 |
 |---|---|---|
-| S00T.V14.3（F-14 迁移 + 脚本下线） | **已交付**（见 §2b） | `evidence-check` rc=0；13 defs / 31 collected；极性反证当场改掉一处照抄的旧结论 |
+| S00T.V14.3（F-14 迁移 + 脚本下线） | **已交付且两轮复验通过**（D-14 计 2/2，见卡面轮次账） | `evidence-check` rc=0；13 defs / 31 collected；极性反证当场改掉一处照抄的旧结论 |
 | S00H.2.3（CI-Windows 连续绿收口） | **部分确认，动作未做** | 前置我自己复算过：规划方入库的 `evidence/fdad6dd/workflow_runs_main.json`（原始 API 转储）里 CI-Windows 恰有 3 条 run，全部 `completed/success`，head_sha 三个互不相同（`72a7a0e`/`fad54a9`/`fdad6dd`）；我又用 REST 复算了本会话两个推送（`7a525a0` windows-dev failure、`067ff59` 取数时 in_progress）。**未做收紧**的原因：`--timeout=300 → 120` 是共享 CI 门，必须先有 Windows 侧的用例耗时分布；`git credential fill` 本轮失效（GCM 缓存），改走指令里的内嵌 PAT（仅内存、输出脱敏、不落盘）后读数已拿到，缺的只是 durations 一步 |
 | 00T 原 9 项、00R 原 9 项 | **待执行** | 本批只交付 V14 增量 |
 | 追认项 | P-32（make 侧断裂已修，是否把 `make guard` 接进 CI）、P-33（耦合门 `<1` 与轮次门归属口径 L3-only/中文数字） | 判据解释权在规划方 |

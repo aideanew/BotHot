@@ -276,7 +276,7 @@ V0.14.0/04 §5 给 Agent-Guard 的 W 面是 `scripts/guards.py`、`Makefile`、`
 （`scripts/guards.py:137` 那条 E501 是 HEAD 既有，属他人代码，未顺手改）。
 
 
-## 11. S00T.V14.3 交付：F-14 迁移 + 脚本下线（同日续做，`evidence-check` 首次 rc=0）
+## 11. S00T.V14.3 交付：F-14 迁移 + 脚本下线（同日续做，`evidence-check` 回到 rc=0）
 
 ### 11.1 迁出来的东西
 
