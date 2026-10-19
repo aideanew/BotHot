@@ -1,0 +1,9 @@
+# @linux 守卫读数 · main@410ac20 · 2026-10-19 16:00 CST（本机无 make，Makefile 目标以 guards.py 实体调用复算；make -n guard 读数以执行方 @win 记录为准）
+guards.py guard-ports → rc=0  | ✅ session cookie = bothot_session
+guards.py guard-versions → rc=0  | ✅ 版本锚点一致
+guards.py guard-structure → rc=0  | ✅ docs/00_governance 存在
+guards.py rounds-check → rc=3  | ⚠️  rounds-check：origin/main..HEAD 为空 ⇒ 无可检提交，**这不是通过**（rc=3）
+guards.py evidence-check → rc=3  | ⚠ evidence-check：前置门之一在本批没有可检面 ⇒ 退出码 3（这不是 PASS）
+check_entry_parity → rc=0 | ✅ 每个 Makefile 目标都能在 entry.py/guards.py 找到实体，且 recipe 已转调
+check_docs_consistency → rc=0 | [ok] 文档一致性检查通过
+注：rounds-check/evidence-check 的 rc=3 是空批第三态（origin/main..HEAD 为空、索引为空），非空批读数见 evidence_check_nonempty_97f1d61..410ac20.txt（rc=0）

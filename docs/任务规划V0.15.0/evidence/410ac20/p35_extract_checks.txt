@@ -1,0 +1,10 @@
+# P-35 复核 · docs/任务规划V0.5.0/evidence/S0T/extract_checks.py @ main@410ac20 · @linux
+## 默认运行（只打印）
+     1  docs/06_validation/evidence/EVD-V2-00/prove_provider_shapes.py
+合计标签 536 条 + 占位 1 行、登记来源 10 份（提取到标签的 9 份）——四个数现算，勿抄进正文
+rc=0（实测；与 P-35「会 FileNotFoundError」的静态结论相反）
+## --check
+<unknown>:369: SyntaxWarning: invalid escape sequence '\|'
+FAIL 迁移清单过期：与当前树不一致——新表有 283 行不在盘上那份里，盘上有 272 行不在新表里（多半是 `行` 列漂了）。重跑 `--write` 并随件提交。
+rc=1（清单过期：行列漂移）
+## 对照：删除前（067ff59、7d999db）--check 同样 rc=1，漂移 282/271 ⇒ 清单过期早于 S00T.V14.3，非删除所致

@@ -1,0 +1,19 @@
+# 本版入库批（暂存面）evidence-check · @linux · 共三次：①HIGH 1 复制的探针第 14 行 ⇒ 不复制；②HIGH 1 本版 02 正文内联了该行形状 ⇒ 改为描述；③如下
+evidence 耦合门（D-V4-03）：范围 origin/main..工作树 ⇒ 证据脚本净增 0，用例净增 0
+敏感形门（STEP-00P S00P.1.1）：待检 22 个路径（取材面=index），实扫 22，跳过 0（本批删除/二进制/超限），HIGH 0，ALLOWED 放行 14
+✅ 敏感形门：待检面无 HIGH 命中
+  INFO 回退点 test_docs_batch.py:45 生产形态=True
+  INFO 回退点 test_idempotency_lock.py:58 生产形态=True
+  INFO 回退点 test_job_worker.py:37 生产形态=True
+  INFO 回退点 test_manifest_sync.py:42 生产形态=True
+  INFO 回退点 test_persistence.py:32 生产形态=True
+  INFO 回退点 test_process_heartbeat.py:40 生产形态=True
+  INFO 回退点 test_scheduler.py:42 生产形态=True
+  INFO 回退点 test_w2_worker.py:27 生产形态=True
+  INFO 回退点 test_w3_push_scheduler.py:51 生产形态=True
+  INFO 直接消费者 test_chat_sse.py:18（值=conftest 解析结果，未配置时=拒连地址）
+[90m8:09AM[0m [32mINF[0m 261 commits scanned.
+[90m8:09AM[0m [32mINF[0m scan completed in 5.25s
+[90m8:09AM[0m [32mINF[0m no leaks found
+✅ evidence-check 全部通过（前置两道门 + stdlib 证据 + 真实工具两步）
+rc=0

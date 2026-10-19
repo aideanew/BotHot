@@ -1,0 +1,55 @@
+# STEP-24/25 探针在 main@410ac20 复跑 · @linux PG16@5547 · 播种 2 用户+1 渠道结束即删 · redis 未起（traceback 为限流 fail-open 日志，不影响判读） · 脚本未复制，原样运行 docs/任务规划V0.14.0/evidence/fdad6dd/probe_push_write_roles_and_created_by.py（复制件被敏感形门以 P-36 同族表达式引用判 HIGH，按门口径不复制、不豁免）
+/workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+2026-10-19T07:58:53.574857 [info     ] setup plugin alembic.autogenerate.schemas [alembic.runtime.plugins]
+2026-10-19T07:58:53.575002 [info     ] setup plugin alembic.autogenerate.tables [alembic.runtime.plugins]
+2026-10-19T07:58:53.575064 [info     ] setup plugin alembic.autogenerate.types [alembic.runtime.plugins]
+2026-10-19T07:58:53.575109 [info     ] setup plugin alembic.autogenerate.constraints [alembic.runtime.plugins]
+2026-10-19T07:58:53.575150 [info     ] setup plugin alembic.autogenerate.defaults [alembic.runtime.plugins]
+2026-10-19T07:58:53.575187 [info     ] setup plugin alembic.autogenerate.comments [alembic.runtime.plugins]
+2026-10-19T07:58:53.575216 [info     ] setup plugin alembic.ext.checkconstraint_byname [alembic.runtime.plugins]
+2026-10-19T07:58:53.699416 [warning  ] 限流计数器 Redis 不可用，本轮 fail-open（不限流） [app.core.security]
+Traceback (most recent call last):
+  File "/workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/redis/asyncio/connection.py", line 305, in connect_check_health
+    await self.retry.call_with_retry(
+  File "/workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/redis/asyncio/retry.py", line 50, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/redis/asyncio/connection.py", line 760, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/asyncio/base_events.py", line 1140, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6379, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6379)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/work/BotHot/apps/api/app/core/security.py", line 194, in incr_window
+    count = await client.incr(key)
+            ^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/redis/asyncio/client.py", line 672, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/redis/asyncio/connection.py", line 1149, in get_connection
+    await self.ensure_connection(connection)
+  File "/workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/redis/asyncio/connection.py", line 1182, in ensure_connection
+    await connection.connect()
+  File "/workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/redis/asyncio/connection.py", line 296, in connect
+    await self.connect_check_health(check_health=True)
+  File "/workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/redis/asyncio/connection.py", line 315, in connect_check_health
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6379, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6379) connecting to localhost:6379.
+2026-10-19T07:58:53.770528 [info     ] HTTP Request: GET http://testserver/api/v1/bots/tasks "HTTP/1.1 200 OK" [httpx]
+① operator GET  /bots/tasks           -> 200 0
+2026-10-19T07:58:53.776915 [info     ] HTTP Request: POST http://testserver/api/v1/bots/tasks "HTTP/1.1 403 Forbidden" [httpx]
+① operator POST /bots/tasks           -> 403 10004
+2026-10-19T07:58:53.783305 [info     ] HTTP Request: PUT http://testserver/api/v1/bots/1840c77a-12c8-4e42-86e2-935276af0d4a "HTTP/1.1 403 Forbidden" [httpx]
+① operator PUT  /bots/{id}            -> 403 10004
+2026-10-19T07:58:53.791690 [info     ] HTTP Request: POST http://testserver/api/v1/bots/tasks "HTTP/1.1 500 Internal Server Error" [httpx]
+② admin POST created_by=<SSO sub>（前端口径）-> 500 50001
+2026-10-19T07:58:53.797976 [info     ] HTTP Request: POST http://testserver/api/v1/bots/tasks "HTTP/1.1 500 Internal Server Error" [httpx]
+② admin POST created_by 缺省（后端兜 "system"）-> 500 50001

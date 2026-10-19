@@ -1,0 +1,160 @@
+# 敏感形门+耦合门+stdlib 证据+ruff+gitleaks 8.21.2，空批（origin/main==HEAD，索引空）· main@410ac20 @linux · 文中示例 DSN 的口令段已统一打码为 <redacted>
+evidence 耦合门（D-V4-03）：范围 origin/main..工作树 ⇒ 证据脚本净增 0，用例净增 0
+⚠️  敏感形门：索引为空且 origin/main..HEAD 为空 ⇒ 无可检文件，**这不是通过**（rc=3）
+PASS S0.1.2-a `_DEFAULT_PG_URL` 已删除 :: grep -c 命中 0
+PASS S0.1.2-b 生产形态字面量不再出现在 conftest :: 字面量命中 0 处（期望 0）
+PASS S0.1.2-c env 层解析 :: PG_URL=postgresql+psycopg://bothot:<redacted>@localhost:5547/bothot_test
+PASS S0.1.2-d env 层来源标注 :: env:AIDEANBOT_TEST_PG_DSN
+PASS S0.1.2-e 广播值=配置值（下游 9 处回退点被该环境变量屏蔽） :: _broadcast='postgresql+psycopg://bothot:<redacted>@localhost:5547/bothot_test'
+PASS S0.1.2-f 未配置返回空串 :: '',unset
+PASS S0.1.2-g 未配置时 PG_URL=拒连地址 :: postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset
+PASS S0.1.2-h 未配置时广播值=拒连地址（非生产形态） :: _broadcast='postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'
+PASS S0.1.2-i 拒连地址不含部署端口 :: postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset
+PASS S0.1.2-j skip 原因含「未设置」 :: AIDEANBOT_TEST_PG_DSN 未设置：连库用例需要独立测试库。准备命令：bash scripts/test-env.sh up && eval "$(bash scripts/test-env.sh env)"
+PASS S0.1.2-k skip 原因不含「不可达」（避免触中 ci.yml:148 的 PG-不可达门禁）
+PASS S0.1.2-l 纯空白 env 视为未配置 :: '',unset
+PASS S0.1.2-p 空串 env 也广播为拒连地址（赋值而非 setdefault） :: _broadcast='postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'
+PASS S0.1.2-q 纯空白 env 广播拒连地址 :: _broadcast='postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'
+PASS S0.1.2-r 三种入口的广播值均非空串（下游永远不会读到 ""） :: 'postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'｜'postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'｜'postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'
+PASS S0.1.2-s 带空白的配置广播为剥离后的值 :: _broadcast='postgresql+psycopg://bothot:<redacted>@localhost:5547/bothot_test'
+PASS S0.1.2-m .env 层解析并广播该值 :: postgresql+psycopg://bothot:<redacted>@localhost:5547/bothot_from_env_file,file:.env,broadcast='postgresql+psycopg://bothot:<redacted>@localhost:5547/bothot_from_env_file'
+PASS S0.1.2-n .env 空值视为未配置
+PASS S0.1.2-o 下游自带默认回退点=9（其中生产形态 9）；旧注释称 7 ⇒ 钉死为 9 :: 实测 9 处、生产形态 9 处；期望恰 9（数量变动须同步 §3.2 表）
+  INFO 回退点 test_docs_batch.py:45 生产形态=True
+  INFO 回退点 test_idempotency_lock.py:58 生产形态=True
+  INFO 回退点 test_job_worker.py:37 生产形态=True
+  INFO 回退点 test_manifest_sync.py:42 生产形态=True
+  INFO 回退点 test_persistence.py:32 生产形态=True
+  INFO 回退点 test_process_heartbeat.py:40 生产形态=True
+  INFO 回退点 test_scheduler.py:42 生产形态=True
+  INFO 回退点 test_w2_worker.py:27 生产形态=True
+  INFO 回退点 test_w3_push_scheduler.py:51 生产形态=True
+PASS S0.1.2-t 直接 import conftest.PG_URL 的模块已被清点（现恰 1 处） :: 实测 [('test_chat_sse.py', 18)]；数量或归属变动须同步 §3.2 表
+  INFO 直接消费者 test_chat_sse.py:18（值=conftest 解析结果，未配置时=拒连地址）
+ALL PASS (20 断言，回退点 9 个已列举)
+OK  S0.1.2-p 空串 env 广播拒连地址：现行='postgresql+psycopg://invalid@127.0.0.1:1/bothot_dsn_unset'（断言成立）｜setdefault 变异体=''（断言变红）
+OK  S0.1.2-s 带空白 env 广播剥离值：现行='postgresql+psycopg://bothot:<redacted>@localhost:5547/bothot_test'（断言成立）｜setdefault 变异体='  postgresql+psycopg://bothot:<redacted>@localhost:5547/bothot_test  '（断言变红）
+SELF-TEST PASS：两条新断言对旧实现敏感
+=== apps/api/tests/conftest.py ===
+  无违规（E/F/I/W/UP/B 机检子集）
+=== apps/api/tests/test_w3_push_scheduler.py ===
+  无违规（E/F/I/W/UP/B 机检子集）
+=== apps/api/tests/fixtures/wechat_urls.py ===
+  无违规（E/F/I/W/UP/B 机检子集）
+
+合计违规 0 条。注：CI 的 ruff/mypy 为终判，本表只降提交风险。
+  自检 F401: 捕获 1 F401 未使用导入 json
+  自检 E501: 捕获 1 E501 行宽 269 > 120（139 个字符）
+  自检 W291: 捕获 1 W291 行尾空格
+  自检 W292: 捕获 W292 文件末尾缺换行
+  自检 E711: 捕获 2 E711 用 `is None` / `is not None`
+  自检 B006: 捕获 1 B006 可变默认参数
+  自检 I001: 捕获 2 I001 import 未排序：os 应排在 sys 之前（段 1，先 import 后 from）
+  自检 I001: 捕获 1 I001 import 成员未排序：['defaultdict', 'OrderedDict'] 应为 ['Orde
+  自检 I001: 捕获 3 I001 同一段（段 1）被空行拆开：与上一条 import 之间不该留空行
+  自检 I001: 捕获 3 I001 import 成员未排序：['PG_URL', 'SKIP_UNSET_REASON', '_PG_URL
+  自检 I001: 捕获 2 I001 import 成员未排序：['NO_PROXY_ISOLATION_VALUE', '_PROXY_ENV
+  自检 I001: 捕获 3 I001 同一段（段 2）被空行拆开：与上一条 import 之间不该留空行
+  自检 I001（绿档）: 未误报——实测通过 CI 的形状不许被本表咬
+  自检 I001（绿档）: 未误报——实测通过 CI 的形状不许被本表咬
+  自检 E501: 捕获 1 E501 行宽 269 > 120（139 个字符）
+  自检 E501: 捕获 1 E501 行宽 129 > 120（69 个字符）
+  自检 E501（绿档）: 未误报——实测通过 CI 的形状不许被本表咬
+  自检 E501（绿档）: 未误报——实测通过 CI 的形状不许被本表咬
+  自检 E501: 捕获 1 E501 行宽 121 > 120（121 个字符）
+自检结果：19/19 项判据两端都对（该报 15 项、该静默 4 项）
+
+PASS NR-1 夹具带 @pytest.fixture(autouse=True) :: 装饰器关键字={'autouse': 'True'}
+PASS NR-2 夹具为函数级 scope（缺省或 'function'） :: scope=缺省
+PASS NR-3 夹具定义在 DSN 广播之后（不改广播语义） :: 广播 :75、夹具 :92
+PASS NR-4-a 脏环境下 6 个代理变量被清空 :: 残留=[]
+PASS NR-4-b NO_PROXY 与 no_proxy 均写成契约值（win32 上两键折叠，小写那一半由 NR-14 兜） :: NO_PROXY='127.0.0.1,localhost,::1' no_proxy='127.0.0.1,localhost,::1'（期望 '127.0.0.1,localhost,::1'）
+PASS NR-6 undo() 后宿主原貌恢复（夹具经 monkeypatch 而非直写 os.environ） :: undo 后 NO_PROXY='internal.example' no_proxy=None HTTP_PROXY='http://127.0.0.1:10808'｜宿主原貌 = 'internal.example' / None / 代理 URL（win32 大小写合并，见常量注释）
+PASS NR-5 无代理的干净环境调用夹具不抛异常 :: delenv(raising=False) 生效
+PASS NR-7 清理代理不影响 AIDEANBOT_TEST_PG_DSN :: 夹具后='postgresql+psycopg://x@127.0.0.1:5547/z'
+PASS NR-8 tests 全树无 localhost:9999 字面量 :: 命中=[]
+PASS NR-9-a fixtures/net.py 导出 REFUSED_HTTP_URL 且端口为 1 :: 值='http://127.0.0.1:1/bothot-hook-no-listener'
+PASS NR-9-b 5 个消费方均把该常量接到 webhook_url 实参上（AST） :: 未接线=无｜test_alerting_drill.py:import=True、实参行=[101] test_bots_logs_filter.py:import=True、实参行=[28] test_wb_push_hardening.py:import=True、实参行=[80] test_w3_push_scheduler.py:import=True、实参行=[87, 160] test_env_isolation.py:import=True、实参行=[58]
+PASS NR-9-c test_w3 旧常量收敛为别名（单一真值：本文件不再自带 URL 字面量） :: 别名行=:49｜自带字面量=False
+PASS NR-10-a 冒烟首行守卫：未配置 DSN → skip 而非 error :: 首条可执行语句=If :1191（守卫体内已 skip）
+PASS NR-10-b 守卫所需符号已从 conftest 导入 :: import 行='from conftest import _PG_URL_SOURCE, PG_URL, SKIP_UNSET_REASON'
+PASS NR-11 「见 conftest 警告」陈旧注释清零 :: 残留=[]
+PASS NR-12-a test_env_isolation 有 3 条用例 :: 用例=['test_proxy_env_is_cleared_for_every_case', 'test_refused_url_fails_as_connection_error_not_http_status', 'test_host_proxy_state_is_not_inherited']
+PASS NR-12-b 每条用例至少 1 个 assert（无空断言） :: {'test_proxy_env_is_cleared_for_every_case': 3, 'test_refused_url_fails_as_connection_error_not_http_status': 4, 'test_host_proxy_state_is_not_inherited': 1}
+PASS NR-12-c 宿主代理快照在模块级、用例定义之前（收集期即夹具运行前） :: 快照 :39、首个用例 :44
+PASS NR-13-a _PROXY_ENV_VARS 覆盖大小写 6 个键 :: 实测=('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy')
+PASS NR-13-b NO_PROXY_ISOLATION_VALUE 含回环地址 :: 实测='127.0.0.1,localhost,::1'
+PASS NR-14 夹具对 NO_PROXY 与 no_proxy 的每一次写入都取契约值（配对判据，与平台无关） :: 写入面=.setenvNO_PROXY→NO_PROXY_ISOLATION_VALUE、.setenvno_proxy→NO_PROXY_ISOLATION_VALUE
+PASS NR-15 清理循环以 _PROXY_ENV_VARS 为迭代源且 delenv(循环变量, raising=False) :: 遍历模块级 _PROXY_ENV_VARS，循环体内 delenv(_name, raising 假值) 就位
+PASS NR-16 运行期往常量表追加一项，夹具跟着删除它（夹具读常量而非抄一份） :: 哨兵残留=None｜异常=无
+PASS NR-17 隔离夹具内没有任何平台身份读数（os.name / sys.platform / platform.* / 与 'nt' 一类比较） :: 平台读数=无｜夹具的隔离必须与运行平台无关
+
+合计 PASS=24 FAIL=0
+结论：代理隔离夹具真实执行有效、同形端口假设清零；chat_sse 冒烟的首行守卫按 AST 位置判定为「文本层就位」（该用例本身未执行，见 H-1）。
+边界（刻意不由本脚本判定）：test_env_isolation.py 的三条用例需 venv+httpx 真实运行；连库全量 failed=0 需隔离 PG——均交 STEP-00R S0R.1.3/S0R.3.2（人工/有依赖环境）。
+OK  去掉 autouse → 应变红 ['NR-1']｜实际红项=['NR-1']
+OK  删掉 delenv 循环体 → 应变红 ['NR-4-a', 'NR-15']｜实际红项=['NR-15', 'NR-16', 'NR-4-a']
+OK  delenv 改 raising=True → 应变红 ['NR-5']｜实际红项=['NR-15', 'NR-16(异常 KeyError)', 'NR-5']
+OK  NO_PROXY 值去掉回环 → 应变红 ['NR-4-b', 'NR-13-b']｜实际红项=['NR-13-b', 'NR-4-b']
+OK  夹具直写 os.environ 而非经 monkeypatch → 应变红 ['NR-6']｜实际红项=['NR-6']
+OK  夹具不再写小写 no_proxy → 应变红 ['NR-14']｜实际红项=['NR-14', 'NR-4-b']
+OK  大写 NO_PROXY 写了非契约值（小写那遍把它盖回来） → 应变红 ['NR-14']｜实际红项=['NR-14', 'NR-4-b']
+OK  清理循环与 _PROXY_ENV_VARS 常量脱钩 → 应变红 ['NR-15', 'NR-16']｜实际红项=['NR-15', 'NR-16']
+OK  删掉 _PROXY_ENV_VARS 常量定义 → 应变红 ['NR-13-a', 'NR-15']｜实际红项=['NR-13-a', 'NR-15', 'NR-4-a']
+OK  夹具 scope 改成 "session"（autouse 仍是 True，只有 NR-2 能红） → 应变红 ['NR-2']｜实际红项=['NR-2']
+OK  广播行被改名/挪走（夹具定义不再晚于广播） → 应变红 ['NR-3']｜实际红项=['NR-3']
+OK  夹具顺手删掉 DSN 变量（把广播值清了，连库配置消失） → 应变红 ['NR-7']｜实际红项=['NR-7']
+OK  同一拼写好写之后追加坏写（win32 上后写覆写先写） → 应变红 ['NR-14']｜实际红项=['NR-14', 'NR-4-b']
+OK  平台守卫后的坏写（Linux 上隔离失效，win32 行为面不可观测） → 应变红 ['NR-14']｜实际红项=['NR-14', 'NR-17', 'NR-4-b']
+OK  真接线循环塞进 if False、活路径改硬写（结构判据的盲区） → 应变红 ['NR-16']｜实际红项=['NR-16']
+OK  用 os.environ.setdefault 坏写（沙箱里是空操作，v3 只认 setenv 所以全绿） → 应变红 ['NR-14']｜实际红项=['NR-14']
+OK  f-string 名 + 平台守卫的坏写（名不是字面量 ⇒ v3 看不见） → 应变红 ['NR-14', 'NR-17']｜实际红项=['NR-14', 'NR-17', 'NR-4-b']
+OK  循环变量名的坏写（名是 Name 节点，v3 不解析） → 应变红 ['NR-14']｜实际红项=['NR-14', 'NR-4-b']
+OK  ** 字典展开的坏写（关键字通道看不见展开） → 应变红 ['NR-14']｜实际红项=['NR-14', 'NR-4-b']
+OK  清理循环被 if os.name == 'nt' 包住（win32 三层全绿，Linux 隔离整个失效） → 应变红 ['NR-17']｜实际红项=['NR-16', 'NR-17', 'NR-4-a']
+OK  NR-9-b 实参退回 URL 字面量：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-9-b 只 import 从不接到形参：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-9-b 丢掉 import 行：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-9-b 经模块级别名接线（test_w3 形态）：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-8 用例退回 localhost:9999 字面量：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-11 陈旧注释「见 conftest 警告」回潮：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-12-a 用例数退化为 2 条：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-12-b 某条用例一条 assert 都没有：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-12-c 宿主代理快照移到用例之后（收集期原貌丢失）：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-9-a 地址常量退回 9999 端口假设：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-9-a 常量定义整行被删：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-9-c 别名退回自带 URL 字面量（单点被破）：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-9-c 别名行整体消失：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-10-a 守卫挪到 import asyncio 之后（未配置时报 error 而非 skip）：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-10-a 守卫条件在、体内不 skip：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-10-a 用例函数被改名：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-10-b 导入行少了 SKIP_UNSET_REASON：基准=True（应 True）｜变异体=False（应 False）
+OK  NR-10-b 导入行整体缺失（守卫自身 NameError）：基准=True（应 True）｜变异体=False（应 False）
+OK  等价重构 setenv 名与值都改关键字实参 → 应变 0 红｜实际红项=（无）
+OK  等价重构 delenv 的 raising 改位置实参 → 应变 0 红｜实际红项=（无）
+OK  等价重构 delenv 名与 raising 都改关键字 → 应变 0 红｜实际红项=（无）
+OK  等价重构 迭代源加 list() 包装 → 应变 0 红｜实际红项=（无）
+OK  等价重构 delenv 的 raising 写成 0 → 应变 0 红｜实际红项=（无）
+OK  等价重构 迭代源改列表推导 → 应变 0 红｜实际红项=（无）
+OK  等价重构 迭代源嵌套两层包装 → 应变 0 红｜实际红项=（无）
+OK  等价重构 迭代源用 reversed() → 应变 0 红｜实际红项=（无）
+OK  等价重构 迭代源用 map(str, …) → 应变 0 红｜实际红项=（无）
+OK  等价重构 delenv 整个改 ** 展开 → 应变 0 红｜实际红项=（无）
+OK  等价重构 省略 raising 但加 in os.environ 守卫 → 应变 0 红｜实际红项=（无）
+OK  等价重构 海象别名后再遍历 → 应变 0 红｜实际红项=（无）
+OK  等价重构 契约值套一层 str() → 应变 0 红｜实际红项=（无）
+SELF-TEST PASS：20 个 conftest 变异体各自让对应断言变红 + 18 个源码探针敏感 + 13 个等价重构不假红
+── docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py ──
+── docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py --self-test ──
+── docs/06_validation/evidence/EVD-V2-00/g24_static_check.py ──
+── docs/06_validation/evidence/EVD-V2-00/g24_static_check.py --self-test ──
+── docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py ──
+── docs/06_validation/evidence/EVD-V2-00R/prove_net_isolation.py --self-test ──
+── 真实工具步：ruff ──
+All checks passed!
+── 真实工具步：gitleaks ──
+[90m7:54AM[0m [32mINF[0m 261 commits scanned.
+[90m7:54AM[0m [32mINF[0m scan completed in 22.1s
+[90m7:54AM[0m [32mINF[0m no leaks found
+⚠ evidence-check：前置门之一在本批没有可检面 ⇒ 退出码 3（这不是 PASS）
+rc=3

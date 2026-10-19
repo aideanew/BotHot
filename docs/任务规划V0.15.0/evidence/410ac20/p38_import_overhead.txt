@@ -1,0 +1,4 @@
+# P-38 对照：可达库下 import app.main 自身耗时（不含探测挂起）· @linux 独占 ×3
+import_reachable_db 1.20
+import_reachable_db 1.02
+import_reachable_db 1.05
