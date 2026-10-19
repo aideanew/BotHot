@@ -1,0 +1,7 @@
+# @linux 探针 · main@fdad6dd · 2026-10-19 09:54 CST · PG16@5547 · 播种 2 用户+1 渠道，结束已删（复核 bot_channels=0）
+① operator GET  /bots/tasks           -> 200 0
+① operator POST /bots/tasks           -> 403 10004
+① operator PUT  /bots/{id}            -> 403 10004
+② admin POST created_by=<SSO sub>（前端口径）-> 500 50001
+② admin POST created_by 缺省（后端兜 "system"）-> 500 50001
+# has_min_rank("operator","admin","operator") = False

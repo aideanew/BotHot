@@ -1,0 +1,7 @@
+# evidence-check · main@fdad6dd · 2026-10-19 09:59 CST
+                                 ^^^^^^^^^^^^^^
+NameError: name 'ManifestStatus' is not defined
+── docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py ──
+── docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py --self-test ──
+── docs/06_validation/evidence/EVD-V2-00/prove_provider_shapes.py ──
+❌ 证据复跑失败：docs/06_validation/evidence/EVD-V2-00/prove_provider_shapes.py（rc=1）

@@ -1,0 +1,6 @@
+# 黑洞 DSN /health 有界性复测 · main@fdad6dd
+DATABASE_URL=<10.255.255.1 黑洞> REDIS_URL=<同> → 200 degraded, postgres=unreachable, 全程 wall 11s（含进程启动与导入）；314d7f2 上同命令 45s 不返回 rc=124
+# 端点墙钟（同一进程连打 3 次，TestClient，perf_counter）：
+run1 200 3.04 s
+run2 200 3.0 s
+run3 200 3.0 s

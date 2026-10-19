@@ -1,0 +1,4 @@
+# 单测隔离复跑 · main@fdad6dd
+全量时宿主设了 PUSH_SECRET_MASTER_KEY（探针用随机值）⇒ test_production_guard_still_reports_all_eight_items 读到 7 项而断言 8 项 → FAILED
+env -u PUSH_SECRET_MASTER_KEY -u DATABASE_URL -u AIDEANBOT_TEST_PG_DSN 单跑该用例 → 1 passed
+定性：用例读宿主环境、非密封（F-V14-03），不是生产代码回归

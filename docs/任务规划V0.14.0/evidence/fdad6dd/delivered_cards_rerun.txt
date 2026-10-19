@@ -1,0 +1,6 @@
+# 执行段五张交付卡的用例真库复跑 · main@fdad6dd · 2026-10-19 10:03 CST · PG16@5547
+# 命令：python -m pytest tests/test_bots_read_authz.py tests/test_direct_push_persists_notification.py tests/test_health_probe_bounded.py tests/test_article_identity.py tests/test_provider_defects_p15_p17.py -q
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+85 passed, 2 warnings in 31.33s
+# git grep 'fromtimestamp(.*tz=None' apps/api/app → 0；git grep 'get("source", {})' apps/api/app → 0

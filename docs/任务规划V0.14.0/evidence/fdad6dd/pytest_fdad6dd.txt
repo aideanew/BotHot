@@ -1,0 +1,63 @@
+# @linux 后端全量 · main@fdad6dd · 2026-10-19 09:51 CST · Debian / Py3.12 / PG16@5547 库 bothot_test · PUSH_SECRET_MASTER_KEY=随机临时值（未落盘）
+# 命令：alembic upgrade head && python -m pytest tests/ -q --no-header -p no:cacheprovider --cov=app --cov-report=term -o faulthandler_timeout=120
+INFO  [alembic.runtime.migration] Running upgrade ab1005w5b -> ab1006c1a, STEP-04 S4.2.1：清单加规范键 `article_key` + JobItem 加关联 `manifest_id`（纯 DDL）。
+# alembic heads: ab1006c1a (head)
+........................................................................ [  4%]
+........................................................................ [  9%]
+..........................................ss............................ [ 13%]
+........................................................................ [ 18%]
+........................................................................ [ 22%]
+........................................................................ [ 27%]
+........................................................................ [ 31%]
+........................................................................ [ 36%]
+........................................................................ [ 41%]
+........................................................................ [ 45%]
+........................................................................ [ 50%]
+........................................................................ [ 54%]
+........................................................................ [ 59%]
+........................................................................ [ 63%]
+........................................................................ [ 68%]
+........................................................................ [ 73%]
+........................................................................ [ 77%]
+........................................................................ [ 82%]
+........................................................................ [ 86%]
+...................................................F.................... [ 91%]
+ss...................................................................... [ 95%]
+...............................................................s         [100%]
+=================================== FAILURES ===================================
+_____________ test_production_guard_still_reports_all_eight_items ______________
+
+    def test_production_guard_still_reports_all_eight_items() -> None:
+        """守卫条目数不变（白名单化只改闸门，不改判据集合）——防顺手削项。
+    
+        2026-10-09 A-T024：新增 QA_FIXTURE_TOKEN_PREFIX 非空守卫（生产禁 fixture 短路）
+        属有意扩展，从 7 项 → 8 项。同名测试重命名确保下次拓展仍需显式确认。
+        """
+        settings = Settings(_env_file=None, app_env="prod-eu")  # type: ignore[call-arg]
+        violations = settings.production_guard_violations()
+>       assert len(violations) == 8
+E       AssertionError: assert 7 == 8
+E        +  where 7 = len(['OIDC_CLIENT_SECRET 仍是占位值（主平台 SSO 密钥未配置）', 'SESSION_COOKIE_SECURE=False（会话 cookie 会以明文传输）', 'SESSION_STORE_BACKEND=me...iss 声明）', 'OIDC_AUDIENCE_EXPECTED 未配置（生产环境须校验 userinfo aud 声明）', 'ENGINE_KEY_MASTER_KEY 未配置（引擎 Key 登记加密，缺失即登记全拒）', ...])
+
+tests/test_security_middleware.py:415: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /workspace/work/BotHot/apps/api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.15-final-0 _______________
+
+Name                                          Stmts   Miss  Cover
+-----------------------------------------------------------------
+-----------------------------------------------------------------
+TOTAL                                          9180   1284    86%
+=========================== short test summary info ============================
+FAILED tests/test_security_middleware.py::test_production_guard_still_reports_all_eight_items
+1 failed, 1570 passed, 5 skipped, 2 warnings in 147.27s (0:02:27)
+# WALL 159 s

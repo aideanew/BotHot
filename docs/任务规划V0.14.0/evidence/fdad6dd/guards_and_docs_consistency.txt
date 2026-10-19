@@ -1,0 +1,4 @@
+guard-ports rc=0 | ✅ session cookie = bothot_session
+guard-versions rc=0 | ✅ 版本锚点一致
+guard-structure rc=0 | ✅ docs/00_governance 存在
+[ok] 文档一致性检查通过
