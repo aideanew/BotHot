@@ -243,8 +243,42 @@ def test_sample_covers_every_main_path_read_key(sample_name: str, rel_src: str) 
         ("tikhub.json", ("data", "data")),
     ],
 )
+def _container_is_populated(node: Any) -> bool:
+    """容器"有内容"的判据：数组要非空，其他形态要非 None。
+
+    这条是从旧脚本 `:323` 的 `nonempty` 原样搬来的，**迁移时被我漏掉过一半**：
+    只断言"路径定位得到"的话，`{"data": {"list": []}}` 也算过，而一份空容器样本
+    对下游没有任何契约价值（Provider 拿它产 0 行，形状断言形同虚设）。
+    """
+    if isinstance(node, list):
+        return len(node) > 0
+    return node is not None
+
+
+def _walk_single(doc: Any, path: tuple[str, ...]) -> Any:
+    """按单条路径取值（不做 `[]` 展开），取不到返回 None。"""
+    node = doc
+    for seg in path:
+        if isinstance(node, dict) and seg in node:
+            node = node[seg]
+        else:
+            return None
+    return node
+
+
+@pytest.mark.parametrize(
+    ("sample_name", "path"),
+    [
+        ("redfox.json", ("data", "list")),
+        ("redfox.json", ("data", "total")),
+        ("dajiala.json", ("data",)),
+        ("justoneapi.json", ("data", "MsgList", "Msg")),
+        ("wellbyte.json", ("data", "MsgList", "Msg")),
+        ("tikhub.json", ("data", "data")),
+    ],
+)
 def test_upstream_container_levels_are_where_the_code_thinks_they_are(sample_name: str, path: tuple) -> None:
-    """容器层级硬断言（TC-A4-04 那一类事故的常驻版）。
+    """容器层级硬断言（TC-A4-04 那一类事故的常驻版）：**存在且非空**。
 
     `wellbyte` 写这条是因为历史上有过把它当成 `data.data.MsgList` 的读法；
     `dajiala` 写这条是因为它的 `data` **本身即数组**，不是 `data.list`。
@@ -252,6 +286,40 @@ def test_upstream_container_levels_are_where_the_code_thinks_they_are(sample_nam
     doc = json.loads((SAMPLES / sample_name).read_text(encoding="utf-8"))
     ok, where = _resolve_path(doc, path)
     assert ok, f"{sample_name} 里找不到容器路径 {path}（停在 {where}）⇒ 代码的读取层级与上游形状不一致"
+    node = _walk_single(doc, path)
+    assert _container_is_populated(node), (
+        f"{sample_name} 的 {path} 定位得到但内容是 {node!r}：空容器样本没有契约价值"
+        "（旧脚本 `:323` 就判 FAIL，迁移时这一半曾经丢失）"
+    )
+
+
+def test_container_population_predicate_rejects_empty_lists() -> None:
+    """反证：`{"data": {"list": []}}` 必须被判"没内容"，否则上一条用例是空守卫。
+
+    写这条的直接理由就是它抓到了我迁移时的丢失：只喂真样本永远看不出"忘了断非空"。
+    """
+    assert _container_is_populated([{"a": 1}]) is True
+    assert _container_is_populated([]) is False, "空数组被判成有内容 ⇒ 容器判据只剩路径存在一半"
+    assert _container_is_populated(None) is False
+    assert _container_is_populated({"Msg": []}) is True  # 对象形态只要求非 None（承旧脚本口径）
+    doc = {"data": {"list": []}}
+    assert _container_is_populated(_walk_single(doc, ("data", "list"))) is False
+    assert _walk_single(doc, ("data", "missing")) is None
+
+
+def test_map_row_prefers_workUrl_over_generic_url() -> None:
+    """`_URL_KEYS` 的**顺序**本身要有判据：`workUrl` 必须赢过 `url`。
+
+    承旧脚本"RedFox 行无 url 键时仍取到 workUrl"这条，但它其实从未被真正测到——
+    样本行只有 `workUrl`，把 `_URL_KEYS` 顺序换成 `url` 在前也不会红（首轮复验实测）。
+    这里用一行同时带两个键的合成行把顺序钉住：上游 `url` 常是包装链接，
+    `workUrl` 才是正文地址，取错就是"能落库但打不开"。
+    """
+    row = {"workUuid": "e" * 32, "workUrl": "https://mp.weixin.qq.com/s/REAL", "url": "https://share.example/x"}
+    mapped = _map_row(row)
+    assert mapped is not None and mapped["url"] == "https://mp.weixin.qq.com/s/REAL", (
+        f"没有优先取 workUrl（实读 {mapped and mapped['url']!r}）⇒ `_URL_KEYS` 顺序被改动"
+    )
 
 
 # ═══════════════════════════════ B 组：RSS/Atom 真执行（真 import，不再 exec）

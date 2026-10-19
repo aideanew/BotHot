@@ -47,7 +47,7 @@
 
 ### 2b. 交付三：S00T.V14.3（F-14 证据脚本迁成 pytest 并下线）
 
-`apps/api/tests/proofs/test_provider_shapes.py`：**13 defs / 31 收集**（A16 + B6 + C6 + 极性反证 3，
+`apps/api/tests/proofs/test_provider_shapes.py`：**15 defs / 33 收集**（A16 + B6 + C6 + 极性反证 3，
 分组取自 `pytest --collect-only`）。同批把该脚本从 `EVIDENCE_PROOFS` 移除、`git rm` 脚本本体、
 在 `EVD-V2-00/README.md` 追加归档说明（原文保留，历史读数不重写）。
 

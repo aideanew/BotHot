@@ -55,7 +55,7 @@
 |---|---|---|
 | **S00T.V14.1** D-14 轮次门 | **已交付** | `python scripts/guards.py rounds-check` ⇒ 范围内无卡越限 rc=0；端到端在一次性仓库里 2 轮⇒绿、3 轮⇒红并点名 `STEP-77`、坏基线⇒1、空范围⇒3 |
 | **S00T.V14.2** D-V4-03 耦合门 | **已交付（判据有一处收紧待追认）** | `evidence-check` 现先跑耦合门再复跑脚本；端到端"新增证据脚本 + 零新用例"⇒ rc=1 且打印 `净增 1 / 用例净增 0`，补 1 条用例⇒放行。卡面「= 0 ⇒ 红」实现成 `< 1`（P-33） |
-| **S00T.V14.3** F-14 迁移 | **已交付** | `apps/api/tests/proofs/test_provider_shapes.py`：13 defs / **31 收集**（A16 + B6 + C6 + 极性 3，分组数取自 `pytest --collect-only`）；脚本已从 `EVIDENCE_PROOFS` 移除并 `git rm`，`EVD-V2-00/README.md` 追加 §7 归档说明；**出门判据实测达成**：`python scripts/guards.py evidence-check` ⇒ **rc=0**（本仓第一次） |
+| **S00T.V14.3** F-14 迁移 | **已交付** | `apps/api/tests/proofs/test_provider_shapes.py`：15 defs / **33 收集**（复验抓到 2 处判据缺口后 +2）（A16 + B6 + C6 + 极性 3，分组数取自 `pytest --collect-only`）；脚本已从 `EVIDENCE_PROOFS` 移除并 `git rm`，`EVD-V2-00/README.md` 追加 §7 归档说明；**出门判据实测达成**：`python scripts/guards.py evidence-check` ⇒ **rc=0**（准确口径：F-14 自 `314d7f2` 断裂以来第一次回到 0；断裂前 `b45777a` 有过 ✅，故不写「本仓第一次」——该收窄由复验指出并复核） |
 | 原 9 项（S0T.1.x 盘点 / S0T.2.x 其余脚本 / S0T.3.x 门禁） | **部分推进**：S0T.3.1（proofs 进 CI）随本批**顺带成立**（CI 命令是 `pytest tests/`，递归收集自动覆盖 `tests/proofs/`）；S0T.1.x 盘点与 S0T.2.x 其余脚本、S0T.3.2 行数上限、S0T.3.3 gitleaks 增量仍**未执行** | 04 §3 表把本卡「本版剩余」记 12 = 原 9 + 增量 3；增量三项已全部交付 |
 
 三条现读纠正（都带命令，不在门文本里静默生效）：

@@ -62,7 +62,7 @@ except Exception as e: print('第三处断裂:', type(e).__name__, e)
 ⇒ 结论：这不是"脚本陈旧"，是**取证形态**错了。AST 抽函数 + 手写命名空间的证明，
 既不能在实现演进时报红（它只会以 NameError 的形式崩在别处），也不能在结论被推翻时报案。
 这正是 S00T.V14.3 要把它迁成 pytest（真 import、真调用）的理由，也是本版把它接进
-`evidence-check`/CI 的理由。**V14.3 尚未执行**，本卡只交付两道闸（V14.1/V14.2）。
+`evidence-check`/CI 的理由。**（本行写于 V14.1/V14.2 交付时；V14.3 已在同日的 §11 交付，该节按当时状态保留。）**
 
 ## 3. 两道闸的判据（`scripts/guards.py`，Makefile 目标 `rounds-check`/`guard`）
 
@@ -254,7 +254,7 @@ V0.14.0/04 §5 给 Agent-Guard 的 W 面是 `scripts/guards.py`、`Makefile`、`
 |---|---|---|---|
 | N1 | `coupling_check` 里"基线 blob 取不到 ⇒ 红"那段接线**删掉后 38 例仍全绿** | 成立，且看清了原因：删接线后 `coupling_check` 因别的路径**同样返回 rc=1**，所以"只看 rc"的断言抓不到这个变异 | **MED 已修**：新增 `test_coupling_check_refuses_when_the_base_blob_cannot_be_read`，用 `monkeypatch` 替换 `guards._git`，除 rc 外**再断言"真的调用过 `cat-file`"** |
 | N2 | 词界残余：`second-round 3`、`back-ground-3` 仍计成第 3 轮；`my_round_3` 反因分隔符不含下划线而不计 | 两条都复现 | **已修**：lookbehind 加连字符与下划线、分隔符类加下划线；反证同时钉住 `round-3`、`第 3 轮`、`Round 3`、`round_3` 四种真写法仍计数 |
-| N3 | 文档两处读数过期 | 成立 | 见 §4（38 defs / 39 collected，A14）与 §7 末尾那条【第 2 轮订正】 |
+| N3 | 文档两处读数过期 | 成立 | 见 §4（38 defs / 39 collected，A14）与 §7 末尾那条「第 2 轮订正」（§7 出门判据段末） |
 
 变异对照（`.staging/mutation_check.py` 的等价做法：造一个删掉接线的副本，喂同一组 fake git）：
 
@@ -278,10 +278,10 @@ V0.14.0/04 §5 给 Agent-Guard 的 W 面是 `scripts/guards.py`、`Makefile`、`
 
 ## 11. S00T.V14.3 交付：F-14 迁移 + 脚本下线（同日续做，`evidence-check` 首次 rc=0）
 
-### 12.1 迁出来的东西
+### 11.1 迁出来的东西
 
 `apps/api/tests/proofs/test_provider_shapes.py`（新目录 `tests/proofs/`，00T 卡 §7 的输出路径）：
-**13 个 test 定义 / pytest 收集 31 例**，按 `--collect-only` 的分组实测：
+**15 个 test 定义 / pytest 收集 33 例**（初版 13/31，复验后 +2 定义），按 `--collect-only` 的分组实测：
 A 组 16（5 样本合法性 + 5 主路径读取键 + 6 容器层级）、B 组 6（2 良构产行 + 2 可行消费
 + D-04 aware + Atom 两支回落）、C 组 6（4 身分真源 + 1 None 唯一条件 + 1 RedFox 对照）、
 极性反证 3。
@@ -297,7 +297,7 @@ A 组 16（5 样本合法性 + 5 主路径读取键 + 6 容器层级）、B 组 
 并在 `EVD-V2-00/README.md` 追加 §7 归档说明（原文不删，保留 S0.3.2 当时的 32 断言读数；
 历史脚本可 `git show 7d999db:…` 取回）。
 
-### 12.2 出门判据的实测
+### 11.2 出门判据的实测（措辞已按复验收窄）
 
 ```
 $ python scripts/guards.py evidence-check
@@ -308,10 +308,10 @@ $ python scripts/guards.py evidence-check
 rc=0
 ```
 
-这是本仓**第一次** `evidence-check` 返回 0（F-14 自 `314d7f2` 起一直红，跨 V0.13.0/V0.14.0 两版）。
+**订正（复验指出，我已复核）**：这句原本写的是「本仓第一次」，超售了。`git merge-base --is-ancestor b45777a 314d7f2` ⇒ 真，且 `docs/任务规划V0.4.0/evidence/b45777a/evidence_check_b45777a.txt:180` 有 `✅ evidence-check 全部通过` ⇒ 断裂前它是绿的。准确说法是「**F-14 自 `314d7f2` 断裂以来第一次回到 rc=0**」。（那份反证文件本身是并行会话未跟踪的在制品，`git ls-files` 取不到它，但祖先关系与文本都独立核过。）
 耦合门同时放行：本批 `evidence/.py` 净增 = −1（删脚本），tests 净增 +31 ⇒ 不触发。
 
-### 12.3 极性反证当场把我的一条结论打回原形（必须留原文）
+### 11.3 极性反证当场把我的一条结论打回原形（必须留原文）
 
 照抄脚本旧结论写的 C 组判据（"行键 ∩ `_ID_KEYS` 为空 ⇒ 行被丢弃"）配上反证
 「拿掉 `_ID_KEYS` 里的 `id`，行必须立刻被丢弃」后，**第一次跑就 FAILED**：
@@ -336,13 +336,23 @@ E  AssertionError: 拿掉 `id` 后行仍能落库 ⇒ 命中另有途径，C 组
 其余两条反证同批落地：`_parse_rfc822` 退回 `None` 时 aware 判据必须失去成立条件（实测失去）；
 A 组提取器喂一个读 `MISSING_TODAY` 的假 Provider 时必须报缺失（实测报出）。
 
-### 12.4 本卡的完成度
+### 11.3b 第二轮复验又抓到两处（都已修）
+
+| 指控 | 我的复算 | 处置 |
+|---|---|---|
+| 迁移中把容器判据的"**非空**"半条丢了（旧 `:323` 的 `nonempty` 只剩"路径定位得到"） | 成立：喂 `{"data": {"list": []}}`，旧脚本判 FAIL、我的新用例判过 ⇒ 空容器样本毫无契约价值却算"锚存在" | 补 `_container_is_populated()` + 反证 `test_container_population_predicate_rejects_empty_lists`（空数组 ⇒ False、非 None 对象 ⇒ True，承旧口径） |
+| `_URL_KEYS` 的**顺序**没有判据：把 `url` 挪到 `workUrl` 前面也不会红 | 成立，而且这是**继承缺陷**——旧脚本那条也只是措辞，样本行根本没有 `url` 键，所以它从来没咬过 | 新增 `test_map_row_prefers_workUrl_over_generic_url`，用同时带两键的合成行钉住优先级 |
+
+`_URL_KEYS` 这条值得单独记：它说明"从旧证据脚本继承下来的判据"不等于"被验证过的判据"。
+我第一版迁移把旧脚本的**措辞**当判据搬了过来，只有反证才暴露它一直是空的。
+
+### 11.4 本卡的完成度
 
 | 增量 | 状态 |
 |---|---|
 | S00T.V14.1 轮次门 | 已交付，两轮复验通过 |
 | S00T.V14.2 耦合门 | 已交付，两轮复验通过（含一条真变异杀手） |
-| S00T.V14.3 F-14 迁移 | **已交付**：`evidence-check` rc=0（卡面出门判据）；`pytest tests/proofs` ⇒ 31 passed |
+| S00T.V14.3 F-14 迁移 | **已交付**：`evidence-check` rc=0（卡面出门判据）；`pytest tests/proofs` ⇒ 33 passed；复验抓到的 2 处判据缺口已补 |
 | 00T 原 9 项（S0T.1.x 盘点 / S0T.2.x 其余脚本迁移 / S0T.3.x 门禁） | **未执行** |
 
 注：`S0T.3.1`（proofs 目录纳入 CI pytest）在本批**顺带成立**——CI 的命令是 `pytest tests/`，
