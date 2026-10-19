@@ -45,3 +45,31 @@
 ---
 ## V0.13.0 补充输入（基线 main@314d7f2，不增任务数）
 - `make evidence-check` 现为红：`docs/06_validation/evidence/EVD-V2-00/prove_provider_shapes.py` 按 AST 抽 `_map_row` 单独 exec，STEP-03 之后 `_map_row` 依赖同文件 `_row_identity`（`apps/api/app/services/manifest.py:165,192`）⇒ `NameError`（证据 `docs/任务规划V0.13.0/evidence/314d7f2/evidence_check.txt`）。这正是本卡"证明判据 pytest 化"要消灭的形态：AST 抽函数的证明会随实现演进静默失效。**本卡第一项任务以它为首个迁移对象**：改为 pytest 直接 import 被测函数，并把 `evidence-check` 接进 CI（或在 `guards.py` 的 `EVIDENCE_PROOFS` 中移除已 pytest 化的条目），出门判据 = `python scripts/guards.py evidence-check` rc=0。
+
+---
+## 执行记录（Agent-Guard · 2026-10-19 · 基线 main@7d999db，V0.14.0 增量）
+
+卡面文本一律未改（含上面那段 V0.13.0 补充输入）。这一段是追加。
+
+| 增量 | 状态 | 读数 |
+|---|---|---|
+| **S00T.V14.1** D-14 轮次门 | **已交付** | `python scripts/guards.py rounds-check` ⇒ 范围内无卡越限 rc=0；端到端在一次性仓库里 2 轮⇒绿、3 轮⇒红并点名 `STEP-77`、坏基线⇒1、空范围⇒3 |
+| **S00T.V14.2** D-V4-03 耦合门 | **已交付（判据有一处收紧待追认）** | `evidence-check` 现先跑耦合门再复跑脚本；端到端"新增证据脚本 + 零新用例"⇒ rc=1 且打印 `净增 1 / 用例净增 0`，补 1 条用例⇒放行。卡面「= 0 ⇒ 红」实现成 `< 1`（P-33） |
+| **S00T.V14.3** F-14 迁移 | **未执行**（下一步） | 现跑量到三处断裂与两条被推翻的在案事实，见 `EVD-V14-00T` §2；不是搬运，要按真值重写断言 |
+| 原 9 项（S0T.1.1–1.3 / S0T.2.1–2.3 / S0T.3.1–3.3） | **未执行** | 04 §3 表把本卡"本版剩余"记 12 = 原 9 + 增量 3，与本记录一致 |
+
+三条现读纠正（都带命令，不在门文本里静默生效）：
+
+1. 卡面那句「`make evidence-check` 现为红…⇒ `_row_identity` NameError」在 `7d999db` 上**只对了一半**：
+   现在第一个炸点是模块级 `MANIFEST_STATUS_DISCOVERED = ManifestStatus.DISCOVERED.value`
+   （注入命名空间里没有 `ManifestStatus`），`_row_identity` 被它挡在后面，还有第三处 `_parse_rfc822`。
+   复现命令在 `EVD-V14-00T` §2（整段可直接粘贴执行，实测输出已附）。
+2. 「`make evidence-check`」这条命令本身**此前也跑不起来**：`$(GUARDS)` 在 Makefile 里从未定义
+   ⇒ `make evidence-check` 实测 `Error 2`（旧 Makefile 用 `make -f` 复跑为证）。
+   已随本增量补定义并上闸（`EVD-V14-00T` §5）。
+3. 卡面 `10 命令` 写的是 `uv run pytest tests/proofs -q`：本机无 `uv`，本增量的验证命令一律用
+   `apps/api/.venv/Scripts/python.exe -X utf8 -m pytest …`；`tests/proofs/` 目录尚不存在（属 S0T.2/S0T.3）。
+
+编号归一：本卡原 9 项沿用卡面写法（`S00T.1` 组下三条子项在卡面上是 `S0T.1.1` 形态），
+V14 增量按 V0.14.0 增量文件开头的规则写作 `S00T.V14.<n>`。两套前缀并存本身就是 V0.13.0/09 §0-e
+登记过的问题，归一动作在 S0T.1.x（未开始），本轮不动。

@@ -57,11 +57,46 @@ def forwarded(text: str, target: str) -> bool:
     return False
 
 
+# make 自带/环境提供的名字，不需要在本文件里定义
+MAKE_BUILTINS = {"MAKEFILE_LIST", "CURDIR", "MAKE", "MAKEFLAGS", "SHELL", "OS", "PWD", "RM"}
+# 由**调用方**在命令行赋值的变量（用法写在 help 里，如 `make migrate-new MSG="描述"`）。
+# 判据：只允许在 recipe 里以 `VAR="$(MSG)"` 这种转发形式出现，不允许出现在命令位。
+CALLER_VARS = {"MSG"}
+
+
+def undefined_variables(text: str) -> list[str]:
+    """Makefile 里 `$(VAR)` 用到了、却没有任何一处定义 ⇒ 展开成空串。
+
+    为什么必须机检（现读到实证）：`GUARDS` 从未被定义，于是
+    `make guard-ports / guard-structure / guard-versions / evidence-check` 四条目标
+    全部退化成"把子命令名当可执行文件跑"，实测 `Error 2`（见 EVD-V14-00T §5）。
+    而本脚本网上的 `forwarded()` 只查 recipe 文本里有没有 `$(GUARDS)` 字样，
+    所以"每个目标都已转调实体脚本"这句声明自己也是空头的——**声明与可运行是两个维度**。
+
+    调用变量（`MSG`）只在**每一个**出现点都处于 `NAME="$(MSG)"` 这种赋值位时才放行；
+    一旦有人把它放到命令位（`@$(MSG)`），它同样会被判未定义。
+    """
+    defined = set(re.findall(r"^([A-Za-z_][A-Za-z0-9_]*)\s*[:?+]?=", text, re.MULTILINE))
+    used = set(re.findall(r"\$\(([A-Za-z_][A-Za-z0-9_]*)\)", text))
+    # make 的单字符形式 `$X` 也是变量引用（`$MYVAR` 实际是 `$(M)` + 字面量 "YVAR"），
+    # 只看 `$(...)` 会漏掉整类写法（评审实测：`@echo $FROMMK` 判成"没有未定义变量"）。
+    used |= set(re.findall(r"(?<!\$)\$([A-Za-z])", text))
+    out: list[str] = []
+    for var in sorted(used - defined - MAKE_BUILTINS):
+        total = len(re.findall(rf"\$\({var}\)", text))
+        assign_sites = len(re.findall(rf'[A-Za-z_][A-Za-z0-9_]*="\$\({var}\)"', text))
+        if var in CALLER_VARS and total and assign_sites == total:
+            continue
+        out.append(var)
+    return out
+
+
 def main() -> int:
     tasks = entry_tasks()
     text = (ROOT / "Makefile").read_text(encoding="utf-8")
     targets = make_targets()
     missing = [t for t in targets if t not in tasks]
+    undef = undefined_variables(text)
     inline = [t for t in targets if t in tasks and not forwarded(text, t)]
     print(f"Makefile 目标 {len(targets)} 个；entry.py 任务 {len(tasks)} 个；"
           f"实体文件 entry.py={int((ROOT/'scripts/entry.py').exists())} "
@@ -76,6 +111,9 @@ def main() -> int:
         if real:
             print(f"❌ 这些目标没有转调实体脚本，Windows 侧不可运行：{', '.join(real)}")
             return 1
+    if undef:
+        print(f"❌ recipe 用了未定义的变量（展开成空串 ⇒ 子命令名被当成可执行文件跑）：{', '.join(undef)}")
+        return 1
     print("✅ 每个 Makefile 目标都能在 entry.py/guards.py 找到实体，且 recipe 已转调")
     extra = sorted(tasks - set(targets))
     if extra:

@@ -19,9 +19,11 @@ PNPM           := pnpm
 ifeq ($(OS),Windows_NT)
 PYTHON         := python
 ENTRY          ?= python scripts/entry.py
+GUARDS         ?= python scripts/guards.py
 else
 PYTHON         := python3
 ENTRY          ?= python3 scripts/entry.py
+GUARDS         ?= python3 scripts/guards.py
 endif
 
 # ─── Help ───────────────────────────────────────────
@@ -155,6 +157,18 @@ guard-versions: ## 检查版本锚点一致性（fail-closed）
 .PHONY: evidence-check
 evidence-check: ## 复跑仓库内全部 stdlib 证据证明（不装依赖、不起服务）
 	@$(GUARDS) evidence-check
+
+# ─── 治理门禁（STEP-00T S00T.V14.1/V14.2）─────────────────────────
+.PHONY: rounds-check
+rounds-check: ## D-14 轮次熔断：同一卡在第 3 轮返工即红（阈值 ≤2 轮，D-V11-04）
+	@$(GUARDS) rounds-check
+
+# 聚合门：04 §8 的完成定义引用 `make guard`，而此目标此前并不存在（F-V14-09）。
+# 用前置目标的既有写法（同 `test:`/`lint:`），本体不重复执行。
+# 任一子门非 0 即失败——含 evidence-check 的 rc=3「工具缺席」态，那不是通过。
+.PHONY: guard
+guard: guard-ports guard-structure guard-versions rounds-check evidence-check ## 全部架构/证据/治理门
+	@:  # 由前置目标转调，本体不重复执行
 
 # ─── 清理 ───────────────────────────────────────────
 .PHONY: clean

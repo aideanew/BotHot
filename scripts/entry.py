@@ -359,8 +359,13 @@ add("test-all", "后端 + 前端单测 + e2e", composite=("test-backend", "test-
 add("dev", "前后端一起起的说明（两个终端各起一个）", [print_dev_hint])
 add("clean", "清理构建产物（跨平台，不用 rm -rf）", [clean_tree])
 for _t, _d in (("guard-ports", "端口守卫"), ("guard-versions", "版本锚守卫"),
-               ("guard-structure", "目录结构守卫"), ("evidence-check", "stdlib 证据复跑")):
-    add(_t, f"{_d}（实体在 Makefile）", [guard(_t)])
+               ("guard-structure", "目录结构守卫"), ("evidence-check", "stdlib 证据复跑"),
+               ("rounds-check", "D-14 轮次熔断")):
+    add(_t, f"{_d}（实体在 guards.py）", [guard(_t)])
+# 聚合门（04 §8 完成定义引用的 `make guard`）。必须是复合目标：
+# check_entry_parity 要求 Makefile 每个目标名都在 BY_NAME 里，漏注册就是红。
+add("guard", "全部架构/证据/治理门", composite=("guard-ports", "guard-structure",
+                                              "guard-versions", "rounds-check", "evidence-check"))
 
 BY_NAME = {name: (desc, steps, composite) for name, desc, steps, composite in TASKS}
 
