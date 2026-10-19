@@ -480,8 +480,18 @@ def _mask_shape(rule: str, frag: str) -> str:
     return frag[:4] + "***"
 
 
-def secret_scan(text: str) -> tuple[list[tuple[str, int, str]], int]:
+#: 源码文件后缀（P-40 / D-V12-19）：源码里的字面量一定带引号，不带引号的「键名 + 等号 + 值」
+#: 只可能是表达式（变量、属性、函数调用），不是值。文档/配置（.md/.txt/.yml/.env…）不在此列，
+#: 仍按宽口径——YAML 无引号短口令不能放过。
+SECRET_CODE_SUFFIXES = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+
+
+def secret_scan(text: str, code: bool = False) -> tuple[list[tuple[str, int, str]], int]:
     """纯函数：文本 → ([(规则, 行号, 打码形状)], 被 ALLOW 放行处数)。
+
+    `code=True`（调用方按 SECRET_CODE_SUFFIXES 判定）时，`assign` 只报**带引号**的值：
+    改前「键名等于解密函数调用」「键名冒号表单属性」这类表达式被当成凭据，任何触碰 bots.py / bots/page.tsx 的提交都被永久阻断且没有豁免通道（P-40）。
+    十条具名规则（AKIA、DSN 内嵌口令等）不受影响，源码里照样逐条判。
 
     合成字符串即可证伪，不必造 git 状态——"这判据会不会永远绿"必须可测。
 
@@ -503,6 +513,9 @@ def secret_scan(text: str) -> tuple[list[tuple[str, int, str]], int]:
                 hits.append((name, no, _mask_shape(name, frag)))
         for m in SECRET_ASSIGN.finditer(line):
             val = m.group(2)
+            quoted = m.start(2) > 0 and line[m.start(2) - 1] in "\"'"
+            if code and not quoted:
+                continue
             if (val.startswith("re.compile") or SECRET_FAKE.match(val)
                     or _SECRET_ASSIGN_SKIP.search(val)):
                 continue
@@ -573,7 +586,7 @@ def secret_shape_check(base: str = "origin/main") -> int:
             skipped += 1
             continue
         scanned += 1
-        hits, ok = secret_scan(data.decode("utf-8", "replace"))
+        hits, ok = secret_scan(data.decode("utf-8", "replace"), code=rel.endswith(SECRET_CODE_SUFFIXES))
         allowed += ok
         for name, no, shape in hits:
             high += 1

@@ -719,3 +719,43 @@ def test_the_implementation_files_themselves_carry_no_shape() -> None:
             continue
         hits, _allowed = guards.secret_scan(path.read_text(encoding="utf-8"))
         assert hits == [], f"{path.name} 里留下了敏感形：{[(h[0], h[1]) for h in hits]}"
+
+
+# ═══════════════════════════ G. P-40 / D-V12-19：源码文件里只报带引号的赋值
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        # 一律拼接：本文件自身在门的扫描面上
+        "        " + "secret" + "=decrypt_channel_secret(ch.id, ch.secret_enc),",
+        "          " + "secret" + ": formData.secret,",
+        "    " + "token" + " = settings.feishu_token",
+    ],
+    ids=["函数调用", "属性访问", "设置引用"],
+)
+def test_code_expressions_are_not_values(line: str) -> None:
+    assert guards.secret_scan(line, code=True)[0] == []
+    # 同一行放在文档里仍按宽口径报——收窄只作用于源码
+    assert [h[0] for h in guards.secret_scan(line)[0]] == ["assign"]
+
+
+def test_quoted_literal_in_code_is_still_high() -> None:
+    hits, _ = guards.secret_scan("token" + ' = "hunter2secret99"', code=True)
+    assert [h[0] for h in hits] == ["assign"]
+    hits, _ = guards.secret_scan("const " + "password" + ": 'hunter2secret99',", code=True)
+    assert [h[0] for h in hits] == ["assign"]
+
+
+def test_named_rules_still_fire_in_code() -> None:
+    hits, _ = guards.secret_scan("x = " + AKIA, code=True)
+    assert hits, "具名规则在源码里被一起关掉了"
+
+
+def test_gate_applies_code_mode_by_suffix(monkeypatch) -> None:
+    expr = ("secret" + ": formData.secret\n").encode()
+    _fake_git(monkeypatch, staged="a.tsx\nb.md\n", blobs={"a.tsx": expr, "b.md": expr})
+    assert guards.secret_shape_check() == 1  # b.md 仍报
+    _fake_git(monkeypatch, staged="a.tsx\n", blobs={"a.tsx": expr})
+    assert guards.secret_shape_check() == 0
+
