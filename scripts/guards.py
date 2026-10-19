@@ -171,11 +171,19 @@ def guard_structure() -> int:
 
 MAX_ROUNDS = 2  # D-14：≤2 轮，第 3 轮熔断（不是 S0G.2.1 旧卡面的 >3；以 D-V11-04 为准）
 _STEP_ID_RE = re.compile(r"STEP-([0-9A-Za-z]+)")
+# D-V12-02（S27.5）：主题里只写 L3 号时按**第一段**反推卡号（`S1.3.2` → 1，`S27.3` → 27）。
+# 这是关掉 EVD-V14-00T §4-3 登记的真实盲区：`…S1.3.2 的第 7 轮熔断…` 改前零归属。
+_L3_ID_RE = re.compile(r"(?<![A-Za-z0-9])S([0-9]+)\.[0-9]+(?:\.[0-9]+)*")
 # `(?<![A-Za-z0-9])` 是必须的：不加词界时 `background-3`、`reorder around 3 tests`
 # 都会被当成"第 3 轮"（实测），而那是**假红**——门一红人就停手，假红的代价是门被关掉。
 # 第 2 轮复验又抓到同族两个漏网：`second-round 3`（`round` 前是连字符）、`back-ground-3`，
 # 所以 lookbehind 要连 `-`/`_` 一起挡；而 `round_3` 这种下划线写法仍要认 ⇒ 分隔符类加 `_`。
 _ROUND_RE = re.compile(r"第\s*(\d+)\s*轮|(?<![A-Za-z0-9_-])round[\s_-]*(\d+)", re.IGNORECASE)
+# D-V12-02：中文数字轮号（`第二轮`…`第二十轮`）。P-31 记的 STEP-01 那 10 条主题就是这种写法，
+# 改前完全不计数。上界取二十——D-14 只到第 3 轮，超过二十的写法不存在，多认只会引入歧义。
+_CN_DIGITS = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
+              "六": 6, "七": 7, "八": 8, "九": 9}
+_ROUND_CN_RE = re.compile(r"第\s*([一二三四五六七八九十]{1,3})\s*轮")
 _REWORK_TOKENS = ("返工", "重做")
 _REWORK_THRESHOLD = MAX_ROUNDS + 1  # 出现「第 3 轮」这类显式轮号即红
 
@@ -184,12 +192,45 @@ EVIDENCE_ROOT = "docs/06_validation/evidence"
 TESTS_ROOT = "apps/api/tests"
 
 
+def _cn_number(text: str) -> int | None:
+    """中文数字 → 整数，只支持 D-14 需要的 1～20（`十` / `十一` / `二十`）。"""
+    if not text or any(ch not in _CN_DIGITS and ch != "十" for ch in text):
+        return None
+    if "十" not in text:
+        if len(text) != 1:
+            return None
+        return _CN_DIGITS[text]
+    left, _, right = text.partition("十")
+    if "十" in right:
+        return None
+    tens = _CN_DIGITS[left] if left else 1
+    ones = _CN_DIGITS[right] if right else 0
+    value = tens * 10 + ones
+    return value if 1 <= value <= 20 else None
+
+
 def _round_numbers(subject: str) -> list[int]:
-    """主题里出现的全部轮号（`第3轮` / `round-3` 两种写法，本仓历史实际都有）。"""
+    """主题里出现的全部轮号（`第3轮` / `round-3` / `第三轮` 三种写法，本仓历史实际都有）。"""
     out: list[int] = []
     for m in _ROUND_RE.finditer(subject):
         out.append(int(m.group(1) or m.group(2)))
+    for m in _ROUND_CN_RE.finditer(subject):
+        value = _cn_number(m.group(1))
+        if value is not None:
+            out.append(value)
     return out
+
+
+def _primary_card(subject: str) -> str:
+    """一条主题归属的**唯一**卡号（D-V12-02：跨卡提及只计主卡）。
+
+    优先级：首个 `STEP-<id>` > 首个 L3 号（`S<卡号>.`）。两者都没有 ⇒ 空串（不归属）。
+    """
+    ids = _STEP_ID_RE.findall(subject)
+    if ids:
+        return ids[0]
+    l3 = _L3_ID_RE.findall(subject)
+    return l3[0] if l3 else ""
 
 
 def _is_round_marker(subject: str) -> bool:
@@ -204,14 +245,18 @@ def rounds_violations(subjects: list[str], max_rounds: int = MAX_ROUNDS) -> list
       1. 同一卡在范围内被标记 > max_rounds 次 ⇒ 已经第 3 轮；
       2. 任一主题直接写出 ≥ max_rounds+1 的轮号 ⇒ 即便前面的轮发生在范围外，
          "第 3 轮"这个事实本身就够熔断。
+
+    归属口径（D-V12-02 / S27.5）：每条主题只计**主卡**（`_primary_card`），
+    跨卡提及不再连坐；只写 L3 号的按第一段反推卡号。
     """
     limit = max_rounds
     marks: dict[str, list[str]] = {}
     for subject in subjects:
         if not _is_round_marker(subject):
             continue
-        for step_id in _STEP_ID_RE.findall(subject):
-            marks.setdefault(step_id, []).append(subject)
+        card = _primary_card(subject)
+        if card:
+            marks.setdefault(card, []).append(subject)
     out: list[dict[str, object]] = []
     for step_id, hits in sorted(marks.items()):
         explicit = [n for s in hits for n in _round_numbers(s) if n >= _REWORK_THRESHOLD]
@@ -480,8 +525,13 @@ def _mask_shape(rule: str, frag: str) -> str:
     return frag[:4] + "***"
 
 
-def secret_scan(text: str) -> tuple[list[tuple[str, int, str]], int]:
+def secret_scan(text: str, code: bool = False,
+                lang: str = "hash") -> tuple[list[tuple[str, int, str]], int]:
     """纯函数：文本 → ([(规则, 行号, 打码形状)], 被 ALLOW 放行处数)。
+
+    `code=True` 走源码模式（S27.V15.1）：源码里的表达式不再误报，字面量照报。
+    默认 `False` 是**刻意**的——文档面读数必须与改前逐字节一致（④）。
+    `lang` 只影响注释符（`hash` = Python 的 `#`，`slash` = JS/TS 的 `//`）。
 
     合成字符串即可证伪，不必造 git 状态——"这判据会不会永远绿"必须可测。
 
@@ -493,6 +543,8 @@ def secret_scan(text: str) -> tuple[list[tuple[str, int, str]], int]:
     """
     hits: list[tuple[str, int, str]] = []
     allowed = 0
+    if code:
+        return secret_scan_source(text, lang)
     for no, line in enumerate(text.splitlines(), 1):
         for name, rx in SECRET_RULES:
             for m in rx.finditer(line):
@@ -508,6 +560,259 @@ def secret_scan(text: str) -> tuple[list[tuple[str, int, str]], int]:
                 continue
             hits.append(("assign", no, f"{m.group(1)}=<已打码，值长 {len(val)} 字符>"))
     return hits, allowed
+
+
+# ══════════════════════════════════════════ 源码模式（S27.V15.1 / D-V12-21）
+#
+# 为什么需要第二种口径：P-40 的 14 个自有源码文件里，命中全是**表达式**——
+# 键名紧接赋值号、右值是解密函数调用；对象键名后接冒号、右值是表单对象属性；
+# 键名等于配置对象属性。门没有豁免通道，所以任何触碰这些文件的提交都被永久挡住。
+# （本段刻意不写出那三种形状的完整文本：写了就会被本门自己判红，S00P.2.1 的规矩
+#   先约束写规矩的人，EVD-V4-00P §10 记过同一次自伤。）
+#
+# 但"放宽"必须是一条有语义的线，不是"源码文件跳过"：
+#   · 键名落在**字符串/注释**里 ⇒ 那段文本本身就是字面量 ⇒ 照报（含跨行三引号与反引号，
+#     这正是两轮复查里漏掉的第一类：行内判断看不见跨行串）；
+#   · 键名在代码位 ⇒ 看**赋值号到行尾**的整段右值，而不是正则截断出来的片段。
+#     正则的字符类在第一个引号处就停，于是「取环境变量 + 逗号 + 写死兜底值」会被截成
+#     「取环境变量 + 左括号」，看上去就是表达式——这是复查第 2 轮漏掉的第二类。
+#   · 右值里没有引号（含反引号）且不是纯数字 ⇒ 表达式 ⇒ 不报；
+#   · 右值里出现**值类**字面量（≥8 字符、非占位、非全大写环境变量名）⇒ 报；
+#   · 整体就是一个字面量 ⇒ 直接赋值 ⇒ 报（不看长度，短口令也算）。
+#
+# 为什么不用 AST：TS/TSX 没有 stdlib 解析器；且文件可能正在编辑（语法不完整）时
+# 门仍必须给出判定。字符级状态机对两类语言都成立，且失败方向是"多报"。
+
+_SOURCE_EXTS = frozenset({".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"})
+_HASH_COMMENT_EXTS = frozenset({".py"})
+
+# S27.3 / D-V12-05：`\b` 边界抓不到 `APP_TOKEN` 这类前缀常量名（P-41 的登记项）。
+# 只补 `_TOKEN` 后缀这一族；不扩到别的后缀——扩面要配全仓误报对照，属另一条裁决。
+SECRET_ASSIGN_SUFFIX = re.compile(
+    r"(?i)\b([A-Za-z0-9_]*_token)\b\s*[:=]\s*[\"']?([^\"'\s,;)}]{4,})")
+
+_SRC_LITERAL = re.compile(r"\"(?:[^\"\\\n]|\\.)*\"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`")
+_SRC_ONLY_LITERAL = re.compile(
+    r"^(?:[rRbBuUfF]{0,2})?(?:\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)$")
+_SRC_ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]{2,}$")
+# 键位取值：`x["k"]` 的下标、`.get(`/`.pop(`/`.setdefault(` 的第一个实参。
+# 这些位置上的字面量是**字段名**，不是值——首版把「键名=对象["同名键"]」这种取值
+# 判成"写死凭据"，把改前能过门的 `providers/aidean/client.py`、`api/v1/auth.py` 关回门里。
+_KEYED_ACCESS = re.compile(r"\.(?:get|pop|setdefault|getlist|getall)\s*\(\s*$")
+
+
+def _source_language(suffix: str) -> str | None:
+    suffix = suffix.lower()
+    if suffix not in _SOURCE_EXTS:
+        return None
+    return "hash" if suffix in _HASH_COMMENT_EXTS else "slash"
+
+
+def _source_kinds(lines: list[str], lang: str) -> list[list[str]]:
+    """逐行给出每个字符的归属：`c` 代码位 / `s` 字符串位 / `m` 注释位。
+
+    跨行字符串（Python 三引号、JS 反引号）的状态在行间传递——这是复查第 2 轮
+    「多行字符串内赋值漏检」的正面修法：行内判断永远看不见上一行打开的定界符。
+    """
+    out: list[list[str]] = []
+    state = ""
+    for line in lines:
+        kinds = ["c"] * len(line)
+        i, n = 0, len(line)
+        while i < n:
+            if state:
+                end = line.find(state, i)
+                if end < 0:
+                    for j in range(i, n):
+                        kinds[j] = "s"
+                    i = n
+                    break
+                for j in range(i, end + len(state)):
+                    kinds[j] = "s"
+                i = end + len(state)
+                state = ""
+                continue
+            ch = line[i]
+            if (lang == "hash" and ch == "#") or (
+                    lang != "hash" and ch == "/" and i + 1 < n and line[i + 1] == "/"):
+                for j in range(i, n):
+                    kinds[j] = "m"
+                i = n
+                break
+            if ch in "\"'":
+                triple = ch * 3
+                if line.startswith(triple, i):
+                    for j in range(i, min(i + 3, n)):
+                        kinds[j] = "s"
+                    i += 3
+                    state = triple
+                    continue
+                j = i + 1
+                while j < n:
+                    if line[j] == "\\":
+                        j += 2
+                        continue
+                    if line[j] == ch:
+                        break
+                    j += 1
+                for k in range(i, min(j + 1, n)):
+                    kinds[k] = "s"
+                i = j + 1
+                continue
+            if ch == "`":
+                j = i + 1
+                closed = False
+                while j < n:
+                    if line[j] == "\\":
+                        j += 2
+                        continue
+                    if line[j] == "`":
+                        closed = True
+                        break
+                    j += 1
+                if closed:
+                    for k in range(i, j + 1):
+                        kinds[k] = "s"
+                    i = j + 1
+                    continue
+                for k in range(i, n):
+                    kinds[k] = "s"
+                state = "`"
+                i = n
+                break
+            i += 1
+        out.append(kinds)
+    return out
+
+
+def _src_literals(text: str) -> list[str]:
+    """抽出文本里的字面量内容（去掉定界符）。跨行串按行给出，调用方只需"有没有值类字面量"。"""
+    return [m.group(0)[1:-1] for m in _SRC_LITERAL.finditer(text)]
+
+
+def _src_value_like(literal: str) -> bool:
+    """这个字面量像不像"值"：≥8 字符、非占位、非全大写环境变量名。"""
+    if len(literal) < 8 or SECRET_FAKE.match(literal):
+        return False
+    return not _SRC_ENV_NAME.match(literal)
+
+
+def _literal_is_key(rhs: str, start: int) -> bool:
+    """这个字面量是不是处在**键位**（下标或键值访问的第一个实参）。
+
+    为什么键位不能算值：「键名=对象["同名键"]」这种取值的右值来自对象本身，
+    引号里那串只是字段名；`.get("k", "v")` 里第一个实参同理。若把键位当值，
+    "放宽表达式"就变成"把两处表达式换成另一种误报"，`providers/aidean/client.py`
+    与 `api/v1/auth.py` 会重新被门挡住——S27.3 首版就是这么自伤的。
+    第二个实参（兜底值）不在键位，照旧按值判定。
+    """
+    i = start - 1
+    while i >= 0 and rhs[i] in " \t":
+        i -= 1
+    if i < 0:
+        return False
+    if rhs[i] == "[":
+        return True
+    if rhs[i] == "(":
+        return bool(_KEYED_ACCESS.search(rhs[:i + 1]))
+    return False
+
+
+def _operator_index(line: str, key_end: int) -> int:
+    """键名之后的**赋值算子**位置；注解式赋值取后面的 `=`，不是类型注解的 `:`。
+
+    为什么不能只取 `rfind(":")`/`rfind("=")`：注解式赋值的右值会从冒号后开始，
+    于是类型名被当成"值里有写死字面量"的表达式——而真正的右值是 `=` 之后那段。
+    反过来，对象字面量里的键名后接冒号、右值是属性访问，那一行没有 `=`，冒号就是算子。
+    """
+    i = key_end
+    while i < len(line) and line[i] in " \t":
+        i += 1
+    if i >= len(line):
+        return -1
+    if line[i] == "=":
+        return i
+    if line[i] != ":":
+        return -1
+    depth = 0
+    j = i + 1
+    while j < len(line):
+        ch = line[j]
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "=" and depth == 0 and line[j:j + 2] != "==" and line[j - 1] not in "=!<>":
+            return j
+        elif ch in ",;" and depth == 0:
+            break
+        j += 1
+    return i
+
+
+def _source_hit(line: str, kinds: list[str], key_start: int, op: int) -> bool:
+    """源码面的一条候选：报还是放行。判据见本节开头的四条。"""
+    if kinds[key_start] != "c":
+        # 键名在字符串或注释里：那一段文本就是字面量本身（跨行串也走这一支）
+        return True
+    end = len(line)
+    for i in range(op + 1, len(line)):
+        if kinds[i] == "m":
+            end = i
+            break
+    rhs = line[op + 1:end].strip().rstrip(",;").strip()
+    if not rhs:
+        return False
+    if "`" in rhs:
+        return True
+    if _SRC_ONLY_LITERAL.match(rhs):
+        return True
+    literals = [(m.start(), m.group(0)[1:-1]) for m in _SRC_LITERAL.finditer(rhs)]
+    if literals:
+        # 键位（下标 / 键值访问首实参）里的字面量是字段名，不参与"值类"判定
+        return any(_src_value_like(lit) and not _literal_is_key(rhs, pos)
+                   for pos, lit in literals)
+    return rhs.isdigit()
+
+
+def secret_scan_source(text: str, lang: str) -> tuple[list[tuple[str, int, str]], int]:
+    """源码面扫描：具名规则照旧，赋值形走 `_source_hit` 的表达式判据。
+
+    返回形状与 `secret_scan` 相同，调用方不必分支。
+    """
+    lines = text.splitlines()
+    kinds_per_line = _source_kinds(lines, lang)
+    hits: list[tuple[str, int, str]] = []
+    allowed = 0
+    for no, line in enumerate(lines, 1):
+        kinds = kinds_per_line[no - 1]
+        for name, rx in SECRET_RULES:
+            for m in rx.finditer(line):
+                frag = m.group(0)
+                if any(a.search(frag) for a in SECRET_ALLOW):
+                    allowed += 1
+                    continue
+                hits.append((name, no, _mask_shape(name, frag)))
+        for rx in (SECRET_ASSIGN, SECRET_ASSIGN_SUFFIX):
+            for m in rx.finditer(line):
+                val = m.group(2)
+                if (val.startswith("re.compile") or SECRET_FAKE.match(val)
+                        or _SECRET_ASSIGN_SKIP.search(val)):
+                    continue
+                op = _operator_index(line, m.end(1))
+                if op < 0 or not _source_hit(line, kinds, m.start(1), op):
+                    continue
+                hits.append(("assign", no, f"{m.group(1)}=<已打码，值长 {len(val)} 字符>"))
+    hits.sort(key=lambda item: (item[1], item[0]))
+    return hits, allowed
+
+
+def secret_scan_for_path(text: str, rel: str) -> tuple[list[tuple[str, int, str]], int]:
+    """按路径挑口径：源码后缀走源码模式，其余（文档/配置/未知）走原严格口径。"""
+    lang = _source_language(Path(rel).suffix)
+    if lang is None:
+        return secret_scan(text)
+    return secret_scan_source(text, lang)
 
 
 def secret_scope(base: str) -> tuple[list[str], str, str]:
@@ -573,7 +878,7 @@ def secret_shape_check(base: str = "origin/main") -> int:
             skipped += 1
             continue
         scanned += 1
-        hits, ok = secret_scan(data.decode("utf-8", "replace"))
+        hits, ok = secret_scan_for_path(data.decode("utf-8", "replace"), rel)
         allowed += ok
         for name, no, shape in hits:
             high += 1
@@ -650,9 +955,15 @@ def evidence_check(base: str = "origin/main") -> int:
     if not gitleaks and os.environ.get("LOCALAPPDATA"):
         cand = Path(os.environ["LOCALAPPDATA"]) / "Programs" / "tools" / "gitleaks" / "gitleaks.exe"
         gitleaks = str(cand) if cand.exists() else None
+    # S27.2：CI 的 backend job 不装 gitleaks（权威步在 Security 工作流）。
+    # 没有这个开关时，本门会把「工具缺席」判成第三态 ⇒ CI 恒红；而把 gitleaks 装进
+    # 每个 job 是重复劳动。开关只允许**显式声明覆盖**，默认仍是缺席即第三态。
+    gitleaks_covered = bool(os.environ.get("GUARD_GITLEAKS_COVERED"))
     if gitleaks:
         tool_steps.append(("gitleaks", [gitleaks, "detect", "--source", ".", "--config", ".gitleaks.toml",
                                      "--no-banner"], ROOT))
+    elif gitleaks_covered:
+        print("SKIP(covered by Security) gitleaks——权威步在 .github/workflows/security.yml", flush=True)
     else:
         missing.append("gitleaks")
     # 缺席告警只报真缺席的那个：改前是 `if gitleaks and tool_steps is not None … else: print(gitleaks SKIP)`，
@@ -711,6 +1022,14 @@ GUARDS = {"guard-ports": guard_ports, "guard-versions": guard_versions,
 # 只有这两道门需要基线（其余门看的是仓库现状，与"这一批改了什么"无关）
 BASE_AWARE = ("evidence-check", "rounds-check")
 DEFAULT_BASE = "origin/main"
+# S27.1 / D-V12-03：范围门的默认基线统一读它。CI 里 `origin/main` 在 push 事件上等于
+# "刚推完的 HEAD"，范围恒空 ⇒ 门永远第三态；基线只能由事件给出（`github.event.before`）。
+BASE_ENV = "GUARD_BASE"
+
+
+def default_base() -> str:
+    """范围门的默认基线：`GUARD_BASE` 非空则用它，否则退回 `origin/main`。"""
+    return os.environ.get(BASE_ENV, "").strip() or DEFAULT_BASE
 
 
 def main(argv: list[str]) -> int:
@@ -721,18 +1040,20 @@ def main(argv: list[str]) -> int:
             except Exception:
                 pass
     name = argv[0] if argv else ""
-    base = DEFAULT_BASE
+    base = default_base()
+    explicit = False
     rest = argv[1:]
     if rest[:1] == ["--base"]:
-        if len(rest) != 2:
+        if len(rest) != 2 or not rest[1].strip():
             print("用法：--base 后面必须且只能跟一个可解析的 ref")
             return 1
         base = rest[1]
+        explicit = True
         rest = []
     if rest or not name or name not in GUARDS:
         print(f"用法：python scripts/guards.py <{'|'.join(GUARDS)}> [--base <ref>]")
         return 1
-    if base != DEFAULT_BASE and name not in BASE_AWARE:
+    if explicit and name not in BASE_AWARE:
         # 不接受 --base 的门被传了 --base：静默忽略会制造"我指定了基线所以判了历史"的错觉
         print(f"❌ {name} 不接受 --base（它不比较范围，只看仓库现状）", flush=True)
         return 1

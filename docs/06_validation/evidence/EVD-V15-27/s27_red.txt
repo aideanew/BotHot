@@ -1,0 +1,170 @@
+# STEP-27 / S27.V15.1 先红读数（重取版，可入库）
+#
+# 为什么是重取版：就地实现时取的完整回栈版逐行带着夹具形状，按 S00P.2.1
+# 不得入库（敏感形门在它上面读 19 条 HIGH，整批被挡）。这里把实现侧逐字节还原到
+# 交付前（git show 8135f1a:scripts/guards.py），并用 --tb=line 重跑：只留失败用例
+# 与断言消息，不留源码回栈。还原前后 sha256 一致（见本脚本输出）。
+# 原始就地读数：42 failed, 103 passed in 19.16s（42 条 = §H/§I 新增的先红用例）。
+#
+# 落盘前还有一步机械去形：敏感形门自己的错误消息形如「键名=<已打码，值长 N 字符>」，
+# 打码值仍是值类字面量（门会读它会读的东西）。统一换成 <masked>，只损失长度读数。
+#
+................................................................FFFFFFFF [ 48%]
+FFFFFFFFFFFFFFFFFFFFFFFF..........F.F...........................FF.F..FF [ 97%]
+FF.                                                                      [100%]
+================================== FAILURES ===================================
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:749: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:749: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:749: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:777: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:777: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:777: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:777: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:777: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:777: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:777: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:777: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:777: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:777: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:777: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:777: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:777: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:777: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:777: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:788: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:811: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:822: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:828: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:837: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:844: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:864: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:864: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:864: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:864: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   TypeError: secret_scan() got an unexpected keyword argument 'code'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:864: TypeError: secret_scan() got an unexpected keyword argument 'code'
+E   AttributeError: module 'bothot_secret_guards_under_test' has no attribute 'secret_scan_for_path'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:916: AttributeError: module 'bothot_secret_guards_under_test' has no attribute 'secret_scan_for_path'
+E   AttributeError: module 'bothot_secret_guards_under_test' has no attribute 'secret_scan_for_path'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:938: AttributeError: module 'bothot_secret_guards_under_test' has no attribute 'secret_scan_for_path'
+E   AssertionError: 源码面没有走源码模式 ⇒ bots.py 仍会被挡
+    assert 1 == 0
+     +  where 1 = <function secret_shape_check at 0x000001DB088BAAC0>('HEAD')
+     +    where <function secret_shape_check at 0x000001DB088BAAC0> = guards.secret_shape_check
+---------------------------- Captured stdout call -----------------------------
+敏感形门（STEP-00P S00P.1.1）：待检 1 个路径（取材面=index），实扫 1，跳过 0（本批删除/二进制/超限），HIGH 1，ALLOWED 放行 0
+   HIGH assign  app/x.py:1  secret=<masked>
+❌ 敏感形门：命中 >0 ⇒ 本批不得入库。整改口径（S00P.2.1/2.2）：文档里不内联敏感形字面量，也不内联扫描正则本身——只描述形状并指向判据实体；权威终判仍以 `gitleaks` 的 git 模式为准。要豁免只能按 D-12 逐指纹登记进 `.gitleaksignore`（STEP-00S 的归属面），**本门不自建 allowlist**。
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_secret_shape_gate.py:956: AssertionError: 源码面没有走源码模式 ⇒ bots.py 仍会被挡
+E   AssertionError: assert ['20', '22', '23'] == ['20']
+      
+      Left contains 2 more items, first extra item: '22'
+      Use -v to get more diff
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_guard_rounds.py:164: AssertionError: assert ['20', '22', '23'] == ['20']
+E   AssertionError: assert [] == ['1']
+      
+      Right contains one more item: '1'
+      Use -v to get more diff
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_guard_rounds.py:187: AssertionError: assert [] == ['1']
+E   AttributeError: module 'bothot_guards_under_test' has no attribute 'default_base'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_guard_rounds.py:675: AttributeError: module 'bothot_guards_under_test' has no attribute 'default_base'
+E   AssertionError: assert ['origin/main'] == ['cafe1234']
+      
+      At index 0 diff: 'origin/main' != 'cafe1234'
+      Use -v to get more diff
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_guard_rounds.py:686: AssertionError: assert ['origin/main'] == ['cafe1234']
+E   AssertionError: assert 3 == 1
+     +  where 3 = <function main at 0x000001DB08446520>(['rounds-check'])
+     +    where <function main at 0x000001DB08446520> = guards.main
+---------------------------- Captured stdout call -----------------------------
+⚠️  rounds-check：origin/main..HEAD 为空 ⇒ 无可检提交，**这不是通过**（rc=3）
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_guard_rounds.py:701: AssertionError: assert 3 == 1
+E   AssertionError: 三
+    assert [] == [3]
+      
+      Right contains one more item: 3
+      Use -v to get more diff
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_guard_rounds.py:741: AssertionError: 三
+E   AssertionError: assert [] == ['1']
+      
+      Right contains one more item: '1'
+      Use -v to get more diff
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_guard_rounds.py:753: AssertionError: assert [] == ['1']
+E   AssertionError: assert ['20', '22', '23'] == ['20']
+      
+      Left contains 2 more items, first extra item: '22'
+      Use -v to get more diff
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_guard_rounds.py:765: AssertionError: assert ['20', '22', '23'] == ['20']
+E   AttributeError: module 'bothot_guards_under_test' has no attribute '_primary_card'
+D:\\Code\\AideanBotHot\\apps\\api\\tests\\test_guard_rounds.py:770: AttributeError: module 'bothot_guards_under_test' has no attribute '_primary_card'
+=========================== short test summary info ===========================
+FAILED tests/test_secret_shape_gate.py::test_source_mode_does_not_report_pure_expressions[\\u952e\\u540d\\u7b49\\u4e8e\\u89e3\\u5bc6\\u51fd\\u6570\\u8c03\\u7528]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_does_not_report_pure_expressions[\\u5bf9\\u8c61\\u91cc\\u952e\\u540d\\u5192\\u53f7\\u63a5\\u8868\\u5355\\u5c5e\\u6027]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_does_not_report_pure_expressions[\\u952e\\u540d\\u7b49\\u4e8e\\u914d\\u7f6e\\u5c5e\\u6027]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_every_literal_shape[\\u53cc\\u5f15\\u53f7\\u5b57\\u7b26\\u4e32\\u91cc\\u7684\\u8fde\\u63a5\\u4e32\\uff08\\u5177\\u540d\\u89c4\\u5219\\uff09]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_every_literal_shape[\\u5b57\\u7b26\\u4e32\\u91cc\\u7684\\u73af\\u5883\\u884c\\uff08\\u5927\\u5199\\u952e\\u540d\\u7b49\\u4e8e\\u503c\\uff09]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_every_literal_shape[\\u4e95\\u53f7\\u6ce8\\u91ca\\u91cc\\u7684\\u8d4b\\u503c]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_every_literal_shape[\\u53cc\\u659c\\u6760\\u6ce8\\u91ca\\u91cc\\u7684\\u8d4b\\u503c]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_every_literal_shape[\\u53cd\\u5f15\\u53f7\\u6a21\\u677f\\u91cc\\u7684\\u8d4b\\u503c]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_every_literal_shape[\\u7eaf\\u6570\\u5b57\\u53e3\\u4ee4]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_every_literal_shape[\\u4e09\\u5f15\\u53f7\\u8de8\\u884c\\u5b57\\u7b26\\u4e32\\u91cc\\u7684\\u8d4b\\u503c]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_every_literal_shape[\\u53cd\\u5f15\\u53f7\\u8de8\\u884c\\u5b57\\u7b26\\u4e32\\u91cc\\u7684\\u8d4b\\u503c]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_every_literal_shape[\\u53d6\\u73af\\u5883\\u53d8\\u91cf\\u5e26\\u5199\\u6b7b\\u515c\\u5e95\\u503c]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_every_literal_shape[\\u5b57\\u5178 get \\u5e26\\u5199\\u6b7b\\u515c\\u5e95\\u503c]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_every_literal_shape[\\u7a7a\\u503c\\u5408\\u5e76\\u7684\\u5199\\u6b7b\\u515c\\u5e95\\u503c]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_every_literal_shape[\\u903b\\u8f91\\u6216\\u7684\\u5199\\u6b7b\\u515c\\u5e95\\u503c]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_every_literal_shape[or \\u7684\\u5199\\u6b7b\\u515c\\u5e95\\u503c]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_every_literal_shape[\\u4e09\\u5143\\u7684\\u5199\\u6b7b\\u515c\\u5e95\\u503c]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_every_literal_shape[\\u5b57\\u7b26\\u4e32\\u62fc\\u63a5\\u7684\\u5199\\u6b7b\\u515c\\u5e95\\u503c]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_skips_an_env_name_argument_but_not_a_fallback_value
+FAILED tests/test_secret_shape_gate.py::test_source_mode_treats_a_keyed_lookup_as_a_reference_not_a_value
+FAILED tests/test_secret_shape_gate.py::test_source_mode_still_reports_a_hardcoded_fallback_after_a_keyed_lookup
+FAILED tests/test_secret_shape_gate.py::test_source_mode_keeps_the_named_rules_untouched
+FAILED tests/test_secret_shape_gate.py::test_source_mode_catches_a_token_suffixed_key
+FAILED tests/test_secret_shape_gate.py::test_source_mode_is_opt_in_so_the_doc_face_cannot_drift
+FAILED tests/test_secret_shape_gate.py::test_named_source_files_have_zero_hits_under_source_mode[apps/api/app/api/v1/bots.py]
+FAILED tests/test_secret_shape_gate.py::test_named_source_files_have_zero_hits_under_source_mode[apps/web/app/bots/page.tsx]
+FAILED tests/test_secret_shape_gate.py::test_named_source_files_have_zero_hits_under_source_mode[apps/api/app/providers/discovery/registry.py]
+FAILED tests/test_secret_shape_gate.py::test_named_source_files_have_zero_hits_under_source_mode[apps/api/app/services/push_scheduler.py]
+FAILED tests/test_secret_shape_gate.py::test_named_source_files_have_zero_hits_under_source_mode[scripts/entry.py]
+FAILED tests/test_secret_shape_gate.py::test_source_mode_never_drops_a_line_carrying_a_value_literal
+FAILED tests/test_secret_shape_gate.py::test_source_mode_only_adds_the_token_suffix_family
+FAILED tests/test_secret_shape_gate.py::test_the_gate_switches_source_mode_by_extension
+FAILED tests/test_guard_rounds.py::test_rounds_gate_attributes_cross_card_subjects_to_the_primary_card_only
+FAILED tests/test_guard_rounds.py::test_rounds_gate_now_attributes_l3_only_subjects
+FAILED tests/test_guard_rounds.py::test_default_base_reads_the_guard_base_env
+FAILED tests/test_guard_rounds.py::test_main_uses_the_env_base_for_scope_gates
+FAILED tests/test_guard_rounds.py::test_a_bad_base_from_the_env_is_red_and_named
+FAILED tests/test_guard_rounds.py::test_rounds_gate_counts_chinese_numerals
+FAILED tests/test_guard_rounds.py::test_rounds_gate_infers_the_card_from_an_l3_id
+FAILED tests/test_guard_rounds.py::test_rounds_gate_counts_only_the_primary_card_of_a_cross_card_subject
+FAILED tests/test_guard_rounds.py::test_primary_card_prefers_step_prefix_over_l3_id
+41 failed, 106 passed in 15.27s

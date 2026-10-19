@@ -50,7 +50,7 @@ import pytest
 
 API_DIR = Path(__file__).resolve().parents[1]
 BLACK_HOLE_DSN = os.environ.get("BOTHOT_PROBE_BLACKHOLE", "postgresql+psycopg://probe@10.255.255.1:5432/probe")
-LIMIT_SECONDS = 8.0          # 判据：connect_timeout=3 + wait_for(5) 之和，留 CI 抖动余量
+LIMIT_SECONDS = 7.0          # 判据（S27.6 / D-V12-07）：探测段上界，wait_for(5) + 2s 收尾余量
 FLOOR_SECONDS = 3.0          # 下界 = connect_timeout：真黑洞下探测至少要占用这么久
 SOCKET_CHECK_SECONDS = 2.0   # 复检地址性质用，不计入耗时
 HARD_TIMEOUT_SECONDS = 40.0  # 父进程兜底：绝不允许本用例把整轮测试拖死
@@ -61,9 +61,33 @@ if sys.platform == "win32":
     # 与 tests/conftest.py:27 同条件：不换位时 psycopg 直接拒绝在 Proactor 上连接，
     # 根本不会发起 TCP 连接，于是"无上界"这个缺陷测不出来。
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+# S27.6 / D-V12-07：只对**探测段**计时。
+# 改前断言的是整段 `import app.main`（解释器启动 + 全部模块 import + 探测），
+# 而 F-V15-02 指出 8.0 = 3 + 5 是把两级超时重复相加、且零余量：
+# 机器一忙（P-38 实测 9.14s）就红，红的是"机器忙"而不是"探测没有上界"。
+_probe = {"started": None, "seconds": None}
+_orig_run = asyncio.run
+
+
+def _timed_run(coro, *args, **kwargs):
+    _probe["started"] = time.monotonic()
+    try:
+        return _orig_run(coro, *args, **kwargs)
+    finally:
+        _probe["seconds"] = time.monotonic() - _probe["started"]
+
+
+asyncio.run = _timed_run
+
 t0 = time.monotonic()
 import app.main  # noqa: F401  # import 期即 create_app() → _assert_schema_current
 sys.stderr.write("PROBE_SECONDS %.2f\n" % (time.monotonic() - t0))
+if _probe["seconds"] is None:
+    # 包装没被调用 ⇒ 探测根本没走 asyncio.run（被短路或实现改了）⇒ 计时没有测量对象
+    sys.stderr.write("SCHEMA_PROBE_SECONDS none\n")
+else:
+    sys.stderr.write("SCHEMA_PROBE_SECONDS %.2f\n" % _probe["seconds"])
 """
 
 
@@ -150,9 +174,19 @@ def test_import_time_schema_probe_is_bounded_against_blackhole_db() -> None:
     )
     reported = re.search(r"PROBE_SECONDS (\d+\.\d+)", combined)
     assert reported is not None, (
-        f"子进程没自报 import 耗时（期望 `PROBE_SECONDS <秒>`）⇒ 它没跑到最后一行。输出尾部：{combined[-600:]}"
+        f"子进程没自报整段 import 耗时（期望 `PROBE_SECONDS <秒>`）⇒ 它没跑到最后一行。输出尾部：{combined[-600:]}"
     )
-    probe_seconds = float(reported.group(1))
+    import_seconds = float(reported.group(1))   # 只报不判：它包含解释器启动与全部模块 import
+    probe_match = re.search(r"SCHEMA_PROBE_SECONDS (\d+\.\d+|none)", combined)
+    assert probe_match is not None, (
+        "子进程没有自报探测段耗时（期望 `SCHEMA_PROBE_SECONDS <秒>`）⇒ 计时包装未生效，"
+        f"本用例的计时断言没有测量对象。输出尾部：{combined[-600:]}"
+    )
+    assert probe_match.group(1) != "none", (
+        "`asyncio.run` 一次都没被调用 ⇒ 启动探测被短路（或实现已不再走 asyncio.run），"
+        "此时谈「有没有上界」没有意义"
+    )
+    probe_seconds = float(probe_match.group(1))
     # 复检顺序有意放在"计时"之前（第二轮独立验证的要求）：地址若不是真黑洞，计时断言在这台机器上
     # 就没有测量对象——**不看 probe_seconds 也要 skip**，否则"import 本身 ≥3s 的慢机器"会在
     # 什么都没测的情况下绿。结论日志断言在上面已经跑过，短路类假通过仍然红。
@@ -161,15 +195,16 @@ def test_import_time_schema_probe_is_bounded_against_blackhole_db() -> None:
         pytest.skip(
             f"地址 {BLACK_HOLE_DSN} 实测为 {state}（不是无响应黑洞）⇒ 本机复现不了「丢包式挂起」，"
             f"计时判据（下界 {FLOOR_SECONDS}s / 上界 {LIMIT_SECONDS}s）没有测量对象；"
-            f"探测本身跑过（结论日志已命中），子自报 {probe_seconds:.2f}s。按 skip 记账，不冒充已证"
+            f"探测本身跑过（结论日志已命中），子自报探测段 {probe_seconds:.2f}s / "
+            f"整段 import {import_seconds:.2f}s。按 skip 记账，不冒充已证"
         )
     if probe_seconds < FLOOR_SECONDS:
         pytest.fail(
-            f"地址实测无响应（真黑洞）而探测只花 {probe_seconds:.2f}s < 下界 {FLOOR_SECONDS}s"
+            f"地址实测无响应（真黑洞）而探测段只花 {probe_seconds:.2f}s < 下界 {FLOOR_SECONDS}s"
             f"（= connect_timeout）⇒ 超时上界未生效或探测根本没走网络。输出尾部：{combined[-400:]}"
         )
     assert probe_seconds < LIMIT_SECONDS, (
-        f"import app.main 的探测耗时 {probe_seconds:.2f}s 超过 {LIMIT_SECONDS}s 上界 —— "
+        f"探测段耗时 {probe_seconds:.2f}s 超过 {LIMIT_SECONDS}s 上界 —— "
         f"黑洞地址下还这么久说明两级超时（connect_timeout=3 / wait_for=5）都没生效。"
-        f"父进程墙钟 {wall_seconds:.2f}s（含解释器启动，不计入判据）"
+        f"整段 import {import_seconds:.2f}s、父进程墙钟 {wall_seconds:.2f}s（均含解释器启动，不计入判据）"
     )

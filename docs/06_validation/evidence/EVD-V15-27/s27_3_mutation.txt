@@ -1,0 +1,9 @@
+guards.py sha256(前)=6de1a506b0155b0b33b858a1b771be61af55f4cf7da82c424e72184ad54375ad 行尾='\r\n'
+  M1 表达式全放行（_source_hit 恒 False） → rc=1 | 18 failed, 79 passed in 13.60s
+  M2 源码面等同文档面（_source_hit 恒 True） → rc=1 | 12 failed, 85 passed in 12.98s
+  M3 下标键位失效（[ 分支永不成立） → rc=1 | 1 failed, 96 passed in 12.65s
+  M4 值类阈值失效（去掉 ≥8 字符下界） → rc=1 | 2 failed, 95 passed in 12.82s
+  M5 路径分流失效（源码文件走文档面） → rc=1 | 1 failed, 96 passed in 11.06s
+guards.py sha256(后)=6de1a506b0155b0b33b858a1b771be61af55f4cf7da82c424e72184ad54375ad
+变异被抓：5/5；还原逐字节一致=True
+结论：✅ 5/5 全红且还原一致

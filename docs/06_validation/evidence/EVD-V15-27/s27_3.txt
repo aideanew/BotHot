@@ -1,0 +1,31 @@
+自有源码面：463 个文件｜旧口径命中 52 条 → 新口径命中 36 条（少报 26 条，新增 10 条，净 -16）
+全仓可读文本面：1327 个文件｜旧口径命中 70 条 → 新口径命中 54 条（少报 26 条，新增 10 条，净 -16）
+
+逐文件（旧 → 新，只列有变化的）：
+    2 →   0  apps/api/app/api/v1/bots.py
+    1 →   0  apps/api/app/api/v1/chat.py
+    1 →   0  apps/api/app/core/middleware.py
+    1 →   0  apps/api/app/core/request_context.py
+    1 →   0  apps/api/app/core/security.py
+    1 →   0  apps/api/app/providers/article_sources/__init__.py
+    4 →   0  apps/api/app/providers/discovery/registry.py
+    1 →   0  apps/api/app/providers/embedding.py
+    2 →   0  apps/api/app/providers/engine_port.py
+    1 →   0  apps/api/app/providers/langbot/client.py
+    1 →   0  apps/api/app/services/push_scheduler.py
+    3 →   6  apps/api/tests/test_auth.py
+    0 →   1  apps/api/tests/test_manifest_asset_alignment.py
+    0 →   1  apps/api/tests/test_manifest_state_machine.py
+    2 →   3  apps/api/tests/test_push_providers.py
+    0 →   2  apps/api/tests/test_session_store_redis.py
+    3 →   0  apps/web/app/bots/page.tsx
+    0 →   2  docs/06_validation/evidence/EVD-V2-02/prove_article_identity.py
+    1 →   0  docs/任务规划V0.13.0/evidence/314d7f2/probe_bots_read_by_plain_user.py
+    1 →   0  docs/任务规划V0.14.0/evidence/fdad6dd/probe_push_write_roles_and_created_by.py
+    1 →   0  docs/任务规划V0.2.0/evidence/probe_reenqueue_loop.py
+    2 →   0  packages/contracts/src/bot/dto.ts
+    2 →   0  scripts/entry.py
+
+被放掉但含值位值类字面量的行：0 []
+新增但不属于 _TOKEN 后缀族的行：0 []
+结论：✅ 只少报表达式，未少报任何含值类字面量的行

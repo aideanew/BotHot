@@ -1,0 +1,34 @@
+F.                                                                       [100%]
+================================== FAILURES ===================================
+______ test_source_mode_treats_a_keyed_lookup_as_a_reference_not_a_value ______
+
+    def test_source_mode_treats_a_keyed_lookup_as_a_reference_not_a_value() -> None:
+        """键位里的字面量是**字段名**，不是值：`x=body["x"]` 与 `x=form.get("x", "")` 都是表达式。
+    
+        回归来源（S27.3 首版自伤）：首版把下标/首实参里的字段名当成值类字面量，于是
+        `app/providers/aidean/client.py`、`app/api/v1/auth.py` 这两份**改前能过门**的文件被
+        新口径判红——放宽表达式的那批改动，又把两处表达式关回门里。判据：键位（`[` 之后、
+        `.get(`/`.pop(`/`.setdefault(` 的第一个实参）里的字面量不参与"值类"判定。
+        """
+        access = "access" + "_token"
+        refresh = "refresh" + "_token"
+        ident = "id" + "_token"
+        code = (
+            "def pair(body):\n"
+            "    return TokenPair(\n"
+            f'        {access}=body["{access}"],\n'
+            f'        {refresh}=body["{refresh}"],\n'
+            f'        {ident}=body.get("{ident}", ""),\n'
+            "    )\n"
+        )
+>       assert guards.secret_scan(code, code=True)[0] == []
+E       AssertionError: assert [('assign', 3...打码，值长 9 字符>')] == []
+E         
+E         Left contains 3 more items, first extra item: ('assign', 3, 'access_token=<已打码，值长 5 字符>')
+E         Use -v to get more diff
+
+tests\test_secret_shape_gate.py:810: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_secret_shape_gate.py::test_source_mode_treats_a_keyed_lookup_as_a_reference_not_a_value
+1 failed, 1 passed, 95 deselected in 0.28s
+rc=1

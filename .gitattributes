@@ -40,6 +40,10 @@ Dockerfile  text eol=lf
 *.gif   binary
 *.ico   binary
 *.pdf   binary
+# S27.4 / D-V12-06：Git for Windows 的 **system 级** gitattributes 给 *.docx 注册了
+# diff=astextplain，而 docx2txt.exe 未装 ⇒ gitleaks 自报 `failed to scan` 却 rc=0（P-37）。
+# 仓库级 binary 覆盖 system 级 textconv：这一行是 @win 权威步不再 fail-open 的前提。
+*.docx  binary
 *.woff  binary
 *.woff2 binary
 *.ttf   binary
@@ -50,3 +54,9 @@ Dockerfile  text eol=lf
 # 不参与行尾收敛——它们的 14 个 .sh 与自有文件保持原样，避免一次跨平台改动
 # 变成上千文件的噪音 diff。
 /.project/** -text
+# S27.4 追补（判据不可达时的必要一行）：`failed to scan` 的触发源是 **system 级**
+# attributes 把一整族办公文档（docx/odt/rtf…）挂到 `diff=astextplain`，而该 textconv
+# 依赖未安装的 `file`/`docx2txt`。逐个扩展名补 `binary` 是打地鼠——现读触发点已从
+# sample.docx 漂到 sample.odt 再漂到 sample.rtf，全在 vendored 子树里。
+# 一条子树规则覆盖整族；`.project/` 是第三方参考源码，不参与本仓 diff 展示。
+/.project/** -diff

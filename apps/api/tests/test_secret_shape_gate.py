@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -379,11 +380,12 @@ def test_the_card_named_script_gives_a_vacuous_pass_on_a_file_argument() -> None
     ],
     ids=["变量引用", "布尔读数"],
 )
-def test_known_false_positive_families_fire_today(text: str, why: str) -> None:
-    """现读自 V0.13.0/V0.14.0 证据件：`assign` 启发式对本仓文档 10 连发全假。
+def test_known_false_positive_families_still_fire_on_the_doc_face(text: str, why: str) -> None:
+    """文档面（`code=False`）的读数**一字未变**：S27.V15.1 ④ 把这条钉成硬约束。
 
-    本用例**钉住现状而非背书**：规则收窄属安全判据语义变更，卡面写明需单独评审、
-    且禁止执行方自建 allowlist，故登记交规划方/00S（P-36），这里只留可重跑的读数。
+    现读自 V0.13.0/V0.14.0 证据件：`assign` 启发式对本仓文档 10 连发全假。
+    源码面（`code=True`）的同一形状由 §H 证明不再误报——两面口径不同是刻意的：
+    文档里"键名 = 表达式"读起来仍像一句赋值说明，宁多报；源码里它有语法含义。
     """
     hits, _ = guards.secret_scan(text)
     assert [h[0] for h in hits] == ["assign"], f"{why}：判据行为已变，请同步 P-36 与 {hits}"
@@ -719,3 +721,262 @@ def test_the_implementation_files_themselves_carry_no_shape() -> None:
             continue
         hits, _allowed = guards.secret_scan(path.read_text(encoding="utf-8"))
         assert hits == [], f"{path.name} 里留下了敏感形：{[(h[0], h[1]) for h in hits]}"
+
+
+# ═══════════════════════════ H. 源码模式（S27.V15.1 / D-V12-21）
+#
+# 判据（卡面 ①～④，逐条对应下面的用例）：
+#   ① 不报：键名在**代码位**、值里没有任何引号（含反引号）且不是纯数字 ⇒ 表达式；
+#   ② 照报：键名落在字符串/注释里（文本本身就是字面量，含跨行三引号与反引号）、
+#      反引号模板、纯数字值、整体就是一个字面量的直接赋值、以及表达式里带**值类**字面量
+#      （≥8 字符且非占位、非全大写环境变量名）的兜底写法；
+#   ③ 全仓自有源码：新门只能少报表达式，不能少报任何含**值类**字面量的行；
+#   ④ 文档面（code=False）与十条具名规则、SECRET_ALLOW/SECRET_ASSIGN/SECRET_FAKE 字节不变。
+#
+# 本文件的形状一律跨字符串边界拼接（理由同文件头第 3 条）：运行期拼出的串进判据，
+# 源码文本里的行不留完整形状——否则本文件自己会被门判红。
+
+_SRC_EXPRESSION_CASES = [
+    ("secret" + " = decrypt_channel" + "_secret(conn, row.secret),", "键名等于解密函数调用"),
+    ("payload = {" + "secret" + ": form.secret}", "对象里键名冒号接表单属性"),
+    ("token" + " = settings.access" + "_token", "键名等于配置属性"),
+]
+
+
+@pytest.mark.parametrize("text, why", _SRC_EXPRESSION_CASES, ids=[c[1] for c in _SRC_EXPRESSION_CASES])
+def test_source_mode_does_not_report_pure_expressions(text: str, why: str) -> None:
+    """① 这三条正是 P-40 把 bots.py / page.tsx / registry.py / push_scheduler.py 挡住的原因。"""
+    assert guards.secret_scan(text, code=True)[0] == [], f"{why} 仍被误报"
+
+
+_VALUED = "hunter2" + "secret99"          # 13 字符，非占位、非全大写环境变量名
+_ENVNAME = "AIDEANBOT_TEST" + "_PG_DSN"   # 全大写环境变量名：是名字，不是值
+
+_SRC_MUST_REPORT = [
+    (_dsn(), "双引号字符串里的连接串（具名规则）", "hash"),
+    ('DOC = """\nAPI' + '_KEY=' + _VALUED + '\n"""', "字符串里的环境行（大写键名等于值）", "hash"),
+    ("# password" + " = " + _VALUED, "井号注释里的赋值", "hash"),
+    ("// token" + " = " + _VALUED, "双斜杠注释里的赋值", "slash"),
+    ("const s = `password" + "=" + _VALUED + "`", "反引号模板里的赋值", "slash"),
+    ("password" + " = 12345678", "纯数字口令", "hash"),
+    ('DOC = """\n' + "password" + " = " + _VALUED + '\n"""', "三引号跨行字符串里的赋值", "hash"),
+    ("const t = `\n" + "token" + " = " + _VALUED + "\n`", "反引号跨行字符串里的赋值", "slash"),
+    ("token" + ' = os.getenv("' + _ENVNAME + '", "' + _VALUED + '")', "取环境变量带写死兜底值", "hash"),
+    ("api_key" + ' = cfg.get("k", "' + _VALUED + '")', "字典 get 带写死兜底值", "hash"),
+    ("secret" + ' = os.environ.get("X") ?? "' + _VALUED + '"', "空值合并的写死兜底值", "slash"),
+    ("secret" + ' = os.environ.get("X") || "' + _VALUED + '"', "逻辑或的写死兜底值", "slash"),
+    ("secret" + ' = os.environ.get("X") or "' + _VALUED + '"', "or 的写死兜底值", "hash"),
+    ("secret" + ' = "' + _VALUED + '" if flag else other', "三元的写死兜底值", "hash"),
+    ("secret" + ' = "' + _VALUED + '" + suffix', "字符串拼接的写死兜底值", "hash"),
+]
+
+
+@pytest.mark.parametrize("text, why, lang", _SRC_MUST_REPORT, ids=[c[1] for c in _SRC_MUST_REPORT])
+def test_source_mode_still_reports_every_literal_shape(text: str, why: str, lang: str) -> None:
+    """② 两轮独立复查构造的全部反例，一条都不能少（D-V12-21 的验收口径）。"""
+    assert guards.secret_scan(text, code=True, lang=lang)[0] != [], f"{why} 在源码模式下漏报了"
+
+
+def test_source_mode_skips_an_env_name_argument_but_not_a_fallback_value() -> None:
+    """极性成对：同一个调用，只把第二参数从"名字"换成"值"，判定必须翻转。
+
+    没有这一对，上面「带兜底值要报」可能只是"所有带引号的都报"，而「纯表达式不报」
+    也可能只是"所有调用都不报"——两种解释都过得去，判据就没有分辨率。
+    """
+    only_name = "token" + ' = os.getenv("' + _ENVNAME + '")'
+    with_value = "token" + ' = os.getenv("' + _ENVNAME + '", "' + _VALUED + '")'
+    assert guards.secret_scan(only_name, code=True)[0] == []
+    assert guards.secret_scan(with_value, code=True)[0] != []
+
+
+def test_source_mode_treats_a_keyed_lookup_as_a_reference_not_a_value() -> None:
+    """键位里的字面量是**字段名**，不是值：`x=body["x"]` 与 `x=form.get("x", "")` 都是表达式。
+
+    回归来源（S27.3 首版自伤）：首版把下标/首实参里的字段名当成值类字面量，于是
+    `app/providers/aidean/client.py`、`app/api/v1/auth.py` 这两份**改前能过门**的文件被
+    新口径判红——放宽表达式的那批改动，又把两处表达式关回门里。判据：键位（`[` 之后、
+    `.get(`/`.pop(`/`.setdefault(` 的第一个实参）里的字面量不参与"值类"判定。
+    """
+    access = "access" + "_token"
+    refresh = "refresh" + "_token"
+    ident = "id" + "_token"
+    code = (
+        "def pair(body):\n"
+        "    return TokenPair(\n"
+        f'        {access}=body["{access}"],\n'
+        f'        {refresh}=body["{refresh}"],\n'
+        f'        {ident}=body.get("{ident}", ""),\n'
+        "    )\n"
+    )
+    assert guards.secret_scan(code, code=True)[0] == []
+
+
+def test_source_mode_still_reports_a_hardcoded_fallback_after_a_keyed_lookup() -> None:
+    """键位放过 ≠ 整行放过：同一个 `.get` 的第二个实参是值，必须照报。
+
+    与上一条成对：只把"字段名"换成"写死兜底值"，判定必须翻转，否则「键位放过」
+    与「所有调用都不报」两种解释都过得去。
+    """
+    key = "api" + "_key"
+    code = f'{key} = cfg.get("{key}", "{_VALUED}")'
+    assert [h[1] for h in guards.secret_scan(code, code=True)[0]] == [1]
+
+
+def test_source_mode_keeps_the_named_rules_untouched() -> None:
+    """④ 十条具名规则在源码面一字不改：连接串/私钥块/token 前缀都必须照报。"""
+    for text in (_dsn(), PEM, GH, AKIA):
+        assert guards.secret_scan(text, code=True)[0] != [], text[:12]
+
+
+def test_source_mode_catches_a_token_suffixed_key() -> None:
+    """S27.3 / D-V12-05：`\\b` 边界抓不到 `APP_TOKEN` 这类前缀常量名（P-41）。
+
+    只补 `_TOKEN` 后缀这一族；其余前缀名（`DEFAULT_SECRET` 等）仍按 P-41 的登记留在原地。
+    """
+    text = "APP" + '_TOKEN = "' + _VALUED + '"'
+    assert [h[0] for h in guards.secret_scan(text, code=True)[0]] == ["assign"]
+
+
+def test_source_mode_is_opt_in_so_the_doc_face_cannot_drift() -> None:
+    """④ 默认参数必须仍是文档面：漏掉默认值会让全仓文档读数一夜之间变样。"""
+    expr = _SRC_EXPRESSION_CASES[0][0]
+    assert guards.secret_scan(expr)[0] != []
+    assert guards.secret_scan(expr, code=True)[0] == []
+
+
+_NAMED_CLEAN_SOURCES = [
+    "apps/api/app/api/v1/bots.py",
+    "apps/web/app/bots/page.tsx",
+    "apps/api/app/providers/discovery/registry.py",
+    "apps/api/app/services/push_scheduler.py",
+    "scripts/entry.py",
+]
+
+
+@pytest.mark.parametrize("rel", _NAMED_CLEAN_SOURCES)
+def test_named_source_files_have_zero_hits_under_source_mode(rel: str) -> None:
+    """① 卡面点名的 5 个文件必须全文 0 命中——它们正是 STEP-26/28/10/05 要改的文件。
+
+    改前（严格口径）这 5 个文件共 2+3+4+1+2 = 12 条 HIGH，全是表达式；
+    门没有豁免通道，所以不修这一条，后面四张卡的提交会被永久挡住。
+    """
+    text = (_ROOT / rel).read_text(encoding="utf-8", errors="replace")
+    hits, _ = guards.secret_scan(text, code=True)
+    assert hits == [], f"{rel} 仍有 {len(hits)} 条：{[(h[0], h[1]) for h in hits]}"
+
+
+def _tracked_source_files() -> list[str]:
+    proc = subprocess.run(["git", "-c", "core.quotepath=false", "ls-files"],
+                          cwd=str(_ROOT), capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
+    assert proc.returncode == 0, proc.stderr
+    exts = {".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
+    return sorted(p for p in proc.stdout.splitlines()
+                  if Path(p).suffix in exts and not p.startswith(".project/"))
+
+
+_KEYED_CALL = re.compile(r"\.(?:get|pop|setdefault|getlist|getall)\s*\(\s*$")
+
+
+def _value_like_literals(line: str) -> list[str]:
+    """行内**值位**的「值类」字面量：≥8 字符、非占位、非全大写环境变量名。
+
+    键位（`[` 之后、键值访问的首实参）不算——那里的字面量是字段名，`body["access_token"]`
+    的右值来自 `body` 而不是那串名字。这一层是实现侧 `_literal_is_key` 的**独立复写**：
+    守卫若直接调实现，就成了"用实现证明实现"，判据没有分辨率。
+    """
+    out: list[str] = []
+    for m in re.finditer(r"\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`", line):
+        lit = m.group(0)[1:-1]
+        if not guards._src_value_like(lit):
+            continue
+        i = m.start() - 1
+        while i >= 0 and line[i] in " \t":
+            i -= 1
+        if i >= 0 and line[i] == "[":
+            continue
+        if i >= 0 and line[i] == "(" and _KEYED_CALL.search(line[:i + 1]):
+            continue
+        out.append(lit)
+    return out
+
+
+def test_source_mode_never_drops_a_line_carrying_a_value_literal() -> None:
+    """③ 全仓自有源码的新旧命中集合对照，判据是**包含关系**而不是计数相等。
+
+    只允许少报「不含值类字面量」的表达式行（例如键名等于一次环境变量读取）；
+    任何含值类字面量的行，改前报、改后也必须报——否则就是安全面的倒退（复查第 2 轮的 B 条）。
+    """
+    files = _tracked_source_files()
+    assert len(files) > 300, f"扫描面只有 {len(files)} 个文件，疑似 ls-files 取空"
+    regressions: list[str] = []
+    for rel in files:
+        text = (_ROOT / rel).read_text(encoding="utf-8", errors="replace")
+        old = guards.secret_scan(text)[0]
+        new = guards.secret_scan_for_path(text, rel)[0]
+        old_lines = {no for _n, no, _s in old}
+        new_lines = {no for _n, no, _s in new}
+        lines = text.splitlines()
+        for no in sorted(old_lines - new_lines):
+            if _value_like_literals(lines[no - 1]):
+                regressions.append(f"{rel}:{no}")
+    assert regressions == [], f"源码模式少报了含值类字面量的行：{regressions[:10]}"
+
+
+def test_source_mode_only_adds_the_token_suffix_family() -> None:
+    """③ 的另一半读数：新增命中必须**全部**来自 S27.3 的 `_TOKEN` 后缀族。
+
+    结构上：文档面的赋值形是源码面的超集（源码面只多一层表达式过滤），所以"新增"只可能
+    来自那条新规则。这条用例把它钉成机检——若哪天有人把 `_source_hit` 的调用删掉，
+    新增面会从 20 行量级暴涨，这里立刻红。
+    """
+    files = _tracked_source_files()
+    added: list[str] = []
+    for rel in files:
+        text = (_ROOT / rel).read_text(encoding="utf-8", errors="replace")
+        old_lines = {no for _n, no, _s in guards.secret_scan(text)[0]}
+        new_lines = {no for _n, no, _s in guards.secret_scan_for_path(text, rel)[0]}
+        lines = text.splitlines()
+        for no in sorted(new_lines - old_lines):
+            if not guards.SECRET_ASSIGN_SUFFIX.search(lines[no - 1]):
+                added.append(f"{rel}:{no}")
+    assert added == [], f"源码模式新增了非后缀族的命中（判据被放宽）：{added[:10]}"
+
+
+# ═══════════════════════════ I. 接线与二进制属性（S27.V15.1 / S27.4）
+
+
+def test_the_gate_switches_source_mode_by_extension(monkeypatch) -> None:
+    """判据实体有了 `code=` 参数 ≠ 门在用它。按扩展名接线才是 P-40 真正被解开的那一步。
+
+    两档对照：同一个表达式，放在 `.py` 里放行、放在 `.md` 里照报（文档面口径不变）。
+    """
+    expr = ("secret" + " = decrypt_channel" + "_secret(conn, row.secret)\n").encode()
+    _fake_git(monkeypatch, staged="app/x.py\n", blobs={"app/x.py": expr})
+    assert guards.secret_shape_check("HEAD") == 0, "源码面没有走源码模式 ⇒ bots.py 仍会被挡"
+
+    _fake_git(monkeypatch, staged="notes.md\n", blobs={"notes.md": expr})
+    assert guards.secret_shape_check("HEAD") == 1, "文档面被一起放宽了 ⇒ 违反 S27.V15.1 ④"
+
+
+def test_docx_is_declared_binary_so_gitleaks_stops_failing_on_windows() -> None:
+    """S27.4 / D-V12-06：Git for Windows 的 system 级 gitattributes 给 `*.docx` 注册了
+    `diff=astextplain`，而 `docx2txt.exe` 未装 ⇒ gitleaks 自报 `failed to scan` 却 rc=0（P-37）。
+
+    仓库级 `*.docx binary` 覆盖 system 级 textconv，让 Windows 侧的权威步不再 fail-open。
+    """
+    lines = (_ROOT / ".gitattributes").read_text(encoding="utf-8").splitlines()
+    rules = {" ".join(line.split("#", 1)[0].split()) for line in lines}
+    assert "*.docx binary" in rules, "缺少 `*.docx binary`：Windows 上 gitleaks 仍会 failed to scan"
+    # 只补扩展名是打地鼠：现读触发点从 docx 漂到 odt 再漂到 rtf，全在 vendored 子树里。
+    # 子树级 `-diff` 才是让 @win 权威步真正不再 fail-open 的那一条（EVD-V15-27/s27_4.txt）。
+    assert "/.project/** -diff" in rules, (
+        "缺少 `/.project/** -diff`：system 级 attributes 仍会把整族办公文档交给 textconv，"
+        "`failed to scan` 会换个扩展名继续出现"
+    )
+    # 只补扩展名是打地鼠：现读触发点从 docx 漂到 odt 再漂到 rtf，全在 vendored 子树里。
+    # 子树级 `-diff` 才是让 @win 权威步真正不再 fail-open 的那一条（EVD-V15-27/s27_4.txt）。
+    assert "/.project/** -diff" in rules, (
+        "缺少 `/.project/** -diff`：system 级 attributes 仍会把整族办公文档交给 textconv，"
+        "`failed to scan` 会换个扩展名继续出现"
+    )

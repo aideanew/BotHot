@@ -1,0 +1,36 @@
+S27.2 —— 两道范围门进 CI（D-V12-03 / D-V12-04）
+
+一、改动位置
+.github/workflows/ci.yml / jobs.backend：
+  ① checkout 步补 `with: fetch-depth: 0`（浅克隆下 base 不可解析，门会 fail-closed 判红）；
+  ② backend 末步新增 `Governance gates (rounds-check + evidence-check)`。
+
+二、YAML 解析读数（本地，脚本见下方命令）
+$ python -c "import yaml; d=yaml.safe_load(open('.github/workflows/ci.yml')); ..."
+backend steps: 13
+last step name: Governance gates (rounds-check + evidence-check)
+env keys: ['GUARD_BASE', 'GUARD_GITLEAKS_COVERED']
+checkout fetch-depth: [{'fetch-depth': 0}]
+YAML_RC=0
+
+三、基线来源为什么必须由事件给出
+push 事件里 `origin/main` 就是刚推完的 HEAD ⇒ `origin/main..HEAD` 恒空 ⇒ 门永远第三态
+（rc=3），"跑了"与"什么都没看"读数相同。故：
+  GUARD_BASE = pull_request ? github.event.pull_request.base.sha : github.event.before
+  空串 / 40 个 0（新建分支首次 push 的 before）⇒ 回落 HEAD~1
+
+四、两条门不短路
+rc_rounds / rc_evidence 各自独立执行、最后汇总；rc 非 0 一律失败（含第三态 3）。
+判据：`if [ "$rc_rounds" -ne 0 ] || [ "$rc_evidence" -ne 0 ]; then exit 1`。
+
+五、GUARD_GITLEAKS_COVERED 为什么存在
+backend job 不装 gitleaks（权威步在 .github/workflows/security.yml）。不显式记账时
+evidence-check 会把"工具缺席"判成第三态 ⇒ CI 恒红；把 gitleaks 装进每个 job 是重复劳动。
+该开关只允许显式声明覆盖，默认仍是"缺席即第三态"（rc=3）。
+
+六、对应先红用例（apps/api/tests/test_guard_rounds.py §F）
+  test_ci_backend_job_runs_both_scope_gates_with_the_event_base
+    —— 断言 CI 里两条门都在、且基线取自事件、且带 GUARD_GITLEAKS_COVERED。
+  test_default_base_reads_the_guard_base_env / test_main_uses_the_env_base_for_scope_gates
+  / test_explicit_base_still_beats_the_env / test_a_bad_base_from_the_env_is_red_and_named
+  / test_non_scope_gates_still_reject_a_base_argument

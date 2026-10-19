@@ -153,40 +153,38 @@ def test_coupling_check_refuses_when_the_base_blob_cannot_be_read(monkeypatch: p
     assert any(c[0] == "cat-file" for c in calls), f"根本没去核验基线 blob：{calls[:3]}"
 
 
-def test_rounds_gate_attributes_every_card_mentioned_in_a_subject() -> None:
-    """跨卡提及会被**同时**计入每张被点名的卡——这是卡面原文口径，不是实现意外。
+def test_rounds_gate_attributes_cross_card_subjects_to_the_primary_card_only() -> None:
+    """D-V12-02（S27.5）改了这条口径：跨卡提及**只计主卡**，不再连坐。
 
-    卡面写的是「对每个 `STEP-<id>` 统计主题含…的提交」，所以一条同时提到 20/22/23 的
-    "第 3 轮"主题会让三张卡都越限。评审把这叫"误杀"，但收窄成"只认第一个 id"就是
-    执行方改判据 ⇒ 保留行为并钉住，口径交规划方裁（登记在 P-33 ③）。
+    改前口径是"提到就都算"，一条同时提到 20/22/23 的"第 3 轮"主题会让三张卡都越限
+    （P-33 ③ 登记、评审叫"误杀"）。用户裁决取"只计主卡"，所以现在只有 20 越限。
     """
     subj = "fix(STEP-20 返工轮): 第 3 轮，顺带 STEP-23 与 STEP-22 的文本"
     violations = guards.rounds_violations([subj])
-    assert sorted(str(v["step"]) for v in violations) == ["20", "22", "23"]
+    assert sorted(str(v["step"]) for v in violations) == ["20"]
     assert all(v["explicit_rounds"] == [3] for v in violations)
 
 
 def test_rounds_gate_cannot_attribute_a_card_named_only_by_l3_id() -> None:
-    """实测盲区（评审复核过）：主题里没有 `STEP-<id>` 时，门对该提交完全失明。
+    """`_STEP_ID_RE` 仍只认 `STEP-<id>`；L3 号的反推由 `_primary_card` 单独负责（S27.5）。
 
     真实例子就是规划方自己的提交风格 `docs(V0.14.0): …STEP-24/25 规划方自做…`
-    ——`STEP-24/25` 里的第二个 id（25）以及不带前缀的写法都不在归属口径内。
+    ——`STEP-24/25` 里的第二个 id（25）不在 `_STEP_ID_RE` 的口径内，主卡是 24。
     """
     assert guards._STEP_ID_RE.findall("docs(V0.14.0): 推送任务创建恒 500（STEP-24/25 自做）") == ["24"]
     assert guards._STEP_ID_RE.findall("docs(裁决台账): S1.3.2 的第 7 轮熔断") == []
 
 
-def test_rounds_gate_does_not_attribute_l3_only_subjects_measured_blind_spot() -> None:
-    """现读到的真实盲区（不是假想敌）：主题只写 L3 号时不归属，因而不会熔断。
+def test_rounds_gate_now_attributes_l3_only_subjects() -> None:
+    """S27.5 / D-V12-02 关掉了这条盲区：主题只写 L3 号时按第一段反推卡号。
 
-    证据：`git log` 里 `docs(裁决台账): 登记 D-V8-05——S1.3.2 的「比对器全捕」判据触发
+    证据（改前）：`git log` 里 `docs(裁决台账): 登记 D-V8-05——S1.3.2 的「比对器全捕」判据触发
     D-14 熔断（第 7 轮，机械门实读 8>2）` 这条主题含第 7 轮，却既无 `STEP-` 前缀
-    也无卡号可归 ⇒ 本门放行。卡面把归属口径定为 `STEP-<id>`，执行方**不改判据**，
-    只把它测出来并登记（EVD-V14-00T §4-3）。
+    也无卡号可归 ⇒ 改前本门放行（EVD-V14-00T §4-3 登记的真实盲区）。
     """
     subject = "docs(裁决台账): 登记 D-V8-05——S1.3.2 的第 7 轮熔断（机械门实读 8>2）"
     assert guards._STEP_ID_RE.findall(subject) == []
-    assert guards.rounds_violations([subject]) == []
+    assert [v["step"] for v in guards.rounds_violations([subject])] == ["1"]
 
 
 def test_rounds_cli_is_fail_closed_on_unresolvable_base() -> None:
@@ -662,3 +660,112 @@ def test_coupling_git_side_equals_an_independent_recount() -> None:
         f"，重数侧新增={sorted(worktree_evidence - base_evidence)}，"
         f"重数侧删除={sorted(base_evidence - worktree_evidence)}）"
     )
+
+
+# ═════════════════ F. STEP-27：GUARD_BASE（S27.1）、CI 接线（S27.2）、轮次门扩判据（S27.5）
+
+
+def test_default_base_reads_the_guard_base_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """S27.1：范围门（耦合/敏感形/轮次）的默认基线统一读 `GUARD_BASE`。
+
+    为什么要有它：CI 里 `origin/main` 在 push 事件上就是"刚推完的 HEAD"，范围恒空 ⇒ 门永远
+    第三态；而门必须判"这一次推送改了什么"，基线只能由事件给出（`github.event.before`）。
+    """
+    monkeypatch.setenv("GUARD_BASE", "deadbeef")
+    assert guards.default_base() == "deadbeef"
+    monkeypatch.delenv("GUARD_BASE")
+    assert guards.default_base() == guards.DEFAULT_BASE == "origin/main"
+
+
+def test_main_uses_the_env_base_for_scope_gates(monkeypatch: pytest.MonkeyPatch) -> None:
+    """未传 `--base` 时，`main()` 必须把环境基线交给门——只加一个函数不算接线。"""
+    seen: list[str] = []
+    monkeypatch.setitem(guards.GUARDS, "rounds-check", lambda base: seen.append(base) or 0)
+    monkeypatch.setenv("GUARD_BASE", "cafe1234")
+    assert guards.main(["rounds-check"]) == 0
+    assert seen == ["cafe1234"]
+
+
+def test_explicit_base_still_beats_the_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """显式 `--base` 优先于环境：本机复跑历史批次时不能反过来被 CI 变量劫持。"""
+    seen: list[str] = []
+    monkeypatch.setitem(guards.GUARDS, "rounds-check", lambda base: seen.append(base) or 0)
+    monkeypatch.setenv("GUARD_BASE", "cafe1234")
+    assert guards.main(["rounds-check", "--base", "beef5678"]) == 0
+    assert seen == ["beef5678"]
+
+
+def test_a_bad_base_from_the_env_is_red_and_named(monkeypatch: pytest.MonkeyPatch) -> None:
+    """坏基线 ⇒ rc=1 并点名。静默退回 origin/main 会让"基线传错了"看起来像"检查过了"。"""
+    monkeypatch.setenv("GUARD_BASE", "no-such-ref-27")
+    assert guards.main(["rounds-check"]) == 1
+
+
+def test_non_scope_gates_still_reject_a_base_argument(monkeypatch: pytest.MonkeyPatch) -> None:
+    """极性对照：`--base` 只对两道范围门有效，其余门被传了必须报错（口径不能被这次改动放宽）。"""
+    assert guards.main(["guard-ports", "--base", "HEAD"]) == 1
+
+
+def _ci_backend_block() -> str:
+    text = (_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "\n  backend:" in text and "\n  frontend:" in text, "ci.yml 的 job 结构变了，本用例需重读"
+    return text.split("\n  backend:", 1)[1].split("\n  frontend:", 1)[0]
+
+
+def test_ci_backend_job_runs_both_scope_gates_with_the_event_base() -> None:
+    """S27.2：两道范围门必须在 backend job 里、用事件给出的基线、以 rc 判失败。
+
+    这条用例是"门进了 CI"的唯一机检：只写进 Makefile 的门在 CI 里等于不存在
+    （本仓先例：`check_docs_consistency.py` 早就在仓库里，却长期零调用点）。
+    """
+    block = _ci_backend_block()
+    assert "rounds-check" in block, "backend job 没有跑轮次门"
+    assert "evidence-check" in block, "backend job 没有跑证据门"
+    assert "GUARD_BASE" in block, "范围门没有拿到事件基线 ⇒ 在 CI 上范围恒空（永远第三态）"
+    assert "github.event.before" in block, "基线没有接 push 事件的 before"
+    assert "pull_request.base.sha" in block or "pull_request.base.sha" in block, "PR 没有用 base sha"
+    assert "0000000000000000000000000000000000000000" in block, "首推（before 全 0）没有兜底"
+    assert "fetch-depth: 0" in block, (
+        "checkout 仍是默认 depth=1 ⇒ before/base 的提交对象不在本地，门会 fail-closed 判红"
+    )
+    assert "set -e" in block or "set -euo pipefail" in block, "两条门之间没有短路保护：前一条红后一条照样跑"
+    assert "GUARD_GITLEAKS_COVERED" in block, (
+        "backend job 没装 gitleaks，evidence-check 会把「工具缺席」判成第三态 ⇒ CI 恒红；"
+        "必须显式记「由 Security 工作流覆盖」"
+    )
+
+
+def test_rounds_gate_counts_chinese_numerals(monkeypatch: pytest.MonkeyPatch) -> None:
+    """S27.5 / D-V12-02：本仓真实存在「第二轮」「第十一轮」写法，只认阿拉伯数字会漏计。"""
+    for cn, n in {"三": 3, "七": 7, "十": 10, "十一": 11, "二十": 20}.items():
+        assert guards._round_numbers(f"fix(STEP-88): 第{cn}轮返工") == [n], cn
+    assert guards.rounds_violations(["fix(STEP-88): 第三轮返工"])[0]["explicit_rounds"] == [3]
+    # 中文数字必须仍受词界约束：`第一轮` 合法，`统一轮` 不是轮次
+    assert guards._round_numbers("fix(STEP-88): 统一轮次口径") == []
+
+
+def test_rounds_gate_infers_the_card_from_an_l3_id() -> None:
+    """S27.5 / D-V12-02：主题只写 L3 号（`S1.3.2`）时按第一段反推卡号。
+
+    改前这是已登记的真实盲区：`docs(裁决台账): …S1.3.2 的第 7 轮熔断…` 含第 7 轮却零归属。
+    """
+    violations = guards.rounds_violations(["docs(裁决台账): S1.3.2 的第 7 轮熔断"])
+    assert [v["step"] for v in violations] == ["1"]
+    assert guards._STEP_ID_RE.findall("fix(S27.3): 第 3 轮") == []
+    assert guards._primary_card("fix(S27.3): 第 3 轮") == "27"
+
+
+def test_rounds_gate_counts_only_the_primary_card_of_a_cross_card_subject() -> None:
+    """S27.5 / D-V12-02：一条主题跨卡提及只计**主卡**（首个 STEP id），不再连坐。
+
+    改前口径是"提到就都算"，一条 `STEP-20/22/23 第 3 轮` 会让三张卡同时熔断——
+    被连坐的卡并没有第 3 轮，熔断停的是不该停的活。
+    """
+    subject = "fix(STEP-20 返工轮): 第 3 轮，顺带 STEP-23 与 STEP-22 的文本"
+    assert [v["step"] for v in guards.rounds_violations([subject])] == ["20"]
+
+
+def test_primary_card_prefers_step_prefix_over_l3_id() -> None:
+    """两种写法同时出现时以 `STEP-` 为准：`STEP-27 S27.3` 的主卡是 27，不是 27（同号）也一样。"""
+    assert guards._primary_card("fix(STEP-24/25): S25.1 第 2 轮") == "24"
+    assert guards._primary_card("chore: 没有卡号") == ""

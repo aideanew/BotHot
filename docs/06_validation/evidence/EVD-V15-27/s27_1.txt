@@ -1,0 +1,4 @@
+[GUARD_BASE=两提交前] rc=0（期望 0）  rounds-check：范围 69e5b37649e2b8878842828f842da6529e4f1f96..HEAD 共 2 个提交，阈值 ≤2 轮（D-14，第 3 轮熔断）
+[未设 GUARD_BASE 且已追平] rc=3（期望 3）  ⚠️  rounds-check：HEAD..HEAD 为空 ⇒ 无可检提交，**这不是通过**（rc=3）
+[GUARD_BASE 不可解析] rc=1（期望 1）  ❌ rounds-check：基线 'no-such-ref-27' 不可解析（先 fetch，或显式传 --base）
+结论：3/3 与期望一致

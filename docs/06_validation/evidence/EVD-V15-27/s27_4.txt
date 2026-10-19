@@ -1,0 +1,50 @@
+S27.4 —— gitleaks @win 的 `failed to scan` fail-open（P-37）
+
+一、症状
+Git for Windows 的 **system 级** gitattributes 把一族办公文档（docx/odt/rtf…）挂到
+`diff=astextplain`，其 textconv 依赖未安装的 `file` / `docx2txt`。gitleaks 8.21.2 在 git
+模式下取 diff 时子进程 stderr 非空 ⇒ 打印 `ERR failed to scan Git repository`，但**整次
+扫描当场作废、退出码仍为 0** ⇒ Security 的 ④ 步读成"未检出明文密钥"（fail-open）。
+
+二、A/B 对照（同一份克隆、同一个提交，只换 .gitattributes）
+克隆：git clone --no-local <repo> /tmp/s27clone && git checkout 8135f1a
+
+① 修复前（8135f1a 的 .gitattributes，docx 命中 0 行）
+$ gitleaks detect --source . --config .gitleaks.toml --no-banner --log-opts=main
+RC=0
+failed_to_scan=1
+  7:43PM ERR failed to scan Git repository error="stderr is not empty"
+  7:43PM INF scan completed in 2.72s
+  7:43PM INF no leaks found
+读法：2.72s 就"完成"且没有 `N commits scanned` 行 ⇒ **一个提交都没扫**，却 rc=0。
+
+② 修复后（覆盖本仓 .gitattributes）
+$ cp <repo>/.gitattributes /tmp/s27clone/.gitattributes
+$ gitleaks detect --source . --config .gitleaks.toml --no-banner --log-opts=main
+RC=0
+failed_to_scan=0
+  7:43PM INF 270 commits scanned.
+  7:43PM INF scan completed in 4.87s
+  7:43PM INF no leaks found
+
+结论：判据从"退出码"变成"必须真扫了 270 个提交且 failed_to_scan=0"。
+
+三、修法为什么是两行、而不是逐个扩展名补 binary
+现读触发点已从 sample.docx 漂到 sample.odt 再漂到 sample.rtf（全在 vendored 的
+`.project/` 子树里）⇒ 逐个扩展名补 `binary` 是打地鼠。落两行：
+  *.docx  binary      —— 仓库级 binary 覆盖 system 级 textconv（本仓自有 docx）
+  /.project/** -diff  —— 一条子树规则覆盖整族第三方文档，且它们本不参与本仓 diff 展示
+
+四、工作树读数（含未提交改动）
+$ gitleaks detect --source . --config .gitleaks.toml --no-banner --log-opts=main
+RC=0 / failed_to_scan=0 / 270 commits scanned / no leaks found / findings=0
+
+五、一条必须写清的读数边界
+不带 `--log-opts=main` 时本机读数是 `leaks found: 15`，全部落在提交 33919692
+（`untracked files on main` 的 **stash 备份提交**，非 main 祖先、未推送、CI 不可见），
+内容是 V0.4.0～V0.6.0 旧证据里带占位 DSN 的 patch。⇒ 这 15 条是**本机 stash 的噪音**，
+不是仓库基线；`.gitleaksignore` 不需要、也不允许为此扩条目（D-12 只准逐指纹、只准真实命中）。
+
+六、对应先红用例（apps/api/tests/test_secret_shape_gate.py §I）
+  test_docx_is_declared_binary_so_gitleaks_stops_failing_on_windows
+    —— 同时断言 `*.docx binary` 与 `/.project/** -diff` 两行都在。

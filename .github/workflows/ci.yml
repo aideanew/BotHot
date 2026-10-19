@@ -50,7 +50,12 @@ jobs:
       DATABASE_URL: postgresql+psycopg://bothot:bothot@localhost:5433/bothot
       AIDEANBOT_TEST_PG_DSN: postgresql+psycopg://bothot:bothot@localhost:5433/bothot
     steps:
+      # STEP-27 S27.2（D-V12-03）：治理门要看「这一批改了什么」，基线由事件给出。
+      # 默认 depth=1 时 `github.event.before` / PR base sha 的提交对象不在本地，
+      # 门会 fail-closed 判红（方向正确，但不能让它天天红）⇒ 这里必须取全历史。
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -204,6 +209,38 @@ jobs:
             exit "$pytest_status"
           fi
           exit "$gate_status"
+      # STEP-27 S27.2（D-V12-03 / D-V12-04）：两道范围门进 CI。
+      #
+      # 为什么必须在这里跑：D-14（轮次熔断）与 D-V4-03（证据↔用例耦合）改前只有本机
+      # `make` 入口，CI 一次都没执行过——"签了但没人跑"就是 F-V14-06 的形态。
+      # 为什么基线必须由事件给出：push 事件里 `origin/main` 就是刚推完的 HEAD，
+      # `origin/main..HEAD` 恒空 ⇒ 门永远第三态（rc=3），"跑了"与"什么都没看"读数相同。
+      # 为什么 `GUARD_GITLEAKS_COVERED=1`：本 job 不装 gitleaks（权威步在 Security
+      # 工作流），不显式记账的话 evidence-check 会把「工具缺席」判成第三态 ⇒ CI 恒红。
+      # 两条门各自独立执行：前一条红也要让后一条留下读数（S00T.V14.2 修过的同一个毛病）。
+      - name: Governance gates (rounds-check + evidence-check)
+        shell: bash
+        env:
+          GUARD_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          GUARD_GITLEAKS_COVERED: "1"
+        run: |
+          set -uo pipefail
+          base="$GUARD_BASE"
+          case "$base" in
+            ""|0000000000000000000000000000000000000000) base="HEAD~1" ;;
+          esac
+          echo "治理门基线：$base（HEAD=$(git rev-parse HEAD)）"
+          rc_rounds=0
+          rc_evidence=0
+          python "$GITHUB_WORKSPACE/scripts/guards.py" rounds-check --base "$base" || rc_rounds=$?
+          python "$GITHUB_WORKSPACE/scripts/guards.py" evidence-check --base "$base" || rc_evidence=$?
+          echo "rounds-check rc=$rc_rounds / evidence-check rc=$rc_evidence"
+          # rc=3 是「这一维没有可检面」，不是通过（D-V12-04）⇒ 与 rc=1 同样判失败。
+          if [ "$rc_rounds" -ne 0 ] || [ "$rc_evidence" -ne 0 ]; then
+            echo "❌ 治理门未通过（rc 非 0 一律失败，含第三态 3）"
+            exit 1
+          fi
+          echo "✅ 治理门通过"
 
   frontend:
     runs-on: ubuntu-latest

@@ -1,0 +1,122 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+________ test_import_time_schema_probe_is_bounded_against_blackhole_db ________
+
+    def test_import_time_schema_probe_is_bounded_against_blackhole_db() -> None:
+    
+        if _alembic_head() is None:
+    
+            pytest.skip("alembic head 解析不到 ⇒ 守卫两条结论日志都不会打，结论断言失去判据（非缺陷）")
+    
+        env = dict(os.environ)
+    
+        env["DATABASE_URL"] = BLACK_HOLE_DSN
+    
+        env["APP_ENV"] = "development"   # 生产语义（拒启）由另一条断言管，这里只测"有没有上界"
+    
+        env["PYTHONUTF8"] = "1"
+    
+    
+    
+        started = time.monotonic()
+    
+        try:
+    
+            proc = subprocess.run(
+    
+                [sys.executable, "-X", "utf8", "-c", _CHILD],
+    
+                cwd=str(API_DIR),
+    
+                capture_output=True,
+    
+                text=True,
+    
+                encoding="utf-8",
+    
+                errors="replace",
+    
+                timeout=HARD_TIMEOUT_SECONDS,
+    
+                env=env,
+    
+            )
+    
+        except subprocess.TimeoutExpired as exc:
+    
+            pytest.fail(
+    
+                f"import app.main 在无响应的库前挂住（>{HARD_TIMEOUT_SECONDS}s 被父进程杀掉）：启动期探测没有超时上界。"
+    
+                f" 子进程 stderr 尾部：{str(exc.stderr or '')[-400:]}"
+    
+            )
+    
+        wall_seconds = time.monotonic() - started
+    
+        combined = (proc.stdout or "") + (proc.stderr or "")
+    
+    
+    
+        assert proc.returncode == 0, (
+    
+            f"import app.main 退出码 {proc.returncode}（期望 0：探测不可判定应放行，不是崩）\n"
+    
+            f"stderr 尾部：{proc.stderr[-600:]}"
+    
+        )
+    
+        # 这条断言是独立验证逼出来的，比计时更重要：**没有探测结论的计时通过是假通过**。
+    
+        # 只要探测真跑了，两条日志必居其一：超时放行（>5s 那支）、或"版本不一致：DB=…"
+    
+        # （黑洞下 connect_timeout 先抛、read_current_version_async 归一为 None，本机实测走这支）。
+    
+        # 反之若 psycopg 缺失、DSN 解析失败、或已在 loop 内短路，就一条都没有 ⇒ 这里红，而不是悄悄绿。
+    
+        markers = ("schema 版本探测超时", "版本不一致：DB=")
+    
+        assert any(m in combined for m in markers), (
+    
+            "没看到启动探测的任何结论性日志（期望命中 "
+    
+            f"{markers} 之一）⇒ 探测被短路，本用例的计时通过不可信。输出尾部：{combined[-600:]}"
+    
+        )
+    
+        reported = re.search(r"PROBE_SECONDS (\d+\.\d+)", combined)
+    
+        assert reported is not None, (
+    
+            f"子进程没自报整段 import 耗时（期望 `PROBE_SECONDS <秒>`）⇒ 它没跑到最后一行。输出尾部：{combined[-600:]}"
+    
+        )
+    
+        import_seconds = float(reported.group(1))   # 只报不判：它包含解释器启动与全部模块 import
+    
+        probe_match = re.search(r"SCHEMA_PROBE_SECONDS (\d+\.\d+|none)", combined)
+    
+        assert probe_match is not None, (
+    
+            "子进程没有自报探测段耗时（期望 `SCHEMA_PROBE_SECONDS <秒>`）⇒ 计时包装未生效，"
+    
+            f"本用例的计时断言没有测量对象。输出尾部：{combined[-600:]}"
+    
+        )
+    
+>       assert probe_match.group(1) != "none", (
+    
+            "`asyncio.run` 一次都没被调用 ⇒ 启动探测被短路（或实现已不再走 asyncio.run），"
+    
+            "此时谈「有没有上界」没有意义"
+    
+        )
+E       AssertionError: `asyncio.run` 一次都没被调用 ⇒ 启动探测被短路（或实现已不再走 asyncio.run），此时谈「有没有上界」没有意义
+E       assert 'none' != 'none'
+E        +  where 'none' = <built-in method group of re.Match object at 0x000001F2AD1A2440>(1)
+E        +    where <built-in method group of re.Match object at 0x000001F2AD1A2440> = <re.Match object; span=(881, 906), match='SCHEMA_PROBE_SECONDS none'>.group
+
+tests\test_startup_probe_timeout.py:369: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_startup_probe_timeout.py::test_import_time_schema_probe_is_bounded_against_blackhole_db
+1 failed in 6.39s
