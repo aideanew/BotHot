@@ -123,8 +123,8 @@ ruff 净，`check_entry_parity` rc=0，`rounds-check` rc=0。
 |---|---|---|---|
 | `7a525a0`（S00R.V14.1） | frontend / backend / compose / compose-smoke / workflow-lint / 安全扫描 | 全部 **success** | — |
 | `7a525a0` | **windows-dev** | **failure** | 红在步骤 `15_Frontend typecheck + unit（vitest）`：`FAIL tests/r043-jobs-page.spec.tsx > R0.4.3 轮询纪律 > 有非终态才轮询（5s）；全部终态自动停，不空转打接口`，`Test Files 1 failed | 46 passed (47)`；日志里另有大量 `AggregateError … ::1/127.0.0.1` 的 `createConnectionError` |
-| `067ff59`（S00T.V14.1/V14.2） | 其余 6 个 job | **success** | — |
-| `067ff59` | windows-dev | 取读数时仍 `in_progress` | **未定**，落地后补 |
+| `067ff59`（S00T.V14.1/V14.2） | 全部 7 个 job（含 windows-dev） | **全绿，0 个非 success** | 本批代码侧 Done 判据成立 |
+| `067ff59` | windows-dev 的前端那一步 | **success** | **与 `7a525a0` 同一份前端代码、同一测试集合（47 个文件）** ⇒ 上一行的红被证实为抖动，不是推断 |
 
 **这不是本批引入的回归**，三条依据：
 
@@ -139,7 +139,8 @@ ruff 净，`check_entry_parity` rc=0，`rounds-check` rc=0。
 ⇒ 定性：**Windows runner 上的时序抖动**（轮询纪律用例 + 真连接尝试），已登记 **P-34** 交前端 owner，
 不在本会话的允许面内（`apps/web/**` 归规划方）。
 本卡（Guard 线）的 Done 判据里"`@ci` 三绿且 run 的 `head_sha` 等于交付提交"这一条，
-在 `067ff59` 上**尚未成立**（windows-dev 未定），所以本卡状态写作 **部分确认**，不写"已交付并绿"。
+在 `067ff59` 上**已成立**（7 个 job 全绿、head_sha 等于交付提交）。
+第 2 轮返工的 `e99fac1` 已推送，取数时 jobs=0（尚未建 run），落地后另记。
 
 ## 7. 未做 / 阻塞 / 交回
 
