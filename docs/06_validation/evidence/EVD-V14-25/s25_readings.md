@@ -57,3 +57,9 @@
 - 第 2 轮修法：`scripts/guards.py` 新增 `_in_string_or_comment` 与 `_is_code_expression`，三条同时成立才跳过——键名不在字符串/注释里、值不带任何引号（含反引号）、值是标识符/属性/调用形。复查者 5 例 + `//` 注释 1 例写成反证用例（`test_code_mode_still_reports_shapes_inside_strings_comments_and_non_expressions`），门用例 76 passed；原表达式用例（函数调用/属性访问/设置引用）仍不报。
 - 其余 11 条 PASS（含：权限矩阵 11 端点 × 3 角色逐格实测一致；夹带凭据整单拒绝且无部分生效；先授权后查库；r11 只删 2 条多参数格；Windows 基线推算 8 条正确；证据无真凭据）。
 - 复查者建议请用户签字确认 D-V12-18（新建渠道仅管理员）以及"删任务、立即执行、测试推送给运营"（D-V12-12 原文未逐项写到）——已列入 V0.15.0/05 待用户确认。
+
+## 独立复查第 2 轮（2026-10-19 17:59，基线 c41a57d）
+- STEP-25 本体：A 条（卡面 grep 为空、EVD 已更正）PASS；回归面 C/D/E PASS。
+- P-40 门修复第 2 轮 FAIL：多行字符串内的赋值、表达式后跟写死兜底值两类在源码模式下漏检，属倒退。
+- 处置：按 D-14 熔断，不做第 3 次自修，6b3a58f 撤回 d1db090 与 c41a57d 的门改动（D-V12-21），重做移交 STEP-27 S27.V15.1。STEP-24/25 的业务代码与测试不受影响（撤回只动 `scripts/guards.py` 与 `tests/test_secret_shape_gate.py`）。
+- 后果：严格口径下 `bots.py`、`bots/page.tsx` 等文件再被触碰会被门挡住，直到 27 合入。
