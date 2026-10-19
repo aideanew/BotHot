@@ -347,3 +347,20 @@ A 组提取器喂一个读 `MISSING_TODAY` 的假 Provider 时必须报缺失（
 
 注：`S0T.3.1`（proofs 目录纳入 CI pytest）在本批**顺带成立**——CI 的命令是 `pytest tests/`，
 递归收集自动覆盖 `tests/proofs/`；这条不是刻意做的，记在这里是为了让"哪项因何而闭"可考。
+
+### 11.5 删除的连带影响（登记，不越界代修）
+
+`git grep -n prove_provider_shapes` 复核：本仓仍提到这个名字的 30 余处里，
+**只有一处是可执行引用**——`docs/任务规划V0.5.0/evidence/S0T/extract_checks.py:31`
+把它登记在自己的 `SOURCES` 取材面里，而该脚本 `:66` 直接 `path.read_text()`（无 `exists()` 守卫）、
+`:144` 无条件遍历 `SOURCES` ⇒ 现在运行它会抛 `FileNotFoundError`，
+V0.5.0 的 `判决迁移清单.md` 就此无法再生成。
+
+**我没有改它也没有运行它**，三条理由：①V0.5.0 树正被并行会话写入（其 `evidence/S0T/判决迁移清单.md`
+与 `steps/STEP-00T-*.md` 在 `git status` 里是脏的）；②`extract_checks.py:183` 会 `write_text`
+回写那张正被别人改着的表；③按 J-10，V0.5.0 的 `S0T.*` 与 V0.13.0 的 `S00T.*` 不是同一编号空间，
+跨树改动等于替别人决定语义。已登记 **P-35**，并给出两个修法（改指向新 proofs / 加存在性守卫），
+其中加守卫更耐久——00T 后面还会继续删脚本。
+
+其余引用都是历史文档、注释与我自己的合成用例（`test_guard_rounds.py` 用这个路径当
+`--name-status` 解析的样例数据），不构成悬空。

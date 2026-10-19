@@ -167,4 +167,5 @@ ruff 净，`check_entry_parity` rc=0，`rounds-check` rc=0。
 | 00T 原 9 项、00R 原 9 项 | **待执行** | 本批只交付 V14 增量 |
 | 追认项 | P-32（make 侧断裂已修，是否把 `make guard` 接进 CI）、P-33（耦合门 `<1` 与轮次门归属口径 L3-only/中文数字） | 判据解释权在规划方 |
 | STEP-24 / 25 / 26、15b、21、19、13、15、12 | **不属本会话** | 04 §5 归规划方或 Agent-API/Data；`bots.py`、`roles.py`、`hot.py`、`services/push.py` 一律未动 |
+| 删除 F-14 脚本的连带影响 | **已登记 P-35，未代修** | `docs/任务规划V0.5.0/evidence/S0T/extract_checks.py:31` 把它列在 `SOURCES` 取材面里，而 `:66` 的 `path.read_text()` 没有存在性守卫 ⇒ 运行它会 `FileNotFoundError`；该树正被并行会话写入，且 `S0T.*` 与 `S00T.*` 不是同一编号空间（J-10），故只登记不代修。详见 `EVD-V14-00T/s00t_v14_gates.md` §11.5 |
 | 并行会话脏文件 | 未 stage、未回退 | `apps/web/pnpm-lock.yaml`、`packages/contracts/src/**`（5 个 dto.ts）、`EVD-V2-02/**`（2 个）、`任务规划V0.5.0/**`（2 个）、`identity.schema.json`、`.q6.json`、`apps/api/.coverage`、`任务规划V0.4.0/V0.6.0` 的 4 个未跟踪 patch |
