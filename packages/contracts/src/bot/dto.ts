@@ -77,7 +77,6 @@ export interface PushTaskCreateRequest {
   trigger_event: string | null;
   content_template: string | null;
   space_id: string | null;
-  created_by: string | null;
 }
 
 export interface PushTaskUpdateRequest {

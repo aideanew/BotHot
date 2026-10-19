@@ -21,3 +21,9 @@
 
 ## S24.3.1 存量审计
 生产只读 DSN 未提供（D-V12-14：先在测试库演练，生产以后跑）⇒ **未测**，不写 0。审计 SQL 已并入 STEP-07 的脚本清单。
+
+## 第 2 轮（CI 契约漂移门红后补交）
+- 7504ef8/d1db090 推送后 CI `backend` job 在 **Contract drift gate（gen_contracts --check）** 失败（run 39232791407，job 117994547380；Security 39232791423 success）：`PushTaskCreateRequest` 删除 `created_by` 后，**生成产物** `packages/contracts/src/bot/dto.ts` 未重新生成。
+- 根因是规划方漏跑了 CI 的契约门（本机只跑了 ruff/mypy/pytest/前端三件套）。修法：`python scripts/gen_contracts.py` 重新生成，diff 只有 1 行（删 `created_by: string | null;`）；`--check` 全部幂等一致；contracts 包 `tsc --noEmit` rc=0；前端无 `PushTaskCreateRequest` 引用。
+- 卡面"禁止修改 `packages/contracts/**`"指手写契约；本次是**生成器产物随请求模型同步**，冻结契约 `docs/任务规划V0.12.0/contracts/**` 未动。登记为卡面增量。
+- 教训（写进执行提示词）：交付前按 `ci.yml` backend job 的步骤顺序逐条本机跑，包括契约门与文档门。
