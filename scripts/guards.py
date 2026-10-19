@@ -480,60 +480,8 @@ def _mask_shape(rule: str, frag: str) -> str:
     return frag[:4] + "***"
 
 
-#: 源码文件后缀（P-40 / D-V12-19）：源码里「键名 + 等号 + 值」若键名在代码层（不在字符串/注释里）、
-#: 值不带任何引号且是标识符/属性/调用形，它就是表达式而不是凭据。文档/配置（.md/.txt/.yml/.env…）不在此列，
-#: 仍按宽口径——YAML 无引号短口令不能放过。
-SECRET_CODE_SUFFIXES = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
-
-
-_CODE_EXPR = re.compile(r"[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*(?:\(.*)?")
-
-
-def _in_string_or_comment(line: str, pos: int) -> bool:
-    """`pos` 之前是否处在未闭合的字符串（单/双/反引号）里，或已进入行注释（# 或 //）。
-
-    逐字符扫，处理反斜杠转义；不跨行（多行字符串里的行按"不在字符串里"处理，偏向多报）。
-    """
-    quote = ""
-    i = 0
-    while i < pos:
-        ch = line[i]
-        if quote:
-            if ch == "\\":
-                i += 2
-                continue
-            if ch == quote:
-                quote = ""
-        elif ch in "\"'`":
-            quote = ch
-        elif ch == "#" or line.startswith("//", i):
-            return True
-        i += 1
-    return bool(quote)
-
-
-def _is_code_expression(line: str, key_pos: int, val_pos: int, val: str) -> bool:
-    """源码模式下，这处「键名 + 等号/冒号 + 值」是不是表达式（P-40 第 2 轮，独立复查 FAIL 后收紧）。
-
-    三个条件**同时**成立才跳过：
-    ① 键名不在字符串或注释里（字符串里的 `password=…` 连接串、`API_KEY=…` 环境行、注释里的赋值照报）；
-    ② 值前面不是任何引号（含反引号模板）；
-    ③ 值是标识符/属性访问/函数调用形（纯数字口令照报）。
-    """
-    if _in_string_or_comment(line, key_pos):
-        return False
-    if val_pos > 0 and line[val_pos - 1] in "\"'`":
-        return False
-    return bool(_CODE_EXPR.fullmatch(val))
-
-
-def secret_scan(text: str, code: bool = False) -> tuple[list[tuple[str, int, str]], int]:
+def secret_scan(text: str) -> tuple[list[tuple[str, int, str]], int]:
     """纯函数：文本 → ([(规则, 行号, 打码形状)], 被 ALLOW 放行处数)。
-
-    `code=True`（调用方按 SECRET_CODE_SUFFIXES 判定）时，`assign` 跳过**确属表达式**的值
-    （判据见 `_is_code_expression`，三条同时成立）：
-    改前「键名等于解密函数调用」「键名冒号表单属性」这类表达式被当成凭据，任何触碰 bots.py / bots/page.tsx 的提交都被永久阻断且没有豁免通道（P-40）。
-    十条具名规则（AKIA、DSN 内嵌口令等）不受影响，源码里照样逐条判。
 
     合成字符串即可证伪，不必造 git 状态——"这判据会不会永远绿"必须可测。
 
@@ -555,8 +503,6 @@ def secret_scan(text: str, code: bool = False) -> tuple[list[tuple[str, int, str
                 hits.append((name, no, _mask_shape(name, frag)))
         for m in SECRET_ASSIGN.finditer(line):
             val = m.group(2)
-            if code and _is_code_expression(line, m.start(1), m.start(2), val):
-                continue
             if (val.startswith("re.compile") or SECRET_FAKE.match(val)
                     or _SECRET_ASSIGN_SKIP.search(val)):
                 continue
@@ -627,7 +573,7 @@ def secret_shape_check(base: str = "origin/main") -> int:
             skipped += 1
             continue
         scanned += 1
-        hits, ok = secret_scan(data.decode("utf-8", "replace"), code=rel.endswith(SECRET_CODE_SUFFIXES))
+        hits, ok = secret_scan(data.decode("utf-8", "replace"))
         allowed += ok
         for name, no, shape in hits:
             high += 1
