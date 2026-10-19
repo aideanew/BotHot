@@ -759,3 +759,21 @@ def test_gate_applies_code_mode_by_suffix(monkeypatch) -> None:
     _fake_git(monkeypatch, staged="a.tsx\n", blobs={"a.tsx": expr})
     assert guards.secret_shape_check() == 0
 
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        # 独立复查（2026-10-19）构造的 5 种漏检形态：第 1 轮门修复后在源码模式下全部 0 命中
+        'psycopg.connect("host=db ' + "password" + '=hunter2Secret9988")',
+        'ENV = "API' + "_KEY" + '=hunter2Secret9988"',
+        "# " + "password" + "=hunter2Secret9988",
+        "  " + "secret" + ": `hunter2Secret9988`,",
+        "password" + " = 1234567890",
+        "// " + "token" + " = hunter2Secret9988",
+    ],
+    ids=["字符串内连接串", "字符串内环境行", "注释内赋值", "反引号模板", "数字口令", "双斜杠注释"],
+)
+def test_code_mode_still_reports_shapes_inside_strings_comments_and_non_expressions(line: str) -> None:
+    hits, _ = guards.secret_scan(line, code=True)
+    assert [h[0] for h in hits] == ["assign"], f"源码模式漏检：{hits}"
+
