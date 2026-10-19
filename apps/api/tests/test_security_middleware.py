@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import importlib
 import os
@@ -77,6 +78,34 @@ def _reset_security_state() -> Any:
     yield
     sec.set_rate_limit_counter(None)
     sec.reset_shared_redis()
+
+
+# 生产守卫读取的全部 env 名（判据见 `app/core/config.py:236-255`）。
+# 这张清单与本文件的密封夹具由 `test_guard_env_seal_covers_the_guard_own_item_set`
+# 双向对着守卫自己的输出校验——守卫加第 9 项而清单没跟上就是红。
+_GUARD_ENV_KEYS = (
+    "OIDC_CLIENT_SECRET",
+    "SESSION_COOKIE_SECURE",
+    "SESSION_STORE_BACKEND",
+    "OIDC_ISSUER_EXPECTED",
+    "OIDC_AUDIENCE_EXPECTED",
+    "PUSH_SECRET_MASTER_KEY",
+    "ENGINE_KEY_MASTER_KEY",
+    "QA_FIXTURE_TOKEN_PREFIX",
+)
+
+
+@pytest.fixture
+def sealed_guard_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """清空守卫读取的 8 个 env 键，使判据数只取决于 `Settings` 默认值。
+
+    F-V14-03 现跑：宿主设了 `PUSH_SECRET_MASTER_KEY`（探针用的随机值）⇒ 该项不再计入
+    ⇒ 断言 8 项实读 7 项而 FAILED。CI 不设这个变量所以全绿，缺陷只在本机暴露——
+    所以「CI 绿」和「本机可信」当时可以同时不成立。D-V11-06 否决了"在 CI 里固定环境"
+    （那只是把假红藏起来，本机的不可信读数还在），要求用例侧密封。
+    """
+    for name in _GUARD_ENV_KEYS:
+        monkeypatch.delenv(name, raising=False)
 
 
 _APP: FastAPI | None = None
@@ -388,7 +417,9 @@ def test_hsts_honours_forwarded_proto() -> None:
     "app_env",
     ["production", "PRODUCTION", " Production ", "prod", "prd", "prod-eu", "staging", "live"],
 )
-def test_production_guard_blocks_non_whitelisted_env_names(app_env: str) -> None:
+def test_production_guard_blocks_non_whitelisted_env_names(
+    app_env: str, sealed_guard_env: None
+) -> None:
     """负例（本项验收核心）：任何**不在**白名单里的 env 名一律按生产守卫。
 
     原实现 `!= "production"` 精确匹配时，`prod-eu` 可整体绕过红线。
@@ -398,32 +429,239 @@ def test_production_guard_blocks_non_whitelisted_env_names(app_env: str) -> None
 
 
 @pytest.mark.parametrize("app_env", sorted(NON_PRODUCTION_ENVS))
-def test_production_guard_whitelists_known_dev_envs(app_env: str) -> None:
+def test_production_guard_whitelists_known_dev_envs(app_env: str, sealed_guard_env: None) -> None:
     """白名单内的开发/测试环境仍放行（不得把本地开发卡死）。"""
     settings = Settings(_env_file=None, app_env=app_env)  # type: ignore[call-arg]
     assert settings.production_guard_violations() == []
 
 
-def test_production_guard_still_reports_all_eight_items() -> None:
+def test_production_guard_still_reports_all_eight_items(sealed_guard_env: None) -> None:
     """守卫条目数不变（白名单化只改闸门，不改判据集合）——防顺手削项。
 
     2026-10-09 A-T024：新增 QA_FIXTURE_TOKEN_PREFIX 非空守卫（生产禁 fixture 短路）
     属有意扩展，从 7 项 → 8 项。同名测试重命名确保下次拓展仍需显式确认。
+
+    S00R.V14.1（D-V11-06）：`sealed_guard_env` 先清 8 个 env 键——这条断言的是
+    「默认值下守卫报几项」，宿主环境一旦提供任一项的真值就会少报一项，与本断言无关。
     """
     settings = Settings(_env_file=None, app_env="prod-eu")  # type: ignore[call-arg]
     violations = settings.production_guard_violations()
     assert len(violations) == 8
-    for token in (
-        "OIDC_CLIENT_SECRET",
-        "SESSION_COOKIE_SECURE",
-        "SESSION_STORE_BACKEND",
-        "OIDC_ISSUER_EXPECTED",
-        "OIDC_AUDIENCE_EXPECTED",
-        "PUSH_SECRET_MASTER_KEY",
-        "ENGINE_KEY_MASTER_KEY",
-        "QA_FIXTURE_TOKEN_PREFIX",
-    ):
-        assert any(token in item for item in violations), token
+    for token in _GUARD_ENV_KEYS:
+        assert any(_mentions_guard_key(item, token) for item in violations), token
+
+
+def test_guard_env_seal_covers_the_guard_own_item_set(sealed_guard_env: None) -> None:
+    """密封清单与守卫判据**双向**对齐：少一个键、多一个键、清单里的键失效，都是红。
+
+    写成用例而不是注释的理由：F-V14-03 的根因不是「这一条用例忘了清环境」，而是
+    「清单会随守卫扩展而 drift，且漂移只在本机暴露」。判据取守卫自己的输出，
+    不取源码文本——文本扫描会被改文案绕过（本轮已犯过一次同类判据）。
+    """
+    violations = Settings(_env_file=None, app_env="prod-eu").production_guard_violations()  # type: ignore[call-arg]
+    named = [key for key in _GUARD_ENV_KEYS if any(_mentions_guard_key(i, key) for i in violations)]
+    uncovered = [i for i in violations if not any(_mentions_guard_key(i, k) for k in _GUARD_ENV_KEYS)]
+    assert len(named) == len(violations), (
+        f"守卫判据项数({len(violations)}) ≠ 密封清单命中的项数({len(named)})；未覆盖项={uncovered}"
+    )
+    assert len(named) == len(_GUARD_ENV_KEYS), (
+        f"清单里有 {len(_GUARD_ENV_KEYS) - len(named)} 个键已不再是守卫判据，请删或改守卫"
+    )
+
+
+def test_guard_key_matcher_rejects_truncated_names() -> None:
+    """反证（首轮评审实测出的假绿方向）：清单写成截断名时，命中判据必须失效。
+
+    子串匹配下 `PUSH_SECRET_MASTER` 会被判成"命中了 PUSH_SECRET_MASTER_KEY 那一项"，
+    于是双向对齐用例全绿，而夹具 `delenv("PUSH_SECRET_MASTER")` 什么也没清——密封静默失效。
+    """
+    item = "PUSH_SECRET_MASTER_KEY 未配置（渠道密钥 AES 加解密，缺失即投递全拒）"
+    assert _mentions_guard_key(item, "PUSH_SECRET_MASTER_KEY")
+    assert not _mentions_guard_key(item, "PUSH_SECRET_MASTER"), "截断名不得算命中"
+    assert not _mentions_guard_key(item, "SECRET_MASTER_KEY"), "后缀片段不得算命中"
+    assert not _mentions_guard_key("ENGINE_KEY_MASTER_KEY 未配置", "PUSH_SECRET_MASTER_KEY")
+
+
+_GUARD_CALL_NAME = "production_guard_violations"
+_KEY_WORD_RE_CACHE: dict[str, re.Pattern[str]] = {}
+
+
+def _arg_names(args: ast.arguments) -> list[str]:
+    """形参名列表。不用 `args.argnames`——本机解释器的 `ast.arguments` 未注册该属性
+    （第一版就栽在这里，被自己写的反证用例抓出来的）。"""
+    return [a.arg for a in (*args.posonlyargs, *args.args, *args.kwonlyargs)]
+
+
+def _reads_guard(fn: ast.AST) -> bool:
+    """函数体内是否引用守卫判据——覆盖三种真实写法 + 一种间接写法：
+    `x.production_guard_violations()`、`f = x.production_guard_violations` 后调 `f()`、
+    类内 `self.settings.production_guard_violations()`、`getattr(x, "production_guard_violations")()`。
+
+    为什么不只认 Call：密封夹具是非 autouse 的，这条判据是"后来者忘请求夹具"的唯一兜底；
+    判据只认属性调用时，`getattr` 与别名写法就能静默绕过（首轮评审实测出 5 类漏检）。
+    **已知不覆盖**：只在 docstring/注释里提到这个名字的用例不算读者——否则本文件的自述用例
+    会被自己判红。这条边界登记在 EVD-V14-00R §5。
+    """
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Attribute) and node.attr == _GUARD_CALL_NAME:
+            return True
+        if isinstance(node, ast.Call) and any(
+            isinstance(a, ast.Constant) and a.value == _GUARD_CALL_NAME for a in node.args
+        ):
+            return True
+    return False
+
+
+def _test_funcs(tree: ast.AST) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+    """全树搜 `test_*`（**含类内方法与 async**）。
+
+    只扫 `tree.body` 会漏掉类内用例——本仓确有这种写法（`tests/test_wb_push_hardening.py:346`
+    读同一个守卫）。漏检等于没有兜底。
+    """
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name.startswith("test_")
+    ]
+
+
+def _mentions_guard_key(item: str, key: str) -> bool:
+    """整词匹配 env 名。子串匹配会被截断名绕过：清单写成 `PUSH_SECRET_MASTER` 时
+    子串判据双向都绿，而夹具 `delenv("PUSH_SECRET_MASTER")` 清不掉真键 ⇒ 密封静默失效。"""
+    pat = _KEY_WORD_RE_CACHE.get(key)
+    if pat is None:
+        pat = re.compile(rf"(?<![A-Z0-9_]){re.escape(key)}(?![A-Z0-9_])")
+        _KEY_WORD_RE_CACHE[key] = pat
+    return pat.search(item) is not None
+
+
+_SEAL_FIXTURE = "sealed_guard_env"
+
+
+def _is_sealed(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """两种合法密封都算：形参请求，或 `@pytest.mark.usefixtures("sealed_guard_env")`。
+
+    只认形参会把 usefixtures 写法判成未密封（假红），而假红会逼人改坏判据。
+    """
+    if _SEAL_FIXTURE in _arg_names(fn.args):
+        return True
+    return any(
+        isinstance(dec, ast.Call)
+        and any(isinstance(a, ast.Constant) and a.value == _SEAL_FIXTURE for a in dec.args)
+        for dec in fn.decorator_list
+    )
+
+
+def _unsealed_guard_readers(source: str) -> list[str]:
+    """扫出「读生产守卫却没密封」的用例名（纯函数，可喂合成源）。"""
+    offenders: list[str] = []
+    for fn in _test_funcs(ast.parse(source)):
+        if _reads_guard(fn) and not _is_sealed(fn):
+            offenders.append(f"{fn.name} 的参数={_arg_names(fn.args)}")
+    return offenders
+
+
+# (写法名, 未密封源码, 同写法加密封后的源码)——反证必须对每种写法双向敏感。
+_POLARITY_CASES: tuple[tuple[str, str, str], ...] = (
+    (
+        "属性调用",
+        "def test_x():\n    assert Settings().production_guard_violations()\n",
+        "def test_x(sealed_guard_env):\n    assert Settings().production_guard_violations()\n",
+    ),
+    (
+        "async 用例",
+        "async def test_x():\n    assert Settings().production_guard_violations()\n",
+        "async def test_x(sealed_guard_env):\n    assert Settings().production_guard_violations()\n",
+    ),
+    (
+        "类内方法",
+        "class TestGuard:\n"
+        "    def test_x(self):\n"
+        "        assert self.settings.production_guard_violations()\n",
+        "class TestGuard:\n"
+        "    def test_x(self, sealed_guard_env):\n"
+        "        assert self.settings.production_guard_violations()\n",
+    ),
+    (
+        "getattr 间接",
+        "def test_x():\n    assert getattr(Settings(), 'production_guard_violations')()\n",
+        "def test_x(sealed_guard_env):\n    assert getattr(Settings(), 'production_guard_violations')()\n",
+    ),
+    (
+        "别名后调",
+        "def test_x():\n    f = Settings().production_guard_violations\n    assert f()\n",
+        "def test_x(sealed_guard_env):\n    f = Settings().production_guard_violations\n    assert f()\n",
+    ),
+    (
+        "usefixtures 密封",
+        "def test_x():\n    assert Settings().production_guard_violations()\n",
+        "@pytest.mark.usefixtures('sealed_guard_env')\ndef test_x():\n"
+        "    assert Settings().production_guard_violations()\n",
+    ),
+)
+
+# 只在 docstring 里提名字 ≠ 读者（判据的已知边界，EVD §5）。
+_DOCSTRING_ONLY_SRC = (
+    'def test_x():\n    """这里提到 production_guard_violations 只是说明文字。"""\n    assert True\n'
+)
+
+
+def test_structure_guard_reading_seal_check_has_polarity() -> None:
+    """反证：六种写法逐一喂正反两侧，再加一条"仅提及不算"的边界。
+
+    没有这条，`test_structure_every_guard_reading_test_is_sealed` 可能空转（本轮已经
+    为空守卫返工过一次）。首轮独立评审实测出 5 类漏检（async/类内/getattr/别名/
+    `tree.body` 只扫顶层）与 1 类假绿（清单写截断名），本条把前 5 类逐个钉住。
+    """
+    for label, unsealed, sealed in _POLARITY_CASES:
+        offenders = _unsealed_guard_readers(unsealed)
+        assert len(offenders) == 1 and offenders[0].startswith("test_x"), f"{label} 未被扫出：{offenders}"
+        assert _unsealed_guard_readers(sealed) == [], f"{label} 的密封写法被误判：{label}"
+    assert _unsealed_guard_readers(_DOCSTRING_ONLY_SRC) == []
+
+
+def test_structure_every_guard_reading_test_is_sealed() -> None:
+    """本文件里凡读生产守卫的用例都必须密封（判据由 `_reads_guard` 给，覆盖 5 类写法）。
+
+    本条自己的 docstring 里出现了那个名字，但不算读者——`_reads_guard` 只认 Attribute
+    节点与 Call 实参位上的字符串常量，说明文字不进判据（边界见 EVD-V14-00R §5）。
+    """
+    offenders = _unsealed_guard_readers(Path(__file__).read_text(encoding="utf-8"))
+    assert offenders == [], f"读生产守卫却未密封的用例（宿主环境会造本机假红）：{offenders}"
+
+
+def test_structure_seal_fixture_dels_every_guard_key() -> None:
+    """夹具本体必须真的逐个 `delenv` 清单里的键（防清单与实现脱钩）。
+
+    判据取 AST 里 `monkeypatch.delenv(name)` 的实参变量所指的元组，而不是数一遍
+    `delenv` 出现次数——次数判据会被「同一个键删两遍」骗过。
+    """
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    fixtures = [
+        fn for fn in tree.body if isinstance(fn, ast.FunctionDef) and fn.name == _SEAL_FIXTURE
+    ]
+    assert len(fixtures) == 1, f"夹具应当有且只有一个实现，实读 {len(fixtures)} 个"
+    loops = [node for node in ast.walk(fixtures[0]) if isinstance(node, ast.For)]
+    assert len(loops) == 1, "夹具应只有一个遍历清单的循环（写死两遍 delenv 不算密封）"
+    loop = loops[0]
+    assert isinstance(loop.iter, ast.Name) and loop.iter.id == "_GUARD_ENV_KEYS", (
+        "夹具必须遍历清单本身，不许写死另一份键名"
+    )
+    dels = [
+        node
+        for node in ast.walk(loop)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "delenv"
+    ]
+    assert len(dels) == 1 and dels[0].args and isinstance(dels[0].args[0], ast.Name), (
+        "循环体里应只有一次 delenv(变量)"
+    )
+    assert dels[0].args[0].id == loop.target.id
+    assert dels[0].keywords and any(
+        k.arg == "raising" and isinstance(k.value, ast.Constant) and k.value.value is False
+        for k in dels[0].keywords
+    ), "必须 delenv(..., raising=False)：宿主没设该键时不许抛 KeyError"
 
 
 # ═══════════════════════════════════════════════════════ B.3 上游治理
