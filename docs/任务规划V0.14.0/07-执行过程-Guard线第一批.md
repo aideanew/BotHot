@@ -138,7 +138,7 @@ ruff 净，`check_entry_parity` rc=0，`rounds-check` rc=0。
 | 提交 | 工作流/job | 读数 | 归属判断 |
 |---|---|---|---|
 | `7a525a0`（S00R.V14.1） | frontend / backend / compose / compose-smoke / workflow-lint / 安全扫描 | 全部 **success** | — |
-| `7a525a0` | **windows-dev** | **failure** | 红在步骤 `15_Frontend typecheck + unit（vitest）`：`FAIL tests/r043-jobs-page.spec.tsx > R0.4.3 轮询纪律 > 有非终态才轮询（5s）；全部终态自动停，不空转打接口`，`Test Files 1 failed | 46 passed (47)`；日志里另有大量 `AggregateError … ::1/127.0.0.1` 的 `createConnectionError` |
+| `7a525a0` | **windows-dev** | **failure** | 红在步骤 `15_Frontend typecheck + unit（vitest）`：`FAIL tests/r043-jobs-page.spec.tsx > R0.4.3 轮询纪律 > 有非终态才轮询（5s）；全部终态自动停，不空转打接口`，`Test Files 1 failed \| 46 passed (47)`；日志里另有大量 `AggregateError … ::1/127.0.0.1` 的 `createConnectionError` |
 | `067ff59`（S00T.V14.1/V14.2） | 全部 7 个 job（含 windows-dev） | **全绿，0 个非 success** | 本批代码侧 Done 判据成立 |
 | `067ff59` | windows-dev 的前端那一步 | **success** | **与 `7a525a0` 同一份前端代码、同一测试集合（47 个文件）** ⇒ 上一行的红被证实为抖动，不是推断 |
 
@@ -169,3 +169,52 @@ ruff 净，`check_entry_parity` rc=0，`rounds-check` rc=0。
 | STEP-24 / 25 / 26、15b、21、19、13、15、12 | **不属本会话** | 04 §5 归规划方或 Agent-API/Data；`bots.py`、`roles.py`、`hot.py`、`services/push.py` 一律未动 |
 | 删除 F-14 脚本的连带影响 | **已登记 P-35，未代修** | `docs/任务规划V0.5.0/evidence/S0T/extract_checks.py:31` 把它列在 `SOURCES` 取材面里，而 `:66` 的 `path.read_text()` 没有存在性守卫 ⇒ 运行它会 `FileNotFoundError`；该树正被并行会话写入，且 `S0T.*` 与 `S00T.*` 不是同一编号空间（J-10），故只登记不代修。详见 `EVD-V14-00T/s00t_v14_gates.md` §11.5 |
 | 并行会话脏文件 | 未 stage、未回退 | `apps/web/pnpm-lock.yaml`、`packages/contracts/src/**`（5 个 dto.ts）、`EVD-V2-02/**`（2 个）、`任务规划V0.5.0/**`（2 个）、`identity.schema.json`、`.q6.json`、`apps/api/.coverage`、`任务规划V0.4.0/V0.6.0` 的 4 个未跟踪 patch |
+
+## 8. S00P 批（2026-10-19 第二批，本卡 2/2 轮已用尽）
+
+卡：`docs/任务规划V0.13.0/steps/STEP-00P-规划产物敏感形机械门.md`（V0.14.0 表第 10 行，⚪ 剩 5，
+归执行 Agent-Guard）。细节全部在 `docs/06_validation/evidence/EVD-V4-00P/s00p_gate_readings.md`，
+这一节只记这条线的方法账与交回面。
+
+### 8.1 这一批真正的产出不是"加了个门"，而是三条推翻卡面的现读
+
+1. **卡面点名的调用方式会造一个永绿的安全门**。那条 V0.5.0 脚本的扫描集是 `rglob("*")`，
+   把**文件**当参数交给它 ⇒ 「文件数 0 / HIGH 0 / rc=0」。同目录 5 条、同文件 0 条。
+   ⇒ 判据实体落 `scripts/guards.py`，四条规则常量逐字符搬运，并写了两条**对账用例**
+   （从那条脚本的 AST 里抽字面量比规则名、模式、顺序；抽不到就报错，不悄悄跳过）。
+2. **门差点咬死自己**：第一版 guards.py 的注释里内联了形状，自扫 2 条 HIGH——
+   而 S00P.2.1 要立的正是"不许内联形状"。第三次同族自伤的违规者是实现该规矩的文件本身。
+   现在这条由常设用例盯着（实现文件自身 0 命中）。
+3. **权威工具步是 fail-open 的**：gitleaks 8.21.2 @win 自报 `failed to scan Git repository` 却 rc=0，
+   根因在 Git for Windows 的 **system 级** `etc/gitattributes`（`*.docx → astextplain`，
+   `docx2txt.exe` 未装），触发文件全在 `.project/` ⇒ Windows 专属，ubuntu CI 不受影响。已登记 P-37。
+
+### 8.2 端到端读数的价值（与上一批同一句话，又被验证一次）
+
+合成入参的 63 条用例**一条都没抓到**下面这四个问题，全部是门跑到真实 git 状态/真实批面之后才现形的：
+
+- `git diff --cached --name-only` 默认转义非 ASCII 路径 ⇒ 中文名文件被计成"已删除"跳过。
+  本批第一次实跑：待检 7 只扫了 5，**少扫的正是规划文档**（这条门管的就是它）。
+- 门读工作树而非**索引 blob** ⇒ `git add` 后把工作树洗成占位值，索引里的凭据照样入库而门报 0。
+- 待检路径**全被跳过**（整批删除/二进制）时，"实扫 0 + HIGH 0"被读成通过。
+- ALLOW 按**整行**判 ⇒ 同一行一处无关占位（格式化占位符那种）就能带走真凭据。
+
+⇒ 规矩沉淀：**判据的"取材面"必须写成显式读数**（现在输出行带 `取材面=index|head`），
+"扫了哪些字节"不能靠实现默认。四条都有反证 + 五轮变异验证（改回旧行为 ⇒ 5/5 变红，还原逐字节相同）。
+
+### 8.3 编排上的一次自我修正（第三态 vs 红）
+
+前置门的"没有可检面"最初判红。现跑发现它在 Windows 上**每次必发**，于是整门永远红——
+一个永远红的安全门与一个永远绿的一样没用，而卡面阻塞条件①说的正是"门被人关掉"这条路。
+改成第三态（rc=3，与本仓 `SKIP(tool missing)` 同口径）：`make guard` 仍非 0，不会被当成通过。
+代价如实写：**本机在 P-37 根治前跑不出 `make evidence-check` = 0**（卡面验收第 1 条因此判部分确认）。
+
+### 8.4 本会话的方法账（累计）
+
+| 纪律 | 本轮证据 |
+|---|---|
+| 数字一律由命令产生 | §3 表最后一行前，defs/collected/合跑/变异数全部由脚本与 pytest 现取；评审者看到 57、我最终 64 的差 1 也是靠重跑说清的 |
+| 每条判据配极性对 | 11 族命中 + 6 种占位放行 + 「只换口令段必须红」+「摘掉 re.compile 必须红」+「打码串仍是形状」 |
+| 收紧要登记，不许静默 | 四处收紧（ALLOW 段级、re.compile 收窄、用户名位打码、实扫 0 落第三态）全写进 §7 偏离表与 §2 |
+| 不替别人决定判据口径 | P-36 的 47 条赋值形命中（31 条表达式引用 + 16 条夹具字面量，后者只到"抽样"口径）、两条反向缺口、`secret_shape_gate.py` 自称逐字符一致实差一个字符类——都只登记不代修 |
+| 改动面越界要自曝 | 卡面禁止栏含 `apps/**`，而判据用例必须进 `apps/api/tests/**`：动机与偏离写在 §7 最后一行 |

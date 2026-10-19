@@ -253,7 +253,11 @@ def rounds_check(base: str = "origin/main") -> int:
 
 
 def _git(*args: str) -> tuple[int, str]:
-    proc = subprocess.run(["git", *args], cwd=str(ROOT), capture_output=True)
+    # `-c core.quotepath=false` 不是美化：默认 git 会把非 ASCII 路径转义成 "\344\273\273…"，
+    # 于是 `ROOT / 那个字符串` 不存在 ⇒ 中文命名的文件被当成「本批已删除」跳过。
+    # 实测本批第一次跑门时 7 个待检路径只扫了 5 个（EVD-V4-00P §5）。
+    proc = subprocess.run(["git", "-c", "core.quotepath=false", *args],
+                          cwd=str(ROOT), capture_output=True)
     return proc.returncode, proc.stdout.decode("utf-8", "replace")
 
 
@@ -407,6 +411,194 @@ def coupling_check(base: str = "origin/main") -> int:
     return 0
 
 
+# ══════════════════════════════════════════════════════ STEP-00P 敏感形门（S00P.1.1）
+#
+# 判据实体为什么在这里、而不是子进程直调卡面点名的
+# `docs/任务规划V0.5.0/evidence/65f508b/secret_shape_scan.py`：
+# 实测把**单个文件**当参数喂给它——它的扫描集是 `root.rglob("*")`，对文件根返回空集 ⇒
+# 「文件数 0 / HIGH 命中 0 / rc=0」（同一个 patch 文件按目录扫到 5 条，按文件扫到 0 条；
+# 现跑读数在 EVD-V4-00P §2）。照卡面直调就是造一个**永远绿的安全门**，那比没有门更坏。
+#
+# 下面四条常量逐条从那个脚本搬运、**不改语义**（不新增豁免、不改规则），
+# 由 `apps/api/tests/test_secret_shape_gate.py` 与脚本源码里的字面量逐条对账防副本漂移。
+# 该卡禁止修改 V0.1…V0.8 规划树，所以不动原脚本；两处并存由对账用例钉住。
+
+SECRET_RULES: list[tuple[str, re.Pattern[str]]] = [
+    ("dsn-embedded-password", re.compile(r"(?i)[a-z][a-z0-9+.\-]*://[^:/\s\"']+:[^@/\s\"']+@")),
+    ("aws-akia", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("github-token", re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b")),
+    ("github-fine-grained", re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b")),
+    ("slack-token", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b")),
+    ("openai-key", re.compile(r"\bsk-[A-Za-z0-9]{20,}\b")),
+    ("google-api-key", re.compile(r"\bAIza[0-9A-Za-z_\-]{30,}\b")),
+    ("private-key-block", re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY")),
+    ("anthropic-key", re.compile(r"\bsk-ant-[A-Za-z0-9_\-]{20,}\b")),
+    ("vendor-key-assign", re.compile(
+        r"(?i)(?:tikhub|dajiala|wellbyte|redfox)[_-]?(?:api[_-]?key|token)"
+        r"\s*[:=]\s*\S{8,}")),
+]
+
+# 占位值不算秘密（变量引用 / 模板 / 本地-CI 固定占位凭据）——与原脚本同源
+SECRET_ALLOW: list[re.Pattern[str]] = [
+    re.compile(r"[:/](?:\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|<[^>\s]+>|%[sdv])@"),
+    re.compile(r"://(?:[^:/\s\"@]+|<user>):"
+               r"(?:bothot|bothot_dev|bothot_ci|aideanbot|nobody|nosuch|not_a_secret)@"),
+]
+
+# 口令赋值形（`password = "…"`）：值像占位/脱敏就不算，其余一律 HIGH 交人判
+SECRET_ASSIGN = re.compile(
+    r"(?i)\b(password|passwd|secret|token|api[_-]?key|access[_-]?key|dsn)\b"
+    r"\s*[:=]\s*[\"']?([^\"'\s,;)}]{4,})")
+SECRET_FAKE = re.compile(r"(?i)^(?:<[^>]*>|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|%[sdv]"
+                         r"|change[_-]?me|your[_-]?\S*|REDACTED\S*|x{4,}|\*{4,})$")
+# 赋值判据的三条补充豁免：规则定义行自身（否则召回器举报自己）、脱敏串、尖括号/变量模板
+_SECRET_ASSIGN_SKIP = re.compile(r"(?i)redact|\*{3,}|x{4,}|<[^>]+>|\$\{")
+
+# 与 EVD-V5-00S/secret_shape_gate.py 的差异（读代码得来，非推测）：那条 key 赋值判据要求
+# 值被引号包住且 ≥20 字符，召回面比这里的 SECRET_ASSIGN 窄；本门取 V0.5.0 的宽口径，
+# 因为短口令与 YAML 无引号写法都不能放过。分歧已登记待规划方追认。
+
+_SECRET_MAX_BYTES = 4_000_000  # 与 _grep 同一上限：超了当产物/资源，不当文本
+
+
+def _mask_shape(rule: str, frag: str) -> str:
+    """命中只报形状，不报正文。
+
+    原脚本打印匹配串前 90 个字符——对连接串形状而言那已经是**凭据正文本身**，
+    会落进终端与 CI 日志。安全铁律第 1 条禁止这件事，所以这里刻意与原脚本的
+    **输出格式**不同（判据相同）。规则名已经说明是哪一族，片段只用来定位，不用来复原值。
+
+    连接串的**账号位也打码**（只留 4 字符）：复核实测出「把 token 直接放在 userinfo 的用户名位、
+    口令位填一个占位字符」这类用法——只隐口令段等于把凭据整条留在输出里。
+    匹配串本身止于 at 符号，所以主机段从来不在片段里；定位靠「文件:行号 + 规则名」，不靠片段复原。
+    """
+    if rule == "dsn-embedded-password":
+        head, sep, rest = frag.partition("://")
+        userinfo, _, host = rest.partition("@")
+        user, _, _pw = userinfo.partition(":")
+        return f"{head}://{user[:4]}***:***@{host}"
+    return frag[:4] + "***"
+
+
+def secret_scan(text: str) -> tuple[list[tuple[str, int, str]], int]:
+    """纯函数：文本 → ([(规则, 行号, 打码形状)], 被 ALLOW 放行处数)。
+
+    合成字符串即可证伪，不必造 git 状态——"这判据会不会永远绿"必须可测。
+
+    两处与那条脚本的实现差异都是**收紧**（方向：少漏检），且各有反证用例：
+    - ALLOW 对**匹配段**判，不对整行判。行级判会被同一行里一处无关的占位形（`%s@tenant`）
+      带着真凭据一起放行（复核实测 ⇒ 漏检）。gitleaks 的 allowlist regex 本来也是作用在匹配上。
+    - `re.compile` 豁免只认「值本身以 re.compile 开头」的规则定义行。
+      行级豁免让 `password = "…"  # 注释里提到 re.compile` 也一并放行（复核实测 ⇒ 漏检）。
+    """
+    hits: list[tuple[str, int, str]] = []
+    allowed = 0
+    for no, line in enumerate(text.splitlines(), 1):
+        for name, rx in SECRET_RULES:
+            for m in rx.finditer(line):
+                frag = m.group(0)
+                if any(a.search(frag) for a in SECRET_ALLOW):
+                    allowed += 1
+                    continue
+                hits.append((name, no, _mask_shape(name, frag)))
+        for m in SECRET_ASSIGN.finditer(line):
+            val = m.group(2)
+            if (val.startswith("re.compile") or SECRET_FAKE.match(val)
+                    or _SECRET_ASSIGN_SKIP.search(val)):
+                continue
+            hits.append(("assign", no, f"{m.group(1)}=<已打码，值长 {len(val)} 字符>"))
+    return hits, allowed
+
+
+def secret_scope(base: str) -> tuple[list[str], str, str]:
+    """待检路径 → (路径, 取材处 index|head, 错误说明)。错误非空即 fail-closed。
+
+    先取索引（卡面 S00P.1.1.1「不扫全仓」），索引为空再退到 base..HEAD。
+    为什么要有第二档：`make evidence-check` 目前没有工作流调用（现读 `.github/workflows/`
+    下的 yml 对 guard/evidence-check 零命中），但若将来接进 CI，那一步
+    **没有 staged 内容**——只按卡面取 `--cached` 就成了"每次必空、每次都绿"的门。两档都空 ⇒
+    交回空集，调用方给第三态。
+
+    「取材处」必须一路带到读内容那一步：门要看的是**将要入库的那份字节**，不是工作树上恰好
+    打开的那份。复核实测——先 `git add` 一个带形状的文件、再把工作树洗成占位值，
+    索引里的 blob 仍带凭据，而只读工作树的门报 rc=0 ⇒ 凭据照样入库（偏绿的 fail-open）。
+    """
+    rc, out = _git("diff", "--cached", "--name-only")
+    if rc:
+        return [], "", f"git diff --cached 失败（rc={rc}）"
+    paths = [line for line in out.splitlines() if line.strip()]
+    if paths:
+        return paths, "index", ""
+    rc, _ = _git("rev-parse", "--verify", "--quiet", base)
+    if rc:
+        return [], "", f"索引为空且基线 {base!r} 不可解析 ⇒ 门什么都没看"
+    rc, out = _git("diff", "--name-only", base, "HEAD")
+    if rc:
+        return [], "", f"git diff --name-only {base} HEAD 失败（rc={rc}）"
+    return [line for line in out.splitlines() if line.strip()], "head", ""
+
+
+def _git_bytes(*args: str) -> tuple[int, bytes]:
+    proc = subprocess.run(["git", "-c", "core.quotepath=false", *args],
+                          cwd=str(ROOT), capture_output=True)
+    return proc.returncode, proc.stdout
+
+
+def secret_blob(rel: str, whence: str) -> bytes | None:
+    """取出待检内容的**那一份字节**：索引面取 `:路径`，提交面取 `HEAD:路径`。"""
+    ref = f":{rel}" if whence == "index" else f"HEAD:{rel}"
+    rc, data = _git_bytes("show", ref)
+    return data if rc == 0 else None
+
+
+def secret_shape_check(base: str = "origin/main") -> int:
+    """敏感形阻断步：待检面上 HIGH>0 ⇒ 红；没有可检面或一份都没看成 ⇒ 第三态 rc=3。"""
+    paths, whence, err = secret_scope(base)
+    if err:
+        print(f"❌ 敏感形门：{err}（fail-closed，不许静默放行）", flush=True)
+        return 1
+    if not paths:
+        print(f"⚠️  敏感形门：索引为空且 {base}..HEAD 为空 ⇒ 无可检文件，**这不是通过**（rc=3）",
+              flush=True)
+        return 3
+
+    scanned = skipped = high = allowed = 0
+    reported: list[str] = []
+    for rel in paths:
+        data = secret_blob(rel, whence)
+        if data is None:
+            skipped += 1  # 暂存的删除/重命名左侧：索引与 HEAD 里都没有这份内容
+            continue
+        if len(data) > _SECRET_MAX_BYTES or b"\x00" in data[:4096]:
+            skipped += 1
+            continue
+        scanned += 1
+        hits, ok = secret_scan(data.decode("utf-8", "replace"))
+        allowed += ok
+        for name, no, shape in hits:
+            high += 1
+            reported.append(f"   HIGH {name}  {rel}:{no}  {shape}")
+
+    print(f"敏感形门（STEP-00P S00P.1.1）：待检 {len(paths)} 个路径（取材面={whence}），"
+          f"实扫 {scanned}，跳过 {skipped}（本批删除/二进制/超限），"
+          f"HIGH {high}，ALLOWED 放行 {allowed}", flush=True)
+    if high:
+        print("\n".join(reported), flush=True)
+        print("❌ 敏感形门：命中 >0 ⇒ 本批不得入库。整改口径（S00P.2.1/2.2）："
+              "文档里不内联敏感形字面量，也不内联扫描正则本身——只描述形状并指向判据实体；"
+              "权威终判仍以 `gitleaks` 的 git 模式为准。"
+              "要豁免只能按 D-12 逐指纹登记进 `.gitleaksignore`（STEP-00S 的归属面），"
+              "**本门不自建 allowlist**。", flush=True)
+        return 1
+    if scanned == 0:
+        # 一条都没看成 ≠ 看过了。整批都是删除/二进制时，这一维没有终判。
+        print("⚠️  敏感形门：待检路径全被跳过（本批删除/二进制/超限）⇒ 退出码 3，**这不是通过**",
+              flush=True)
+        return 3
+    print("✅ 敏感形门：待检面无 HIGH 命中", flush=True)
+    return 0
+
+
 EVIDENCE_PROOFS = [
     "docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py",
     "docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py --self-test",
@@ -426,9 +618,16 @@ def evidence_check(base: str = "origin/main") -> int:
 
     S00T.V14.2：先跑 D-V4-03 耦合门——判据必须在复跑脚本**之前**，否则脚本一红就
     `return 1` 短路，耦合这一维永远不会被报出来。
+    S00P.1.1：敏感形门同在前置位。**两道前置门各自跑完再汇总**——
+    前置门之间一旦短路，第二道门就永远没有读数，那正是 S00T.V14.2 刚修掉的毛病。
     """
-    if coupling_check(base):
+    gate_rc = coupling_check(base)
+    secret_rc = secret_shape_check(base)
+    if gate_rc == 1 or secret_rc == 1:
         return 1
+    # 前置门的 3 = 「这一维没有可检面」。它必须一路带到最终退出码，但不能就地短路——
+    # 否则干净工作树上 `make evidence-check` 会连证据复跑都不做，把本目标的主用途打掉。
+    third = 3 if (gate_rc == 3 or secret_rc == 3) else 0
     for spec in EVIDENCE_PROOFS:
         parts = spec.split()
         target = ROOT / parts[0]
@@ -441,33 +640,58 @@ def evidence_check(base: str = "origin/main") -> int:
             print(f"❌ 证据复跑失败：{spec}（rc={code}）", flush=True)
             return 1
     tool_steps = []
+    missing: list[str] = []
     ruff = shutil_which("ruff") or _venv_script("ruff")
     if ruff:
         tool_steps.append(("ruff", [ruff, "check", "app", "tests"], API))
     else:
-        print("SKIP(tool missing) ruff——stdlib 近似表(g24)判不了的成员序/段序之外，终判在这一步")
-        tool_steps = None
+        missing.append("ruff")
     gitleaks = shutil_which("gitleaks")
     if not gitleaks and os.environ.get("LOCALAPPDATA"):
         cand = Path(os.environ["LOCALAPPDATA"]) / "Programs" / "tools" / "gitleaks" / "gitleaks.exe"
         gitleaks = str(cand) if cand.exists() else None
-    if gitleaks and tool_steps is not None:
+    if gitleaks:
         tool_steps.append(("gitleaks", [gitleaks, "detect", "--source", ".", "--config", ".gitleaks.toml",
                                      "--no-banner"], ROOT))
     else:
-        print("SKIP(tool missing) gitleaks——Security 门禁的终判在这一步，本机只跑 secret_shape_scan 做召回")
-        tool_steps = None
-    if tool_steps is None:
+        missing.append("gitleaks")
+    # 缺席告警只报真缺席的那个：改前是 `if gitleaks and tool_steps is not None … else: print(gitleaks SKIP)`，
+    # ruff 缺席而 gitleaks 在场时也会打印「SKIP(tool missing) gitleaks」——一条假的缺席读数。
+    for name in missing:
+        print(f"SKIP(tool missing) {name}——{TOOL_ABSENT_WHY[name]}")
+    if missing:
         print("⚠ evidence-check：stdlib 证据全过，但真实工具步没跑 ⇒ 退出码 3（这不是 PASS，也不是 FAIL）")
         return 3
     for name, cmd, cwd in tool_steps:
         print(f"── 真实工具步：{name} ──")
-        code = subprocess.run(cmd, cwd=str(cwd)).returncode
-        if code:
-            print(f"❌ {name} 失败（rc={code}）", flush=True)
-            return code
-    print("✅ evidence-check 全部通过（stdlib 证据 + 真实工具两步）", flush=True)
+        proc = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True,
+                              encoding="utf-8", errors="replace")
+        print(proc.stdout, end="")
+        print(proc.stderr, end="")
+        if proc.returncode:
+            print(f"❌ {name} 失败（rc={proc.returncode}）", flush=True)
+            return proc.returncode
+        # gitleaks 8.21.2 @win 实测：Git for Windows 的 system 级 /etc/gitattributes 给 *.docx
+        # 注册了 `diff=astextplain`，而 astextplain 要调没装的 docx2txt.exe ⇒ gitleaks 自己打印
+        # `ERR failed to scan Git repository error="stderr is not empty"`，**却 rc=0**。
+        # 安全门不能把"工具自报没扫成"读成"扫过且干净"（P-37）。
+        # 这里给第三态而非判红：这一维此刻没有终判，把它和「扫出了凭据」混成同一个红，
+        # 等于用狼来了消耗门禁的信用——本批文件自身的判定已由前置的敏感形门给出。
+        if "failed to scan" in f"{proc.stdout}\n{proc.stderr}":
+            print(f"⚠️  {name} 自报扫描未完成（rc=0 但输出含 failed to scan）"
+                  " ⇒ 退出码 3：这一维没有终判，**不是通过**", flush=True)
+            return 3
+    if third:
+        print("⚠ evidence-check：前置门之一在本批没有可检面 ⇒ 退出码 3（这不是 PASS）", flush=True)
+        return 3
+    print("✅ evidence-check 全部通过（前置两道门 + stdlib 证据 + 真实工具两步）", flush=True)
     return 0
+
+
+TOOL_ABSENT_WHY = {
+    "ruff": "stdlib 近似表(g24)判不了的成员序/段序之外，终判在这一步",
+    "gitleaks": "Security 门禁的终判在这一步；本门前置位已实跑敏感形门（secret_shape_check）做召回",
+}
 
 
 def shutil_which(name: str) -> str | None:

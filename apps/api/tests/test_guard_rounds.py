@@ -469,21 +469,39 @@ def test_entry_parity_holds_after_the_new_make_targets() -> None:
     ), "rounds-check 未在 entry.py 注册"
 
 
+def _first_call_index(fn: ast.FunctionDef, name: str) -> int | None:
+    """函数体里第一条「调用了 name()」的顶层语句下标（按子树找，不绑语法形状）。
+
+    写成 AST 语义而非 `if coupling_check(...):` 的形状匹配：S00P 把前置门改成
+    「两道门各自跑完再汇总」之后，调用还在、顺序还在，只是换了写法——
+    绑形状的断言会把**改进**读成**破坏**，那和绑形状的判据一样脆弱。
+    """
+    for i, node in enumerate(fn.body):
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Call) and getattr(sub.func, "id", "") == name:
+                return i
+    return None
+
+
+def _first_proofs_loop_index(fn: ast.FunctionDef) -> int:
+    for i, node in enumerate(fn.body):
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.For) and any(
+                    isinstance(n, ast.Name) and n.id == "EVIDENCE_PROOFS" for n in ast.walk(sub.iter)):
+                return i
+    raise AssertionError("evidence_check 里找不到 EVIDENCE_PROOFS 复跑循环")
+
+
 def test_evidence_check_calls_the_coupling_gate_before_the_scripts() -> None:
     """耦合门必须在复跑脚本**之前**被调用：脚本一红就 return，之后的判据永远跑不到。"""
     tree = ast.parse(_GUARDS_PATH.read_text(encoding="utf-8"), filename=str(_GUARDS_PATH))
     fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "evidence_check")
-    body = fn.body
-    couplings = [
-        i for i, node in enumerate(body)
-        if isinstance(node, ast.If)
-        and isinstance(node.test, ast.Call)
-        and getattr(node.test.func, "id", "") == "coupling_check"
-    ]
-    returns = [i for i, node in enumerate(body) if isinstance(node, ast.Return)]
-    assert couplings, "evidence_check 里没有 coupling_check 判据"
-    first_return = min(returns, default=len(body))
-    assert couplings[0] < first_return, "耦合门排在脚本复跑之后 ⇒ 脚本一红它就永远不跑"
+    coupling = _first_call_index(fn, "coupling_check")
+    assert coupling is not None, "evidence_check 里没有 coupling_check 判据"
+    proofs = _first_proofs_loop_index(fn)
+    assert coupling < proofs, "耦合门排在脚本复跑之后 ⇒ 脚本一红它就永远不跑"
+    returns = [i for i, node in enumerate(fn.body) if isinstance(node, ast.Return)]
+    assert coupling < min(returns, default=len(fn.body)), "耦合门之前就有 return ⇒ 它永远不会被调用"
 
 
 def test_coupling_check_is_fail_closed_on_unresolvable_base() -> None:
