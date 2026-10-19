@@ -1,0 +1,17 @@
+# S27 提交后范围门读数（批面 8135f1a..HEAD = d32edfc，非空批）
+# rounds-check --base 8135f1a / evidence-check --base 8135f1a
+
+rounds-check：范围 8135f1a..HEAD 共 1 个提交，阈值 ≤2 轮（D-14，第 3 轮熔断）
+✅ rounds-check：范围内无卡越过轮次上限
+ROUNDS_RC=0
+
+evidence 耦合门（D-V4-03）：范围 8135f1a..工作树 ⇒ 证据脚本净增 5，用例净增 23
+敏感形门（STEP-00P S00P.1.1）：待检 28 个路径（取材面=head），实扫 28，跳过 0（本批删除/二进制/超限），HIGH 0，ALLOWED 放行 7
+✅ 敏感形门：待检面无 HIGH 命中
+── 真实工具步：ruff ──
+All checks passed!
+── 真实工具步：gitleaks ──
+[90m9:37PM[0m [32mINF[0m 271 commits scanned.
+[90m9:37PM[0m [32mINF[0m no leaks found
+✅ evidence-check 全部通过（前置两道门 + stdlib 证据 + 真实工具两步）
+EVIDENCE_RC=0
