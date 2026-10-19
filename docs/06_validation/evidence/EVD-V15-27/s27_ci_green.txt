@@ -1,0 +1,18 @@
+# S27 CI 治理门步骤实测读数（run 39271291938，head_sha 9e1532d）
+# 源：actions/job log（backend job，第 15 步 Governance gates）
+
+[36;1mecho "治理门基线：$base（HEAD=$(git rev-parse HEAD)）"[0m
+[36;1mecho "rounds-check rc=$rc_rounds / evidence-check rc=$rc_evidence"[0m
+[36;1m  echo "❌ 治理门未通过（rc 非 0 一律失败，含第三态 3）"[0m
+[36;1mecho "✅ 治理门通过"[0m
+治理门基线：07053f9085018085ffb776eb2aa83108a6134383（HEAD=9e1532dfe1a7d3e3183a9b6f643a2e8e035c6c01）
+rounds-check：范围 07053f9085018085ffb776eb2aa83108a6134383..HEAD 共 1 个提交，阈值 ≤2 轮（D-14，第 3 轮熔断）
+✅ rounds-check：范围内无卡越过轮次上限
+evidence 耦合门（D-V4-03）：范围 07053f9085018085ffb776eb2aa83108a6134383..工作树 ⇒ 证据脚本净增 0，用例净增 0
+✅ 敏感形门：待检面无 HIGH 命中
+SELF-TEST PASS：两条新断言对旧实现敏感
+SELF-TEST PASS：20 个 conftest 变异体各自让对应断言变红 + 18 个源码探针敏感 + 13 个等价重构不假红
+All checks passed!
+✅ evidence-check 全部通过（前置两道门 + stdlib 证据 + 真实工具两步）
+rounds-check rc=0 / evidence-check rc=0
+✅ 治理门通过

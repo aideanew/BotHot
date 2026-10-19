@@ -67,14 +67,19 @@ skip 构成（451）：`AIDEANBOT_TEST_PG_DSN` 未设置（连库）+ Redis 不�
 | 工作流 | run | 结论 |
 |---|---|---|
 | Security | 39268287343 | ✅ success |
-| CI | 39268288823 | ❌ **failure** —— backend `Governance gates` 步 rc=1 |
-| CI-Windows | 39268287340 | （见下） |
+| CI | 39268288823 | ❌ failure —— backend `Governance gates` 步 rc=1 |
+| CI-Windows | 39268287340 | ✅ success |
 
-failure 根因不是门逻辑，是 job 级 DSN 让 `prove_dsn_policy.py` 的未配置分支 4 条断言必 FAIL
-（详见 `s27_2.txt` §七，本机同变量复现 4 FAIL、置空串 ALL PASS）。已按允许修改面修正该步 env
-（两个 DSN 置空串）并补机检断言，先红原文 `s27_2_dsn_env_red.txt`。
+第 2 次推送（9e1532d，S27.2 第 2 轮修正）——**三绿**：
 
-第 2 次推送（修正提交）：待填。
+| 工作流 | run | 结论 | 关键读数 |
+|---|---|---|---|
+| CI | 39271291938 | ✅ success | backend 第 15 步 `Governance gates` **success**；基线取事件 `github.event.before` = 07053f9，`rounds-check rc=0 / evidence-check rc=0`，末行 `✅ 治理门通过` |
+| CI-Windows | 39271292029 | ✅ success | — |
+| Security | 39271292556 | ✅ success | — |
+
+CI 治理门步骤日志原文：`s27_ci_green.txt`。
+双端同步：`git rev-list --left-right --count HEAD...origin/main` = `0 0`（HEAD = 9e1532d）。
 
 ## 六、新增待登记 P 项（两件，均要求登记而非本卡内改）
 
