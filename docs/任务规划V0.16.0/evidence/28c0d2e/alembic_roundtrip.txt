@@ -1,0 +1,31 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 05a5a856c37b, v1 initial schema
+INFO  [alembic.runtime.migration] Running upgrade 05a5a856c37b -> ab1004p0a, AB-P004 P0 资产缓存：content_assets 加 hit_count（复用命中计数）。
+INFO  [alembic.runtime.migration] Running upgrade ab1004p0a -> ab1004p1a, AB-P004 P1 公共库拷贝式：knowledge_spaces 加 is_public/owner_type/engine/engine_kb_id，
+knowledge_documents 加 source(copy默认|link预留)。
+INFO  [alembic.runtime.migration] Running upgrade ab1004p1a -> ab1004d04a, AB-P004 D-04/L-01：short_link_maps 短链→长链 article_key 映射（幂等加列+回滚）。
+INFO  [alembic.runtime.migration] Running upgrade ab1004d04a -> ab1004t32a, T3.2.1（C-8/G6）：content_assets 加 category 分类标签（站内筛选；规则版赋值）。
+INFO  [alembic.runtime.migration] Running upgrade ab1004t32a -> ab1004m5a, R0.5.1（F-4）：knowledge_spaces 加 description 空间简介。
+INFO  [alembic.runtime.migration] Running upgrade ab1004m5a -> ab1004m3a, SPEC-M3 批次 1 / T5.0（D9=a 终底）：users 加 role 列（user/operator/admin 三态）。
+INFO  [alembic.runtime.migration] Running upgrade ab1004m3a -> ab1004m3b, SPEC-M3 批次 3 / T5.4：engine_key_registrations 引擎 Key 登记表（密文落库）。
+INFO  [alembic.runtime.migration] Running upgrade ab1004m3b -> ab1004f11a, R4.4（F-11）：knowledge_documents 加 content_hash——跨空间 stale 判定的内容指纹。
+INFO  [alembic.runtime.migration] Running upgrade ab1004f11a -> ab1004s1a, 需求「每天 10 点整号采集」：source_subscriptions 加固定时点锚 sync_anchor_hour。
+INFO  [alembic.runtime.migration] Running upgrade ab1004s1a -> ab1004h1a, R7.7：process_heartbeats 常驻进程心跳表（scheduler / worker 存活可观测）。
+INFO  [alembic.runtime.migration] Running upgrade ab1004h1a -> ab1004bh01, BotHot 扩展表：多渠道机器人、推送任务/日志、热点聚簇、日报、Feed 流。
+INFO  [alembic.runtime.migration] Running upgrade ab1004bh01 -> ab1004w1a, W1：bot_channels.secret_enc 存量 base64 → AES-256-GCM 重加密。
+INFO  [alembic.runtime.migration] Running upgrade ab1004w1a -> ab1004w2a, W2：feed_items 加 (item_type, ref_id) 唯一约束（upsert 语义基础）。
+INFO  [alembic.runtime.migration] Running upgrade ab1004w2a -> ab1004w3a, push_events outbox 表。
+INFO  [alembic.runtime.migration] Running upgrade ab1004w3a -> ab1004w4a, WB（审查补完）：推送投递重试字段 + 4 个无索引 FK 补索引。
+INFO  [alembic.runtime.migration] Running upgrade ab1004w4a -> ab1005w5a, R1.2a：站内通知持久化底座（离线补投存储层）。
+INFO  [alembic.runtime.migration] Running upgrade ab1005w5a -> ab1005w5b, S2.1：bot_channels.extra_config 明文 JSON → AES-256-GCM 重加密。
+INFO  [alembic.runtime.migration] Running upgrade ab1005w5b -> ab1006c1a, STEP-04 S4.2.1：清单加规范键 `article_key` + JobItem 加关联 `manifest_id`（纯 DDL）。
+alembic rc=0
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running downgrade ab1006c1a -> ab1005w5b, STEP-04 S4.2.1：清单加规范键 `article_key` + JobItem 加关联 `manifest_id`（纯 DDL）。
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade ab1005w5b -> ab1006c1a, STEP-04 S4.2.1：清单加规范键 `article_key` + JobItem 加关联 `manifest_id`（纯 DDL）。
+roundtrip rc=0
+ab1006c1a (head)
