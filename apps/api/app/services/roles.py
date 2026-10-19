@@ -4,8 +4,11 @@
 FastAPI 依赖工厂在 app.api.deps.require_roles —— services 层不反引 api 层
 （与 job_worker.py「刻意只在 services 层装配」同纪律）。
 
-角色阶梯 user < operator < admin：判定时按「任一请求角色达标即放行」取秩，
-故 admin 自动覆盖 operator 端点，无需在端点处重复声明两级。
+角色阶梯 user < operator < admin：所需角色即**最低**秩，高秩自动覆盖低秩端点——
+需要「运营及以上」就写 require_roles("operator")，需要管理员就写 require_roles("admin")。
+**只接受一个角色**（D-V11-01）：冻结契约 identity.schema.json 规定多角色取最高秩，
+历史上 require_roles("admin", "operator") 被读成「运营及以上」、实际要的是 admin（P-23）。
+所以多参数直接 fail fast，结构守卫 tests/test_require_roles_single_arg.py 在 CI 拦截。
 
 **PUBLIC_ADMIN_ALLOWLIST 不在本函数内咨询**（批次 3 双闸收敛，2026-09-23
 管理者裁定「按角色分通道」）：allowlist 的唯一合法语义是「公共库发布」，
@@ -37,10 +40,15 @@ def _required_rank(roles: tuple[str, ...]) -> int:
     """
     if not roles:
         raise ValueError("require_role 至少须指定一个角色")
+    if len(roles) > 1:
+        raise ValueError(
+            f"require_roles 只接受一个最低角色，实得 {list(roles)}；"
+            '需要运营及以上写 require_roles("operator")（D-V11-01）'
+        )
     unknown = [r for r in roles if r not in ROLE_RANK]
     if unknown:
         raise ValueError(f"未知角色 {unknown}，合法取值 {sorted(ROLE_RANK)}")
-    return max(ROLE_RANK[r] for r in roles)
+    return ROLE_RANK[roles[0]]
 
 
 def has_min_rank(role_value: str, *roles: str) -> bool:

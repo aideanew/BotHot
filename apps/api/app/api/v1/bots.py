@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_sub, get_db, require_roles
 from app.core.errors import (
+    ForbiddenError,
     RequestInvalidError,
     ResourceNotFoundError,
 )
@@ -44,6 +45,7 @@ from app.providers.push import PushMessage, make_push_provider, registered_chann
 from app.services.cron_expr import parse_cron_next, validate_cron
 from app.services.push_scheduler import persist_web_notification
 from app.services.push_template import validate_template
+from app.services.roles import has_min_rank
 
 router = APIRouter(
     prefix="/api/v1/bots",
@@ -94,7 +96,8 @@ class PushTaskCreateRequest(BaseModel):
     trigger_event: str = ""
     content_template: str = ""
     space_id: str = ""
-    created_by: str = ""
+    # 不收 `created_by`：归属只取当前登录者（STEP-24 / D-V11-02）。pydantic 默认忽略多余键，
+    # 旧前端仍发来该字段也不会 422，只是不再生效。
 
 
 class PushTaskUpdateRequest(BaseModel):
@@ -112,11 +115,9 @@ def _validate_channel_type(channel_type: str) -> None:
         raise RequestInvalidError(f"未知渠道类型: {channel_type}（合法：{', '.join(sorted(valid))}）")
 
 
-# 读接口的角色门一律写 `require_roles("operator")`，**不要**顺手抄成同文件写接口那行
-# `require_roles("admin", "operator")`：`_required_rank` 取请求角色里的**最高**秩
-# （`app/services/roles.py:44` 的 `max(...)`），所以那两个参数实际要的是 admin，operator 会被判
-# 10004。本卡目标句是「rank<operator 得 403、operator 得 200」，只有最低秩写法才满足。
-# 写接口那 8 处仍是 admin-only——这一事实连同待裁决点登记为 P-23。
+# 角色门一律只写**一个**最低角色（D-V11-01；守卫 tests/test_require_roles_single_arg.py）。
+# 权限边界按 D-V12-12：运营可建/改/删/执行推送任务、测试推送、改渠道名称与启停；
+# 新建渠道（即写入凭据）、删除渠道、修改渠道凭据只给管理员。
 
 
 def _serialize_channel(ch: BotChannel) -> dict:
@@ -191,7 +192,7 @@ async def list_channel_types():
 async def create_channel(
     payload: ChannelCreateRequest,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
+    _: str = Depends(require_roles("admin")),
 ):
     """创建机器人渠道。"""
     name = payload.name.strip()
@@ -270,9 +271,13 @@ async def list_channels(
 async def create_push_task(
     payload: PushTaskCreateRequest,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
+    actor: User = Depends(require_roles("operator")),
 ):
-    """创建推送任务（定时/事件触发/手动）。"""
+    """创建推送任务（定时/事件触发/手动）。
+
+    `created_by` 是 `users.id` 外键：由服务端取当前登录者的本地 id 写入，请求体无权指定
+    （否则任何能建任务的人都可把归属写成任意用户；旧的 SSO sub / 字面量兜底则直接违反外键 ⇒ 500）。
+    """
     name = payload.name.strip()
     if not name:
         raise RequestInvalidError("任务名称不能为空")
@@ -322,7 +327,7 @@ async def create_push_task(
         trigger_event=trigger_event,
         content_template=content_template,
         space_id=payload.space_id or None,
-        created_by=payload.created_by or "system",
+        created_by=actor.id,
         status="active" if payload.trigger_type != "manual" else "paused",
         next_run_at=next_run_at,
     )
@@ -368,7 +373,7 @@ async def update_push_task(
     task_id: str,
     payload: PushTaskUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
+    _: str = Depends(require_roles("operator")),
 ):
     """编辑推送任务：可修改 name/cron_expr/trigger_event/content_template/status。
 
@@ -440,7 +445,7 @@ async def update_push_task(
 async def delete_push_task(
     task_id: str,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
+    _: str = Depends(require_roles("operator")),
 ):
     """删除推送任务（软删除：status → deleted）。"""
     task = (await db.execute(select(PushTask).where(PushTask.id == task_id))).scalar_one_or_none()
@@ -457,7 +462,7 @@ async def delete_push_task(
 async def run_push_task_now(
     task_id: str,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
+    _: str = Depends(require_roles("operator")),
 ):
     """手动触发推送任务。"""
     task = (await db.execute(select(PushTask).where(PushTask.id == task_id))).scalar_one_or_none()
@@ -547,9 +552,17 @@ async def update_channel(
     channel_id: str,
     payload: ChannelUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
+    actor: User = Depends(require_roles("operator")),
 ):
-    """更新渠道配置。Optional 字段 None = 不修改（显式空串 = 清空）。"""
+    """更新渠道配置。Optional 字段 None = 不修改（显式空串 = 清空）。
+
+    运营可改名称与启停；凭据三项（`webhook_url` / `secret` / `extra_config`）只给管理员（D-V12-12）。
+    凭据判定放在查库之前：先授权、后判存在，运营无法借 404/403 的差异探测渠道 id；
+    同一请求夹带凭据字段时整单拒绝，不做部分生效。
+    """
+    touches_credentials = payload.webhook_url is not None or bool(payload.secret) or payload.extra_config is not None
+    if touches_credentials and not has_min_rank(actor.role, "admin"):
+        raise ForbiddenError("修改渠道凭据（webhook_url / secret / extra_config）仅限管理员")
     ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
     if ch is None:
         raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
@@ -568,7 +581,9 @@ async def update_channel(
     if payload.secret:
         ch.secret_enc = encrypt_channel_secret(ch.id, payload.secret)
     if payload.extra_config is not None:
-        ch.extra_config = payload.extra_config
+        # P-39：与 create_channel 同口径落密文（AAD 绑定 channel id）；改前这里写明文，
+        # 读侧 decrypt_extra_config 的"{ 开头原样返回"兼容读把缺陷遮住了。
+        ch.extra_config = encrypt_extra_config(ch.id, payload.extra_config)
     if payload.status is not None:
         if payload.status not in ("active", "disabled"):
             raise RequestInvalidError(f"状态非法: {payload.status}（合法：active, disabled）")
@@ -583,7 +598,7 @@ async def update_channel(
 async def delete_channel(
     channel_id: str,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
+    _: str = Depends(require_roles("admin")),
 ):
     """删除渠道（软删除：status → deleted）。"""
     ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
@@ -604,7 +619,7 @@ async def test_push(
     message: str = "BotHot 测试推送 —— 如果您收到此消息，说明渠道配置正确！",
     title: str = "BotHot 测试推送",
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(require_roles("admin", "operator")),
+    _: str = Depends(require_roles("operator")),
 ):
     """向指定渠道发送测试消息。"""
     ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()

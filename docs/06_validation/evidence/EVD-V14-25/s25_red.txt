@@ -1,0 +1,17 @@
+# S25.1.1 结构守卫改前扫描（app/** 中 require_roles 调用 38 处，不合规 10 处 = bots 8 + hot 2，与卡面预期一致）
+offenders 10 of 38
+['app/api/v1/bots.py:195', 'app/api/v1/bots.py:274', 'app/api/v1/bots.py:376', 'app/api/v1/bots.py:448', 'app/api/v1/bots.py:465', 'app/api/v1/bots.py:555', 'app/api/v1/bots.py:591', 'app/api/v1/bots.py:612', 'app/api/v1/hot.py:157', 'app/api/v1/hot.py:273']
+
+# S25.1 先红原文（守卫 + 秩矩阵，roles.py/bots.py/hot.py 未改）
+E       AssertionError: 这些 require_roles 调用不是单个字面量角色（多参数会被 max() 解释成最高秩）：['app/api/v1/bots.py:195', 'app/api/v1/bots.py:274', 'app/api/v1/bots.py:376', 'app/api/v1/bots.py:448', 'app/api/v1/bots.py:465', 'app/api/v1/bots.py:555', 'app/api/v1/bots.py:591', 'app/api/v1/bots.py:612', 'app/api/v1/hot.py:157', 'app/api/v1/hot.py:273']
+E       assert not ['app/api/v1/bots.py:195', 'app/api/v1/bots.py:274', 'app/api/v1/bots.py:376', 'app/api/v1/bots.py:448', 'app/api/v1/bots.py:465', 'app/api/v1/bots.py:555', ...]
+E       AssertionError: operator 建推送任务 不应 10004，实得 403/10004
+E         operator 改推送任务 不应 10004，实得 403/10004
+E         operator 删推送任务 不应 10004，实得 403/10004
+E         operator 立即执行任务 不应 10004，实得 403/10004
+E         operator 测试推送 不应 10004，实得 403/10004
+E         operator 改渠道名称/启停 不应 10004，实得 403/10004
+E         operator 触发热点聚簇 不应 10004，实得 403/10004
+E         operator 生成日报 不应 10004，实得 403/10004
+E       assert not ['operator 建推送任务 不应 10004，实得 403/10004', 'operator 改推送任务 不应 10004，实得 403/10004', 'operator 删推送任务 不应 10004，实得 403/10004...r 立即执行任务 不应 10004，实得 403/10004', 'operator 测试推送 不应 10004，实得 403/10004', 'operator 改渠道名称/启停 不应 10004，实得 403/10004', ...]
+2 failed, 5 passed, 2 warnings in 3.98s

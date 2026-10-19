@@ -1,0 +1,13 @@
+# S24.1 先红原文 · 基于 main@8cd0e68 工作树（bots.py 未改）· @linux PG16@5547 bothot_test · 2026-10-19 17:27 CST
+# 命令：pytest tests/test_push_task_create_owner.py -q --no-cov
+E       AssertionError: 实得 500/{'code': 50001, 'message': '服务内部错误: IntegrityError', 'data': None, 'requestId': 'd3a0c2aa-f8c6-48d8-b1ee-f408265d6791'}
+E       assert (500 == 200)
+E        +  where 500 = <Response [500 Internal Server Error]>.status_code
+tests/test_push_task_create_owner.py:80: AssertionError
+E           AssertionError: created_by='5f5a23e9-a97f-4b62-bb39-96e7a0a40f46' 改写了归属：{'id': '73fcd9d4-675c-4dbd-aee0-8fb1cc30b771', 'name': 's24-task-89d399', 'bot_channel_id': '856fcf8e-da36-4ce3-b1b4-661f85388295', 'trigger_type': 'manual', 'cron_expr': '', 'trigger_event': '', 'content_template': '', 'space_id': None, 'next_run_at': None, 'last_run_at': None, 'status': 'paused', 'created_by': '5f5a23e9-a97f-4b62-bb39-96e7a0a40f46', 'created_at': '2026-10-19T09:27:55.517549+00:00'}
+E           assert '5f5a23e9-a97...-96e7a0a40f46' == 'b5330deb-7a0...-54d2bcff5fbc'
+E             
+E             - b5330deb-7a0b-44da-af14-54d2bcff5fbc
+E             + 5f5a23e9-a97f-4b62-bb39-96e7a0a40f46
+tests/test_push_task_create_owner.py:100: AssertionError
+2 failed, 2 warnings in 15.21s

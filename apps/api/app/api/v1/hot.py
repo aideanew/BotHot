@@ -154,7 +154,7 @@ async def get_hot_topic(topic_id: str, db=Depends(get_db)):
 async def trigger_cluster(
     days: int = 1,
     db=Depends(get_db),
-    user: User = Depends(require_roles("admin", "operator")),
+    user: User = Depends(require_roles("operator")),
 ):
     """手动触发热点聚簇：入队 Job type=hot_cluster，立即返回 queued 回执。
 
@@ -270,7 +270,7 @@ async def get_daily_report(report_date: str, db=Depends(get_db)):
 async def generate_daily_report(
     report_date: str = "",
     db=Depends(get_db),
-    _: User = Depends(require_roles("admin", "operator")),
+    _: User = Depends(require_roles("operator")),
 ):
     """手动生成日报：取当日 TOP10 热点 → LLM 摘要（失败降级正文首段）→ 落库 DailyReport。
 

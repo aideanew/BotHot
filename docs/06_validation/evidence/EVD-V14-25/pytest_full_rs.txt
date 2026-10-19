@@ -1,0 +1,7 @@
+# 后端全量（--no-cov -rs）· STEP-24+25 最终工作树 · @linux PG16@5547 · PUSH_SECRET_MASTER_KEY=随机32字节（未落盘）· 2026-10-19 17:43 CST
+SKIPPED [1] tests/test_chat_sse.py:1130: LangBot :5300 不可达或未注入管理员凭据，跳过真实冒烟
+SKIPPED [1] tests/test_chat_sse.py:1208: LangBot :5300 不可达或未注入管理员凭据，跳过全链冒烟
+SKIPPED [1] tests/test_session_store_redis.py:47: 测试 Redis 不可达（ConnectionError），拉起容器后复跑
+SKIPPED [1] tests/test_session_store_redis.py:71: 测试 Redis 不可达（ConnectionError），拉起容器后复跑
+SKIPPED [1] tests/test_we_notifications.py:247: Redis 不可达（redis://localhost:6379/0，ConnectionError），恢复后复跑本用例
+1723 passed, 5 skipped, 2 warnings in 74.32s (0:01:14)

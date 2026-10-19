@@ -48,11 +48,6 @@ const TASK_STATUS_LABELS: Record<string, string> = {
 const TEMPLATE_PLACEHOLDER =
   "支持变量：{date} {time} {space_name} {doc_title} {hot_topic} {topic_count}";
 
-interface Props {
-  /** 当前会话用户 sub，作为任务创建者透传（未登录传空串走后端默认） */
-  userSub: string;
-}
-
 interface TaskFormState {
   name: string;
   bot_channel_id: string;
@@ -71,7 +66,7 @@ const EMPTY_FORM: TaskFormState = {
   content_template: "",
 };
 
-export default function PushTasksTab({ userSub }: Props) {
+export default function PushTasksTab() {
   const [tasks, setTasks] = useState<PushTask[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -177,7 +172,6 @@ export default function PushTasksTab({ userSub }: Props) {
           cron_expr: form.trigger_type === "cron" ? form.cron_expr : "",
           trigger_event: form.trigger_type === "event" ? form.trigger_event : "",
           content_template: form.content_template,
-          created_by: userSub || undefined,
         });
       }
       setShowForm(false);

@@ -46,11 +46,23 @@ MISSING = "00000000-0000-0000-0000-000000000000"
 # ------------------------------------------------------------------ 纯逻辑（离线口径）
 
 
-def test_required_rank_picks_highest_of_requested() -> None:
-    """阶梯判定取最高秩：声明 ("operator","admin") 仍按 admin 校。"""
-    assert _required_rank(("operator", "admin")) == ROLE_RANK["admin"]
+def test_required_rank_is_the_single_requested_role() -> None:
+    """单参数：所需角色即最低秩（STEP-25 / D-V11-01）。"""
+    assert _required_rank(("admin",)) == ROLE_RANK["admin"]
     assert _required_rank(("operator",)) == ROLE_RANK["operator"]
     assert _required_rank(("user",)) == ROLE_RANK["user"]
+
+
+def test_required_rank_rejects_multiple_roles() -> None:
+    """多参数 fail fast（STEP-25 / D-V11-01）。
+
+    改前 ("operator","admin") 静默取最高秩 = admin，写的人以为是「运营及以上」（P-23）。
+    基线：原用例 test_required_rank_picks_highest_of_requested 断言 == admin，本卡改为必须抛错。
+    """
+    with pytest.raises(ValueError, match="只接受一个最低角色"):
+        _required_rank(("operator", "admin"))
+    with pytest.raises(ValueError, match="只接受一个最低角色"):
+        has_min_rank("operator", "admin", "operator")
 
 
 def test_required_rank_rejects_empty_request() -> None:
@@ -148,16 +160,12 @@ async def test_role_ladder_matrix(db_session) -> None:  # type: ignore[no-untype
         (user, ("admin",), False),
         (operator, ("user",), True),
         (operator, ("operator",), True),
-        # 多角色元组取**最高秩**而非「任一成员命中」：声明 ("operator","admin")
-        # 等价于 ("admin",)。SPEC-M3 §2.3 原文写 role ∈ roles，但成员语义会让
-        # admin 被 operator 端点拒——与其自身「admin 全放行」验收锚矛盾，
-        # 故取单调秩语义，此处锁定该取舍。
-        (operator, ("operator", "admin"), False),
+        # 多角色元组自 STEP-25（D-V11-01）起 fail fast，不再出现在矩阵里；
+        # 见 test_required_rank_rejects_multiple_roles。原两行 ("operator","admin") 格已删除。
         (operator, ("admin",), False),
         (admin, ("user",), True),
         (admin, ("operator",), True),
         (admin, ("admin",), True),
-        (admin, ("operator", "admin"), True),
     ]
     for actor, wanted, expect_allow in cases:
         outcome = await _allowed(db_session, actor, wanted)

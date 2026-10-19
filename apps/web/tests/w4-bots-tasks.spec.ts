@@ -215,3 +215,29 @@ describe("/bots 推送任务 Tab", () => {
     ).toBeTruthy();
   });
 });
+
+describe("/bots 渠道编辑只发改动的凭据字段（STEP-25 / D-V12-12）", () => {
+  it("只改名称：不带 webhook_url / secret / extra_config，运营不会被凭据门整单拒绝", async () => {
+    h.updateChannel.mockResolvedValue(channel());
+    render(createElement(BotsPage));
+    fireEvent.click(await screen.findByText("编辑"));
+    const modal = (await screen.findByText("编辑渠道")).parentElement as HTMLElement;
+    fireEvent.change(within(modal).getByPlaceholderText("如：飞书技术群"), { target: { value: "改名后" } });
+    fireEvent.click(within(modal).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(h.updateChannel).toHaveBeenCalledTimes(1));
+    expect(h.updateChannel).toHaveBeenCalledWith("ch-1", { name: "改名后" });
+  });
+
+  it("改了 webhook：才带上 webhook_url", async () => {
+    h.updateChannel.mockResolvedValue(channel());
+    render(createElement(BotsPage));
+    fireEvent.click(await screen.findByText("编辑"));
+    const modal = (await screen.findByText("编辑渠道")).parentElement as HTMLElement;
+    fireEvent.change(within(modal).getByPlaceholderText("https://open.feishu.cn/open-apis/bot/v2/hook/xxx"), {
+      target: { value: "https://y" },
+    });
+    fireEvent.click(within(modal).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(h.updateChannel).toHaveBeenCalledTimes(1));
+    expect(h.updateChannel).toHaveBeenCalledWith("ch-1", { name: "飞书技术群", webhook_url: "https://y" });
+  });
+});

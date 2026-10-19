@@ -44,7 +44,11 @@ jobs:
       # 交叉核对：同 sha 的 ubuntu job 非 PG 类也是这几族，两侧分母相同（本机 @win 复现过 441 那版）。
       # ⚠️ 不许留余量：余量就是"同数换因"那个洞的宽度（详见 docs/04_engineering/cross-platform.md
       # 的「新增连库用例必做的第二步」）。
-      SKIP_BASELINE_WIN: "444"
+      # STEP-24/25（规划方，2026-10-19）新增 8 条连库用例：test_push_task_create_owner 2 +
+      # test_push_and_hot_rank_matrix 5（2 + 参数化 3）+ test_channel_update_extra_config_encrypted 1，
+      # 均经 db_session 夹具在本平台以「AIDEANBOT_TEST_PG_DSN 未设置」族 skip ⇒ 444 + 8 = 452。
+      # 这是按增量推算的值，交付提交的 CI-Windows 读数（total_skipped）回填进 EVD-V14-25 后才算测量值。
+      SKIP_BASELINE_WIN: "452"
     defaults:
       run:
         shell: bash

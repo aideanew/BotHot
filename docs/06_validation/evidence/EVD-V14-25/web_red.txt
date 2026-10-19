@@ -1,0 +1,5 @@
+# 前端：渠道编辑只发改动凭据字段——先红（page.tsx 回退）
+     × 只改名称：不带 webhook_url / secret / extra_config，运营不会被凭据门整单拒绝 27ms
+     × 改了 webhook：才带上 webhook_url 24ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed | 8 passed (10)

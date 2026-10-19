@@ -161,7 +161,7 @@ export async function createPushTask(data: {
   trigger_event?: string;
   content_template?: string;
   space_id?: string;
-  created_by?: string;
+  // 不传 created_by：创建者由服务端取当前登录者的本地 users.id（STEP-24 / D-V11-02）
 }): Promise<PushTask> {
   return request("/api/v1/bots/tasks", {
     method: "POST",

@@ -1,0 +1,7 @@
+# P-39 先红原文（bots.py 与 roles.py 回退到 8cd0e68，admin PUT extra_config）
+E       AssertionError: 库里是明文：{"app_secret": "p39-marker-app-secret"}
+E       assert 'p39-marker-app-secret' not in '{"app_secre...app-secret"}'
+E         
+E         'p39-marker-app-secret' is contained here:
+# 修复后
+1 passed, 2 warnings in 1.37s

@@ -54,7 +54,7 @@ const STATUS_LABELS: Record<string, string> = {
 export default function BotsPage() {
   // W4 4.1：页面拆为「推送渠道 / 推送任务」两个 Tab
   const [activeTab, setActiveTab] = useState<"channels" | "tasks">("channels");
-  const { me, status } = useAuth();
+  const { status } = useAuth();
   const [channels, setChannels] = useState<BotChannel[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -143,11 +143,13 @@ export default function BotsPage() {
     setFormLoading(true);
     try {
       if (editingChannel) {
+        // 只发真正改动的凭据字段：凭据三项仅管理员可改（D-V12-12），运营只改名称时
+        // 不能因为表单回填了原值就被后端整单 10004。
         await updateChannel(editingChannel.id, {
           name: formData.name,
-          webhook_url: formData.webhook_url,
-          secret: formData.secret,
-          extra_config: formData.extra_config,
+          ...(formData.webhook_url !== editingChannel.webhook_url ? { webhook_url: formData.webhook_url } : {}),
+          ...(formData.secret ? { secret: formData.secret } : {}),
+          ...(formData.extra_config !== editingChannel.extra_config ? { extra_config: formData.extra_config } : {}),
         });
       } else {
         await createChannel({
@@ -252,7 +254,7 @@ export default function BotsPage() {
       </div>
 
       {activeTab === "tasks" ? (
-        <PushTasksTab userSub={me?.sub ?? ""} />
+        <PushTasksTab />
       ) : (
         <>
       {error && (
