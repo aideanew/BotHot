@@ -7,7 +7,7 @@ FastAPI 依赖工厂在 app.api.deps.require_roles —— services 层不反引 
 角色阶梯 user < operator < admin：所需角色即**最低**秩，高秩自动覆盖低秩端点——
 需要「运营及以上」就写 require_roles("operator")，需要管理员就写 require_roles("admin")。
 **只接受一个角色**（D-V11-01）：冻结契约 identity.schema.json 规定多角色取最高秩，
-历史上 require_roles("admin", "operator") 被读成「运营及以上」、实际要的是 admin（P-23）。
+历史上「admin 与 operator 两个参数」的写法被读成「运营及以上」、实际要的是 admin（P-23）。
 所以多参数直接 fail fast，结构守卫 tests/test_require_roles_single_arg.py 在 CI 拦截。
 
 **PUBLIC_ADMIN_ALLOWLIST 不在本函数内咨询**（批次 3 双闸收敛，2026-09-23
