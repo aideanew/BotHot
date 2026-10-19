@@ -218,11 +218,23 @@ jobs:
       # 为什么 `GUARD_GITLEAKS_COVERED=1`：本 job 不装 gitleaks（权威步在 Security
       # 工作流），不显式记账的话 evidence-check 会把「工具缺席」判成第三态 ⇒ CI 恒红。
       # 两条门各自独立执行：前一条红也要让后一条留下读数（S00T.V14.2 修过的同一个毛病）。
+      #
+      # 为什么必须把两个 DSN 置空（第 1 轮 CI 红在 run 39268288823，本步 rc=1）：
+      # 本 job 在 **job 级** 设了 `AIDEANBOT_TEST_PG_DSN` / `DATABASE_URL` 指向真实测试库，
+      # 而 `evidence-check` 复跑的 `EVD-V2-00/prove_dsn_policy.py` 有 4 条断言（S0.1.2
+      # f/l/m/n）正是 conftest 的**未配置**分支。带着 job 级 DSN 跑，那 4 条必 FAIL
+      # ⇒ 本步恒定红。空串 = 未配置（conftest 自己就这么判，S0.1.2-l / NR-4-n 已钉死），
+      # 所以这是**还原判据所需的环境**，不是把门降级——那 4 条在有 DSN 的 pytest 步里
+      # 由连库用例覆盖。
+      # 根治应让该证据脚本自己隔离环境（不读 ambient env），文件在 EVD-V2-00/**，
+      # 不在本卡允许修改面 ⇒ 已登记为新 P 项，不顺手改。
       - name: Governance gates (rounds-check + evidence-check)
         shell: bash
         env:
           GUARD_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           GUARD_GITLEAKS_COVERED: "1"
+          AIDEANBOT_TEST_PG_DSN: ""
+          DATABASE_URL: ""
         run: |
           set -uo pipefail
           base="$GUARD_BASE"

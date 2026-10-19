@@ -34,3 +34,41 @@ evidence-check 会把"工具缺席"判成第三态 ⇒ CI 恒红；把 gitleaks 
   test_default_base_reads_the_guard_base_env / test_main_uses_the_env_base_for_scope_gates
   / test_explicit_base_still_beats_the_env / test_a_bad_base_from_the_env_is_red_and_named
   / test_non_scope_gates_still_reject_a_base_argument
+
+## 七、第 1 轮 CI 实测：红 → 定位 → 修（run 39268288823）
+
+推送后 backend job 新步 rc=1，红因**不是门逻辑**：
+
+```
+治理门基线：8135f1ad…（HEAD=07053f90…）
+rounds-check：范围 8135f1a..HEAD 共 2 个提交…✅ 无卡越限
+evidence 耦合门 ⇒ 证据脚本净增 5，用例净增 23
+敏感形门：待检 29 个路径（取材面=head），实扫 29，HIGH 0 ✅
+PASS S0.1.2-a … PASS S0.1.2-t …
+FAIL S0.1.2-f 未配置返回空串   :: '…localhost:5433/bothot',env:AIDEANBOT_TEST_PG_DSN
+FAIL S0.1.2-l 纯空白 env 视为未配置 :: 同上
+FAIL S0.1.2-m .env 层解析并广播该值 :: 同上
+FAIL S0.1.2-n .env 空值视为未配置
+RESULT FAIL (4)
+❌ 证据复跑失败：docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py（rc=1）
+```
+
+本机复现（同一变量、不同值）：把 `AIDEANBOT_TEST_PG_DSN` 设成 CI 的那条 ⇒ 同样 4 FAIL；
+置空串 ⇒ `ALL PASS (20 断言)`，rc=0；置单个空格 ⇒ 同样 rc=0。
+
+根因：本 job 在 **job 级** 设了 `AIDEANBOT_TEST_PG_DSN` / `DATABASE_URL` 指向真实测试库，
+而 `prove_dsn_policy.py` 的 f/l/m/n 四条正是 conftest 的**未配置**分支。带着 DSN 跑，
+那四条必然 FAIL ⇒ 本步恒红。这是**长期没人执行过这个门**才藏住的存量条件
+（本卡第一次把 evidence-check 接进 CI，F-V14-06 的同形）。
+
+修法（只动本卡允许的 ci.yml 该步 env）：把两个 DSN 置空串。空串 = 未配置是 conftest 自己的
+判据（S0.1.2-l / NR-4-n 已钉死），所以这是**还原判据所需环境**，不是把门降级——
+未配置分支之外的值由同 job 的 pytest 步（带 PG）覆盖。
+
+先红原文：`s27_2_dsn_env_red.txt`（移除两行 env ⇒ 该断言红）。机检断言写在
+`test_ci_backend_job_runs_both_scope_gates_with_the_event_base` 末尾：治理门步骤的 env 必须把
+两个 DSN 置成空串。
+
+根治不在本卡面：`prove_dsn_policy.py` 应自己隔离环境而不是读 ambient env，但文件在
+`docs/06_validation/evidence/EVD-V2-00/**`，不在允许修改范围 ⇒ 已登记为新 P 项。
+

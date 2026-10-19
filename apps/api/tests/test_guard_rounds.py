@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 _ROOTS = [
     up for up in Path(__file__).resolve().parents
@@ -712,6 +713,21 @@ def _ci_backend_block() -> str:
     return text.split("\n  backend:", 1)[1].split("\n  frontend:", 1)[0]
 
 
+def _ci_governance_step_env(block: str) -> dict[str, str]:
+    """把 backend 段按 YAML 解开，取治理门那一步的 env（读结构，不读字符串猜）。"""
+    parsed = yaml.safe_load("backend:" + block)
+    assert isinstance(parsed, dict) and isinstance(parsed.get("backend"), dict), "backend 段解不开"
+    steps = parsed["backend"].get("steps")
+    assert isinstance(steps, list) and steps, "backend 段没有 steps"
+    for step in steps:
+        name = str(step.get("name", ""))
+        if name.startswith("Governance gates"):
+            env = step.get("env") or {}
+            assert isinstance(env, dict), "治理门步骤的 env 不是映射"
+            return {str(k): str(v) for k, v in env.items()}
+    raise AssertionError("backend job 里找不到治理门步骤")
+
+
 def test_ci_backend_job_runs_both_scope_gates_with_the_event_base() -> None:
     """S27.2：两道范围门必须在 backend job 里、用事件给出的基线、以 rc 判失败。
 
@@ -732,6 +748,18 @@ def test_ci_backend_job_runs_both_scope_gates_with_the_event_base() -> None:
     assert "GUARD_GITLEAKS_COVERED" in block, (
         "backend job 没装 gitleaks，evidence-check 会把「工具缺席」判成第三态 ⇒ CI 恒红；"
         "必须显式记「由 Security 工作流覆盖」"
+    )
+    # S27.2 第 1 轮 CI 红在 run 39268288823：本步 rc=1，红因不是门逻辑，而是本 job 在
+    # **job 级** 设了 DSN 指向真实测试库，而复跑的 `prove_dsn_policy.py` 有 4 条断言
+    # （S0.1.2 f/l/m/n）正是 conftest 的**未配置**分支。空串 = 未配置（conftest 自己就这么判），
+    # 所以这是还原判据所需环境，不是降级。这条断言把该坑钉成机检。
+    step = _ci_governance_step_env(block)
+    assert step.get("AIDEANBOT_TEST_PG_DSN") == "", (
+        "治理门步骤没有把 AIDEANBOT_TEST_PG_DSN 置空：带着 job 级 DSN 复跑证据脚本，"
+        "未配置分支的 4 条断言必 FAIL ⇒ 本步恒定红"
+    )
+    assert step.get("DATABASE_URL") == "", (
+        "治理门步骤没有把 DATABASE_URL 置空：同上，conftest 的回退路径会把未配置分支判错"
     )
 
 

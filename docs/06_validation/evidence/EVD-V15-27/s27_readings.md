@@ -62,7 +62,26 @@ skip 构成（451）：`AIDEANBOT_TEST_PG_DSN` 未设置（连库）+ Redis 不�
 
 ## 五、@ci
 
-交付提交：`<commit>`（HEAD）
-@ci run：<run id>（推送后回填）
-@ci-windows run：<run id>
-@security run：<run id>
+第 1 次推送（07053f9 = d32edfc + 范围门读数补档）：
+
+| 工作流 | run | 结论 |
+|---|---|---|
+| Security | 39268287343 | ✅ success |
+| CI | 39268288823 | ❌ **failure** —— backend `Governance gates` 步 rc=1 |
+| CI-Windows | 39268287340 | （见下） |
+
+failure 根因不是门逻辑，是 job 级 DSN 让 `prove_dsn_policy.py` 的未配置分支 4 条断言必 FAIL
+（详见 `s27_2.txt` §七，本机同变量复现 4 FAIL、置空串 ALL PASS）。已按允许修改面修正该步 env
+（两个 DSN 置空串）并补机检断言，先红原文 `s27_2_dsn_env_red.txt`。
+
+第 2 次推送（修正提交）：待填。
+
+## 六、新增待登记 P 项（两件，均要求登记而非本卡内改）
+
+1. **P-42（夹具被 `_TOKEN` 后缀族挡）**：见 §四 2。
+2. **P-43（候选）：`EVD-V2-00/prove_dsn_policy.py` 读 ambient env**。该证据脚本的 f/l/m/n
+   四条断言只在**未配置**环境成立，而它自己不做隔离 ⇒ 任何在带 DSN 的环境里跑
+   `evidence-check` 的机器都会红（本机因为没设 DSN 才一直绿）。本卡在 ci.yml 该步置空 DSN
+   只是让门重新可执行，没消掉这个依赖。根治 = 脚本自己 `monkeypatch.delenv` 或子进程隔离，
+   文件在 `docs/06_validation/evidence/EVD-V2-00/**`，不在本卡允许修改面。
+   （与前一条同源的另一半：若有人把这两个 DSN 从步骤 env 里删掉，机检断言会先红。）

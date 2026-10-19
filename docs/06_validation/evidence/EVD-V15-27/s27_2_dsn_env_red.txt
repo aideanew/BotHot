@@ -1,0 +1,11 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+E   AssertionError: 治理门步骤没有把 AIDEANBOT_TEST_PG_DSN 置空：带着 job 级 DSN 复跑证据脚本，未配置分支的 4 条断言必 FAIL ⇒ 本步恒定红
+    assert None == ''
+     +  where None = <built-in method get of dict object at 0x0000029E2451AD00>('AIDEANBOT_TEST_PG_DSN')
+     +    where <built-in method get of dict object at 0x0000029E2451AD00> = {'GUARD_BASE': "${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}", 'GUARD_GITLEAKS_COVERED': '1'}.get
+D:\Code\AideanBotHot\apps\api\tests\test_guard_rounds.py:757: AssertionError: 治理门步骤没有把 AIDEANBOT_TEST_PG_DSN 置空：带着 job 级 DSN 复跑证据脚本，未配置分支的 4 条断言必 FAIL ⇒ 本步恒定红
+=========================== short test summary info ===========================
+FAILED tests/test_guard_rounds.py::test_ci_backend_job_runs_both_scope_gates_with_the_event_base
+1 failed, 48 deselected in 0.23s
+rc=1
