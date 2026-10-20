@@ -1,0 +1,135 @@
+{
+  "$defs": {
+    "PageStyleA": {
+      "additionalProperties": false,
+      "description": "limit/offset 壳（admin/spaces/subscriptions 存量）。",
+      "properties": {
+        "items": {
+          "type": "array"
+        },
+        "limit": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "total",
+        "limit",
+        "offset"
+      ],
+      "type": "object"
+    },
+    "PageStyleB": {
+      "additionalProperties": false,
+      "description": "page/page_size 壳（bots/hot 存量）。",
+      "properties": {
+        "items": {
+          "type": "array"
+        },
+        "page": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "page_size": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "total",
+        "page",
+        "page_size"
+      ],
+      "type": "object"
+    },
+    "PageTargetUnified": {
+      "description": "V0.7.0 目标唯一分页壳（新接口强制）。稿没写 `additionalProperties` ⇒ 多余键放行。\n\n稿给 `page`/`pageSize` 同时写了 `default` 与 `required`：线上必须出现，默认值只是给调用方的提示。\n所以这里字段必填，`default` 作为注解写进 schema，不让 Pydantic 把它们变成可缺省字段。",
+      "properties": {
+        "hasMore": {
+          "description": "由服务端算，前端不得自行用 total/pageSize 猜（避免越界请求）",
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array"
+        },
+        "page": {
+          "default": 1,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "pageSize": {
+          "default": 20,
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "page",
+        "pageSize",
+        "total",
+        "hasMore"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "bothot://contracts/api.envelope/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "由 scripts/gen_contracts.py 从 apps/api/app/contracts/api.envelope.py 生成，请勿手动修改（--check 幂等门禁）。唯一源是 Python 模型（ADR-0008）。",
+  "properties": {
+    "code": {
+      "type": "integer"
+    },
+    "data": {
+      "default": null,
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object"
+        },
+        {
+          "type": "array"
+        }
+      ]
+    },
+    "message": {
+      "maxLength": 512,
+      "type": "string"
+    },
+    "requestId": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "message",
+    "requestId"
+  ],
+  "title": "BotHot api.envelope 域契约（生成物）",
+  "type": "object",
+  "x-generated-by": "scripts/gen_contracts.py",
+  "x-source-module": "app.contracts.envelope"
+}

@@ -27,7 +27,7 @@
     },
     "ErrorBody": {
       "description": "失败信封（api.envelope.schema.json 的 code!=0 形态）",
-      "allOf": [{ "$ref": "api.envelope.schema.json" }],
+      "allOf": [{ "$ref": "bothot://contracts/api.envelope/v1" }],
       "properties": { "code": { "enum": [10001, 10002, 10003, 10004, 10005, 10006, 10007, 10008, 20001, 20002, 20003, 20004, 20005, 30001, 30002, 30003, 30004, 30005, 30006, 50001, 50002] }, "data": { "type": "null" } }
     }
   },

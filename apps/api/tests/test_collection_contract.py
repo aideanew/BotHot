@@ -19,7 +19,8 @@
    有限语料会被 `{32}`→`{31,32}`、字符类去掉 `-`、`{1,12}`→`{1,13}` 绕过：
    量词与字符类是正则语义，样本再多也罩不住（`_PATTERN_CORPUS` 只是第二层）。
 
-`jsonschema` / `hypothesis` 都不在依赖里，也**不装**：比对器自己实现稿实际用到的关键词子集。
+D-V8-05（签 A）之后：语义判定的真源是 `tests/test_contract_jsonschema.py` 里的标准库 `jsonschema`
+（Draft 2020-12）；本文件退役为"差异登记 + 覆盖率守卫"，自研关键词子集只作第二层，不再单独说了算。
 不起 TestClient（U-23 的挂起面就在那）、不连库、不联网。
 """
 from __future__ import annotations
@@ -36,6 +37,7 @@ from typing import Any, get_type_hints
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from app.contracts import envelope as envelope_contract
 from app.contracts import events as events_contract
 from app.contracts import identity as identity_contract
 from app.contracts import resources as resources_contract
@@ -85,6 +87,13 @@ DOMAINS: dict[str, tuple[Path, Path, tuple[Divergence, ...]]] = {
         CONTRACT_DIR / "resources.schema.json",
         SCHEMA_DIR / "resources.schema.json",
         resources_contract.CONTRACT_DIVERGENCES,
+    ),
+    # S1.2.2 第五域（D-V8-08）。本比对器只比 definitions；"根即形状"那一面与全部语义判定
+    # 在 tests/test_contract_jsonschema.py 由标准库 validator 判（D-V8-05）。
+    "api.envelope": (
+        CONTRACT_DIR / "api.envelope.schema.json",
+        SCHEMA_DIR / "api.envelope.schema.json",
+        envelope_contract.CONTRACT_DIVERGENCES,
     ),
 }
 
@@ -2013,7 +2022,8 @@ def test_artifact_provenance_keys_are_declared() -> None:
     for domain, (_f, generated_path, _div) in DOMAINS.items():
         doc = load_cached(generated_path)
         assert doc["x-generated-by"] == "scripts/gen_contracts.py", domain
-        assert doc["x-source-module"] == f"app.contracts.{domain}", domain
+        # 域名与模块名不必同形（`api.envelope` 域的源是 `app.contracts.envelope`）：以生成器的映射表为准
+        assert doc["x-source-module"] == _gen_contracts_module().CONTRACT_SCHEMA_MODULES[domain], domain
 
 
 def test_identity_annotations_have_owners() -> None:
@@ -3405,3 +3415,12 @@ def test_generated_artifact_matches_current_model() -> None:
         assert fresh[domain] == path.read_text(encoding="utf-8"), (
             f"{domain}: 模型与已提交产物不一致，跑 `python scripts/gen_contracts.py` 重生成"
         )
+
+
+def _gen_contracts_module() -> Any:
+    """进程内加载生成器（只读它的映射表，不重算产物）。"""
+    spec = importlib.util.spec_from_file_location("gen_contracts_mapping", GEN_CONTRACTS_PATH)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module

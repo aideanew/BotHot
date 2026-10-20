@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bothot/contracts/api.envelope.schema.json",
+  "$id": "bothot://contracts/api.envelope/v1",
   "title": "BotHot HTTP 响应信封与分页契约（冻结稿 V0.7.0 / 基线 main@13acacc）",
   "description": "唯一源规则见 03 §5。本文件是并行执行者之间的中间语言：后端按此产出，前端按此消费，不得各自臆测字段。实测来源：apps/api/app/core/response.py:12-24（Envelope/success/failure）、apps/api/app/main.py:118-127（异常转信封）、apps/api/app/api/v1/{admin,spaces,subscriptions}.py（limit/offset 风格 9 处）、apps/api/app/api/v1/{bots,hot}.py（page/page_size 风格 6 处）。",
   "type": "object",
@@ -10,7 +10,7 @@
     "code": {
       "type": "integer",
       "description": "0 = 成功；非 0 必须是 errors.global.schema.json 中已登记的错误码。禁止使用 HTTP 状态码充当业务码。",
-      "enumReference": "errors.global.schema.json#/definitions/ErrorCode"
+      "x-enum-reference": "errors.global.schema.json#/definitions/ErrorCode"
     },
     "message": { "type": "string", "maxLength": 512, "description": "人类可读；成功固定 'ok'。不得含堆栈。" },
     "data": {
@@ -21,6 +21,99 @@
       "type": "string",
       "minLength": 1,
       "description": "由 RequestIdMiddleware 注入，必须与 X-Request-ID 响应头和 structlog 日志三处一致（core/request_context.py）。前端错误上报必须带此值。"
+    }
+  },
+  "definitions": {
+    "PageStyleA": {
+      "title": "limit/offset（admin/spaces/subscriptions，9 处）",
+      "type": "object",
+      "required": [
+        "items",
+        "total",
+        "limit",
+        "offset"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "type": "array"
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "PageStyleB": {
+      "title": "page/page_size（bots/hot，6 处）",
+      "type": "object",
+      "required": [
+        "items",
+        "total",
+        "page",
+        "page_size"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "type": "array"
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "page_size": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "PageTargetUnified": {
+      "title": "V0.7.0 目标唯一分页壳（新接口强制；存量两壳只读兼容到 STEP-14/15 收敛）",
+      "type": "object",
+      "required": [
+        "items",
+        "page",
+        "pageSize",
+        "total",
+        "hasMore"
+      ],
+      "properties": {
+        "items": {
+          "type": "array"
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 20
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hasMore": {
+          "type": "boolean",
+          "description": "由服务端算，前端不得自行用 total/pageSize 猜（避免越界请求）"
+        }
+      }
     }
   },
   "x-conventions": {
@@ -36,43 +129,8 @@
   },
   "x-pagination": {
     "status": "BLOCKING→已给默认裁决 D-V3-01（见 03 §6）：并存两种风格是真实缺陷，实测 9 处 offset 风格 vs 6 处 page 风格。",
-    "styleA_current": {
-      "title": "limit/offset（admin/spaces/subscriptions，9 处）",
-      "type": "object",
-      "required": ["items", "total", "limit", "offset"],
-      "additionalProperties": false,
-      "properties": {
-        "items": { "type": "array" },
-        "total": { "type": "integer", "minimum": 0 },
-        "limit": { "type": "integer", "minimum": 1 },
-        "offset": { "type": "integer", "minimum": 0 }
-      }
-    },
-    "styleB_current": {
-      "title": "page/page_size（bots/hot，6 处）",
-      "type": "object",
-      "required": ["items", "total", "page", "page_size"],
-      "additionalProperties": false,
-      "properties": {
-        "items": { "type": "array" },
-        "total": { "type": "integer", "minimum": 0 },
-        "page": { "type": "integer", "minimum": 1 },
-        "page_size": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "targetUnified": {
-      "title": "V0.7.0 目标唯一分页壳（新接口强制；存量两壳只读兼容到 STEP-14/15 收敛）",
-      "type": "object",
-      "required": ["items", "page", "pageSize", "total", "hasMore"],
-      "properties": {
-        "items": { "type": "array" },
-        "page": { "type": "integer", "minimum": 1, "default": 1 },
-        "pageSize": { "type": "integer", "minimum": 1, "maximum": 200, "default": 20 },
-        "total": { "type": "integer", "minimum": 0 },
-        "hasMore": { "type": "boolean", "description": "由服务端算，前端不得自行用 total/pageSize 猜（避免越界请求）" }
-      },
-      "queryParams": { "page": "1-based", "pageSize": "别名 size；上限 200，超限截到 200 而非报错" }
-    }
+    "targetUnifiedQueryParams": {"page": "1-based", "pageSize": "别名 size；上限 200，超限截到 200 而非报错"},
+    "x-promoted": "D-V8-08：styleA_current / styleB_current / targetUnified 三个壳已提升为 definitions 的 PageStyleA / PageStyleB / PageTargetUnified（原文逐字搬过去），此处只留裁决说明，不再是第二份形状。"
   },
   "x-idempotency": {
     "requirement": "写接口必须声明幂等语义，取值三选一并在契约里标注。",

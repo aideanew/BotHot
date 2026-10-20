@@ -164,6 +164,9 @@ CONTRACT_SCHEMA_MODULES: dict[str, str] = {
     "identity": "app.contracts.identity",
     "events": "app.contracts.events",
     "resources": "app.contracts.resources",
+    # STEP-01 S1.2.2 第五域（D-V8-08）：稿名就叫 api.envelope.schema.json，产物同名便于按 $id 对上。
+    # 这一域"根即形状"：模块里 `__contract_root__` 点名的模型摊到产物根上，见 generate_schemas。
+    "api.envelope": "app.contracts.envelope",
 }
 
 
@@ -257,7 +260,14 @@ def generate_schemas() -> dict[str, str]:
             if name in defs and defs[name] != sub:
                 raise SystemExit(f"[error] {domain}: 形状 {name} 自相冲突")
             defs[name] = sub
+        root_shape: dict[str, Any] = {}
+        root_name = getattr(sys.modules.get(module_name), "__contract_root__", None)
+        if root_name:
+            # 根即形状（D-V8-08）：把点名模型的校验关键词摊到根上，并从 $defs 里拿掉——
+            # 稿里它就只在根上，留两份等于造出一个稿里没有的 def。
+            root_shape = {k: v for k, v in defs.pop(root_name).items() if k != "description"}
         doc = {
+            **root_shape,
             "$schema": JSON_SCHEMA_DIALECT,
             "$id": f"bothot://contracts/{domain}/v1",
             "title": f"BotHot {domain} 域契约（生成物）",

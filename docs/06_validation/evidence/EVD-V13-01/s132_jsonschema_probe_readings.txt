@@ -1,0 +1,21 @@
+# STEP-01 S1.3.2 / D-V8-05：jsonschema 探针等价读数（Draft 2020-12，jsonschema 4.25.1）
+形状对数 = 19；元校验文档数 = 12
+collection:ArticleManifest  不一致探针=0  会改接受集的登记=['tightening']
+collection:ChannelName  不一致探针=0  会改接受集的登记=-
+collection:CollectionEvent  不一致探针=0  会改接受集的登记=['tightening']
+collection:DiscoveryChannelView  不一致探针=0  会改接受集的登记=['tightening']
+collection:ManifestStatus  不一致探针=0  会改接受集的登记=-
+collection:ManifestSyncReport  不一致探针=0  会改接受集的登记=-
+collection:WorkListPage  不一致探针=0  会改接受集的登记=-
+collection:WorkListRow  不一致探针=0  会改接受集的登记=['tightening']
+identity:Role  不一致探针=0  会改接受集的登记=-
+identity:SessionClaims  不一致探针=79  会改接受集的登记=['tightening']
+events:EventName  不一致探针=0  会改接受集的登记=-
+events:PushRetryState  不一致探针=31  会改接受集的登记=['conflict']
+resources:ContentAsset  不一致探针=388  会改接受集的登记=['conflict']
+resources:InAppNotification  不一致探针=0  会改接受集的登记=-
+resources:ShortLinkMap  不一致探针=64  会改接受集的登记=['conflict']
+api.envelope:PageStyleA  不一致探针=0  会改接受集的登记=-
+api.envelope:PageStyleB  不一致探针=0  会改接受集的登记=-
+api.envelope:PageTargetUnified  不一致探针=0  会改接受集的登记=-
+api.envelope:<root>  不一致探针=0  会改接受集的登记=-
