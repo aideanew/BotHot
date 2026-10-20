@@ -168,6 +168,7 @@ def make_default_ingest(settings: Settings) -> IngestInvoker:
     from app.providers.engine_port import EngineRouter
     from app.providers.langbot.client import LangBotClient
     from app.providers.raw_store import make_raw_store
+    from app.services.article_detail_fallback import ArticleDetailFallbackCoordinator
     from app.services.kb import KnowledgeBaseService
     from app.services.resolver import SourceResolverService
 
@@ -177,6 +178,8 @@ def make_default_ingest(settings: Settings) -> IngestInvoker:
         settings.langbot_admin_password,
     )
     resolver = SourceResolverService()
+    # 开关默认 False：构造时不装配任何付费 provider（"配了 key" ≠ "启用兜底"）。
+    detail_fallback = ArticleDetailFallbackCoordinator(settings)
 
     async def _ingest(session: AsyncSession, space_id: str, url: str) -> dict[str, Any]:
         svc = KnowledgeBaseService(
@@ -186,6 +189,7 @@ def make_default_ingest(settings: Settings) -> IngestInvoker:
             settings=settings,
             raw_store=make_raw_store(),
             engine_router=EngineRouter(settings, client),
+            detail_fallback=detail_fallback,
         )
         return await svc.ingest_url(space_id, url)
 

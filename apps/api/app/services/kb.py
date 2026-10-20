@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import re
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
 from sqlalchemy import select
@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.errors import (
+    ExtractFailedError,
     ExtractQualityLowError,
     ForbiddenError,
     IngestFailedError,
@@ -45,7 +46,10 @@ from app.services.extractor import ExtractedContent, ExtractorService
 from app.services.feed_service import on_article_indexed
 from app.services.normalizer import normalize_extracted
 from app.services.quality import score_quality
-from app.services.resolver import SourceResolverService
+from app.services.resolver import ResolvedArticle, SourceResolverService
+
+if TYPE_CHECKING:
+    from app.services.article_detail_fallback import ArticleDetailFallbackCoordinator
 
 logger = structlog.get_logger(__name__)
 
@@ -72,6 +76,7 @@ class KnowledgeBaseService:
         settings: Settings | None = None,
         raw_store: RawStore | None = None,
         engine_router: EngineRouter | None = None,
+        detail_fallback: ArticleDetailFallbackCoordinator | None = None,
     ) -> None:
         self._client = client
         self._session = session
@@ -79,6 +84,8 @@ class KnowledgeBaseService:
         self._settings = settings or get_settings()
         self._raw_store = raw_store or make_raw_store()
         self._router = engine_router or EngineRouter(self._settings, client)
+        # 付费详情兜底：只在 job_worker 的默认装配里注入（V15.1）；None = 不兜底。
+        self._detail_fallback = detail_fallback
         # AB-P004 P0：素材复用时直接上传缓存正文（零微信请求）
         self._reupload_cache_hits: list[dict[str, Any]] = []
         self._cache_hits: int = 0
@@ -344,6 +351,24 @@ class KnowledgeBaseService:
                 last_exc = exc
                 if attempt < self._RESOLVE_MAX_ATTEMPTS - 1:
                     await asyncio.sleep(self._RESOLVE_BACKOFF_BASE * (2**attempt))
+        # V15.1：只对直抓失败（网络/非 200）兜底；域错误与本仓 bug 不花付费调用掩盖。
+        if isinstance(last_exc, ExtractFailedError) and self._detail_fallback is not None:
+            detail = await self._detail_fallback.fetch_detail(norm_url)
+            if detail is not None and (detail.content_html or detail.content_text):
+                html = detail.content_html or detail.content_text
+                # 清洗器只喂 `id="js_content"` 区段（extractor.py:298），而付费详情给的是正文片段；
+                # 不补这层容器，兜底拿到的正文会在评分前就抛 20003，接线等于白接。
+                if not re.search(r'id="js_content"', html, re.IGNORECASE):
+                    html = f'<div id="js_content">{html}</div>'
+                return ResolvedArticle(
+                    title=detail.title,
+                    author=detail.author,
+                    publish_time=detail.publish_time.isoformat() if detail.publish_time else None,
+                    content=detail.content_text or detail.content_html,
+                    url=detail.url or norm_url,
+                    biz=detail.biz,
+                    html=html,
+                )
         raise last_exc  # type: ignore[misc]
 
     async def _find_source_by_anchor(
