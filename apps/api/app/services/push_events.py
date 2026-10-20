@@ -17,6 +17,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import metrics
 from app.core.errors import RequestInvalidError
 from app.models.bothot_entities import DailyReport, HotTopic, PushEvent
 from app.models.entities import ContentAsset, KnowledgeSpace
@@ -24,6 +25,19 @@ from app.models.entities import ContentAsset, KnowledgeSpace
 logger = structlog.get_logger(__name__)
 
 VALID_EVENT_TYPES = {"new_article", "hot_topic_update", "daily_report"}
+
+
+def _count_empty(hydrated: dict, event_type: str, fields: tuple[str, ...]) -> None:
+    """P-9 的出口：模板变量被查不到而置空时计数 + 留一条结构化日志。
+
+    语义**一个字都没改**——仍置空、仍发事件（消费侧渲染空值是被接受的取舍）。补的只是
+    "看不见"：今天 100% 的空快照与 0% 的空快照在指标上长得一样，文案空了也没人知道。
+    日志只报事件名与字段名，不报值。
+    """
+    for field in fields:
+        if not str(hydrated.get(field) or ""):
+            metrics.record_event_payload_empty(event_type, field)
+            logger.warning("push_event.payload_empty", name=event_type, field=field)
 
 
 async def _hydrate_payload(session: AsyncSession, event_type: str, payload: dict) -> dict:
@@ -45,12 +59,14 @@ async def _hydrate_payload(session: AsyncSession, event_type: str, payload: dict
             hydrated.setdefault("space_name", space.name if space else "")
         hydrated.setdefault("doc_title", "")
         hydrated.setdefault("space_name", "")
+        _count_empty(hydrated, event_type, ("doc_title", "space_name"))
 
     elif event_type == "hot_topic_update":
         topic_id = str(hydrated.get("topic_id") or "")
         topic = await session.get(HotTopic, topic_id) if topic_id else None
         hydrated["hot_topic"] = topic.title if topic else ""
         hydrated["topic_count"] = str(topic.article_count) if topic else ""
+        _count_empty(hydrated, event_type, ("hot_topic", "topic_count"))
 
     elif event_type == "daily_report":
         if not hydrated.get("report_title"):
@@ -63,6 +79,7 @@ async def _hydrate_payload(session: AsyncSession, event_type: str, payload: dict
                 else None
             )
             hydrated["report_title"] = row or ""
+        _count_empty(hydrated, event_type, ("report_title",))
 
     return hydrated
 

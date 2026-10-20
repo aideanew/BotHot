@@ -37,7 +37,9 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.contracts.collection import ManifestStatus
+from app.contracts.collection import ChannelName, CollectionEvent, ManifestStatus
+from app.core import metrics
+from app.core.alerting import discovery_idempotency_key, notify_discovery_event
 from app.core.config import Settings
 from app.models.entities import ArticleManifest
 from app.services.article_identity import canonical_article_key
@@ -70,7 +72,14 @@ class WorkListProvider(Protocol):
     """清单 Provider：与 `RedfoxClient.query_work_list` 同形（page 从 1 起）。
 
     返回 `(原始行, 上游 total)`：`total` 供增量游标算缺口；上游缺失时为 `None`。
+
+    `name` 是指标/告警的 `channel` 维度来源（与发现注册表 `CHANNELS` 同一词表）；
+    缺该属性的 Provider 记为 `unknown`，宁可让标签难看，也不要拿 URL 或类型去猜渠道。
+    声明成只读 property：`RSSFeedProvider` 就是这样暴露它的，写成可变属性会让协议拒收只读实现。
     """
+
+    @property
+    def name(self) -> str: ...
 
     async def query_work_list(self, biz: str, page: int) -> tuple[list[dict[str, Any]], int | None]: ...
 
@@ -90,6 +99,10 @@ class ManifestSyncReport:
     # **刻意不计进 `total`**：那些行已经落在 discovered/updated/unchanged 里了，
     # 再加一次就是同一行计两遍——这是口径，不是漏加。
     id_fallback: int = 0
+    # STEP-05 S5.2.2：`skipped == rows > 0` 的页数（冻结稿 collection.py:176 的告警语义载体）。
+    # 与 `skipped` 分工：后者答"丢了几行"，本字段答"有没有整页丢光"——后者才是
+    # 采集静默失败（P0-3）的形状，单行丢失不构成告警。
+    all_skipped_pages: int = 0
     known_local: int = 0  # 同步前本地已入库条数（增量游标基线）
     total_remote: int | None = None  # 上游 data.total（缺失/异常 → None）
     pages_planned: int = 0  # 按缺口规划的分页数
@@ -234,6 +247,8 @@ class ManifestSyncService:
         self._provider = provider
         # 注入式页大小让增量游标可脱机断言；缺省取上游常量。
         self._page_size = page_size if page_size and page_size > 0 else _upstream_page_size()
+        # 指标/告警的渠道维度（STEP-05）。解不出就记 unknown，绝不拿 type/URL 猜一个真渠道名。
+        self._channel = str(getattr(provider, "name", "") or "") or "unknown"
 
     async def sync_source(self, source_id: str, biz: str, *, max_pages: int = DEFAULT_MAX_PAGES) -> ManifestSyncReport:
         """翻页拉取清单并幂等落库，直到「新增量已耗尽」。
@@ -258,7 +273,12 @@ class ManifestSyncService:
         planned = max_pages
         page = 1
         while page <= max_pages:
-            rows, total_remote = await self._provider.query_work_list(biz, page)
+            try:
+                rows, total_remote = await self._provider.query_work_list(biz, page)
+            except Exception:
+                metrics.record_discovery_call(self._channel, ok=False)
+                raise
+            metrics.record_discovery_call(self._channel, ok=True)
             report.calls_made += 1
             if total_remote is not None:
                 report.total_remote = total_remote
@@ -269,16 +289,24 @@ class ManifestSyncService:
             if not rows:
                 break
             saw_existing = False
+            # 页内计数（STEP-05）：指标按页出，跨页累加会丢掉"哪一页整页丢光"这一维。
+            page_rows = 0
+            page_dropped = 0
+            page_fallback = 0
+            page_kept = {"discovered": 0, "updated": 0, "unchanged": 0}
             for row in rows:
+                page_rows += 1
                 mapped = _map_row(row)
                 if mapped is None:
                     report.skipped += 1
+                    page_dropped += 1
                     continue
                 # S3.3.3：兜底建行要**可见**——计一次数 + 一条结构化告警。
                 # 只把行收下不吭声，就还是"采集静默失败"那个形状（STEP-05 的同族）。
                 # 判据与 `_map_row` 同取 `_row_identity`，两边不会各判一套。
                 if _row_identity(row)[1]:
                     report.id_fallback += 1
+                    page_fallback += 1
                     logger.warning(
                         "discovery.id_fallback",
                         source_id=source_id,
@@ -287,8 +315,19 @@ class ManifestSyncService:
                     )
                 outcome = await self._upsert(source_id, mapped)
                 setattr(report, outcome, getattr(report, outcome) + 1)
+                page_kept[outcome] += 1
                 if outcome != "discovered":
                     saw_existing = True
+            metrics.record_manifest_rows(
+                self._channel,
+                discovered=page_kept["discovered"],
+                updated=page_kept["updated"],
+                unchanged=page_kept["unchanged"],
+                dropped=page_dropped,
+                fallback=page_fallback,
+            )
+            if page_rows and page_dropped == page_rows:
+                await self._note_all_skipped_page(report, source_id, page, page_dropped)
             if len(rows) < size:
                 break  # 末页：清单已到底
             if saw_existing:
@@ -314,6 +353,42 @@ class ManifestSyncService:
         return report
 
     # ------------------------------------------------------------------ 内部
+
+    async def _note_all_skipped_page(
+        self, report: ManifestSyncReport, source_id: str, page: int, dropped: int
+    ) -> None:
+        """整页全丢弃（`skipped == rows > 0`）：P0-3 那族「上游正常而本仓零入库」的形状。
+
+        三步都要出声：报告计数（供调用方断言）、指标（供面板）、ERROR 结构化事件 +
+        一天一次的告警（供人）。少任何一步都会退回"只在日志里留一行"的旧形态。
+        """
+        report.all_skipped_pages += 1
+        metrics.record_discovery_page_all_skipped(self._channel)
+        at = datetime.now(UTC)
+        key = discovery_idempotency_key(source_id, self._channel, page, at=at)
+        logger.error(
+            "discovery.page_all_skipped",
+            source_id=source_id,
+            channel=self._channel,
+            at=at.isoformat(),
+            idempotency_key=key,
+            count=dropped,
+        )
+        if self._channel not in {c.value for c in ChannelName}:
+            # 词表外的渠道名（provider 没登记 name）只出声不投递：告警正文要过契约视图，
+            # 拿一个假渠道去投递等于把标签体系搞脏——数与 ERROR 已经落了。
+            logger.warning("discovery.channel_unlabelled", source_id=source_id, channel=self._channel)
+            return
+        await notify_discovery_event(
+            CollectionEvent(
+                event="discovery.page_all_skipped",
+                source_id=source_id,
+                channel=ChannelName(self._channel),
+                at=at,
+                idempotency_key=key,
+                count=dropped,
+            )
+        )
 
     async def _known_count(self, source_id: str) -> int:
         """本地已入库清单条数（增量游标基线；走 `uq_manifest_source_external` 前缀索引）。"""

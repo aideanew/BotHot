@@ -62,6 +62,9 @@ _AUTH_FAILED_CODES = frozenset({3103, 3105, 3107})
 class RedfoxClient:
     """RedFox HTTP 客户端（鉴权头 X-API-KEY；单实例进程内复用）。"""
 
+    # 发现渠道名（STEP-05）：指标与告警的 `channel` 维度取它，与 registry.CHANNELS 的键同源。
+    name = "redfox"
+
     def __init__(
         self,
         base_url: str,

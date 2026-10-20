@@ -48,7 +48,7 @@ class RSSFeedConfig:
 class RSSFeedProvider:
     """RSS Feed 发现 Provider。
 
-    实现 WorkListProvider 协议（query_work_list + aclose）。
+    实现 WorkListProvider 协议（name + query_work_list + aclose）。
     identifier 参数：
     - feed URL（http(s)://...）→ 直接抓取该 feed
     - 预配置别名 → 查找 self._feeds 中匹配的 URL

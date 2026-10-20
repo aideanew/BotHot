@@ -1,10 +1,16 @@
-"""运行期告警（W6 A.5）：三类硬化信号经**既有推送 Provider**投递。
+"""运行期告警（W6 A.5）：四类硬化信号经**既有推送 Provider**投递。
 
-三类告警（对应任务 A.5）：
+四类告警（对应任务 A.5 + STEP-05）：
 1. **心跳缺失**：常驻进程（scheduler / worker）心跳 stale 或从未启动——
    正是 R7.7 那次「backend 全绿、采集停摆 5 天」的盲区，现主动点名。
 2. **Job 积压**：`jobs` 表 `QUEUED` 超过阈值——队列只进不出的早期征兆。
 3. **推送连败**：`push_logs` 最近 N 条投递**全部**非 success——某渠道持续投不出去。
+4. **采集静默**（STEP-05，两条入口共用同一个日幂等门）：
+   - `check_discovery_silence`：某源连续 N 轮同步零新增清单行，读库里既有的
+     `source_subscriptions.consecutive_empty_syncs` ⇒ backend 进程也判得动；
+   - `notify_discovery_event`：同步进程当场的「整页全丢弃」（契约 `CollectionEvent`
+     的 `discovery.page_all_skipped`）⇒ 这一半发生在 scheduler 进程，backend 的
+     探测看不见进程内指标，只能由事件侧直接投递。
 
 投递复用 `providers/push.make_push_provider`（默认 `web` 站内通知，可经
 `ALERT_CHANNEL` 指向已配置的飞书/钉钉/webhook），不新造投递面。
@@ -16,7 +22,7 @@
 - **配置读 env、不进 Settings**：`core/config.py` 归 W7（禁改），阈值/渠道全部取自
   `os.environ`，保持零跨批次耦合。
 - **探测函数可注入 session_factory**：调度接线（push_scheduler）传进程工厂，测试传
-  内存/夹具库；三类探测各自独立 try，单类失败不影响其余。
+  内存/夹具库；四类探测各自独立 try，单类失败不影响其余。
 - **告警本身best-effort**：`_deliver` 失败只记日志，绝不反噬调用它的主循环。
 """
 
@@ -24,11 +30,14 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import structlog
 from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.contracts.collection import CollectionEvent
 from app.providers.push import PushMessage, make_push_provider
 from app.services.process_heartbeat import describe_liveness
 
@@ -95,8 +104,63 @@ def allow_alert(title: str) -> bool:
 
 
 def reset_alert_cooldown_state() -> None:
-    """清空冷却状态，供用例隔离（进程内 dict 会让相邻用例互相污染）。"""
+    """清空冷却与日幂等状态，供用例隔离（进程内 dict/set 会让相邻用例互相污染）。"""
     _LAST_FIRED_MONO.clear()
+    _FIRED_DAYS.clear()
+
+
+# ── STEP-05：采集静默的日幂等 ──────────────────────────────────────────────────
+
+# 业务日界与全仓一致（Asia/Shanghai）：告警键里的 yyyymmdd 必须按业务日切，
+# 否则跨零点的两轮同步会算成两个"一天一次"，把同一件事报两遍。
+DISCOVERY_TZ = ZoneInfo("Asia/Shanghai")
+
+# 已投递过的日幂等键（`{source_id}:{channel}:{yyyymmdd}[:{page}]`）。进程内状态，
+# 与 `_LAST_FIRED_MONO` 同纪律：重启即重置，探测随进程走。
+_FIRED_DAYS: set[str] = set()
+
+
+def discovery_day_key(source_id: str, channel: str, at: datetime | None = None) -> str:
+    """告警级日幂等键 `{source_id}:{channel}:{yyyymmdd}`（比事件级少一段 page）。
+
+    为什么两级键都要有：契约 `CollectionEvent.idempotency_key`（collection.py:225-228）
+    是 **page 级**，用于把同一页的重复事件去重；而投递给运维的那条告警必须**一天一条**，
+    按页去重会让"这个源今天第 3 页又全丢"成为第 3 条告警。
+
+    `strftime` 之前必须 `astimezone`：aware datetime 的 `strftime` 打的是它**自带偏移**的字段，
+    不换算就等于拿 UTC 切业务日——UTC 17:00 已是上海次日 01:00，同一件事会被算成两天各一次。
+    """
+    moment = at.astimezone(DISCOVERY_TZ) if at is not None else datetime.now(DISCOVERY_TZ)
+    return f"{source_id}:{channel}:{moment.strftime('%Y%m%d')}"
+
+
+def discovery_idempotency_key(source_id: str, channel: str, page: int, at: datetime | None = None) -> str:
+    """契约形状的 page 级事件键 `{source_id}:{channel}:{yyyymmdd}:{page}`。"""
+    return f"{discovery_day_key(source_id, channel, at)}:{page}"
+
+
+def allow_daily_alert(key: str) -> bool:
+    """日幂等门：同键当天第一次放行并登记，之后一律挡下。"""
+    if key in _FIRED_DAYS:
+        return False
+    _FIRED_DAYS.add(key)
+    return True
+
+
+async def notify_discovery_event(event: CollectionEvent) -> bool:
+    """把一个采集静默事件投成一条当天唯一的告警；返回是否真的投递。
+
+    投递正文只带键里已有的标识（源/渠道/页/丢弃行数）——**不带上游响应原文与凭据**。
+    """
+    day_key = discovery_day_key(event.source_id, str(event.channel), event.at)
+    if not allow_daily_alert(day_key):
+        logger.info("采集静默告警被日幂等抑制", key=event.idempotency_key)
+        return False
+    return await _deliver(
+        "BotHot 告警：采集静默（整页全丢弃）",
+        f"渠道 {event.channel} 的源 {event.source_id} 第 {event.idempotency_key.rsplit(':', 1)[-1]} 页"
+        f" {event.count} 行全部不可用入库，本地清单零新增。请核对上游字段形状。",
+    )
 
 
 def _str_env(name: str, default: str) -> str:
@@ -149,6 +213,32 @@ async def check_push_consecutive_failures(session: AsyncSession, window: int) ->
     if len(rows) < window:
         return False
     return all(str(r[0]) != "success" for r in rows)
+
+
+async def check_discovery_silence(session: AsyncSession, *, threshold: int) -> list[dict[str, object]]:
+    """连续 `threshold` 轮及以上「调用成功而清单零新增」的 ACTIVE 订阅。
+
+    读的是既有列 `source_subscriptions.consecutive_empty_syncs`（由调度器每轮写，
+    `models/entities.py:93`）——所以 backend 进程不必共享发现进程的内存就能判。
+    静默信号的另一半（整页全丢弃）只在同步进程内出声，见 `core/metrics.py` 的进程边界说明。
+
+    SQL 只负责「取所有非零空轮询的 ACTIVE 订阅」，阈值比较留在 Python：把 `>= :n` 写进
+    SQL 也能跑，但那条判据就无法脱离数据库被验证（用例的桩会话不会执行 WHERE）。
+    行数天然很小（ACTIVE 且计数非零），不为它做优化。
+    """
+    rows = (
+        await session.execute(
+            sa_text(
+                "SELECT ss.source_id, s.name, ss.consecutive_empty_syncs "
+                "FROM source_subscriptions ss JOIN sources s ON s.id = ss.source_id "
+                "WHERE ss.status = 'ACTIVE' AND ss.consecutive_empty_syncs > 0 "
+                "ORDER BY ss.consecutive_empty_syncs DESC, ss.source_id"
+            )
+        )
+    ).all()
+    return [
+        {"source_id": str(r[0]), "name": str(r[1]), "rounds": int(r[2])} for r in rows if int(r[2]) >= threshold
+    ]
 
 
 async def run_alert_checks(
@@ -211,5 +301,23 @@ async def run_alert_checks(
                 logger.info("推送连败告警被冷却期抑制", window=window)
     except Exception:  # noqa: BLE001
         logger.warning("推送连败探测失败", exc_info=True)
+
+    silence_threshold = _int_env("ALERT_DISCOVERY_SILENCE_ROUNDS", 3)
+    try:
+        async with session_factory() as session:
+            silent = await check_discovery_silence(session, threshold=silence_threshold)
+        for hit in silent:
+            source_id = str(hit["source_id"])
+            if not allow_daily_alert(discovery_day_key(source_id, "subscription")):
+                logger.info("采集静默告警被日幂等抑制", source_id=source_id)
+                continue
+            fired.append(f"采集静默（连续空轮询）：{hit['name']}")
+            await _deliver(
+                "BotHot 告警：采集静默（连续空轮询）",
+                f"源 {hit['name']}（{source_id}）连续 {hit['rounds']} 轮同步零新增清单行"
+                f"（阈值 {silence_threshold}），请核对上游是否仍返回可用行。",
+            )
+    except Exception:  # noqa: BLE001
+        logger.warning("采集静默探测失败", exc_info=True)
 
     return fired

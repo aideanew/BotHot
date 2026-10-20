@@ -26,7 +26,7 @@ import structlog
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.core.metrics import PUSH_DELIVERIES_TOTAL
+from app.core.metrics import PUSH_DELIVERIES_TOTAL, record_web_notification_persist_failed
 from app.core.secret_crypto import decrypt_channel_secret, decrypt_extra_config
 from app.models.base import gen_uuid
 from app.models.bothot_entities import BotChannel, Notification, PushLog, PushTask
@@ -302,7 +302,10 @@ async def persist_web_notification(db: AsyncSession, msg: PushMessage) -> None:
                     doc_id=msg.doc_id,
                 )
             )
-    except Exception:
+    except Exception as exc:
+        # P-30 的出口：吞掉异常是取舍（通知历史缺一条绝不能吃掉投递回执），但"吞了"这件事
+        # 今天除了日志没有任何可观测面——补一个按异常类型分的计数。日志仍只报标题，不报正文。
+        record_web_notification_persist_failed(type(exc).__name__)
         logger.warning("web 通知落库失败（不影响投递回执）: %s", msg.title)
 
 

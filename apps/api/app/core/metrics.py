@@ -14,6 +14,23 @@
 - `hot_cluster_duration_seconds`（Histogram）—— `run_clustering` 一轮耗时，由
   `job_worker` 的热点任务计时观测。
 
+STEP-05 起的发现链路四族（**只在跑同步的那个进程里有值**，见下）：
+
+- `bothot_discovery_calls_total{channel,outcome}` —— 每次清单调用（success/failed）。
+- `bothot_manifest_rows_total{channel,result}` —— 行级结果五类（discovered/updated/unchanged/dropped/fallback）。
+- `bothot_discovery_page_all_skipped_total{channel}` —— 整页全丢弃的页数（采集静默失败的形状）。
+- `bothot_discovery_last_success_timestamp{channel}`（Gauge）—— 最近一次成功调用时刻。
+- `bothot_event_payload_empty_total{name,field}`（P-9）与 `web_notification_persist_failed_total{reason}`（P-30）
+  —— 两处原本无痕的静默动作各一个出口。
+
+进程边界（别把指标当跨进程总线）：发现同步跑在 scheduler 进程，`/metrics` 与
+`run_alert_checks` 跑在 backend 进程（`main.py` 只启推送调度器），Prometheus 注册表
+**进程内私有** ⇒ 上述计数器在 backend 的 `/metrics` 里恒为未初始化。跨进程可判的那一半
+（连续 N 轮空轮询）走库里既有的 `source_subscriptions.consecutive_empty_syncs`，
+由 `alerting.check_discovery_silence` 读；进程内的另一半（整页全丢弃）由同步侧
+直接交 `alerting.notify_discovery_event` 投递。`bothot_jobs_by_status` 之所以能在
+backend 看到实况，是因为它在**抓取时**回读 Postgres，而不是靠跨进程内存。
+
 关键取舍
 --------------------------------------
 - **path 标签低基数**：`_normalize_path` 把路径里的 id 段（纯数字 / UUID / 长 hex）折叠为
@@ -83,6 +100,43 @@ HOT_CLUSTER_DURATION = Histogram(
     buckets=(0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0),
 )
 
+# ── STEP-05 S5.2.1：发现链路四族（采集静默失败从"只有日志"变成"有数可查"）──────────
+# 标签 `channel` 取发现注册表渠道名（redfox/dajiala/…），与 `describe_channels` 同一词表；
+# 维度刻意保持低基数：渠道是个位数集合，result/outcome 是固定枚举。
+DISCOVERY_CALLS_TOTAL = Counter(
+    "bothot_discovery_calls_total",
+    "Discovery list calls by channel and outcome.",
+    ["channel", "outcome"],
+)
+MANIFEST_ROWS_TOTAL = Counter(
+    "bothot_manifest_rows_total",
+    "Manifest list rows by channel and per-row result (discovered/updated/unchanged/dropped/fallback).",
+    ["channel", "result"],
+)
+DISCOVERY_PAGE_ALL_SKIPPED_TOTAL = Counter(
+    "bothot_discovery_page_all_skipped_total",
+    "Pages where every row was dropped (skipped == rows > 0), by channel.",
+    ["channel"],
+)
+DISCOVERY_LAST_SUCCESS_TIMESTAMP = Gauge(
+    "bothot_discovery_last_success_timestamp",
+    "Unix seconds of the last successful discovery call, by channel.",
+    ["channel"],
+)
+
+# P-9（冻结稿 events.schema.json 的 x-known-defect）：快照置空今天不再是无痕操作。
+EVENT_PAYLOAD_EMPTY_TOTAL = Counter(
+    "bothot_event_payload_empty_total",
+    "Event payload template variables silently filled with an empty string, by event and field.",
+    ["name", "field"],
+)
+# P-30：`persist_web_notification` 吞异常的唯一可观测出口（投递语义不变）。
+WEB_NOTIFICATION_PERSIST_FAILED_TOTAL = Counter(
+    "web_notification_persist_failed_total",
+    "In-app notification persist failures swallowed by persist_web_notification, by exception type.",
+    ["reason"],
+)
+
 _UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 _LONG_HEX_RE = re.compile(r"^[0-9a-fA-F]{16,}$")
 
@@ -105,6 +159,54 @@ def record_push_outcome(channel: str, delivered: bool, dead: bool = False) -> No
     """投递收敛点调用：outcome ∈ {success, failed, dead}。"""
     outcome = "success" if delivered else ("dead" if dead else "failed")
     PUSH_DELIVERIES_TOTAL.labels(channel=channel, outcome=outcome).inc()
+
+
+def record_discovery_call(channel: str, ok: bool) -> None:
+    """一次清单调用结束：成功另写「最近成功时间」，失败只计 outcome=failed（不吞异常）。"""
+    DISCOVERY_CALLS_TOTAL.labels(channel=channel, outcome="success" if ok else "failed").inc()
+    if ok:
+        DISCOVERY_LAST_SUCCESS_TIMESTAMP.labels(channel=channel).set_to_current_time()
+
+
+def record_manifest_rows(
+    channel: str,
+    *,
+    discovered: int,
+    updated: int,
+    unchanged: int,
+    dropped: int,
+    fallback: int,
+) -> None:
+    """一页清单行的落库结果逐类计数；`dropped`=不可用行，`fallback`=以规范键兜底建行的行。
+
+    `fallback` 与 `discovered` 会重叠（兜底行也是新建行），这是口径不是重复计数：
+    前者答"有多少行是靠兜底键进来的"，后者答"有多少行落了库"，与
+    `ManifestSyncReport.id_fallback` 不计进 `total` 的同一条纪律对齐。
+    """
+    for result, count in (
+        ("discovered", discovered),
+        ("updated", updated),
+        ("unchanged", unchanged),
+        ("dropped", dropped),
+        ("fallback", fallback),
+    ):
+        if count:
+            MANIFEST_ROWS_TOTAL.labels(channel=channel, result=result).inc(count)
+
+
+def record_discovery_page_all_skipped(channel: str) -> None:
+    """整页全丢弃（skipped == rows > 0）：采集静默失败的形状，一步一计数。"""
+    DISCOVERY_PAGE_ALL_SKIPPED_TOTAL.labels(channel=channel).inc()
+
+
+def record_event_payload_empty(name: str, field: str) -> None:
+    """P-9：事件快照某个模板变量被查不到而置空——计数只报键名，不报值。"""
+    EVENT_PAYLOAD_EMPTY_TOTAL.labels(name=name, field=field).inc()
+
+
+def record_web_notification_persist_failed(reason: str) -> None:
+    """P-30：站内通知落库失败被吞——`reason` 取异常类型名，不含正文与凭据。"""
+    WEB_NOTIFICATION_PERSIST_FAILED_TOTAL.labels(reason=reason).inc()
 
 
 class MetricsMiddleware:
