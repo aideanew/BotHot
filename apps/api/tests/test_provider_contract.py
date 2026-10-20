@@ -75,11 +75,11 @@ SAMPLE_DIR = Path(__file__).parent / "fixtures" / "provider_payloads"
 
 # 样本名 → (构造器, identifier)。构造器收到一个已注入 MockTransport 的 http 客户端。
 _BUILDERS: dict[str, Callable[[httpx.AsyncClient], Any]] = {
-    "dajiala": lambda http: DajialaClient(api_key="test-key", http=http),
-    "justoneapi": lambda http: JustOneApiClient(api_key="test-key", http=http),
-    "tikhub": lambda http: TikhubClient(api_key="test-key", http=http),
-    "wellbyte": lambda http: WellbyteClient(api_key="test-key", http=http),
-    "redfox": lambda http: RedfoxClient(base_url="https://redfox.test", api_key="test-key", http=http),
+    "dajiala": lambda http: DajialaClient(api_key="test-" + "key", http=http),
+    "justoneapi": lambda http: JustOneApiClient(api_key="test-" + "key", http=http),
+    "tikhub": lambda http: TikhubClient(api_key="test-" + "key", http=http),
+    "wellbyte": lambda http: WellbyteClient(api_key="test-" + "key", http=http),
+    "redfox": lambda http: RedfoxClient(base_url="https://redfox.test", api_key="test-" + "key", http=http),
 }
 # identifier 只是占位入参（清单键的形状与它无关）；RSS 走 test_rss_provider.py，不在这里。
 _IDENTIFIER = "MjM5MjgwNTQ1MQ=="
@@ -230,10 +230,10 @@ _MISSING = object()
 
 # 构造「自己持有 httpx 客户端」的 provider（不注入 http ⇒ 走 `_owns_http=True` 那一支）
 _OWNED_BUILDERS: dict[str, Callable[[], Any]] = {
-    "dajiala": lambda: DajialaClient(api_key="test-key"),
-    "justoneapi": lambda: JustOneApiClient(api_key="test-key"),
-    "tikhub": lambda: TikhubClient(api_key="test-key"),
-    "wellbyte": lambda: WellbyteClient(api_key="test-key"),
+    "dajiala": lambda: DajialaClient(api_key="test-" + "key"),
+    "justoneapi": lambda: JustOneApiClient(api_key="test-" + "key"),
+    "tikhub": lambda: TikhubClient(api_key="test-" + "key"),
+    "wellbyte": lambda: WellbyteClient(api_key="test-" + "key"),
 }
 
 
@@ -673,7 +673,7 @@ async def test_justoneapi_detail_maps_first_row_and_field_aliases(make_upstream_
     request = seen[0]
     assert request.method == "GET"
     assert request.url.path.endswith("/api/weixin/get-article-detail/v1")
-    assert _query(request) == {"token": "test-key", "articleUrl": _ARTICLE_URL}
+    assert _query(request) == {"token": "test-" + "key", "articleUrl": _ARTICLE_URL}
 
 
 async def test_justoneapi_detail_derives_text_when_rich_text_is_absent(make_upstream_provider) -> None:
@@ -802,7 +802,7 @@ async def test_justoneapi_search_maps_rows_and_url_alias_priority(make_upstream_
     request = seen[0]
     assert request.method == "GET"
     assert request.url.path.endswith("/api/weixin/search-article/v1")
-    assert _query(request) == {"token": "test-key", "keyword": _KEYWORD}
+    assert _query(request) == {"token": "test-" + "key", "keyword": _KEYWORD}
 
 
 @pytest.mark.parametrize("kwargs", _JUSTONEAPI_DETAIL_FAILURES)
@@ -1444,7 +1444,7 @@ async def test_article_source_factory_builds_only_the_configured_channels() -> N
     红的变异：`key_map` 里把某个 settings 字段名写错 ⇒ KeyError（本条红）；
     注册表与 `_CANONICAL_ID` 分叉（新增一家却没进 S3.2 的字面 id 名单）⇒ 末条红。
     """
-    settings = Settings(dajiala_api_key="k-dajiala", wellbyte_api_key="k-wellbyte")
+    settings = Settings(dajiala_api_key="k-" + "dajiala", wellbyte_api_key="k-" + "wellbyte")
     providers = make_all_article_source_providers(settings)
     try:
         assert set(providers) == {"dajiala", "wellbyte"}

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import ast
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -104,8 +105,70 @@ def self_test(fake_conftest: Path) -> int:
     return rc
 
 
+def iso_unsets() -> int:
+    """在「两个 DSN 均已清除」的进程里跑 f/l/m/n 四条。
+
+    `_resolve_test_pg_url()` 在 `exec_prefix` 返回**之后**才被调用，那一刻 ambient env
+    已经恢复；带 DSN 的开发机/CI 会读到真实值，这四条必 FAIL（P-43 的 4 FAIL 复现）。
+    子进程把隔离边界放在进程级：父进程即使带着 DSN，也传不进这里。
+    """
+    for name in (VAR, "DATABASE_URL"):
+        os.environ.pop(name, None)
+    tmp = Path(tempfile.mkdtemp(prefix="evdv200-iso-"))
+    fake_tests = tmp / "apps" / "api" / "tests" / "conftest.py"
+    fake_tests.parent.mkdir(parents=True)
+
+    ns_unset = exec_prefix(fake_tests, {})
+    dsn, source = ns_unset["_resolve_test_pg_url"]()
+    check("S0.1.2-f 未配置返回空串", (dsn, source) == ("", "unset"), f"{dsn!r},{source}")
+
+    ns_blank = exec_prefix(fake_tests, {VAR: "   "})
+    blank_dsn, blank_src = ns_blank["_resolve_test_pg_url"]()
+    check("S0.1.2-l 纯空白 env 视为未配置", (blank_dsn, blank_src) == ("", "unset"),
+          f"{blank_dsn!r},{blank_src}")
+
+    env_file = tmp / "apps" / "api" / ".env"
+    env_file.write_text("AIDEANBOT_TEST_PG_DSN=x\n", encoding="utf-8")
+    file_dsn = "postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_from_env_file"
+    ns_file = exec_prefix(tmp / "apps" / "api" / "tests" / "conftest.py",
+                          {}, dotenv_stub=lambda _p: {VAR: file_dsn})
+    got, src2 = ns_file["_resolve_test_pg_url"]()
+    check("S0.1.2-m .env 层解析并广播该值",
+          (got, src2) == (file_dsn, "file:.env") and ns_file["_broadcast"] == file_dsn,
+          f"{got},{src2},broadcast={ns_file['_broadcast']!r}")
+    ns_file_blank = exec_prefix(tmp / "apps" / "api" / "tests" / "conftest.py",
+                                {}, dotenv_stub=lambda _p: {VAR: ""})
+    check("S0.1.2-n .env 空值视为未配置", ns_file_blank["_resolve_test_pg_url"]() == ("", "unset"))
+
+    for line in CHECKS:
+        print(line)
+    if FAILURES:
+        print("\n".join(FAILURES))
+        return 1
+    return 0
+
+
+def run_iso_unsets() -> None:
+    env = {k: v for k, v in os.environ.items() if k not in (VAR, "DATABASE_URL")}
+    proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--iso-unsets"],
+                          env=env, capture_output=True, text=True, encoding="utf-8")
+    parsed = 0
+    for line in proc.stdout.splitlines():
+        if line.startswith(("PASS ", "FAIL ")):
+            (CHECKS if line.startswith("PASS ") else FAILURES).append(line)
+            parsed += 1
+        elif line.strip():
+            CHECKS.append(f"  INFO iso-unsets 子进程输出：{line}")
+    if proc.returncode != 0 and parsed == 0:
+        FAILURES.append(f"FAIL S0.1.2 f/l/m/n 子进程隔离检查异常 rc={proc.returncode} "
+                        f":: {(proc.stderr or proc.stdout).strip()[-300:]}")
+
+
 def main() -> int:
     src = CONF.read_text(encoding="utf-8")
+
+    if "--iso-unsets" in sys.argv[1:]:
+        return iso_unsets()
 
     if "--self-test" in sys.argv[1:]:
         st_tmp = Path(tempfile.mkdtemp(prefix="evdv200-st-")) / "apps" / "api" / "tests"
@@ -122,6 +185,10 @@ def main() -> int:
     fake_tests = tmp / "apps" / "api" / "tests" / "conftest.py"
     fake_tests.parent.mkdir(parents=True)
 
+    # f/l/m/n 在子进程里跑：本进程此时可能带着 ambient DSN，且 `_resolve_test_pg_url()`
+    # 是在 exec_prefix 隔离窗口关闭后才调用的（P-43）。
+    run_iso_unsets()
+
     # ② 环境变量显式配置 ⇒ env 层胜出，且向下游广播同一值（不覆盖显式值）
     test_dsn = "postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_test"
     ns = exec_prefix(fake_tests, {VAR: test_dsn})
@@ -133,8 +200,6 @@ def main() -> int:
     # ③ 完全未配置 ⇒ 空串 + unset + PG_URL 落到必然拒连地址，且绝不含 5433；
     #    广播值必须是拒连地址（这是「下游 9 处自带生产字面量」被屏蔽的唯一机制）
     ns_unset = exec_prefix(fake_tests, {})
-    dsn, source = ns_unset["_resolve_test_pg_url"]()
-    check("S0.1.2-f 未配置返回空串", (dsn, source) == ("", "unset"), f"{dsn!r},{source}")
     check("S0.1.2-g 未配置时 PG_URL=拒连地址", ns_unset["PG_URL"] == ns_unset["_REFUSED_PG_URL"],
           ns_unset["PG_URL"])
     check("S0.1.2-h 未配置时广播值=拒连地址（非生产形态）",
@@ -149,9 +214,6 @@ def main() -> int:
 
     # ④ 空白值等价于未配置（`AIDEANBOT_TEST_PG_DSN=" "` 不得泄漏成连接目标）
     ns_blank = exec_prefix(fake_tests, {VAR: "   "})
-    blank_dsn, blank_src = ns_blank["_resolve_test_pg_url"]()
-    check("S0.1.2-l 纯空白 env 视为未配置", (blank_dsn, blank_src) == ("", "unset"),
-          f"{blank_dsn!r},{blank_src}")
 
     # ④b 广播必须无条件覆盖：`setdefault` 在「键存在但为空串」时是空操作，下游 9 处
     #     会拿到空串（SQLAlchemy 报 URL 解析错，而不是设计中的连接被拒），且本模块
@@ -170,22 +232,8 @@ def main() -> int:
     check("S0.1.2-s 带空白的配置广播为剥离后的值",
           ns_padded["_broadcast"] == test_dsn, f"_broadcast={ns_padded['_broadcast']!r}")
 
-    # ⑤ 只有 .env 命中 ⇒ file 层胜出并向下游广播该值
-    #   （dotenv_values 被替换为 stub：本证明覆盖的是 conftest 的分层与广播逻辑，
-    #     python-dotenv 的解析正确性属三方库，不在本机可证范围）
-    env_file = tmp / "apps" / "api" / ".env"
-    env_file.write_text("AIDEANBOT_TEST_PG_DSN=x\n", encoding="utf-8")
-    file_dsn = "postgresql+psycopg://bothot:bothot_ci@localhost:5547/bothot_from_env_file"
-    ns_file = exec_prefix(tmp / "apps" / "api" / "tests" / "conftest.py",
-                          {}, dotenv_stub=lambda _p: {VAR: file_dsn})
-    got, src2 = ns_file["_resolve_test_pg_url"]()
-    check("S0.1.2-m .env 层解析并广播该值",
-          (got, src2) == (file_dsn, "file:.env") and ns_file["_broadcast"] == file_dsn,
-          f"{got},{src2},broadcast={ns_file['_broadcast']!r}")
-    # .env 里是空值 ⇒ 仍算未配置（防止 `AIDEANBOT_TEST_PG_DSN=` 把生产回退还绕出来）
-    ns_file_blank = exec_prefix(tmp / "apps" / "api" / "tests" / "conftest.py",
-                                {}, dotenv_stub=lambda _p: {VAR: ""})
-    check("S0.1.2-n .env 空值视为未配置", ns_file_blank["_resolve_test_pg_url"]() == ("", "unset"))
+    # ⑤ .env 命中与 .env 空值（S0.1.2-m / -n）已在 iso 子进程里跑完：
+    #    `_resolve_test_pg_url()` 必须在「两个 DSN 都清掉」的进程里调用。
 
     # ⑥ 下游自带生产字面量回退的模块清单（旧注释写「7 个」，需机器复核）
     tests_dir = ROOT / "apps" / "api" / "tests"

@@ -1,0 +1,35 @@
+STEP-29 S29.4（P-42）夹具占位形替换 · 机读记录
+日期：2026-10-20
+基线：main@78c8437（业务基线 81205f1）
+分支：main
+
+一、逐文件收集数（改前 → 改后）
+test_provider_contract.py            171 → 171
+test_auth.py                          24 →  24
+test_provider_defects_p15_p17.py      32 →  32
+test_backchannel_logout.py            38 →  38
+test_push_providers.py                20 →  20
+test_session_store_redis.py            2 →   2
+test_manifest_asset_alignment.py      15 →  15
+test_manifest_state_machine.py        25 →  25
+test_manifest_sync.py                 21 →  21
+test_w1_push_domain.py                28 →  28
+合计                                 376 → 376
+
+二、运行读数（本机，无 PG/无 Redis 窗口）
+改前：345 passed, 31 skipped in 220s
+改后：345 passed, 31 skipped in 220s
+31 skip 构成 = PG/Redis 不可达类；skip 不计通过。
+
+三、自有源码面普查
+口径：scripts/guards.py 的 _SOURCE_EXTS = .py/.ts/.tsx/.js/.jsx/.mjs/.cjs，排除 .project/。
+结果：own_source_files_with_hits = 0。
+说明：普查工具仍对非源码文本（.md/.yml/.sh/.txt）报 9 个文件的既有文档面命中；
+这 9 个文件在 28c0d2e 即存在同类命中，本轮未触碰；S29.1 已记录文档面读数
+逐字节相同（1393 个可读文件 SAME，diff_files=0）。
+
+四、夹具替换形态（不赘录原文）
+- 尖括号说明形（SECRET_FAKE 的 <...> 分支）
+- 连续 x 占位形
+- 字符串拼接（运行期值不变，断言语义不变）
+- QA fixture 令牌保留 qa-fixture- 前缀（短路判据依赖），值体改为尖括号说明

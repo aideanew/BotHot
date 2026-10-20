@@ -897,6 +897,37 @@ def _value_like_literals(line: str) -> list[str]:
             continue
         if i >= 0 and line[i] == "(" and _KEYED_CALL.search(line[:i + 1]):
             continue
+        # 字典/JSON 键名（行首或 `{`/`,` 之后、紧跟冒号）是字段名，不是值；
+        # 三元表达式的真分支也以冒号结尾，但它前面是 `?`，不会被这条豁免吃掉。
+        j = m.end()
+        while j < len(line) and line[j] in " \t":
+            j += 1
+        if (j < len(line) and line[j] == ":" and (i < 0 or line[i] in "{,")):
+            continue
+        # 不含凭据的 URL 是地址，不是值位凭据；带 `@` 的 URL 仍按值类算。
+        if "://" in lit and "@" not in lit:
+            continue
+        # S29.3 / P-45：`getattr(obj, "属性名", 默认)` 的第二个实参是**名字**，不是值。
+        # 独立复写这一档：找字面量左侧最近的未闭合 `(`，数它与字面量之间的顶层逗号。
+        depth = 0
+        commas = 0
+        open_at = -1
+        j = m.start() - 1
+        while j >= 0:
+            ch = line[j]
+            if ch in ")]}":
+                depth += 1
+            elif ch in "([{":
+                if depth == 0:
+                    open_at = j
+                    break
+                depth -= 1
+            elif ch == "," and depth == 0:
+                commas += 1
+            j -= 1
+        if (open_at >= 0 and line[open_at] == "(" and commas == 1
+                and re.search(r"\bgetattr$", line[:open_at].rstrip())):
+            continue
         out.append(lit)
     return out
 
@@ -923,12 +954,17 @@ def test_source_mode_never_drops_a_line_carrying_a_value_literal() -> None:
     assert regressions == [], f"源码模式少报了含值类字面量的行：{regressions[:10]}"
 
 
-def test_source_mode_only_adds_the_token_suffix_family() -> None:
-    """③ 的另一半读数：新增命中必须**全部**来自 S27.3 的 `_TOKEN` 后缀族。
+def test_source_mode_only_adds_hits_carrying_a_value_literal() -> None:
+    """③ 的另一半读数：源码面比文档面**多报**的每一行都必须是真字面量（S29.2 口径）。
 
-    结构上：文档面的赋值形是源码面的超集（源码面只多一层表达式过滤），所以"新增"只可能
-    来自那条新规则。这条用例把它钉成机检——若哪天有人把 `_source_hit` 的调用删掉，
-    新增面会从 20 行量级暴涨，这里立刻红。
+    口径演进（S29 卡面「新增命中逐行列出且每条人工判定'真字面量'；新增误报 0」）：
+
+    - S27 只有 `_TOKEN` 后缀族一条新增来源，当时把「新增」钉成"必须匹配后缀族"；
+    - S29.1/S29.2 按裁决新收短首段兜底、类型注解、引号键名、下标键位与大写常量族，
+      新增面合法扩大——但**每条新增行都必须载有值位的值类字面量**（或仍属后缀族，
+      那是 S27 已背书的一条，允许它的短值夹具）。
+
+    若哪天有人把表达式过滤删掉（纯表达式也报），新增行里不会再有值类字面量，这里立刻红。
     """
     files = _tracked_source_files()
     added: list[str] = []
@@ -938,9 +974,12 @@ def test_source_mode_only_adds_the_token_suffix_family() -> None:
         new_lines = {no for _n, no, _s in guards.secret_scan_for_path(text, rel)[0]}
         lines = text.splitlines()
         for no in sorted(new_lines - old_lines):
-            if not guards.SECRET_ASSIGN_SUFFIX.search(lines[no - 1]):
+            line = lines[no - 1]
+            if guards.SECRET_ASSIGN_SUFFIX.search(line):
+                continue
+            if not _value_like_literals(line):
                 added.append(f"{rel}:{no}")
-    assert added == [], f"源码模式新增了非后缀族的命中（判据被放宽）：{added[:10]}"
+    assert added == [], f"源码模式新增了不含值类字面量的命中（判据被放宽）：{added[:10]}"
 
 
 # ═══════════════════════════ I. 接线与二进制属性（S27.V15.1 / S27.4）
@@ -980,3 +1019,116 @@ def test_docx_is_declared_binary_so_gitleaks_stops_failing_on_windows() -> None:
         "缺少 `/.project/** -diff`：system 级 attributes 仍会把整族办公文档交给 textconv，"
         "`failed to scan` 会换个扩展名继续出现"
     )
+
+
+# ═══════════════════════════ J. S29.1/S29.2 召回补缺（P-41 + P-44）
+#
+# 根因（STEP-27 独立复查 A 项）：老 `SECRET_ASSIGN` 要求**赋值号后第一段 ≥4 字符**。
+# 右值以短标识符开头时（`x or …`、`c ? …`、`(x || …`），正则在那一位就落空，
+# 整行进不到 `_source_hit` ⇒ 兜底字面量永远看不见。旧门也漏，属存量缺口。
+# 本组形状同样跨字符串边界拼接（理由同文件头第 3 条）。
+
+_S29_VALUE = "hunter2" + "secret99"   # 13 字符，非占位、非全大写环境变量名
+
+_S291_REPORT = [
+    ("token = x or " + '"' + _S29_VALUE + '"', "hash", "或运算"),
+    ("token = x ?? " + '"' + _S29_VALUE + '"', "slash", "空值合并"),
+    ("token = x || " + '"' + _S29_VALUE + '"', "slash", "逻辑或"),
+    ("token = c ? " + '"' + _S29_VALUE + '" : "othersecretvalue"', "slash", "三元两个分支"),
+    ("token = x + " + '"' + _S29_VALUE + '"', "hash", "字符串拼接"),
+    ("token = (x || " + '"' + _S29_VALUE + '")', "slash", "括号或运算"),
+]
+
+
+@pytest.mark.parametrize("text, lang, why", _S291_REPORT, ids=[c[2] for c in _S291_REPORT])
+def test_s291_short_first_segment_still_reports_the_fallback(text: str, lang: str, why: str) -> None:
+    """S29.1 先红判据：首段不足 4 字符时，写死的兜底字面量必须照报。"""
+    assert guards.secret_scan(text, code=True, lang=lang)[0] != [], f"{why}：短首段整类漏报"
+    # 同一条文本在文档面必须**保持改前读数**（严格口径仍要求首段 ≥4 字符）：
+    # 这不是缺陷，是 S27.V15.1 ④「文档面逐字节不变」的硬约束。
+    assert guards.secret_scan(text)[0] == [], f"{why}：文档面被一起放宽了"
+
+
+_S291_PURE = [
+    "token" + " = settings.token",
+    "secret" + " = decrypt" + "(row.secret)",
+    "password" + " = db.lookup" + "(user)",
+    "api_key" + " = os.environ" + "[KEY]",
+    "token" + " = await get_token" + "()",
+    "secret" + ' = form["secret"]',
+    "password" + ' = request.form.get("password")',
+    "token" + ' = cfg.get("k")',
+    "secret" + " = self._secret",
+    "api_key" + " = payload.api_key",
+]
+
+
+@pytest.mark.parametrize("text", _S291_PURE)
+def test_s291_pure_expressions_stay_silent(text: str) -> None:
+    """S29.1 的另一半：放开下限不能把纯表达式放回来（复查 A 项「不报」清单）。"""
+    assert guards.secret_scan(text, code=True)[0] == [], f"纯表达式被误报：{text}"
+
+
+_S292_REPORT = [
+    ('password: str = "' + _S29_VALUE + '"', "hash", "带类型注解的赋值"),
+    ('{"password": "' + _S29_VALUE + '"}', "slash", "带引号键名（双引号）"),
+    ("{'token': '" + _S29_VALUE + "'}", "hash", "带引号键名（单引号）"),
+    ('"Authorization"' + ': "Bearer abcdefghijkl"', "slash", "Authorization 键名"),
+    ('os.environ["API_KEY"] = "' + _S29_VALUE + '"', "hash", "下标赋值"),
+    ('cfg["token"] = "' + _S29_VALUE + '"', "hash", "下标赋值（token）"),
+    ('password: str = Field(default="' + _S29_VALUE + '")', "hash", "Field 带注解"),
+    ('DEFAULT_PASSWORD = "' + _S29_VALUE + '"', "hash", "大写常量 _PASSWORD"),
+    ('APP_API_KEY = "' + _S29_VALUE + '"', "hash", "大写常量 _API_KEY"),
+]
+
+
+@pytest.mark.parametrize("text, lang, why", _S292_REPORT, ids=[c[2] for c in _S292_REPORT])
+def test_s292_recall_classes_report_their_literal(text: str, lang: str, why: str) -> None:
+    """S29.2 逐类先红后绿：每类都必须报出写死字面量。"""
+    assert guards.secret_scan(text, code=True, lang=lang)[0] != [], f"{why}：召回缺口仍在"
+
+
+_S292_QUIET = [
+    ('{"password": form.password}', "slash", "对象键名接表单属性"),
+    ("{'token': payload.token}", "hash", "对象键名接载荷属性"),
+    ('"Authorization": f"Bearer {token}"', "slash", "模板串里的变量"),
+    ('os.environ["API_KEY"] = os.getenv("SOME_KEY")', "hash", "下标赋值的右值是读取"),
+    ('cfg["token"] = settings.token', "hash", "下标赋值的右值是属性"),
+    ('password: str = os.getenv("PGPASSWORD")', "hash", "注解赋值的右值是读取"),
+]
+
+
+@pytest.mark.parametrize("text, lang, why", _S292_QUIET, ids=[c[2] for c in _S292_QUIET])
+def test_s292_no_new_false_positive_on_the_same_shapes(text: str, lang: str, why: str) -> None:
+    """S29.2 的收类门槛：同一形状只把右值换成表达式 ⇒ 必须 0 命中。
+
+    没有这一半，「收类」可能只是把表达式重新关回门里（S27.3 首版自伤的同族）。
+    """
+    assert guards.secret_scan(text, code=True, lang=lang)[0] == [], f"{why}：新增误报"
+
+
+# ═══════════════════════════ K. S29.3 getattr 第二个参数是属性名（P-45）
+
+def test_s293_getattr_second_argument_is_a_name_not_a_value() -> None:
+    """`getattr(obj, "attr_name", default)` 的第二个参数是**名字**，不是兜底值。
+
+    reranker.py:145 的误报就是它：两个 `getattr` 的属性名都是 ≥8 字符字面量。
+    默认值位（第三参数起）仍按值判定——见下一条极性对照。
+    """
+    call = ("api_key" + ' = str(getattr(settings, "rerank_api_key", "")'
+            ' or getattr(settings, "embedding_api_key", "") or "")')
+    assert guards.secret_scan(call, code=True)[0] == [], "属性名被当成值"
+
+
+def test_s293_getattr_default_value_still_reports() -> None:
+    """极性对照：同一个调用，把第三参数换成 ≥8 字符非占位字面量 ⇒ 必须报。"""
+    call = ("api_key" + ' = getattr(settings, "rerank_api_key", "' + _S29_VALUE + '")')
+    assert guards.secret_scan(call, code=True)[0] != []
+
+
+def test_s293_the_real_reranker_file_has_zero_hits() -> None:
+    """S29.3 的验收面：业务文件 reranker.py 全仓口径下 0 命中（改前 1 条）。"""
+    path = _ROOT / "apps" / "api" / "app" / "providers" / "reranker.py"
+    text = path.read_text(encoding="utf-8", errors="replace")
+    hits, _ = guards.secret_scan_for_path(text, str(path))
+    assert hits == [], f"reranker.py 仍有 {len(hits)} 条：{[(h[0], h[1]) for h in hits]}"

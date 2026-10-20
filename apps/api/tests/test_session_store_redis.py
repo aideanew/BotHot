@@ -25,8 +25,8 @@ def _record(sid: str) -> SessionRecord:
         sub="sub-t151",
         email="t151@test.local",
         nickname="T151",
-        access_token="access-1",
-        refresh_token="refresh-1",
+        access_token="<access-1>",
+        refresh_token="<refresh-1>",
         access_expires_at=time.time() + 600,
     )
 
@@ -56,7 +56,7 @@ async def test_session_roundtrip_and_token_rotation(redis_client) -> None:  # ty
     await store.create(rec, ttl_seconds=300)
     got = await store.get(sid)
     assert got is not None
-    assert got.sub == "sub-t151" and got.refresh_token == "refresh-1"
+    assert got.sub == "sub-t151" and got.refresh_token == "<refresh-1>"
 
     # 轮换：最新一代 refresh 必须可靠持久化（模块铁律）
     await store.update_tokens(sid, "access-2", "refresh-2", time.time() + 900)

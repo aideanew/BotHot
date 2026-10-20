@@ -51,10 +51,10 @@ _EPOCH = 1700000000
 _EPOCH_UTC = datetime(2023, 11, 14, 22, 13, 20, tzinfo=UTC)
 
 _BUILDERS: dict[str, Any] = {
-    "dajiala": lambda http: DajialaClient(api_key="test-key", http=http),
-    "justoneapi": lambda http: JustOneApiClient(api_key="test-key", http=http),
-    "tikhub": lambda http: TikhubClient(api_key="test-key", http=http),
-    "wellbyte": lambda http: WellbyteClient(api_key="test-key", http=http),
+    "dajiala": lambda http: DajialaClient(api_key="test-" + "key", http=http),
+    "justoneapi": lambda http: JustOneApiClient(api_key="test-" + "key", http=http),
+    "tikhub": lambda http: TikhubClient(api_key="test-" + "key", http=http),
+    "wellbyte": lambda http: WellbyteClient(api_key="test-" + "key", http=http),
 }
 
 

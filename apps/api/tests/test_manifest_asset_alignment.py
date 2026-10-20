@@ -456,9 +456,9 @@ from app.services.subscription import SourceSubscriptionService  # noqa: E402
 
 _ART_URL = "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ%3D%3D&mid=2650&idx=1&sn=probe-a"
 _ART_KEY = canonical_article_key(_ART_URL)
-_ALT_URL = "https://mp.weixin.qq.com/s/AAAAaaaaBBBBcccc?chksm=x&sn=AAAAaaaaBBBBcccc"
+_ALT_URL = "https://mp.weixin.qq.com/s/xxxxxxxxxxxxxxxx?chksm=x&sn=xxxxxxxxxxxxxxxx"
 # 短链形态的 token（`parse_wechat_url(...).short_token` 取的是 `/s/` 后面那一段，不含查询串）
-_SHORT_TOKEN = "AAAAaaaaBBBBcccc"
+_SHORT_TOKEN = "xxxxxxxxxxxxxxxx"
 
 
 def _rowmap(external_id: str, url: str) -> dict[str, object]:

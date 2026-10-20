@@ -209,7 +209,7 @@ class TestChannelSecretRoundtripThroughApi:
                 name=f"regression-{os.urandom(4).hex()}",
                 channel_type="webhook",
                 webhook_url="https://example.com/hook",
-                secret="sk-regression-secret",
+                secret="<regression-secret>",
             ),
             db=db_session,
             _="admin",
@@ -217,4 +217,4 @@ class TestChannelSecretRoundtripThroughApi:
         channel_id = resp.data["id"]
         row = (await db_session.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one()
         assert is_aes_ciphertext(row.secret_enc) is True
-        assert decrypt_channel_secret(row.id, row.secret_enc) == "sk-regression-secret"
+        assert decrypt_channel_secret(row.id, row.secret_enc) == "<regression-secret>"

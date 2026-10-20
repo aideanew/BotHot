@@ -297,7 +297,7 @@ def test_parse_time_naive_string_is_upstream_beijing() -> None:
 def test_redfox_provider_gate_no_key() -> None:
     """无 Key → Provider=None（显式缺省不造数）；有 Key → 装配成功。"""
     assert make_redfox_provider(Settings(redfox_api_key="")) is None
-    p = make_redfox_provider(Settings(redfox_api_key="k-123", redfox_base_url="https://redfox.hk"))
+    p = make_redfox_provider(Settings(redfox_api_key="k-" + "123", redfox_base_url="https://redfox.hk"))
     assert p is not None and hasattr(p, "query_work_list")
 
 

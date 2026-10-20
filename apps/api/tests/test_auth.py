@@ -405,8 +405,8 @@ def _dead_record(session_id: str = "sid-unreachable") -> SessionRecord:
         sub="user-1",
         email="dev@aidean.local",
         nickname="老板",
-        access_token="access-dead",
-        refresh_token="refresh-dead",
+        access_token="<access-dead>",
+        refresh_token="<refresh-dead>",
         access_expires_at=time.time() + 900,
     )
 
@@ -471,8 +471,8 @@ async def test_me_qa_fixture_token_shortcircuits_provider() -> None:
             sub="user-1",
             email="qa@aidean.local",
             nickname="QA 老板",
-            access_token="qa-fixture-user-1",
-            refresh_token="qa-fixture-refresh-user-1",
+            access_token="qa-fixture-<user>",
+            refresh_token="qa-fixture-<refresh>",
             access_expires_at=time.time() + 3600,
         ),
         3600,
@@ -490,7 +490,7 @@ async def test_me_qa_fixture_token_shortcircuits_provider() -> None:
     assert data["user"]["is_admin"] is False  # 无 DB 工厂 → _is_admin 一律 False
     assert data["wallet"]["available"] is False
     # 关键断言：fixture 短路绝不进主平台——idp.valid_access 从未包含 fixture 令牌
-    assert "qa-fixture-user-1" not in idp.valid_access
+    assert "qa-fixture-<user>" not in idp.valid_access
 
 
 async def test_me_qa_fixture_short_circuit_disabled_when_prefix_empty() -> None:
@@ -522,8 +522,8 @@ async def test_me_qa_fixture_short_circuit_disabled_when_prefix_empty() -> None:
             sub="user-1",
             email="qa@aidean.local",
             nickname="QA",
-            access_token="qa-fixture-user-1",
-            refresh_token="qa-fixture-refresh-user-1",
+            access_token="qa-fixture-<user>",
+            refresh_token="qa-fixture-<refresh>",
             access_expires_at=time.time() + 3600,
         ),
         3600,

@@ -578,7 +578,9 @@ def secret_scan(text: str, code: bool = False,
 #     「取环境变量 + 左括号」，看上去就是表达式——这是复查第 2 轮漏掉的第二类。
 #   · 右值里没有引号（含反引号）且不是纯数字 ⇒ 表达式 ⇒ 不报；
 #   · 右值里出现**值类**字面量（≥8 字符、非占位、非全大写环境变量名）⇒ 报；
-#   · 整体就是一个字面量 ⇒ 直接赋值 ⇒ 报（不看长度，短口令也算）。
+#   · 整体就是一个字面量 ⇒ 直接赋值 ⇒ 报；门槛按类别：受限键名（`password = …`）
+#     沿用文档面的 ≥4，新收的结构化/注解/常量类要 ≥8 —— 后者的误报面全在短夹具值上
+#     （`token="k"`、`"token": "jwt-1"`、`token: str = "返工"`），去掉下限会把它们全判红。
 #
 # 为什么不用 AST：TS/TSX 没有 stdlib 解析器；且文件可能正在编辑（语法不完整）时
 # 门仍必须给出判定。字符级状态机对两类语言都成立，且失败方向是"多报"。
@@ -589,7 +591,36 @@ _HASH_COMMENT_EXTS = frozenset({".py"})
 # S27.3 / D-V12-05：`\b` 边界抓不到 `APP_TOKEN` 这类前缀常量名（P-41 的登记项）。
 # 只补 `_TOKEN` 后缀这一族；不扩到别的后缀——扩面要配全仓误报对照，属另一条裁决。
 SECRET_ASSIGN_SUFFIX = re.compile(
-    r"(?i)\b([A-Za-z0-9_]*_token)\b\s*[:=]\s*[\"']?([^\"'\s,;)}]{4,})")
+    r"(?i)\b(?P<key>[A-Za-z0-9_]*_token)\b\s*[:=]\s*[\"']?(?P<val>[^\"'\s,;)}]{4,})")
+
+# ── S29.1/S29.2（P-41 + P-44）：源码模式的召回补缺 ────────────────────────────
+#
+# S29.1 的根因：老 `SECRET_ASSIGN` 要求赋值号后**第一段至少 4 个字符**。右值以短标识符
+# 开头时（`x or …`、`c ? …`、`(x || …`），正则在那一位就落空，整行进不到 `_source_hit`，
+# 写死的兜底字面量永远看不见。这里只在**源码模式**去掉下限；`SECRET_ASSIGN` 本体
+# 一字不动（它与卡面脚本的对账用例仍在，文档面读数因此逐字节不变）。
+#
+# S29.2 的收类口径（每类都要配「同形状换表达式 ⇒ 0 命中」的反证，见测试 §J）：
+#   · 带类型注解的赋值由 S29.1 的下限放开设解（`password: str = "…"` 的值段从类型名开始）；
+#   · 带引号键名 / 下标键位：键只在**代码位的独立字面量**上才算结构化键位。
+#     若它本身落在另一段更大的字符串里（夹具里常见的 `'… {"token": …} …'`），
+#     那整行仍是散文，走文本判据——否则会拿后面无关的键值当成本条的值（S29 实测）。
+#   · 大写常量只收 `*_PASSWORD` / `*_PASSWD` / `*_API_KEY` / `*_ACCESS_KEY` 族，
+#     且必须**全大写**：小写属性（`settings.embedding_api_key = …`）不是常量族，
+#     大写 `*_SECRET` 按 P-41 的登记留在原地不扩面。
+_SRC_ASSIGN_KEYS = r"(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|dsn|authorization)"
+_SRC_ASSIGN_VAL = r"[^\"'\s,;)}]*"
+SECRET_ASSIGN_SOURCE = re.compile(
+    r"(?i)\b(?P<key>" + _SRC_ASSIGN_KEYS + r")\b\s*[:=]\s*[\"']?(?P<val>" + _SRC_ASSIGN_VAL + ")")
+SECRET_ASSIGN_QUOTED = re.compile(
+    r"(?i)(?P<q>[\"'])(?P<key>" + _SRC_ASSIGN_KEYS + r")(?P=q)\s*[:=]\s*[\"']?(?P<val>"
+    + _SRC_ASSIGN_VAL + ")")
+SECRET_ASSIGN_SUBSCRIPT = re.compile(
+    r"(?i)\[\s*(?P<q>[\"'])(?P<key>" + _SRC_ASSIGN_KEYS + r")(?P=q)\s*\]\s*[:=]\s*[\"']?(?P<val>"
+    + _SRC_ASSIGN_VAL + ")")
+SECRET_ASSIGN_CONST = re.compile(
+    r"\b(?P<key>_*[A-Z][A-Z0-9_]*(?:_PASSWORD|_PASSWD|_API_KEY|_ACCESS_KEY))\b"
+    r"\s*[:=]\s*[\"']?(?P<val>" + _SRC_ASSIGN_VAL + ")")
 
 _SRC_LITERAL = re.compile(r"\"(?:[^\"\\\n]|\\.)*\"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`")
 _SRC_ONLY_LITERAL = re.compile(
@@ -697,14 +728,37 @@ def _src_value_like(literal: str) -> bool:
     return not _SRC_ENV_NAME.match(literal)
 
 
+def _enclosing_open(text: str, pos: int) -> tuple[int, int]:
+    """字面量左侧最近的未闭合开括号位置，以及它与字面量之间的顶层逗号数。"""
+    depth = 0
+    commas = 0
+    i = pos - 1
+    while i >= 0:
+        ch = text[i]
+        if ch in ")]}":
+            depth += 1
+        elif ch in "([{":
+            if depth == 0:
+                return i, commas
+            depth -= 1
+        elif ch == "," and depth == 0:
+            commas += 1
+        i -= 1
+    return -1, commas
+
+
 def _literal_is_key(rhs: str, start: int) -> bool:
-    """这个字面量是不是处在**键位**（下标或键值访问的第一个实参）。
+    """这个字面量是不是处在**键位**（下标、键值访问首实参、`getattr` 的属性名位）。
 
     为什么键位不能算值：「键名=对象["同名键"]」这种取值的右值来自对象本身，
     引号里那串只是字段名；`.get("k", "v")` 里第一个实参同理。若把键位当值，
     "放宽表达式"就变成"把两处表达式换成另一种误报"，`providers/aidean/client.py`
     与 `api/v1/auth.py` 会重新被门挡住——S27.3 首版就是这么自伤的。
     第二个实参（兜底值）不在键位，照旧按值判定。
+
+    `getattr(obj, "属性名", 默认值)` 的**第二个**实参也是名字（P-45：reranker.py:145
+    的两个属性名都是 ≥8 字符字面量）。只豁免逗号数为 1 的那一档；默认值位（第三参数起）
+    照旧按值判定——见测试 §K 的极性对照。
     """
     i = start - 1
     while i >= 0 and rhs[i] in " \t":
@@ -715,7 +769,24 @@ def _literal_is_key(rhs: str, start: int) -> bool:
         return True
     if rhs[i] == "(":
         return bool(_KEYED_ACCESS.search(rhs[:i + 1]))
+    open_at, commas = _enclosing_open(rhs, start)
+    if open_at >= 0 and rhs[open_at] == "(" and commas == 1:
+        return bool(re.search(r"\bgetattr$", rhs[:open_at].rstrip()))
     return False
+
+
+def _after_key_token(line: str, key_end: int) -> int:
+    """跳过键名后的收尾符号（引号、下标方括号），把位置交到赋值算子前。"""
+    i = key_end
+    while i < len(line) and line[i] in " \t":
+        i += 1
+    if i < len(line) and line[i] in "\"'":
+        i += 1
+    while i < len(line) and line[i] in " \t":
+        i += 1
+    if i < len(line) and line[i] == "]":
+        i += 1
+    return i
 
 
 def _operator_index(line: str, key_end: int) -> int:
@@ -731,6 +802,10 @@ def _operator_index(line: str, key_end: int) -> int:
     if i >= len(line):
         return -1
     if line[i] == "=":
+        # `==`/`!=`/`<=`/`>=` 是比较，不是赋值。S29 实测：`assert x["authorization"] ==
+        # "Bearer …"` 会被当成赋值，把断言里的夹具值判成凭据。
+        if line[i + 1:i + 2] == "=" or (i and line[i - 1] in "=!<>"):
+            return -1
         return i
     if line[i] != ":":
         return -1
@@ -750,29 +825,148 @@ def _operator_index(line: str, key_end: int) -> int:
     return i
 
 
-def _source_hit(line: str, kinds: list[str], key_start: int, op: int) -> bool:
-    """源码面的一条候选：报还是放行。判据见本节开头的四条。"""
-    if kinds[key_start] != "c":
-        # 键名在字符串或注释里：那一段文本就是字面量本身（跨行串也走这一支）
-        return True
-    end = len(line)
-    for i in range(op + 1, len(line)):
+def _is_fstring_template(rhs: str, start: int, literal: str) -> bool:
+    """带插值的 f-string 是表达式，不是写死的值（`f"Bearer {token}"`）。
+
+    只认 `f`/`F` 前缀且串内确有 `{…}` 的那一档：`f"hunter2secret99"`（没有插值）
+    仍按字面量报；反引号模板的既有口径（S27 的「模板照报」）不受影响。
+    """
+    prefix = re.search(r"(?:^|[^A-Za-z0-9_])([rRbBuUfF]{0,2})$", rhs[:start])
+    return bool(prefix and "f" in prefix.group(1).lower()
+                and "{" in literal and "}" in literal)
+
+
+def _text_region_end(line: str, kinds: list[str], pos: int) -> int:
+    """键名所在字符串/注释区的结束位置：字符串只到定界符，注释到行尾。
+
+    为什么不能取整行：测试夹具里的形状是跨字符串拼接写出来的（`"token = x or " + …`），
+    取整行会把后面的 Python 变量名 `_S29_VALUE` 当成值 ⇒ 门咬到自己的用例。
+    """
+    if pos >= len(line) or kinds[pos] == "c":
+        return len(line)
+    kind = kinds[pos]
+    i = pos
+    while i < len(line) and kinds[i] == kind:
+        i += 1
+    return i
+
+
+def _text_head(text: str) -> str:
+    """散文里只看到第一个顶层逗号/分号为止——那是本条赋值的结束。
+
+    不截断会把同一行后面无关的键值算进来：文档串里
+    `{"Authorization": f"Bearer {x}", "Content-Type": "application/json"}` 的
+    `"Content-Type"` 就是被这么误当成值字面量的。
+    """
+    quote = ""
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if quote:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote:
+                quote = ""
+        elif ch in "\"'`":
+            quote = ch
+        elif ch in ",;":
+            return text[:i]
+        i += 1
+    return text
+
+
+def _text_has_value(text: str) -> bool:
+    """散文（注释/普通字符串）里赋值号后的**第一个值 token** 是否像凭据。
+
+    只看第一个 token 是必须的：散文里后面再提到别的键名（`token="k"、`"token": …`）
+    会被当成这条赋值的值——S29 实测在门自己的注释上误报。
+    判据：引号里 ≥4 字符的非占位字面量（f-string 模板除外），或无引号但**带数字**的
+    ≥8 字符 token；无引号侧要求数字，是为了不把散文里引用的代码标识符
+    （`self._api_key`、`_SHORT_PATH_PREFIX`）当成值。
+    """
+    pos = 0
+    while pos < len(text) and text[pos] in " \t":
+        pos += 1
+    # 前缀字母（f/r/b/u）后面紧跟的引号仍按字面量处理
+    m = re.match(r"[rRbBuUfF]{0,2}(?=[\"'`])", text[pos:])
+    if m:
+        pos += m.end()
+    if pos < len(text) and text[pos] in "\"'`":
+        lit_m = _SRC_LITERAL.match(text, pos)
+        if not lit_m:
+            return False
+        lit = lit_m.group(0)[1:-1]
+        return (len(lit) >= 4 and not SECRET_FAKE.match(lit)
+                and not _SRC_ENV_NAME.match(lit)
+                and not _is_fstring_template(text, pos, lit))
+    tok = re.match(r"[A-Za-z0-9_+/=-]{8,}", text[pos:])
+    if not tok:
+        return False
+    word = tok.group(0)
+    return bool(re.search(r"\d", word)) and not SECRET_FAKE.match(word) \
+        and not _SRC_ENV_NAME.match(word)
+
+
+def _rhs_end(line: str, kinds: list[str], op: int) -> int:
+    """右值结束位置：注释、或**顶层**的逗号/分号/闭括号。
+
+    不截断会把同一行下一个对象的 `"Content-Type": "application/json"` 算进本条右值——
+    `{"Authorization": f"Bearer {x}", "Content-Type": "application/json"}` 就是这么误报的。
+    """
+    depth = 0
+    i = op + 1
+    while i < len(line):
         if kinds[i] == "m":
-            end = i
-            break
+            return i
+        if kinds[i] == "c":
+            ch = line[i]
+            if ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                if depth == 0:
+                    return i
+                depth -= 1
+            elif ch in ",;" and depth == 0:
+                return i
+        i += 1
+    return i
+
+
+def _source_hit(line: str, kinds: list[str], key_start: int, op: int,
+                structured_key: bool = False, min_direct: int = 4) -> bool:
+    """源码面的一条候选：报还是放行。判据见本节开头的四条。
+
+    `structured_key=True` 用于**代码位**的带引号键名与下标键位：键虽然在字符串里，
+    但它是结构化键位，不是散文文本；这类候选照常看右值（右值是表达式就不报）。
+    `min_direct` 是「右值整体就是一个字面量」时的长度门槛：受限键名沿用文档面的 4，
+    新收的注解/结构化/常量类取 8，理由见本节开头。
+    """
+    if kinds[key_start] != "c" and not structured_key:
+        # 键名在字符串或注释里（含「结构化键位其实嵌在更大的字符串里」）：只看同一段文本
+        return _text_has_value(_text_head(line[op + 1:_text_region_end(line, kinds, key_start)]))
+    end = _rhs_end(line, kinds, op)
     rhs = line[op + 1:end].strip().rstrip(",;").strip()
     if not rhs:
         return False
     if "`" in rhs:
         return True
-    if _SRC_ONLY_LITERAL.match(rhs):
-        return True
+    only = _SRC_ONLY_LITERAL.match(rhs)
+    if only:
+        qpos = next((i for i, ch in enumerate(rhs) if ch in "\"'"), 0)
+        lit = rhs[qpos + 1:-1]
+        if _is_fstring_template(rhs, qpos, lit):
+            return False
+        # 直接赋值：空串/占位不算；短于本类门槛的夹具值（`"k"`、`"返工"`）也不算。
+        return (len(lit) >= min_direct and not SECRET_FAKE.match(lit)
+                and not _SECRET_ASSIGN_SKIP.search(lit))
     literals = [(m.start(), m.group(0)[1:-1]) for m in _SRC_LITERAL.finditer(rhs)]
+    literals = [(pos, lit) for pos, lit in literals if not _is_fstring_template(rhs, pos, lit)]
     if literals:
         # 键位（下标 / 键值访问首实参）里的字面量是字段名，不参与"值类"判定
         return any(_src_value_like(lit) and not _literal_is_key(rhs, pos)
                    for pos, lit in literals)
-    return rhs.isdigit()
+    return rhs.isdigit() and len(rhs) >= min_direct
 
 
 def secret_scan_source(text: str, lang: str) -> tuple[list[tuple[str, int, str]], int]:
@@ -793,16 +987,37 @@ def secret_scan_source(text: str, lang: str) -> tuple[list[tuple[str, int, str]]
                     allowed += 1
                     continue
                 hits.append((name, no, _mask_shape(name, frag)))
-        for rx in (SECRET_ASSIGN, SECRET_ASSIGN_SUFFIX):
+        seen_ops: set[int] = set()
+        for rx, mode in ((SECRET_ASSIGN_SOURCE, "plain"),
+                         (SECRET_ASSIGN_QUOTED, "quoted"),
+                         (SECRET_ASSIGN_SUBSCRIPT, "subscript"),
+                         (SECRET_ASSIGN_SUFFIX, "plain"),
+                         (SECRET_ASSIGN_CONST, "const")):
             for m in rx.finditer(line):
-                val = m.group(2)
+                val = m.group("val")
                 if (val.startswith("re.compile") or SECRET_FAKE.match(val)
                         or _SECRET_ASSIGN_SKIP.search(val)):
                     continue
-                op = _operator_index(line, m.end(1))
-                if op < 0 or not _source_hit(line, kinds, m.start(1), op):
+                op = _operator_index(line, _after_key_token(line, m.end("key")))
+                if op < 0 or op in seen_ops:
                     continue
-                hits.append(("assign", no, f"{m.group(1)}=<已打码，值长 {len(val)} 字符>"))
+                # 只有落在**代码位**的独立字面量才算结构化键位；嵌在更大字符串里的
+                # `'… {"token": …} …'` 是散文，走文本判据（见本节开头）。
+                if mode == "subscript":
+                    in_code = kinds[m.start()] == "c"
+                elif mode == "quoted":
+                    in_code = m.start() == 0 or kinds[m.start() - 1] == "c"
+                else:
+                    in_code = kinds[m.start("key")] == "c"
+                annotated = line[m.end("key"):].lstrip().startswith(":") and line[op] == "="
+                min_direct = 8 if mode in ("quoted", "subscript", "const") or annotated else 4
+                if not _source_hit(line, kinds, m.start("key"), op,
+                                   structured_key=in_code and mode != "plain",
+                                   min_direct=min_direct):
+                    continue
+                seen_ops.add(op)
+                hits.append(("assign", no,
+                             f"{m.group('key')}=<已打码，值长 {len(val)} 字符>"))
     hits.sort(key=lambda item: (item[1], item[0]))
     return hits, allowed
 

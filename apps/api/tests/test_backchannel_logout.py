@@ -161,8 +161,8 @@ async def _seed(store: InMemorySessionStore, sub: str, count: int = 1) -> list[s
             sub=sub,
             email=f"{sub}@aidean.local",
             nickname="老板",
-            access_token="access-x",
-            refresh_token="refresh-x",
+            access_token="<access-x>",
+            refresh_token="<refresh-x>",
             access_expires_at=time.time() + 900,
         )
         await store.create(record, 3600)
@@ -302,7 +302,7 @@ async def test_verify_rejects_wrong_key_signature() -> None:
 
 async def test_verify_accepts_audience_as_list() -> None:
     """`aud` 为数组时任一匹配即通过（OIDC 标准形态）。"""
-    token = _token(aud=[CLIENT_ID, "another-client"])
+    token = _token(aud=[CLIENT_ID, "<other-client>"])
     claims = await verify_logout_token(
         token,
         jwks=_verifier(),

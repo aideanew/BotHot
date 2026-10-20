@@ -1,0 +1,26 @@
+STEP-29 S29.1（P-44 第一半）短首段进入源码判定 · 机读记录
+日期：2026-10-20
+基线：main@78c8437（业务基线 81205f1）
+判据入口：guards.secret_scan(text, code=True, lang=...)
+先红原始读数：同目录 s29_1_red.txt
+
+一、六类先红后绿（每条：源码面 HEAD=0 → 现在=1；同文本文档面 HEAD=0 → 现在=0）
+  1. 或运算
+  2. 空值合并
+  3. 逻辑或
+  4. 三元两个分支
+  5. 字符串拼接
+  6. 括号或运算
+  用例：test_s291_short_first_segment_still_reports_the_fallback（6 参数化）
+
+二、纯表达式 10 条（HEAD=0，现在=0）
+  含属性读取、环境变量读取、函数调用、下标键位读取、表单读取、get 键位读取、
+  self 属性读取、载荷属性读取；文本见用例 _S291_PURE。
+  用例：test_s291_pure_expressions_stay_silent（10 参数化）
+
+三、文档面逐文件读数
+  1393 个 tracked 可读文本文件（排除 .project/，跳过 6 个二进制）逐文件比较
+  HEAD 与现在 guard 的 secret_scan 命中序列：diff_files=0，VERDICT=SAME。
+
+四、收口
+  4 字符首段下限只在源码模式放开；文档面判据未改。

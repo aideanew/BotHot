@@ -74,7 +74,7 @@ class TestFeishuProvider:
 
     def test_sign_correctness(self):
         """飞书加签算法：HMAC-SHA256(timestamp + "\\n" + secret)。"""
-        secret = "test_secret_123"
+        secret = "<feishu-secret>"
         timestamp = 1700000000
         expected = base64.b64encode(
             hmac.new(f"{timestamp}\n{secret}".encode(), digestmod=hashlib.sha256).digest()
@@ -122,7 +122,7 @@ class TestDingtalkProvider:
         """钉钉加签算法：HMAC-SHA256(secret, timestamp + "\\n" + secret)。"""
         import urllib.parse
 
-        secret = "test_secret_456"
+        secret = "<dingtalk-secret>"
         timestamp = 1700000000000
         string_to_sign = f"{timestamp}\n{secret}"
         hmac_code = hmac.new(

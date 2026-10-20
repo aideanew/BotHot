@@ -1,0 +1,30 @@
+STEP-29 S29.5（P-43）证据脚本自隔离 · 机读记录
+日期：2026-10-20
+基线：main@78c8437（业务基线 81205f1）
+脚本：docs/06_validation/evidence/EVD-V2-00/prove_dsn_policy.py
+
+一、先红（改前脚本 + ambient DSN）
+运行形态：宿主同时带两个 DSN 环境变量（测试占位值，不在此赘录）跑该脚本。
+读数：FAIL S0.1.2-f / FAIL S0.1.2-l / FAIL S0.1.2-m / FAIL S0.1.2-n，
+      RESULT FAIL (4)，rc=1。
+
+二、根因
+exec_prefix() 只在 exec 窗口内剔除 AIDEANBOT_TEST_PG_DSN，窗口结束即恢复；
+而 _resolve_test_pg_url() 在 main() 里、exec_prefix 返回之后才调用 ⇒ 读回 ambient 值。
+m 同理：env 层先命中，file 层永远轮不到。
+
+三、改后（同一 ambient DSN 环境）
+ALL PASS (20 断言，回退点 9 个已列举)，rc=0
+f/l/m/n 四条全部 PASS：它们由子进程执行，父进程传入的 env 已剔除两个 DSN；
+子进程内再做一次 pop，双边界。
+
+四、改后（不带 DSN）
+ALL PASS (20 断言，回退点 9 个已列举)，rc=0
+
+五、反证（断言非空洞）
+--self-test：SELF-TEST PASS——把广播语句改回 setdefault 后，
+S0.1.2-p / S0.1.2-s 两条均变红。
+
+六、双保险保留
+.github/workflows/ci.yml 的 Governance gates 步：两个 DSN 的步骤级置空串未改
+（本轮只改证据脚本，未动 ci.yml）。

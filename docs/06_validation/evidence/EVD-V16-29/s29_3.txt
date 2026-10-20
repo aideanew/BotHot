@@ -1,0 +1,18 @@
+STEP-29 S29.3（P-45）getattr 第二参数是属性名 · 机读记录
+日期：2026-10-20
+基线：main@78c8437（业务基线 81205f1）
+
+一、先红
+  apps/api/app/providers/reranker.py:145：HEAD=1 命中，现在=0。
+  行形状：属性读取的第二个实参是属性名字符串；它不是兜底值。
+  第三参数位（此处为空串）仍参与判据。
+  用例：test_s293_the_real_reranker_file_has_zero_hits
+
+二、反证（第三参数照判）
+  第三参数是 ≥8 字符、非占位的字面量：HEAD=1，现在=1（照报）。
+  用例：test_s293_getattr_default_value_still_reports
+
+三、第二参数豁免的边界
+  只豁免「在 getattr/类似属性读取调用里、位于第二个实参位」的字符串；
+  同一调用第三参数起的值照判；不在调用实参位上的同名字符串照判。
+  用例：test_s293_getattr_second_argument_is_a_name_not_a_value

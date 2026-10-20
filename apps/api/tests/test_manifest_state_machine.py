@@ -576,8 +576,8 @@ async def test_drain_writes_failed_for_a_permanent_error_before_commit(
 
 # ------------------------------------------------ 7. 短链形态的并键（S4.1.2 跨键空间那一半）
 
-URL_SHORT = "https://mp.weixin.qq.com/s/SHORTtoken1234?chksm=x"
-_SHORT_TOKEN = "SHORTtoken1234"
+URL_SHORT = "https://mp.weixin.qq.com/s/xxxxxxxxxxxxx?chksm=x"
+_SHORT_TOKEN = "xxxxxxxxxxxxx"
 KEY_SHORT = f"s:{_SHORT_TOKEN}"
 
 

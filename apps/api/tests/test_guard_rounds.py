@@ -713,19 +713,42 @@ def _ci_backend_block() -> str:
     return text.split("\n  backend:", 1)[1].split("\n  frontend:", 1)[0]
 
 
-def _ci_governance_step_env(block: str) -> dict[str, str]:
-    """把 backend 段按 YAML 解开，取治理门那一步的 env（读结构，不读字符串猜）。"""
+def _ci_governance_step(block: str) -> dict[str, Any]:
+    """把 backend 段按 YAML 解开，取治理门那一步（读结构，不读字符串猜）。"""
     parsed = yaml.safe_load("backend:" + block)
     assert isinstance(parsed, dict) and isinstance(parsed.get("backend"), dict), "backend 段解不开"
     steps = parsed["backend"].get("steps")
     assert isinstance(steps, list) and steps, "backend 段没有 steps"
     for step in steps:
-        name = str(step.get("name", ""))
-        if name.startswith("Governance gates"):
-            env = step.get("env") or {}
-            assert isinstance(env, dict), "治理门步骤的 env 不是映射"
-            return {str(k): str(v) for k, v in env.items()}
+        if str(step.get("name", "")).startswith("Governance gates"):
+            assert isinstance(step, dict), "治理门步骤不是映射"
+            return step
     raise AssertionError("backend job 里找不到治理门步骤")
+
+
+def _ci_governance_step_env(block: str) -> dict[str, str]:
+    env = _ci_governance_step(block).get("env") or {}
+    assert isinstance(env, dict), "治理门步骤的 env 不是映射"
+    return {str(k): str(v) for k, v in env.items()}
+
+
+def _assert_governance_rc_machine(script: str) -> None:
+    """S29.6：任一门 rc≠0 即 exit 1——解析该步脚本，钉成机检。
+
+    只看最后一个 rc 的写法会让前一道门的失败被后一道的 0 覆盖；`|| rc_*=$?`
+    的捕获与 if 条件里的两个 `-ne 0` 缺一不可。
+    """
+    lines = [ln.strip() for ln in script.splitlines()]
+    for gate, var in (("rounds-check", "rc_rounds"), ("evidence-check", "rc_evidence")):
+        assert any(gate in ln and f"|| {var}=$?" in ln for ln in lines), (
+            f"{gate} 没有把 rc 捕获到 {var}：失败会直接落空或被后一道门的 rc 覆盖"
+        )
+    guard = next((ln for ln in lines
+                  if ln.startswith("if ") and "rc_rounds" in ln and "rc_evidence" in ln), "")
+    assert guard, "失败判定没有同时引用 rc_rounds 与 rc_evidence（只看最后一个 rc）"
+    assert guard.count("-ne 0") == 2, f"失败判定没有对两个 rc 都判非 0：{guard!r}"
+    pos = lines.index(guard)
+    assert any(ln == "exit 1" for ln in lines[pos + 1:pos + 5]), "失败判定分支里没有 exit 1"
 
 
 def test_ci_backend_job_runs_both_scope_gates_with_the_event_base() -> None:
@@ -744,7 +767,16 @@ def test_ci_backend_job_runs_both_scope_gates_with_the_event_base() -> None:
     assert "fetch-depth: 0" in block, (
         "checkout 仍是默认 depth=1 ⇒ before/base 的提交对象不在本地，门会 fail-closed 判红"
     )
-    assert "set -e" in block or "set -euo pipefail" in block, "两条门之间没有短路保护：前一条红后一条照样跑"
+    gov = _ci_governance_step(block)
+    script = str(gov.get("run", ""))
+    assert "set -uo pipefail" in script, (
+        "治理门步骤的 shell 选项与实写不一致：本步实写 `set -uo pipefail`，"
+        "两道门各自捕获 rc 后统一判定"
+    )
+    assert "set -e" not in script, (
+        "治理门步骤出现了 `set -e`：实写是 `set -uo pipefail`；选项被改须同步本判据"
+    )
+    _assert_governance_rc_machine(script)
     assert "GUARD_GITLEAKS_COVERED" in block, (
         "backend job 没装 gitleaks，evidence-check 会把「工具缺席」判成第三态 ⇒ CI 恒红；"
         "必须显式记「由 Security 工作流覆盖」"

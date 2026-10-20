@@ -1,0 +1,30 @@
+STEP-29 S29.6（P-46 + 复查 D 项瑕疵）计数口径与 CI 机检 · 机读记录
+日期：2026-10-20
+基线：main@78c8437（业务基线 81205f1）
+
+一、s27_3_counts.py 改为按（文件,行号,规则）逐行对照
+复算环境：git worktree add --detach <tmp> 28c0d2e；把本版脚本覆盖到该树的
+          docs/06_validation/evidence/EVD-V15-27/s27_3_counts.py 后运行。
+读数：
+  自有源码面：468 个文件｜旧口径命中 52 条 → 新口径命中 36 条（少报 31 条 / 新增 15 条）
+  全仓可读文本面：1350 个文件｜旧口径命中 70 条 → 新口径命中 54 条（少报 31 条 / 新增 15 条）
+  被放掉但含值位值类字面量的行：0
+  新增但不属于 _TOKEN 后缀族的行：0
+  rc=0
+与独立复查的 31/15 一致。旧文件净差口径为 26/10；逐行多出的 +5/+5 来自同
+（文件,行号）上的规则名变化，净差会把它们互相抵掉（D-V16-02 采逐行为准）。
+
+二、test_guard_rounds.py 的 CI 机检
+- 治理门步骤按 YAML 结构取出（不读字符串猜步骤边界）；
+- 断言该步实写的 shell 选项是 `set -uo pipefail`，不再用 backend 段任意位置的
+  `set -e` 交差；
+- _assert_governance_rc_machine 解析该步脚本：
+  两道门各自以 `|| rc_*=$?` 捕获；if 条件同时引用两个 rc 且各判一次非 0；
+  失败分支存在 exit 1。
+- 实跑单点用例：1 passed。
+
+三、变异（把该步改成只看最后一个 rc）
+操作：临时把 ci.yml 的 if 条件改为只判 rc_evidence，跑同一单点用例。
+读数：1 failed；AssertionError「失败判定没有同时引用 rc_rounds 与 rc_evidence（只看最后一个 rc）」。
+还原：用备份回写 ci.yml，sha256 前 16 位 04aa5fbf849ed4a5 与改前一致，
+      git diff --quiet 对 ci.yml 返回 0（无残留改动）。
