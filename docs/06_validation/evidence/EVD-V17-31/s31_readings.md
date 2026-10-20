@@ -136,7 +136,15 @@ tests\test_audit_log.py:146: AssertionError
 
 ## 8. 三 CI
 
-（待回填）
+交付提交 `5a2e4711f5e745cd33a9f504e9c1af86d1c17f98` 的 `push` 三工作流：
+
+| 工作流 | 结论 | 关键读数 |
+|---|---|---|
+| CI（ubuntu-latest） | success（run 39394482245） | backend `2018 passed, 6 skipped, 1 warning in 179.56s`；覆盖率 86.71%（门 75%）；frontend 385 passed、e2e 27 passed |
+| CI-Windows | success（run 39394482305） | backend `1453 passed, 571 skipped, 1 warning in 1011.50s`；门禁 `failed=0 total_skipped=571 baseline=571`；frontend 385 passed |
+| Security | success（run 39394482293） | — |
+
+CI-Windows 的 571 与无 DSN 本机全量读数一致；545 + 26，无余量。
 
 ## 9. 边界与已知影响
 
