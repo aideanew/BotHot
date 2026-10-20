@@ -3,7 +3,7 @@
 - 日期：2026-10-20
 - 改卡依据：**D-V17-03**（选项 A：先记 PushLog 与计数，后落通知，最后 commit）
 - 基线：`main@c5c0160`（D-V17-03 裁决提交）
-- 交付提交：`<待回填>`
+- 交付提交：`f383f0de4e1cffa9507ef9f306387645bdbaa063`（`f383f0d`）
 - 环境：Win10 + Git Bash；`apps/api/.venv` Python 3.12.10；`PYTHONUTF8=1`；本机隔离 PostgreSQL 16.4（`127.0.0.1:5547/bothot_test`，trust）；本卡不依赖 Redis 可达性。
 
 ## 1. S26.1.1 改前红原文
@@ -153,8 +153,10 @@ persist savepoint 之外，通知行回滚不会撤销它，不存在「撤销�
 
 ## 8. CI 读数
 
+head_sha = `f383f0de4e1cffa9507ef9f306387645bdbaa063`：
+
 | 工作流 | 结论 | run id / 备注 |
 |---|---|---|
-| CI | `<待回填>` | `<待回填>` |
-| CI-Windows | `<待回填>` | `SKIP_BASELINE_WIN: 545`（540 + 新增 5 条连库用例；以本次 run 的 total_skipped 为测量值） |
-| Security | `<待回填>` | `<待回填>` |
+| CI | success | run `39383488851` |
+| CI-Windows | success | run `39383488791`；门禁读数 `failed=0 total_skipped=545 baseline=545`（零余量）。构成：PG-DSN-未设置 436（431 + 本卡新增 5）、PG-不可达 104、Redis-不可达 3、LangBot-不可达 1、代理变量未设 1；backend `1452 passed, 545 skipped, 0 failed in 1010.03s`；frontend `Test Files 47 passed (47)` |
+| Security | success | run `39383488768` |
