@@ -52,7 +52,10 @@ jobs:
       # + test_r11_engine_keys 1，均以「AIDEANBOT_TEST_PG_DSN 未设置」族 skip。
       # **测量值**：1834c4a run 39353354825 = 1324 passed / 540 skipped / 0 failed，构成 PG-DSN-未设置 431 +
       # PG-不可达 104 + Redis 3 + LangBot 1 + 代理变量 1，未知族 0 ⇒ 452 + 88 = 540（推算与测量一致）。
-      SKIP_BASELINE_WIN: "540"
+      # STEP-26（执行助手，2026-10-20）新增 5 条连库用例：test_admin_push_persists_notification 2
+      # + test_push_persist_order 3，均以「AIDEANBOT_TEST_PG_DSN 未设置」族 skip ⇒ 540 + 5 = 545。
+      # 交付提交的 CI-Windows 读数回填 EVD-V14-26 后才算测量值。
+      SKIP_BASELINE_WIN: "545"
     defaults:
       run:
         shell: bash

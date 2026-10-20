@@ -16,8 +16,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import RequestInvalidError, ResourceNotFoundError
+from app.models.base import gen_uuid
 from app.models.entities import KnowledgeDocument, KnowledgeSpace
 from app.providers.push import PushMessage, PushResult, make_push_provider
+from app.services.push_scheduler import persist_web_notification
 
 # 正文长度上限：推送是给人读的短消息，不是文档。
 MAX_MESSAGE_CHARS = 2000
@@ -33,7 +35,7 @@ def _assert_no_control(text: str, field: str) -> None:
 
 
 class PushService:
-    """推送校验 + 分发。只读目标、不写任何行。"""
+    """推送校验 + 分发。web 投递成功补写站内历史；其余通道只读目标。"""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -57,9 +59,20 @@ class PushService:
         await self._assert_targets(space_id, doc_id)
 
         provider = make_push_provider(channel)
-        return await provider.push(
-            PushMessage(external_user_id=external_user_id, space_id=space_id, doc_id=doc_id, message=message)
+        # STEP-26：web 与另外三条路径同形——投递前预铸 id，成功投递后复用
+        # persist_web_notification 落历史，让 SSE 帧与历史行同 id（D-V10-05 选「也进」）。
+        push_msg = PushMessage(
+            notification_id=gen_uuid() if channel == "web" else "",
+            external_user_id=external_user_id,
+            space_id=space_id,
+            doc_id=doc_id,
+            message=message,
         )
+        result = await provider.push(push_msg)
+        if channel == "web" and result.delivered:
+            await persist_web_notification(self._session, push_msg)
+            await self._session.commit()
+        return result
 
     @staticmethod
     def _assert_channel(channel: str) -> None:

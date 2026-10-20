@@ -7,8 +7,9 @@
   `push_scheduler.py:184` 的 `notification_id=notification_id` 必须让本文件变红**；
 - 落库层（连库，PG 不可达时 `db_session` 自动 skip）：真 INSERT 后行 id == 帧 id。
 
-直投路径（`bots.py:341` 测试推送 / `:624` run-now）不落库也不预铸 ⇒ 载荷里**没有** id 键，
-前端据此退回内容窗口去重（见 remaining-outline.md R.11 G-19 / R.6.1.3）。
+调度器、run-now、test-push 与管理端直投四条 web 路径都会预铸 id；本文件的载荷层
+仍锁 provider 的防御契约：`PushMessage` 未带 id 时载荷**省略** id 键，前端据此退回
+内容窗口去重（见 remaining-outline.md R.11 G-19 / R.6.1.3）。
 """
 
 from __future__ import annotations
@@ -65,8 +66,8 @@ async def test_frame_carries_id_when_pregen():
     assert channel == "bothot:notifications:broadcast"
 
 
-async def test_frame_omits_id_key_when_absent():
-    """直投路径不预铸 ⇒ 载荷里没有 id 键（而不是 id: null）。"""
+async def test_frame_omits_id_key_when_message_has_no_id():
+    """provider 层防御：消息未带 id 时载荷省略 id 键（而不是 id: null）。"""
     _, payload = await _publish(_msg(external_user_id="sub-abc"))
     assert "id" not in payload
     assert payload["title"] == "测试标题"
@@ -197,7 +198,7 @@ async def test_frame_id_equals_row_id(db_session: AsyncSession):
 
 
 async def test_row_gets_id_without_frame(db_session: AsyncSession):
-    """回归护栏（非本卡验收项）：未预铸时落库仍自铸主键——改动前后都应绿。"""
+    """回归护栏（非本卡验收项）：没有预铸时落库仍自铸主键——改动前后都应绿。"""
     await persist_web_notification(db_session, _msg())
     row = (
         (await db_session.execute(select(Notification).where(Notification.is_broadcast.is_(True))))

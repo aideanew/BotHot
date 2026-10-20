@@ -223,11 +223,6 @@ class PushTaskScheduler:
                     task_row.retry_count = 0
                     task_row.next_retry_at = None
 
-            # S1.1（R1.2）：web 渠道投递成功 → 通知落库（离线补投存储底座）。
-            # savepoint 包裹：落库失败只回滚通知行，投递回执（PushLog/计数）不受影响。
-            if ch.channel_type == "web" and result.delivered:
-                await persist_web_notification(db, push_msg)
-
             # W6 A.2：投递结果计入 Prometheus（outcome ∈ success/failed/dead）。
             PUSH_DELIVERIES_TOTAL.labels(channel=ch.channel_type, outcome=log_status).inc()
 
@@ -243,6 +238,11 @@ class PushTaskScheduler:
             ch.total_push_count += 1
             if result.delivered:
                 ch.success_push_count += 1
+
+            # S1.1（R1.2）：web 渠道投递成功 → 通知落库（离线补投存储底座）。
+            # 顺序约定（D-V17-03）：先记 PushLog 与计数（投递回执），后落通知，最后 commit。
+            if ch.channel_type == "web" and result.delivered:
+                await persist_web_notification(db, push_msg)
 
             await db.commit()
 
@@ -274,13 +274,18 @@ class PushTaskScheduler:
 async def persist_web_notification(db: AsyncSession, msg: PushMessage) -> None:
     """S1.1：web 渠道通知落库（notifications 表，R1.2 离线补投存储底座）。
 
+    调用顺序约定（D-V17-03）：有投递回执的调用方（调度器、run-now、test-push）先
+    `db.add(PushLog)` 与渠道计数，再调用本函数，最后 `commit`；管理端直投没有 PushLog，
+    在投递成功后调用本函数并 `commit`。本函数**不提交事务**。
+
     广播/定向判定与 web.py 频道选择**同源**（external_user_id 有无），两处永不漂移：
     - 定向：sub=external_user_id，is_broadcast=False；
     - 广播：sub=""，is_broadcast=True（历史查询按 sub==me OR is_broadcast 覆盖两类）。
-    savepoint 语义：落库失败仅回滚本通知行并 warning（通知历史可容忍单条缺失），
-    绝不影响同事务内的 PushLog/渠道计数（投递回执优先）。
-    id 口径（TASK-016）：优先复用调度器预铸的 msg.notification_id，使 SSE 实时帧与表行同 id；
-    调用方未预铸（如直投）时退回 ORM 默认路径自铸，此时该行没有对应的实时帧，不影响一致性。
+    savepoint 语义：落库失败仅回滚本通知行并 warning；同事务内已登记的 PushLog 与渠道
+    计数仍随调用方的 commit 落库（投递回执优先，通知历史可容忍单条缺失）。
+    id 口径（TASK-016）：四条 web 投递路径（调度器、run-now、test-push、管理端直投）
+    都在投递前预铸 msg.notification_id，使 SSE 实时帧与表行同 id；没有预铸的调用方退回
+    ORM 默认路径自铸，此时该行没有对应的实时帧，不影响一致性。
     """
     try:
         async with db.begin_nested():
