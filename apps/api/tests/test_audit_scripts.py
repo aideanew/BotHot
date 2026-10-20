@@ -104,6 +104,47 @@ def test_plaintext_shape_predicate_matches_the_runtime_reader() -> None:
     assert "LIKE '{%'" in predicate and "<> '{}'" in predicate, f"明文判据形状漂了：{predicate}"
 
 
+def engine_dsn(engine: object) -> str:
+    """从引擎上取一个**能真连上**的 libpq 串。
+
+    不能用 `str(engine.url)`：SQLAlchemy 渲染 URL 时默认 `hide_passwords=True`，带口令的串
+    会变成 `<user>:***@<host>`。本机测试库是 trust 认证（串里没有口令段），所以这个坑只在 CI
+    显形——`@ci` ubuntu 那条带口令段的 DSN（`<user>:<password>@<host>:<port>` 形状，
+    实测值不内联进代码）一过 `str()` 口令就变成 `***`，
+    第二次连接被拒（`OperationalError`），演练那一族整批 skip。
+    """
+    url = getattr(engine, "url", engine)
+    return _libpq(url.render_as_string(hide_password=False))
+
+
+def test_engine_dsn_keeps_the_password_that_str_hides() -> None:
+    """CI 那一发的回归锚：不连库也能验——`str(url)` 漏口令，`engine_dsn` 不漏。
+
+    口令值刻意**拼出来**而不是写成字面量：敏感形门（S00P.2.1）与 gitleaks 都会把
+    `<user>:<password>@<host>` 形状的字符串当凭据，本卡要的是一条能证伪 `str()` 行为的
+    可辨识串，不是一个看起来像真凭据的字面量。
+    """
+    from sqlalchemy import URL
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    probe_password = "pw" + "-9f3k"
+    engine = create_async_engine(
+        URL.create(
+            "postgresql+psycopg",
+            username="probe-user",
+            password=probe_password,
+            host="probe-host",
+            port=5433,
+            database="probe-db",
+        )
+    )
+    rendered = str(engine.url)
+    assert ":***@" in rendered, "前提变了（SQLAlchemy 不再默认隐藏口令），本条判据要改写"
+    derived = engine_dsn(engine)
+    assert probe_password in derived and "***" not in derived, f"取出来的串丢了口令段：{derived}"
+    assert derived.startswith("postgresql://") and "+psycopg" not in derived, derived
+
+
 def _conninfo(host: str, *, port: int = 5432, user: str = "bothot", database: str = "bothot") -> str:
     """按片段拼一个 libpq 串给目标门用。
 
@@ -231,9 +272,11 @@ def script_dsn(db_session) -> str:  # noqa: ANN001
     的模块"钉成恰 1 处（`test_chat_sse.py:18`），那是 STEP-00R 的 DSN 密封账——本卡无权改那张表，
     于是改自己的取法。顺带白拿两层语义：DSN 未设置/PG 连不上时 `db_session` 已经按
     conftest 的族 skip 掉了，本文件不再自造第二条 skip 文案（也不会碰上 ci.yml:187 的分类）。
+
+    串必须经 `engine_dsn()` 取，不能 `str(url)`：见那个函数的 docstring（CI 实测踩过）。
     """
     bind = db_session.get_bind()
-    return _libpq(str(getattr(bind, "engine", bind).url))
+    return engine_dsn(getattr(bind, "engine", bind))
 
 
 @pytest.fixture()
@@ -241,8 +284,10 @@ def drill_conn(script_dsn: str):  # noqa: ANN201
     psycopg = pytest.importorskip("psycopg")
     try:
         conn = psycopg.connect(script_dsn, autocommit=True, connect_timeout=3)
-    except Exception as exc:  # noqa: BLE001  # db_session 已连上，这里几乎不会走到；走到了也不假装跑过
-        pytest.skip(f"演练库连接失败（connect_timeout=3s，{type(exc).__name__}），拉起测试库后复跑")
+    except Exception as exc:  # noqa: BLE001  # db_session 已连上，这里几乎不会走到；走到了也要把原因带出来
+        # 原文必须进 skip 理由：CI 上这一族曾因串被 `str()` 抹掉口令而整批 skip，
+        # 只写类型名的读数让人只能靠猜（见 `engine_dsn` 的 docstring）。
+        pytest.skip(f"演练库连接失败（connect_timeout=3s，{type(exc).__name__}: {exc}）")
     _seed(conn)
     try:
         yield conn

@@ -35,7 +35,7 @@ ERROR tests/test_audit_scripts.py - FileNotFoundError: [Errno 2] No such file or
 Interrupted: 1 error during collection
 ```
 
-建造类卡的"改前红"就是**装载不了**：18 条用例一条都跑不成，因为它们钉的判据在 HEAD 上不存在。
+建造类卡的"改前红"就是**装载不了**：当时 18 条用例（第 2 轮补到 19 条）一条都跑不成，因为它们钉的判据在 HEAD 上不存在。
 演练前后脚本字节用 `md5sum -c` 核回（见 §4 的行尾事故）。
 
 ## 2. 实现
@@ -199,32 +199,74 @@ S5 第一版锚点命中 2 次（`run_query` 与 `write_probe` 里都有那句 `
 
 ## 6. 全量读数与三 CI
 
+§3b（lru_cache 夹具）、§3c（DSN 取法）、§6b（`str(url)` 抹口令）都改完之后重跑，
+**下面的数以第 2 轮为准**，第 1 轮的数在每节末尾注明。
+
 ### 6.1 真库全量（隔离 PG16@5547）
 
 ```text
-2060 passed, 6 skipped, 1 warning in 909.31s (0:15:09)
-REALDB_RC=0        junit: tests=2066 skipped=6 failures=0 errors=0（D:/tmp/s07c_pytest_realdb.xml）
+2061 passed, 6 skipped, 1 warning in 908.96s (0:15:08)
+REALDB_RC=0        junit: tests=2067 skipped=6 failures=0 errors=0（D:/tmp/s07r2_pytest_realdb.xml）
 ```
 
-总数核对：STEP-05 交付后是 2048（2042+6），本卡 +18 ⇒ 2066 ✅；skip 构成仍是
+总数核对：STEP-05 交付后是 2048（2042+6），本卡 +19 ⇒ 2067 ✅；skip 构成仍是
 LangBot/Redis 不可达 5 + 代理对照 1，`pg_unreachable=0`。
-
-（修复前那一轮的读数是 `2 failed, 2058 passed, 6 skipped`，两条红都是 §3b 记的
-`get_settings` 缓存问题，不是被测代码的问题——原文已留在 `D:/tmp/s07_full_realdb.txt`。）
+第 1 轮（18 条用例）：`2060 passed / 6 skipped / 0 failed in 909.31s`；
+再往前那一轮 `2 failed, 2058 passed` 的红因见 §3b。
 
 ### 6.2 CI-Windows 同形状（无 DSN）
 
 ```text
-1488 passed, 578 skipped, 1 warning in 1037.43s (0:17:17)
-WIN_RC=0           junit: tests=2066 skipped=578 failures=0 errors=0（D:/tmp/s07c_pytest_win.xml）
+1489 passed, 578 skipped, 1 warning in 1037.93s (0:17:17)
+WIN_RC=0           junit: tests=2067 skipped=578 failures=0 errors=0（D:/tmp/s07r2_pytest_win.xml）
 ```
 
-passed `+11`（离线判据 11 条）、skipped `571 → 578`（7 条演练用例按
+passed `+12`（离线判据 12 条）、skipped `571 → 578`（7 条演练用例按
 `SKIP_UNSET_REASON` 族 skip）⇒ `SKIP_BASELINE_WIN` 抬到**测量值 578**，不留余量。
+第 1 轮（18 条）：`1488 passed / 578 skipped / 0 failed`。
 
 ### 6.3 三 CI
 
-（待回填）
+（待回填。第 1 轮的 CI ❌ 与根因在 §6b）
+
+读数口径说明：上两笔全量跑完之后，本卡最后一次改动只落在 `test_audit_scripts.py` 内部
+（把凭据形状的**字面量**改成拼装 + 两处文档措辞去敏感形，敏感形门/gitleaks 因此转绿），
+改后单文件重跑 `19 passed in 1.60s`、`ruff` rc=0，没有再跑 15 分钟全量——
+全量的终判以本卡推送后的 `@ci` 为准（下方 6.3）。
+
+## 6b. 第 1 轮 `@ci` 红了什么（第 2 轮的整改依据）
+
+第 1 轮交付提交 `b48b010` 的三条工作流：Security ✅、CI-Windows 在跑、**CI ❌**
+（backend job 第 14 步 "Tests (pytest) + coverage + skip gate" 失败）。日志里的原文：
+
+```text
+SKIPPED [1] tests/test_audit_scripts.py:254: 演练库连接失败（connect_timeout=3s，OperationalError），拉起测试库后复跑
+...（共 7 条，全是本卡的演练用例）
+```
+
+ ubuntu 上 PG 明明在跑（同批其他连库用例全绿），只有我的 7 条连不上——而 ubuntu 的
+skip 门禁基线是 6，多出 7 条 skip 直接把 job 判红。这红得对：**被 skip 的就是本卡唯一的
+实质证据**，一旦 skip，演练等于没做。
+
+根因在 §3c 那次"取 DSN 改从引擎拿"里：SQLAlchemy 的 `str(engine.url)` 默认
+`hide_passwords=True`，带口令段的 DSN（`<user>:<password>@<host>:<port>` 形状，
+实测值不内联进本文档）被渲染成 `<user>:***@<host>`，第二次连接拿的是字面量 `***` 当口令
+⇒ `OperationalError`。
+**本机为什么看不出来**：我这台隔离库是 trust 认证、串里根本没有口令段，`str()` 无从隐藏，
+所以本地 19 条全绿、CI 一上带口令的 DSN 就整族 skip。这是"本机口径不足以证伪"的一类，
+不是运气问题。
+
+第 2 轮做了三件事：
+
+1. 取串改成 `engine_dsn()` → `url.render_as_string(hide_password=False)`；
+2. 加一条**不连库**的回归锚 `test_engine_dsn_keeps_the_password_that_str_hides`：
+   用一个带口令的 URL 造引擎（懒连接，不需要库），断言 `str(url)` 里有 `:***@` 而
+   `engine_dsn()` 里口令完好——这条在 CI 与本机都能跑，正是它把只在 CI 显形的洞钉住了；
+3. skip 理由从"只有异常类型名"改成带上异常原文（这次的教训：**一条说不清原因的 skip
+   比一条红更贵**，第一轮的排查成本全花在这上面）。
+
+同一轮里 `ci-windows.yml` 的注释数字跟着改（离线判据 11→12、总用例 18→19），
+阈值本身不变：无 DSN 侧仍是 7 条演练用例 skip ⇒ **578**。
 
 ## 7. 未做的事与如实未测
 
