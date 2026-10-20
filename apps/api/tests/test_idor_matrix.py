@@ -213,25 +213,21 @@ def test_wiring_guard_is_falsifiable() -> None:
     assert _identity_usage(_synthetic_role) == "role"
 
 
-# ── 3. 连库矩阵：**不在本批落地**，理由写在这里而不是塞一个空壳进 CI ───────────
+# ── 3. 连库矩阵：已在 STEP-21 落地，实现在文件末尾第 9–11 节 ───────────────────
 #
-# A 用 B 的 id 逐端点请求（31 条）需要播种两个用户 + 空间 + 文档 + 作业，并给每个路径模板
-# 填上 B 的真实 id。本机 5432/5433 皆拒连（现读 TimeoutError），而这批若现在写，
-# 只有两种收尾：CI 里因为助手未实现而 error，或者 31 条全 skip 把"绿"变成假绿——
-# 后者正是 U-20 明令禁止的形状。所以本批只交付能在本机验证的两层（枚举完整性 + 接线底线），
-# 连库矩阵连同**生成好的端点清单**发布为 00-README §4 的 P-11，判据写在下面第 4 节的常量里。
+# 原先这里写的是"不落地"的理由（本机 5432/5433 拒连，写了只会 error 或全 skip 假绿）。
+# 现在 `@linux` 有 PG16、`@ci` ubuntu job 级设了 `AIDEANBOT_TEST_PG_DSN`，前提成立；
+# 归类守卫（第 9 节）不连库，A/B/C 三类的真请求（第 10–11 节）连库。
 
 
 # ── 4. 空白必须可见：稿面规则没覆盖到的属主 id ────────────────────────────────
 
 
 def test_owner_ids_outside_the_frozen_checklist_are_visible() -> None:
-    """稿面只点名 `space_id/job_id/doc_id`，路由表里却还有 5 类同样带属主的 id。
+    """稿面最初只点名 `space_id/job_id/doc_id`，路由表里另有 5 类 id（16 个操作）。
 
-    现读（`@win`，2026-10-16）：`channel_id` 5、`source_id` 3、`task_id` 3、
-    `subscription_id` 1、`topic_id` 1；另有 `engine` 2 与 `report_date` 1 不是属主标识符
-    （配置键与日期键），留在"带参数但不在矩阵里"一侧。
-    这条不是"测了"，是**没人能把这片空白说成已覆盖**：数量一变必红，逼改动的人回来更新裁决。
+    STEP-21 之前这条只负责"空白可见"；现在这 16 个操作由第 9 节的 `x-idor-classes`
+    逐条归类（B 运营类或 C 公共只读），这里保留数量锚，数量一变就逼人回来更新归类。
     """
     surfaced = {p for pair in UNLISTED_OPERATIONS for p in _id_params(pair[0])}
     assert surfaced - NON_OWNER_PARAMS == set(UNLISTED_OWNER_PARAMS), surfaced
@@ -239,9 +235,8 @@ def test_owner_ids_outside_the_frozen_checklist_are_visible() -> None:
 
 
 KNOWN_GAP = (
-    "x-idor-checklist 只点名 space_id/job_id/doc_id（31 个操作），而路由表另有 16 个带"
-    "channel_id/source_id/task_id/subscription_id/topic_id 的操作未被规则覆盖。扩清单需要裁决，"
-    "不在吸收步骤里顺手做——已发布为 V0.12.0 00-README §4 的 P-11。"
+    "已关闭（STEP-21）：原 P-11/P-12 的 16 个未覆盖操作由 x-idor-classes 归类，"
+    "第 9 节守卫保证新增带 id 端点未归类即红。"
 )
 
 
@@ -455,3 +450,289 @@ def test_the_floor_overclaims_for_the_allowlist_gated_endpoint() -> None:
             f"{method} {path} 已不在稿面清单命中的操作里 ⇒ 更新 NON_OWNER_ROLE_GATED"
         )
         assert _identity_usage(next(ep for p, m, ep in CHECKLIST_OPERATIONS if (p, m) == (path, method))) == "threaded"
+
+
+# ── 9. 归类守卫（STEP-21 S21.1.2，无需 PG）：带路径参数的端点必须落进 A/B/C 之一 ──────
+
+import json as _json  # noqa: E402  第 9–11 节专用；放在这里是为了不改动前 8 节的导入面
+
+ROLE_LADDER = ("user", "operator", "admin")
+
+
+def _idor_classes() -> dict[str, Any]:
+    doc = _json.loads(IDENTITY_DRAFT_PATH.read_text(encoding="utf-8"))
+    classes = doc.get("x-idor-classes")
+    assert isinstance(classes, dict), "冻结稿里没有 x-idor-classes（S21.1.1 的机读三类）"
+    return classes
+
+
+def _under(path: str, pre: str) -> bool:
+    """`pre` 本身、`pre/...`、`pre:动作`；以 `/` 结尾的前缀按纯前缀比。"""
+    if pre.endswith("/"):
+        return path.startswith(pre)
+    return path == pre or path.startswith(pre + "/") or path.startswith(pre + ":")
+
+
+def _classify(path: str, method: str, classes: dict[str, Any]) -> str | None:
+    """`(路径模板, 方法)` ⇒ `A` / `A-exceptions` / `B` / `C` / None（未归类）。
+
+    B 先于前缀判：B 是逐操作的显式清单，不靠前缀猜。A 的例外也是逐操作。
+    """
+    key = f"{method} {path}"
+    if key in classes["B"]["minRole"]:
+        return "B"
+    if key in classes["A-exceptions"]:
+        return "A-exceptions"
+    for name in ("A", "C"):
+        if any(_under(path, pre) for pre in classes[name]["prefixes"]):
+            return name
+    return None
+
+
+def _unclassified(ops: list[tuple[str, str]], classes: dict[str, Any]) -> list[str]:
+    return [f"{m} {p}" for p, m in ops if _id_params(p) and _classify(p, m, classes) is None]
+
+
+ID_OPERATIONS = sorted((p, m) for p, m, _ in ALL_OPERATIONS if _id_params(p))
+
+
+def test_every_operation_with_a_path_param_is_classified() -> None:
+    """S21.1.2：替换原第 4 节的"可见"为"必须归类"。新增带 id 的端点没写进稿 ⇒ 红。"""
+    classes = _idor_classes()
+    missing = _unclassified(ID_OPERATIONS, classes)
+    assert not missing, "这些带路径参数的端点没有归入 x-idor-classes：" + "; ".join(missing)
+
+
+def test_classified_entries_all_exist_in_the_route_table() -> None:
+    """反方向：稿里写了、路由表却没有的 B 条目 ⇒ 红（端点删了或改名而稿没跟）。"""
+    classes = _idor_classes()
+    live = {f"{m} {p}" for p, m in ID_OPERATIONS}
+    stale = sorted(set(classes["B"]["minRole"]) - live) + sorted(set(classes["A-exceptions"]) - live)
+    assert not stale, f"x-idor-classes 里有路由表不存在的操作：{stale}"
+    assert set(classes["B"]["minRole"].values()) <= set(ROLE_LADDER[1:]), "B 类 minRole 只能是 operator/admin"
+
+
+def test_classification_guard_rejects_a_synthetic_probe_route() -> None:
+    """验收反证：临时加一个 `GET /api/v1/_probe/{foo_id}` ⇒ 守卫必须认出它未归类。"""
+    classes = _idor_classes()
+    assert _unclassified([*ID_OPERATIONS, ("/api/v1/_probe/{foo_id}", "GET")], classes) == [
+        "GET /api/v1/_probe/{foo_id}"
+    ]
+
+
+def _bucket(name: str) -> list[tuple[str, str]]:
+    classes = _idor_classes()
+    return [(p, m) for p, m in ID_OPERATIONS if _classify(p, m, classes) == name]
+
+
+A_OPS = _bucket("A")
+A_EXC_OPS = _bucket("A-exceptions")
+B_OPS = _bucket("B")
+C_OPS = _bucket("C")
+
+
+def test_bucket_sizes_are_pinned() -> None:
+    """读数锚（2026-10-20 `@linux` 现读）：A 21 + A 例外 1 + B 23 + C 2 = 47 个带参操作。"""
+    assert (len(A_OPS), len(A_EXC_OPS), len(B_OPS), len(C_OPS)) == (21, 1, 23, 2), (
+        len(A_OPS), len(A_EXC_OPS), len(B_OPS), len(C_OPS)
+    )
+    assert len(A_OPS) + len(A_EXC_OPS) + len(B_OPS) + len(C_OPS) == len(ID_OPERATIONS) == 47
+
+
+# ── 10. 连库播种与请求（`@linux` / `@ci`）────────────────────────────────────────
+
+_S21_URL = "https://mp.weixin.qq.com/s/s21idormatrix"
+
+
+async def _seed_world(db_session: Any) -> dict[str, Any]:
+    """两个普通用户 A/B + operator + admin；B 拥有空间、文档、作业、订阅各一，另有渠道、任务、热点。"""
+    import uuid
+
+    from app.models.bothot_entities import BotChannel, HotTopic, PushTask
+    from app.models.entities import (
+        ContentAsset,
+        Job,
+        KnowledgeDocument,
+        KnowledgeSpace,
+        Source,
+        SourceSubscription,
+        User,
+    )
+
+    tag = uuid.uuid4().hex[:8]
+    users = {}
+    for role_name in ("a", "b", "operator", "admin"):
+        role = role_name if role_name in ROLE_LADDER else "user"
+        handle = f"s21-{role_name}-{tag}"
+        users[role_name] = User(sub=handle, email=f"{handle}@s21.test", nickname=role_name, role=role)
+    db_session.add_all(users.values())
+    await db_session.flush()
+    b = users["b"]
+    src = Source(type="wechat_oa", external_id=f"s21-biz-{tag}", name="s21")
+    db_session.add(src)
+    await db_session.flush()
+    asset = ContentAsset(source_id=src.id, content_hash=tag * 8, content_markdown="s21", category="")
+    space = KnowledgeSpace(user_id=b.id, name="s21-b-space", description="s21-b-desc")
+    db_session.add_all([asset, space])
+    await db_session.flush()
+    doc = KnowledgeDocument(asset_id=asset.id, space_id=space.id)
+    job = Job(type="sync", user_id=b.id, idempotency_key=f"s21-{tag}")
+    sub = SourceSubscription(user_id=b.id, source_id=src.id, space_id=space.id)
+    channel = BotChannel(
+        name="s21-ch", channel_type="feishu", webhook_url="https://example.invalid/s21", status="active"
+    )
+    db_session.add_all([doc, job, sub, channel])
+    await db_session.flush()
+    task = PushTask(name="s21-task", bot_channel_id=channel.id, created_by=b.id)
+    topic = HotTopic(title="s21-topic", topic_date="2026-10-20")
+    db_session.add_all([task, topic])
+    await db_session.flush()
+    ids = {
+        "space_id": space.id, "doc_id": doc.id, "job_id": job.id, "subscription_id": sub.id,
+        "source_id": src.id, "channel_id": channel.id, "task_id": task.id, "topic_id": topic.id,
+        "engine": "coze", "report_date": "2026-10-20",
+    }
+    # 先把 sub 取成纯字符串：快照会 `expire_all()`，之后再读 ORM 属性会在同步上下文里懒加载而炸
+    return {"subs": {k: u.sub for k, u in users.items()}, "ids": ids}
+
+
+def _body_for(path: str, method: str, ids: dict[str, str]) -> dict[str, Any] | None:
+    """每个写操作给一份**能过形状校验**的请求体：否则 422 先到，属主判据根本没被走到。"""
+    table: dict[str, dict[str, Any]] = {
+        "PATCH /api/v1/spaces/{space_id}": {"description": "s21-a-was-here"},
+        "POST /api/v1/spaces/{space_id}/docs": {"url": _S21_URL},
+        "PATCH /api/v1/spaces/{space_id}/docs/{doc_id}": {"category": "AI·技术"},
+        "POST /api/v1/spaces/{space_id}/docs:batch": {"urls": [_S21_URL]},
+        "POST /api/v1/spaces/{space_id}/docs:delete": {"ids": [ids["doc_id"]]},
+        "POST /api/v1/spaces/{space_id}/docs:recategorize": {"ids": [ids["doc_id"]], "category": "AI·技术"},
+        "PATCH /api/v1/spaces/{space_id}/engine": {"engine": "builtin"},
+        "POST /api/v1/spaces/{space_id}/links": {"public_space_id": ids["space_id"]},
+        "PATCH /api/v1/spaces/{space_id}/public": {"isPublic": True},
+        "POST /api/v1/spaces/{space_id}/subscriptions": {"source_id": ids["source_id"]},
+        "PATCH /api/v1/spaces/{space_id}/subscriptions/{subscription_id}": {"sync_policy": "auto"},
+        "PATCH /api/v1/admin/spaces/{space_id}": {"description": "s21"},
+        "POST /api/v1/admin/spaces/{space_id}/docs:delete": {"ids": [ids["doc_id"]]},
+        "POST /api/v1/admin/spaces/{space_id}/docs:recategorize": {"ids": [ids["doc_id"]], "category": "AI·技术"},
+        "PUT /api/v1/bots/tasks/{task_id}": {"name": "s21"},
+        "PUT /api/v1/bots/{channel_id}": {"name": "s21"},
+        "PATCH /api/v1/sources/{source_id}": {"name": "s21"},
+    }
+    return table.get(f"{method} {path}")
+
+
+def _call(db_session: Any, sub: str, path: str, method: str, ids: dict[str, str]) -> tuple[int, Any]:
+    from fastapi.testclient import TestClient
+
+    from app.api.deps import get_current_sub, get_db
+    from app.main import create_app
+
+    url = path
+    for name, value in ids.items():
+        url = url.replace("{" + name + "}", value)
+    application = create_app()
+    application.dependency_overrides[get_db] = lambda: db_session
+    application.dependency_overrides[get_current_sub] = lambda: sub
+    body = _body_for(path, method, ids)
+    client = TestClient(application, raise_server_exceptions=False)
+    resp = client.request(method, url, json=body) if body is not None else client.request(method, url)
+    try:
+        code = resp.json().get("code")
+    except ValueError:
+        code = None
+    return resp.status_code, code
+
+
+async def _snapshot_b(db_session: Any, ids: dict[str, str]) -> tuple[Any, ...]:
+    """B 的四类行在请求前后的指纹：越权写哪怕被拒成 404，也得证明**没写进去**。"""
+    from app.models.entities import ContentAsset, Job, KnowledgeDocument, KnowledgeSpace, SourceSubscription
+
+    db_session.expire_all()
+    space = await db_session.get(KnowledgeSpace, ids["space_id"])
+    doc = await db_session.get(KnowledgeDocument, ids["doc_id"])
+    asset = await db_session.get(ContentAsset, doc.asset_id) if doc is not None else None
+    job = await db_session.get(Job, ids["job_id"])
+    sub = await db_session.get(SourceSubscription, ids["subscription_id"])
+    return (
+        space and (space.name, space.description, space.status, space.is_public, space.engine, space.doc_count),
+        doc and (doc.status, doc.space_id),
+        asset and asset.category,
+        job and (job.status, job.progress),
+        sub and (sub.status, sub.sync_policy, sub.sync_interval_minutes, sub.sync_anchor_hour),
+    )
+
+
+# ── 11. 三类的真请求 ───────────────────────────────────────────────────────────
+
+_WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+@pytest.mark.parametrize(("path", "method"), A_OPS + A_EXC_OPS, ids=[_case_id(p, m) for p, m in A_OPS + A_EXC_OPS])
+async def test_a_user_cannot_reach_b_users_resource(db_session: Any, path: str, method: str) -> None:
+    """S21.2.2：普通用户 A 拿 B 的 id 逐端点请求 ⇒ 稿面的拒绝码，且 B 的行一字未变。"""
+    world = await _seed_world(db_session)
+    ids = world["ids"]
+    classes = _idor_classes()
+    deny = classes["A-exceptions"][f"{method} {path}"]["deny"] if (path, method) in A_EXC_OPS else classes["A"]["deny"]
+    before = await _snapshot_b(db_session, ids)
+    status, code = _call(db_session, world["subs"]["a"], path, method, ids)
+    assert (status, code) == (deny["status"], deny["code"]), f"{method} {path}：A 越权实得 {status}/{code}"
+    if method in _WRITE_METHODS:
+        assert await _snapshot_b(db_session, ids) == before, f"{method} {path}：拒绝了但 B 的数据变了"
+
+
+async def test_a_class_positive_control_owner_reads_own_space(db_session: Any) -> None:
+    """正控：同一播种下 B 自己读自己的空间与作业必须 200——否则上面一片 404 可能只是播种坏了。"""
+    world = await _seed_world(db_session)
+    ids, b_sub = world["ids"], world["subs"]["b"]
+    assert _call(db_session, b_sub, "/api/v1/spaces/{space_id}", "GET", ids) == (200, 0)
+    assert _call(db_session, b_sub, "/api/v1/jobs/{job_id}", "GET", ids) == (200, 0)
+    assert _call(db_session, b_sub, "/api/v1/spaces/{space_id}/subscriptions", "GET", ids) == (200, 0)
+
+
+def _b_cases() -> list[tuple[str, str, str, bool]]:
+    classes = _idor_classes()
+    cases = []
+    for path, method in B_OPS:
+        need = ROLE_LADDER.index(classes["B"]["minRole"][f"{method} {path}"])
+        for rank, role in enumerate(ROLE_LADDER):
+            if rank <= need:  # 低于门槛的每一级判拒；恰在门槛判放行（高于门槛由单调秩推出，不重复打）
+                cases.append((path, method, role, rank < need))
+    return cases
+
+
+B_CASES = _b_cases()
+
+
+@pytest.mark.parametrize(
+    ("path", "method", "role", "denied"),
+    B_CASES,
+    ids=[f"{r}-{_case_id(p, m)}" for p, m, r, _ in B_CASES],
+)
+async def test_b_class_rank_gate(db_session: Any, path: str, method: str, role: str, denied: bool) -> None:
+    """S21.2.3：低于 minRole ⇒ 403/10004；恰为 minRole ⇒ 不是 403（业务码随数据，不在本矩阵判）。"""
+    world = await _seed_world(db_session)
+    who = {"user": "a", "operator": "operator", "admin": "admin"}[role]
+    status, code = _call(db_session, world["subs"][who], path, method, world["ids"])
+    deny = _idor_classes()["B"]["deny"]
+    if denied:
+        assert (status, code) == (deny["status"], deny["code"]), f"{role} {method} {path}：应拒，实得 {status}/{code}"
+    else:
+        assert status not in (401, 403), f"{role} {method} {path}：在门槛上却被拒 {status}/{code}"
+
+
+@pytest.mark.parametrize(("path", "method"), C_OPS, ids=[_case_id(p, m) for p, m in C_OPS])
+async def test_c_class_is_readable_by_any_logged_in_user(db_session: Any, path: str, method: str) -> None:
+    """C 公共只读：普通用户不被 401/403 挡；热点详情有播种行 ⇒ 必须 200。"""
+    world = await _seed_world(db_session)
+    status, code = _call(db_session, world["subs"]["a"], path, method, world["ids"])
+    assert status not in (401, 403), f"{method} {path}：{status}/{code}"
+    if "{topic_id}" in path:
+        assert (status, code) == (200, 0)
+
+
+def test_matrix_case_counts_are_printed_for_the_evidence() -> None:
+    """验收第 1 条要的两个数：A 类端点×方法数、B 类用例数（打印入 EVD）。"""
+    print(f"S21 A={len(A_OPS) + len(A_EXC_OPS)} B_ops={len(B_OPS)} B_cases={len(B_CASES)} C={len(C_OPS)}")
+    assert len(B_CASES) == sum(
+        ROLE_LADDER.index(_idor_classes()["B"]["minRole"][f"{m} {p}"]) + 1 for p, m in B_OPS
+    )

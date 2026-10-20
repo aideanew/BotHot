@@ -7,6 +7,7 @@
   "x-not-in-single-source": {
     "x-permission-matrix": "端点 × 角色的授权矩阵不是字段形状，Pydantic 无对应表达；真源在 api/deps.py 的 require_roles 与各端点的角色参数。治理面由 S1.4.3 的 IDOR 用例生成器逐端点核对，而不是抄一份第二表进来。",
     "x-idor-checklist": "越权清单是「哪些端点必须被生成用例」的清单，不是形状。",
+    "x-idor-classes": "端点三类划分与每个运营类操作的最低角色，是治理矩阵，不是形状；执行面是 tests/test_idor_matrix.py。",
     "x-never-persisted": "balance/level/credits 永不落库属持久化纪律，由 grep 型守卫与评审承担。",
     "IsAdminEcho": "/me 的回显位。它带的两条是 x-authoritative=false 与「永不参与授权」——那是行为约束，Pydantic 表达不了，也不该为它造一个无使用处的模型（造出来就是第二个假契约面）。责任在 services/roles.py 与前端；本条由 alias-inlining 登记点名接手。"
   },
@@ -56,7 +57,7 @@
     "tiers": [
       { "surface": "用户端（自己的 spaces / subscriptions / jobs / kb / chat / notifications）", "minRole": "user", "gate": "require_roles() 不传角色 → 仅要求已认证", "crossTenant": "禁止：一切按 sub → users.id → 域表外键收窄，越权访问他人 space 必须 404/403 而非返回数据" },
       { "surface": "运营端（ bots 渠道配置、日志、任务重试 ）", "minRole": "operator", "gate": "require_roles(\"operator\")", "crossTenant": "允许只读跨用户，写操作须记录操作者 sub" },
-      { "surface": "管理端（引擎密钥登记 admin.py:295/342/363、推送渠道 admin.py:449、发现渠道 :467、运维探针 :489、推送 :514）", "minRole": "admin", "gate": "require_roles(\"admin\")", "crossTenant": "允许" },
+      { "surface": "管理端（引擎密钥登记与撤销 admin.py POST/DELETE /admin/engines/keys/{engine}、admin/* 跨用户管理操作）", "minRole": "admin", "gate": "require_roles(\"admin\")", "crossTenant": "允许", "x-operator-readable": "GET /admin/engines/keys、/admin/push/channels、/admin/discovery/channels、/admin/ops/liveness 与 POST /admin/push 实为 operator：运营可读状态、可执行推送（D-V12-12）。原稿把这五条记成 admin 与代码不符，D-V16-06 校正。" },
       { "surface": "SSO 登出回调 backchannel-logout（auth.py:159）", "minRole": "service-to-service", "gate": "非用户会话鉴权：按 iss/aud + 签名校验，禁止接受普通用户 Cookie", "x-gap": "实测 apps/web/** 对该端点 0 消费（coverage §3 REQ-F-008），前端 logout 目前不清理服务端会话 —— 转 STEP-14/19 核实是否功能缺失" }
     ],
     "x-admin-escalation-prohibited-paths": [
@@ -68,6 +69,52 @@
   },
   "x-idor-checklist": [
     "凡路径含 {space_id}/{job_id}/{doc_id} 的端点，必须证明「资源属主 = 当前 sub」或「当前 rank ≥ operator」，二者皆无 → 403(10004)/404(30004)。",
-    "契约测试必须为每个此类端点生成一条「A 用户访问 B 用户的同一 id」用例（STEP-01 锚，见 04 §4.6）。"
-  ]
+    "契约测试必须为每个此类端点生成一条「A 用户访问 B 用户的同一 id」用例（STEP-01 锚，见 04 §4.6）。",
+    "STEP-21 / D-V10-04 扩面：凡带路径参数的端点必须落在 x-idor-classes 的 A/B/C 三类之一，未归类即红。A 属主类（space_id/job_id/doc_id 与挂在空间下的 subscription_id）：属主 = 当前 sub，否则 404(30004)，不泄露存在性；B 运营类（channel_id、task_id、/sources/{source_id}、admin/*）：rank ≥ 该操作的 minRole，否则 403(10004)；C 公共只读（hot 域）：登录即可读，无属主。"
+  ],
+  "x-idor-classes": {
+    "note": "STEP-21 S21.1.1 机读三类（D-V10-04）。执行面 apps/api/tests/test_idor_matrix.py 第 3–4 节。A、C 按路径前缀归类；B 逐操作写死 minRole，不从代码反推（反推等于代码放宽时测试跟着放宽）。PUT /bots/{channel_id} 的 minRole 指改名称与启停，改凭据字段另由端点内判 admin（D-V12-12）。引擎 Key 写操作为 admin 依 D-V16-06。",
+    "A": {
+      "prefixes": ["/api/v1/spaces/{space_id}", "/api/v1/jobs/{job_id}"],
+      "deny": { "status": 404, "code": 30004 }
+    },
+    "A-exceptions": {
+      "PATCH /api/v1/spaces/{space_id}/public": {
+        "deny": { "status": 403, "code": 10004 },
+        "why": "门是 PUBLIC_ADMIN_ALLOWLIST 加 owner_type=system（services/public_library.py），不是 space.user_id"
+      }
+    },
+    "B": {
+      "deny": { "status": 403, "code": 10004 },
+      "minRole": {
+        "DELETE /api/v1/admin/engines/keys/{engine}": "admin",
+        "POST /api/v1/admin/engines/keys/{engine}": "admin",
+        "GET /api/v1/admin/jobs/{job_id}": "admin",
+        "POST /api/v1/admin/jobs/{job_id}:cancel": "admin",
+        "POST /api/v1/admin/jobs/{job_id}:retry": "admin",
+        "DELETE /api/v1/admin/sources/{source_id}": "admin",
+        "DELETE /api/v1/admin/spaces/{space_id}": "admin",
+        "PATCH /api/v1/admin/spaces/{space_id}": "admin",
+        "GET /api/v1/admin/spaces/{space_id}/docs": "admin",
+        "DELETE /api/v1/admin/spaces/{space_id}/docs/{doc_id}": "admin",
+        "POST /api/v1/admin/spaces/{space_id}/docs:delete": "admin",
+        "POST /api/v1/admin/spaces/{space_id}/docs:recategorize": "admin",
+        "DELETE /api/v1/admin/subscriptions/{subscription_id}": "admin",
+        "DELETE /api/v1/bots/tasks/{task_id}": "operator",
+        "PUT /api/v1/bots/tasks/{task_id}": "operator",
+        "POST /api/v1/bots/tasks/{task_id}/run": "operator",
+        "DELETE /api/v1/bots/{channel_id}": "admin",
+        "GET /api/v1/bots/{channel_id}": "operator",
+        "PUT /api/v1/bots/{channel_id}": "operator",
+        "GET /api/v1/bots/{channel_id}/logs": "operator",
+        "POST /api/v1/bots/{channel_id}/test": "operator",
+        "DELETE /api/v1/sources/{source_id}": "admin",
+        "PATCH /api/v1/sources/{source_id}": "admin"
+      }
+    },
+    "C": {
+      "prefixes": ["/api/v1/hot/"],
+      "rule": "登录即可读，无属主"
+    }
+  }
 }

@@ -1,0 +1,19 @@
+# S21.3.1 动态反证：临时删掉 services/spaces.py:440（update_doc_category）的属主判据 'or space.user_id != user_id'，跑矩阵；之后还原
+diff --git a/apps/api/app/services/spaces.py b/apps/api/app/services/spaces.py
+index 28e1c49..e46192c 100644
+--- a/apps/api/app/services/spaces.py
++++ b/apps/api/app/services/spaces.py
+@@ -437,7 +437,7 @@ class SpaceService:
+         validate_category(category)
+ 
+         space = await self._repo.get_by_id(space_id)
+-        if space is None or space.user_id != user_id:
++        if space is None:
+             raise ResourceNotFoundError(space_id)
+         doc = await DocumentRepository(self._session_or_raise()).get_by_id(doc_id)
+         if doc is None or doc.space_id != space_id:
+>       assert (status, code) == (deny["status"], deny["code"]), f"{method} {path}：A 越权实得 {status}/{code}"
+E       AssertionError: PATCH /api/v1/spaces/{space_id}/docs/{doc_id}：A 越权实得 200/0
+FAILED tests/test_idor_matrix.py::test_a_user_cannot_reach_b_users_resource[PATCH-api_v1_spaces_space_id_docs_doc_id]
+1 failed, 105 passed, 2 warnings in 8.14s
+# 还原后 git diff app/services/spaces.py 行数：0

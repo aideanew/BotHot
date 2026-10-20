@@ -1,0 +1,6 @@
+# S21 先红：fb31ea8 + 本卡测试，代码未改；2026-10-20T01:19:39Z
+>           assert (status, code) == (deny["status"], deny["code"]), f"{role} {method} {path}：应拒，实得 {status}/{code}"
+E           AssertionError: operator DELETE /api/v1/admin/engines/keys/{engine}：应拒，实得 404/30004
+>           assert (status, code) == (deny["status"], deny["code"]), f"{role} {method} {path}：应拒，实得 {status}/{code}"
+E           AssertionError: operator POST /api/v1/admin/engines/keys/{engine}：应拒，实得 422/10005
+2 failed, 104 passed, 2 warnings in 8.59s
