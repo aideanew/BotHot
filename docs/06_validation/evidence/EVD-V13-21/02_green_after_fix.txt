@@ -1,0 +1,4 @@
+# S21 修后绿：admin.py 引擎 Key 写操作改 admin（D-V16-06）
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6379, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6379)
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6379, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6379) connecting to localhost:6379.
+136 passed, 2 warnings in 8.71s

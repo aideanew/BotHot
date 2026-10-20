@@ -6,7 +6,7 @@
   EngineRouter 的 base-且-key 判定结论相反，两份拷贝对同一份数据给出两个答案）；
   登记表 > env 的优先级与 activeSource 显式回报；
 - 服务层：密文落库（零明文）、upsert 轮换 key_id、撤销、解密失败不被静默丢弃；
-- 路由层：operator+ 门禁（user 拒绝）、无主密钥 50002、builtin/未知位 10005。
+- 路由层：读 operator+、写 admin（D-V16-06；user 拒绝）、无主密钥 50002、builtin/未知位 10005。
 
 不覆盖：真实引擎实接（ENGINE_IMPLEMENTED 全 False，锁 D10）——登记表当前只影响
 状态上报与切换前置校验，不影响实际入库链路。
@@ -384,7 +384,7 @@ async def _seed_roles(db_session) -> dict[str, str]:
 
 
 async def test_admin_engine_keys_gate_operator_and_above(db_session) -> None:  # type: ignore[no-untyped-def]
-    """operator+ 门禁：admin 经单调秩覆盖 operator（require_role 取 max rank）。"""
+    """读登记状态 operator+：admin 经单调秩覆盖 operator（写操作只给 admin，见下一条）。"""
     rows = await _seed_roles(db_session)
 
     resp = _app(db_session, rows["user"]).get("/api/v1/admin/engines/keys")
@@ -402,10 +402,23 @@ async def test_admin_engine_keys_gate_operator_and_above(db_session) -> None:  #
     assert resp.status_code == 200  # admin 覆盖 operator
 
 
+async def test_engine_key_writes_are_admin_only(db_session) -> None:  # type: ignore[no-untyped-def]
+    """D-V16-06：登记/撤销是写凭据 ⇒ 只给 admin；operator 仍可读登记状态（上一条用例）。
+
+    门在取数据与校验请求体之前，所以 operator 不带请求体也必须先撞 403/10004。
+    """
+    rows = await _seed_roles(db_session)
+    op = _app(db_session, rows["operator"])
+    resp = op.post("/api/v1/admin/engines/keys/coze")
+    assert resp.status_code == 403 and resp.json()["code"] == 10004, resp.text
+    resp = op.delete("/api/v1/admin/engines/keys/coze")
+    assert resp.status_code == 403 and resp.json()["code"] == 10004, resp.text
+
+
 async def test_admin_register_list_and_revoke_lifecycle(db_session, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     set_master_key(monkeypatch)
     rows = await _seed_roles(db_session)
-    client = _app(db_session, rows["operator"])
+    client = _app(db_session, rows["admin"])
 
     # env 也配了同名 Key → 登记后 activeSource 必须从 env 翻到 registered
     monkeypatch.setenv("COZE_API_KEY", "sk-env-side")
@@ -426,7 +439,7 @@ async def test_admin_register_list_and_revoke_lifecycle(db_session, monkeypatch)
     coze = next(i for i in after["items"] if i["engine"] == "coze")
     assert coze["registered"] is True and coze["activeSource"] == "registered"
     assert coze["envConfigured"] is True and coze["keyId"] == body["keyId"]
-    assert coze["registeredBy"] == rows["operator"]
+    assert coze["registeredBy"] == rows["admin"]
     assert coze["updatedAt"]  # 登记时间可见（审计）
 
     # 撤销后回落 env（envConfigured 仍为真 → configured 仍为真，来源变回 env）
@@ -442,7 +455,7 @@ async def test_admin_register_list_and_revoke_lifecycle(db_session, monkeypatch)
 async def test_admin_register_without_master_key_is_50002(db_session, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """无主密钥登记 → 50002（依赖未就绪），不是 4xx、不回落明文。"""
     rows = await _seed_roles(db_session)
-    resp = _app(db_session, rows["operator"]).post("/api/v1/admin/engines/keys/coze", json={"key": "sk-live"})
+    resp = _app(db_session, rows["admin"]).post("/api/v1/admin/engines/keys/coze", json={"key": "sk-live"})
     assert resp.status_code == 503 and resp.json()["code"] == 50002
     assert "ENGINE_KEY_MASTER_KEY" in resp.json()["message"]
 
@@ -450,7 +463,7 @@ async def test_admin_register_without_master_key_is_50002(db_session, monkeypatc
 async def test_admin_reject_builtin_unknown_blank_and_absent(db_session, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     set_master_key(monkeypatch)
     rows = await _seed_roles(db_session)
-    client = _app(db_session, rows["operator"])
+    client = _app(db_session, rows["admin"])
 
     for engine, payload in (("builtin", "x"), ("notion", "x")):
         resp = client.post(f"/api/v1/admin/engines/keys/{engine}", json={"key": payload})
@@ -477,7 +490,7 @@ async def test_get_engines_reflects_registration(db_session, monkeypatch) -> Non
     coze = next(i for i in client.get("/api/v1/engines").json()["data"]["items"] if i["engine"] == "coze")
     assert coze["configured"] is False and coze["activeSource"] is None
 
-    _app(db_session, rows["operator"]).post("/api/v1/admin/engines/keys/coze", json={"key": "sk-1"})
+    _app(db_session, rows["admin"]).post("/api/v1/admin/engines/keys/coze", json={"key": "sk-1"})
 
     coze = next(i for i in client.get("/api/v1/engines").json()["data"]["items"] if i["engine"] == "coze")
     assert coze["configured"] is True and coze["activeSource"] == "registered"

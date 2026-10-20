@@ -343,17 +343,20 @@ async def admin_list_engine_keys(
 async def admin_register_engine_key(
     engine: str,
     payload: RegisterEngineKeyRequest,
-    actor: Annotated[User, Depends(require_roles("operator"))],
+    actor: Annotated[User, Depends(require_roles("admin"))],
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> JSONResponse:
-    """M3 批次 3（T5.4）：operator 登记/覆盖引擎 Key（AES-256-GCM 加密落库）。
+    """M3 批次 3（T5.4）：admin 登记/覆盖引擎 Key（AES-256-GCM 加密落库）。
+
+    写入第三方凭据且会产生费用，与 D-V12-12「改凭据只给管理员」同族 ⇒ admin（D-V16-06，
+    STEP-21 IDOR 矩阵抓到；冻结稿 identity x-permission-matrix 管理端一档本来就写 admin）。
 
     同一引擎位重复登记 = 覆盖（一行一引擎位，key_id 换新）。明文不落库、
     不回显——响应只给 keyId 作为轮换句柄。
 
     builtin → 10005（内置引擎无 Key）；未知引擎位 → 10005；空 Key/控制字符 → 10005；
     ENGINE_KEY_MASTER_KEY 未配置或畸形 → 50002（绝不回落明文）；
-    未登录 → 10001；非 operator/admin → 10004/403。
+    未登录 → 10001；非 admin → 10004/403。
     """
     result = await EngineKeyService(session).register(actor.id, engine, payload.key)
     body = success(data={"ok": True, **result})
@@ -363,12 +366,12 @@ async def admin_register_engine_key(
 @router.delete("/engines/keys/{engine}")
 async def admin_revoke_engine_key(
     engine: str,
-    actor: Annotated[User, Depends(require_roles("operator"))],
+    actor: Annotated[User, Depends(require_roles("admin"))],
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> JSONResponse:
-    """M3 批次 3（T5.4）：operator 撤销引擎 Key 登记（回落 env；env 亦空则不可用）。
+    """M3 批次 3（T5.4）：admin 撤销引擎 Key 登记（回落 env；env 亦空则不可用）。D-V16-06 同上。
 
-    无登记行 → 30004（不谎报已撤销）；未登录 → 10001；非 operator/admin → 10004/403。
+    无登记行 → 30004（不谎报已撤销）；未登录 → 10001；非 admin → 10004/403。
     """
     result = await EngineKeyService(session).revoke(actor.id, engine)
     body = success(data={"ok": True, **result})
