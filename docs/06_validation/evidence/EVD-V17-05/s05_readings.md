@@ -241,7 +241,16 @@ skipped 与基线**逐字相同（571）** ⇒ 本卡 14 条用例全部不连�
 
 ### 7.3 三 CI
 
-（待回填）
+交付提交 `d19b9ab`（`feat(STEP-05 S5.1.1-S5.2.3 第 1 轮): 采集静默告警与可观测上线（四族指标 + 日幂等告警）`）：
+
+| 工作流 | run id | 结论 | 关键读数 |
+|---|---:|---|---|
+| CI | 39465006493 | ✅ success | backend `2042 passed, 6 skipped, 1 warning in 170.45s`；覆盖率 **87.37%**（门槛 75%）；skip 门禁 `total_skipped=6 baseline=6 pg_unreachable=0` |
+| CI-Windows | 39465006658 | ✅ success | backend `1477 passed, 571 skipped, 1 warning in 1012.29s (0:16:52)`；门禁 `windows 门禁：failed=0 total_skipped=571 baseline=571` |
+| Security | 39465006563 | ✅ success | 全 job success |
+
+ubuntu `2042/6` = 本机真库 `2042/6`；CI-Windows `1477/571` = 本机无 DSN 同形状 `1477/571`；
+门禁基线 571 未抬（本卡 0 连库用例）。
 
 ## 8. 未做的事与如实未测
 
