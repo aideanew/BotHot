@@ -72,7 +72,16 @@ junit 汇总：`tests=2024 skipped=571 failures=0 errors=0`。
 
 ## 5. 三 CI
 
-（待回填）
+证据提交 `8aac537`（`docs(STEP-04 S4.5.1): @win 全量同形状复跑 ...`）推送后的三条工作流：
+
+| 工作流 | run id | 结论 | 关键读数 |
+|---|---:|---|---|
+| CI | 39401999933 | ✅ success | backend `2018 passed, 6 skipped, 1 warning in 187.03s`；覆盖率 86.67%（门槛 75%）；skip 门禁 `total_skipped=6 baseline=6 pg_unreachable=0`；frontend / compose / compose-smoke / workflow-lint 均 success |
+| CI-Windows | 39401999865 | ✅ success | backend `1453 passed, 571 skipped, 1 warning in 1015.24s (0:16:55)`；门禁 `windows 门禁：failed=0 total_skipped=571 baseline=571`；frontend `385 passed (47 files)` |
+| Security | 39401999880 | ✅ success | 全 job success |
+
+本机 `@win` 读数（§4）与 CI-Windows 逐项一致：`1453 passed / 571 skipped / 0 failed`，
+门禁基线 571 未变。
 
 ## 6. 边界
 
