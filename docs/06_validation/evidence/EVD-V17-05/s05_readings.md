@@ -166,6 +166,11 @@ E       AssertionError: assert 's05-source-1...ox:20261020:1' == 's05-source-1..
 M1/M2/M3 各咬一层（判定 / 幂等 / 阈值），M4 咬住 §3b 的时区换算，M5/M6 咬住两个可观测出口。
 电池脚本是临时件，跑完即删（不入库，避免把 scratch 带进证据包）。
 
+> 口径更正：上表「还原」列的比对是**文本级**的（电池用 `read_text/write_text`，win32 下
+> `write_text` 会把 `\n` 写成 `\r\n`），不是字节级。事后以提交 diff 佐证没有整文件行尾重写
+> （`11 files changed, 967 insertions(+), 10 deletions(-)`，且 CI 三绿、ruff/mypy rc=0）；
+> 字节级还原核对的写法与同类事故记录见 `EVD-V17-07` §4。
+
 ## 6. 相关回归
 
 ```bash

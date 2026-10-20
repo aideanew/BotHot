@@ -57,7 +57,10 @@ jobs:
       # 交付提交的 CI-Windows 读数回填 EVD-V14-26 后才算测量值。
       # STEP-31（执行助手，2026-10-20）新增 26 条连库用例（test_audit_log：23 个写操作 + 3 条负面），
       # 本机无 DSN 实测 26 skipped；第 27 条计数锚不连库 ⇒ 545 + 26 = 571。
-      SKIP_BASELINE_WIN: "571"
+      # STEP-07（执行助手，2026-10-21）新增 18 条：test_audit_scripts 里 11 条离线判据（脚本装载、
+      # 只读静态门、目标门、明文形状与读侧一致性）不连库，7 条演练用例走 conftest 的
+      # 「AIDEANBOT_TEST_PG_DSN 未设置」族 ⇒ 本机无 DSN 实测 7 skipped ⇒ 571 + 7 = 578。
+      SKIP_BASELINE_WIN: "578"
     defaults:
       run:
         shell: bash
