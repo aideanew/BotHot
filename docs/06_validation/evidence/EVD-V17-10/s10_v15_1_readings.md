@@ -171,7 +171,16 @@ skipped 不变 **571** ⇒ `SKIP_BASELINE_WIN` 保持 571，不动阈值。
 
 ### 7.3 三 CI
 
-（待回填）
+交付提交 `1e5c462`（`feat(STEP-10 S10.V15.1 第 1 轮): 详情兜底接入 job_worker→kb.ingest_url，开关默认关`）：
+
+| 工作流 | run id | 结论 | 关键读数 |
+|---|---:|---|---|
+| CI | 39435067138 | ✅ success | backend `2028 passed, 6 skipped, 1 warning in 161.57s`；覆盖率 **87.10%**（门槛 75%）；skip 门禁 `total_skipped=6 baseline=6 pg_unreachable=0` |
+| CI-Windows | 39435067171 | ✅ success | backend `1463 passed, 571 skipped, 1 warning in 1008.19s (0:16:48)`；门禁 `windows 门禁：failed=0 total_skipped=571 baseline=571` |
+| Security | 39435067123 | ✅ success | 全 job success |
+
+与本机逐项对齐：真库 `2028/6/0`（§7.1）= ubuntu `2028/6`；无 DSN 同形状
+`1463/571/0`（§7.2）= CI-Windows `1463/571`，门禁基线 571 未抬（本卡 0 连库用例）。
 
 ## 8. 边界与如实未测
 
