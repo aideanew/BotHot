@@ -1,0 +1,39 @@
+# S30 全量真库读数（STEP-30 验收）
+
+环境：本机 PostgreSQL 16 @ `127.0.0.1:5547/bothot_test`；Windows 10 + Git Bash；按 CI-Windows 等价设置 `PYTHONUTF8=1`（`.github/workflows/ci-windows.yml:32`）。
+
+命令（`apps/api`）：
+
+```bash
+AIDEANBOT_TEST_PG_DSN=postgresql+psycopg://postgres@127.0.0.1:5547/bothot_test \
+DATABASE_URL=$AIDEANBOT_TEST_PG_DSN PYTHONUTF8=1 PYTHONIOENCODING=utf-8 \
+python -m pytest tests/ -q -rs
+```
+
+末行（逐字）：
+
+```text
+1986 passed, 6 skipped, 1 warning in 884.66s (0:14:44)
+```
+
+`FULL_RC=0` ⇒ `failed = 0`。
+
+skip 清单（6 条，逐字）：
+
+```text
+SKIPPED [1] tests\test_chat_sse.py:1130: LangBot :5300 不可达或未注入管理员凭据，跳过真实冒烟
+SKIPPED [1] tests\test_chat_sse.py:1208: LangBot :5300 不可达或未注入管理员凭据，跳过全链冒烟
+SKIPPED [1] tests\test_env_isolation.py:77: 宿主未设这 6 个待清代理变量，本条对照在此环境下无判定力（①②仍有）
+SKIPPED [1] tests\test_session_store_redis.py:47: 测试 Redis 不可达（ConnectionError），拉起容器后复跑
+SKIPPED [1] tests\test_session_store_redis.py:71: 测试 Redis 不可达（ConnectionError），拉起容器后复跑
+SKIPPED [1] tests\test_we_notifications.py:247: Redis 不可达（redis://localhost:6379/0，TimeoutError），恢复后复跑本用例
+```
+
+## 环境说明（不改变判定）
+
+- 首次全量跑未设 `PYTHONUTF8=1`：2 failed，均在 `tests/test_health_probe_bounded.py`，
+  根因是父进程 `subprocess.run(..., text=True)` 用 GBK 解码子进程 UTF-8 输出
+  （`UnicodeDecodeError: 'gbk' codec can't decode byte 0xad`，`proc.stdout is None`）。
+  CI-Windows 全流程已设 `PYTHONUTF8: "1"`，故按 CI 等价环境复跑。
+- 隔离复验：`python -m pytest tests/test_health_probe_bounded.py -q -rs`（`PYTHONUTF8=1`）⇒ `5 passed in 17.11s`。
+- 本次全量在 `PYTHONUTF8=1` 下 `1986 passed / 6 skipped / 0 failed`。

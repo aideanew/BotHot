@@ -175,7 +175,7 @@ CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
     Divergence(
         "SessionClaims",
         "additionalProperties",
-        "strictness",
+        "tightening",
         "identity-extra-forbid",
         "未声明 additionalProperties（= 允许）",
         'extra="forbid" ⇒ 多余键直接拒绝（比 collection 域的 ignore 更严）',

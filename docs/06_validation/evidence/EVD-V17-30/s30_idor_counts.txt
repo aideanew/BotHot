@@ -1,0 +1,22 @@
+# S30.1 计数行与连库读数（STEP-21 复查）
+
+命令（在 `apps/api`，本机 PG16@5547）：
+
+```bash
+AIDEANBOT_TEST_PG_DSN=postgresql+psycopg://postgres@127.0.0.1:5547/bothot_test \
+DATABASE_URL=$AIDEANBOT_TEST_PG_DSN PYTHONUTF8=1 \
+python -m pytest tests/test_idor_matrix.py -q -rs -s
+```
+
+原始输出（逐字节选）：
+
+```text
+.S21 A=22 B_ops=23 B_cases=62 C=2
+106 passed, 1 warning in 112.45s (0:01:52)
+```
+
+口径：
+
+- 带路径参数的操作共 47 个 = A 21 + A 例外 1 + B 23 + C 2（`s21_readings.md` 表）。
+- A 类连库用例 22 条（A 21 + A 例外 1）；B 类角色档用例 62 条 = admin 档 16 操作 × 3 + operator 档 7 操作 × 2；C 类 2 条。
+- 上述矩阵用例 22 + 62 + 2 = 86 条全部通过；其余为归类/反证/读数等无库用例，文件级合计 106 passed。
