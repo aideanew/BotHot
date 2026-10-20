@@ -225,9 +225,37 @@ passed `+12`（离线判据 12 条）、skipped `571 → 578`（7 条演练用�
 `SKIP_UNSET_REASON` 族 skip）⇒ `SKIP_BASELINE_WIN` 抬到**测量值 578**，不留余量。
 第 1 轮（18 条）：`1488 passed / 578 skipped / 0 failed`。
 
-### 6.3 三 CI
+### 6.3 三 CI（两轮都红 ⇒ 熔断交回）
 
-（待回填。第 1 轮的 CI ❌ 与根因在 §6b）
+| 轮 | 提交 | CI（ubuntu） | CI-Windows | Security |
+|---|---|---|---|---|
+| 1 | `b48b010` | ❌ 39488751050（backend 第 14 步） | 被第 1 轮的红打断后未取数 | ✅ 39488751065 |
+| 2 | `376cfe3` | ❌ 39496625774（backend，`1 failed, 2060 passed, 6 skipped in 187.27s`） | ✅ 39496625738 | ✅ 39496625770 |
+
+第 1 轮的根因与修法见 §6b；第 2 轮的红**换了性质**：演练族已经在 ubuntu 上真实执行
+（skip 回到基线 6），但本卡自己的一条用例对环境做了错假设：
+
+```text
+___ test_drill_p39_apply_zeroes_plaintext_and_reads_back_identically ___
+>       assert p39.main(["--dsn", dsn, "--apply", "--allow-hosts", "127.0.0.1"]) == 0
+E       AssertionError: assert 2 == 0
+--- Captured stderr ---
+DSN 的 host='localhost' 不在白名单 ['127.0.0.1'] 内 ⇒ 拒绝写入（生产不在任何白名单里）
+```
+
+判读：**目标门的行为是对的**，红在测试写死了 `127.0.0.1`。本机隔离库的 host 是
+`127.0.0.1`、CI 的 service 是 `localhost`（`ci.yml:51` 那条 DSN），于是本机 19 条全绿、
+CI 一上就红——与 §6b 是同一族病：**本机环境比 CI 宽松**（trust 认证、固定 host 各一次）。
+一行修法（下一轮或规划方定）：白名单参数别写死，由被测串自己推——
+
+```python
+"--allow-hosts", p39.host_of(dsn)          # 正例
+"--allow-hosts", "host-not-in-the-dsn"     # 反例（现在用的 prod-db.internal 已够）
+```
+
+**本卡到此停**：同一张卡连续两次 `@ci` FAIL ⇒ 按指令熔断交回，不再自行开第 3 轮。
+需要规划方定的其实只有这一行测试参数；脚本面（只读门、日界、目标门、回读校验）与
+演练读数的判定没有变化，`SKIP_BASELINE_WIN=578` 也不变（CI-Windows 第 2 轮 ✅ 已证）。
 
 读数口径说明：上两笔全量跑完之后，本卡最后一次改动只落在 `test_audit_scripts.py` 内部
 （把凭据形状的**字面量**改成拼装 + 两处文档措辞去敏感形，敏感形门/gitleaks 因此转绿），
