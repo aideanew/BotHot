@@ -25,14 +25,26 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_sub, get_current_user_id, get_db, limit_offset_query, require_roles
+from app.api.deps import (
+    get_current_sub,
+    get_current_user_id,
+    get_db,
+    limit_offset_query,
+    record_audit_actor,
+    require_roles,
+)
 from app.core.response import success
 from app.models.entities import User
 from app.repositories.job import JobRepository
 from app.services.jobs import JobService
 from app.services.subscription import SourceSubscriptionService
 
-sources_router = APIRouter(prefix="/api/v1/sources", tags=["sources"])
+# STEP-31：写操作审计的操作者来源（读接口也挂，方法过滤在审计中间件）。
+sources_router = APIRouter(
+    prefix="/api/v1/sources",
+    tags=["sources"],
+    dependencies=[Depends(record_audit_actor)],
+)
 subscriptions_router = APIRouter(prefix="/api/v1/spaces", tags=["subscriptions"])
 jobs_router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 

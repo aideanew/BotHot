@@ -52,6 +52,7 @@ from app.api.deps import (
     get_langbot_client,
     get_space_service,
     limit_offset_query,
+    record_audit_actor,
     require_roles,
 )
 from app.api.v1.spaces import BatchDocCategoryRequest, BatchDocIdsRequest, PatchSpaceRequest
@@ -71,7 +72,12 @@ from app.services.push import PushService
 from app.services.spaces import SpaceService, SpaceValidationError
 from app.services.subscription import SourceSubscriptionService
 
-router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+router = APIRouter(
+    prefix="/api/v1/admin",
+    tags=["admin"],
+    # STEP-31：写操作审计的操作者来源（读接口也挂，方法过滤在审计中间件）。
+    dependencies=[Depends(record_audit_actor)],
+)
 
 
 async def _wrap(value: Any) -> Any:

@@ -55,7 +55,9 @@ jobs:
       # STEP-26（执行助手，2026-10-20）新增 5 条连库用例：test_admin_push_persists_notification 2
       # + test_push_persist_order 3，均以「AIDEANBOT_TEST_PG_DSN 未设置」族 skip ⇒ 540 + 5 = 545。
       # 交付提交的 CI-Windows 读数回填 EVD-V14-26 后才算测量值。
-      SKIP_BASELINE_WIN: "545"
+      # STEP-31（执行助手，2026-10-20）新增 26 条连库用例（test_audit_log：23 个写操作 + 3 条负面），
+      # 本机无 DSN 实测 26 skipped；第 27 条计数锚不连库 ⇒ 545 + 26 = 571。
+      SKIP_BASELINE_WIN: "571"
     defaults:
       run:
         shell: bash

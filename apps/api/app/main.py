@@ -31,6 +31,7 @@ from app.api.v1.resolve import router as resolve_router
 from app.api.v1.spaces import router as spaces_router
 from app.api.v1.subscriptions import jobs_router, sources_router, subscriptions_router
 from app.api.v1.system import router as system_router
+from app.core.audit import AuditMiddleware
 from app.core.config import assert_production_ready, get_settings
 from app.core.errors import AppError, http_status_for
 from app.core.logging import configure_logging
@@ -284,9 +285,12 @@ def create_app() -> FastAPI:
     _assert_schema_current(settings)  # R6.1.4：schema/code 版本一致性守卫
     app = FastAPI(title=settings.app_name, version="0.1.0", docs_url="/docs", lifespan=_lifespan)
 
-    # add_middleware 是"后注册者更外层"：先装异常兜底，再装 requestId，最后装 metrics
-    # （metrics 居最外，连 requestId 上下文缺失的早期异常也能计时）。
+    # add_middleware 是"后注册者更外层"：先装异常兜底，再装审计，再装 requestId，
+    # 最后装 metrics（本组内 metrics 居最外，连 requestId 上下文缺失的早期异常也能计时；
+    # W7 安全中间件由下方 install_security_middlewares 再装到更外层）。
+    # 审计位于 requestId 内、异常兜底外：既拿得到 request_id，也看得到被兜成 500 的响应。
     app.add_middleware(ErrorEnvelopeMiddleware)
+    app.add_middleware(AuditMiddleware)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(MetricsMiddleware)
 

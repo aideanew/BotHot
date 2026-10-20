@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_sub, get_db, require_roles
+from app.api.deps import get_current_sub, get_db, record_audit_actor, require_roles
 from app.core.errors import (
     ForbiddenError,
     RequestInvalidError,
@@ -52,7 +52,8 @@ router = APIRouter(
     tags=["bots"],
     # 全域登录门禁：渠道 CRUD / 测试推送 / 日志含 webhook 与密钥，绝不可匿名访问。
     # 逐端点补 Depend 会随新端点复发，故在 router 层一次性收口。
-    dependencies=[Depends(get_current_sub)],
+    # record_audit_actor（STEP-31）：写操作审计的操作者来源，读接口也挂（方法过滤在中间件）。
+    dependencies=[Depends(get_current_sub), Depends(record_audit_actor)],
 )
 
 # 推送内容上限

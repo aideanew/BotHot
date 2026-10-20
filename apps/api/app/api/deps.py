@@ -69,6 +69,23 @@ async def get_current_user_id(
     return user.id
 
 
+async def record_audit_actor(
+    request: Request,
+    user_id: Annotated[str, Depends(get_current_user_id)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    """STEP-31：把已认证操作者（sub + 角色）写进 request.state 供审计中间件读取。
+
+    挂在三个审计路由组上。401 时本依赖不会完成（get_current_user_id 先抛），
+    中间件据状态码跳过，不产生无操作者的审计记录。
+    """
+    user = await SqlAlchemyUserStore(session).get_by_id(user_id)
+    request.state.audit_actor = {
+        "sub": user.sub if user is not None else "",
+        "role": user.role if user is not None else "",
+    }
+
+
 def require_roles(*roles: str):
     """M3 role 依赖工厂：路由写 user: Annotated[User, Depends(require_roles("admin"))]。
 
