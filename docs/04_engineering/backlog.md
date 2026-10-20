@@ -229,6 +229,14 @@ updated: 2026-10-08
 - **已知副作用**：`apps/api/app/api/v1/engines.py:158` 记载 `delete_space` 走 adapter 分支会
   抛 `NotImplementedError` 并整体回滚（空间删不掉）；修法与排期见协调请求
 
+### TECH-003b：四家引擎实接需人裁决 ⬜
+- **现状**：STEP-13 已把能力面做成可见（`GET /engines` 的 `reason`），骨架位如实显示 `not_implemented`；
+  实接本身按 D-V3-03（签 A）本轮不做。
+- **开工前提（缺一不可，均需用户提供或拍板）**：每家的测试凭据；调用预算上限；网络出口（U-07）；
+  实接顺序（ADR-0004 现写 Coze → Dify → FastGPT，main 另需 `MAIN_KB_API_BASE`）。
+- **完成判据**：实接一家 ⇒ `ENGINE_IMPLEMENTED` 置真、`NotImplementedError` 计数下降、
+  `tests/test_engines_capability.py` 里该引擎位在"已开放 + 已登记"时 `reason=ok`。
+
 ## 🟢 低优先级
 
 ### MIG-001：后端 apps/api/ 目录迁移 ✅

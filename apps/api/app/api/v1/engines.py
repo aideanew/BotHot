@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user_id, get_db
+from app.contracts.engine import EngineReason
 from app.core.config import Settings, get_settings
 from app.core.engine_keyring import resolve_engine_key, set_snapshot
 from app.core.errors import ForbiddenError, RequestInvalidError, ResourceNotFoundError
@@ -56,6 +57,32 @@ _DESCRIPTIONS: dict[str, str] = {
 }
 
 
+#: 切换被拒时文案里的标记词，与 `EngineReason` 一一对应（STEP-13）。前端/运维靠它和列表的 reason 对上。
+REFUSAL_MARKERS: dict[EngineReason, str] = {
+    EngineReason.not_allowlisted: "未开放",
+    EngineReason.key_missing: "未配置 API Key",
+    EngineReason.not_implemented: "尚未实接",
+}
+
+
+def _engine_reason(engine: str, configured: bool, allowlist: list[str]) -> EngineReason:
+    """引擎位不可用的**首要**原因（STEP-13，契约 engine.schema.json）。
+
+    顺序按"谁能解决"排：管理员改开放名单 → 管理员登记 Key → 开发排期（D-V3-03 未推翻前无解）。
+    `GET /engines` 的 `reason` 与 `assert_engine_switchable` 的拒绝都读这一个函数，两边不会分家。
+    builtin 恒 ok：它是回退通道。实接与否只认 `ENGINE_IMPLEMENTED`，这里不写任何引擎名。
+    """
+    if engine == "builtin":
+        return EngineReason.ok
+    if engine not in allowlist:
+        return EngineReason.not_allowlisted
+    if not configured:
+        return EngineReason.key_missing
+    if not ENGINE_IMPLEMENTED.get(engine, False):
+        return EngineReason.not_implemented
+    return EngineReason.ok
+
+
 def _engine_status(
     engine: str,
     settings: Settings | None = None,
@@ -77,6 +104,7 @@ def _engine_status(
         "available": _engine_available(engine, res.configured, allowlist),
         "allowlisted": engine in allowlist,
         "implemented": ENGINE_IMPLEMENTED.get(engine, False),
+        "reason": _engine_reason(engine, res.configured, allowlist).value,
         "keyEnv": res.env_var,
         # T5.4：生效来源显式回报——登记覆盖 env 必须可见，「存了但没生效」是最差失败形态
         "activeSource": res.source,
@@ -92,9 +120,7 @@ def _engine_available(engine: str, configured: bool, allowlist: list[str]) -> bo
     builtin 恒 True：它是回退通道。若随 allowlist 判定，管理员误配 allowlist（不含
     builtin）会让 GET 报 builtin 不可用而 PATCH 仍允许切入——同一份数据两个谓词。
     """
-    if engine == "builtin":
-        return True
-    return configured and engine in allowlist and ENGINE_IMPLEMENTED.get(engine, False)
+    return _engine_reason(engine, configured, allowlist) is EngineReason.ok
 
 
 def assert_engine_switchable(
@@ -113,12 +139,17 @@ def assert_engine_switchable(
     if engine == "builtin":
         return
     st = _engine_status(engine, settings, registered)
-    if not st["allowlisted"]:
-        raise ForbiddenError(f"引擎 {engine} 未开放（allowlist={_engine_allowlist(settings)}），请联系管理员")
-    if not st["configured"]:
-        raise ForbiddenError(f"引擎 {engine} 未配置 API Key（登记表或 env: {st['keyEnv']}），请联系管理员登记")
-    if not ENGINE_IMPLEMENTED.get(engine, False):
-        raise ForbiddenError(f"引擎 {engine} 尚未实接（仅骨架实现），暂不可切换")
+    reason = EngineReason(st["reason"])
+    if reason is EngineReason.not_allowlisted:
+        raise ForbiddenError(
+            f"引擎 {engine} {REFUSAL_MARKERS[reason]}（allowlist={_engine_allowlist(settings)}），请联系管理员"
+        )
+    if reason is EngineReason.key_missing:
+        raise ForbiddenError(
+            f"引擎 {engine} {REFUSAL_MARKERS[reason]}（登记表或 env: {st['keyEnv']}），请联系管理员登记"
+        )
+    if reason is EngineReason.not_implemented:
+        raise ForbiddenError(f"引擎 {engine} {REFUSAL_MARKERS[reason]}（仅骨架实现），暂不可切换")
 
 
 @engines_router.get("/engines")

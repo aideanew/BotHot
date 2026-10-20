@@ -30,6 +30,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import SchemaError
 
 from app.contracts import collection as collection_contract
+from app.contracts import engine as engine_contract
 from app.contracts import envelope as envelope_contract
 from app.contracts import events as events_contract
 from app.contracts import identity as identity_contract
@@ -45,6 +46,7 @@ DOMAINS: dict[str, tuple[str, Any]] = {
     "events": ("events.schema.json", events_contract.CONTRACT_DIVERGENCES),
     "resources": ("resources.schema.json", resources_contract.CONTRACT_DIVERGENCES),
     "api.envelope": ("api.envelope.schema.json", envelope_contract.CONTRACT_DIVERGENCES),
+    "engine": ("engine.schema.json", engine_contract.CONTRACT_DIVERGENCES),
 }
 
 #: `Divergence` 文档里"接受集不变"的四种登记（structural / serialization / strictness / documentation）。
@@ -117,7 +119,7 @@ def test_meta_validation_has_teeth() -> None:
 
 
 def test_every_domain_has_a_generated_counterpart() -> None:
-    """五个域稿 ↔ 五份产物一一对应（`api.envelope` 是 S1.2.2 最后收编的一域）。"""
+    """域稿 ↔ 产物一一对应（`api.envelope` 是 S1.2.2 最后收编的一域，`engine` 由 STEP-13 新冻结）。"""
     assert {p.name for p in SCHEMA_DIR.glob("*.schema.json")} == {f"{d}.schema.json" for d in DOMAINS}
 
 

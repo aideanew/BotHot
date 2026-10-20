@@ -1,0 +1,4 @@
+# 变异反证：把 _engine_reason 里『未开放』与『缺 Key』两条判断对调，跑本卡测试；之后还原
+4 failed, 39 passed in 0.82s
+# 还原后：
+43 passed in 0.63s

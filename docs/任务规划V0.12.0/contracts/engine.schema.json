@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bothot://contracts/engine/v1",
+  "title": "BotHot 可插拔引擎能力面契约（STEP-13 冻结，基线 main@25088c4）",
+  "description": "GET /api/v1/engines 每个引擎位如实回报可用与否和首要原因。D-V3-03（签 A）：本轮不实接四家引擎，未实现能力必须显示为 not_implemented，不得 500。唯一源 apps/api/app/contracts/engine.py。",
+  "x-invariants": [
+    "available 为真当且仅当 reason = ok。",
+    "reason 只给一个值，按谁能解决排序：not_allowlisted（管理员改开放名单）→ key_missing（管理员登记 Key）→ not_implemented（开发排期）。切换校验 PATCH /spaces/{space_id}/engine 的拒绝顺序与此相同，拒绝码一律 403(10004)。",
+    "builtin 是回退通道，恒为 available=true、reason=ok。"
+  ],
+  "x-not-in-single-source": {
+    "x-invariants": "三条是取值之间的关系与端点行为，不是字段形状；由 tests/test_engines_capability.py 逐条核。"
+  },
+  "$defs": {
+    "EngineReason": {
+      "type": "string",
+      "enum": ["ok", "not_allowlisted", "key_missing", "not_implemented"]
+    },
+    "EngineCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine", "available", "reason", "implemented", "configured", "allowlisted", "keyEnv", "activeSource", "decryptFailed", "description"],
+      "properties": {
+        "engine": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "available": { "type": "boolean" },
+        "reason": { "$ref": "#/$defs/EngineReason" },
+        "implemented": { "type": "boolean" },
+        "configured": { "type": "boolean" },
+        "allowlisted": { "type": "boolean" },
+        "keyEnv": { "type": "string" },
+        "activeSource": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "description": "生效的 Key 来源：registered / env；未配置或 builtin 为 null"
+        },
+        "decryptFailed": { "type": "boolean" },
+        "description": { "type": "string" }
+      }
+    }
+  }
+}

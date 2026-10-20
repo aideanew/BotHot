@@ -167,6 +167,8 @@ CONTRACT_SCHEMA_MODULES: dict[str, str] = {
     # STEP-01 S1.2.2 第五域（D-V8-08）：稿名就叫 api.envelope.schema.json，产物同名便于按 $id 对上。
     # 这一域"根即形状"：模块里 `__contract_root__` 点名的模型摊到产物根上，见 generate_schemas。
     "api.envelope": "app.contracts.envelope",
+    # STEP-13 S13.3.1：可插拔引擎能力面（D-V3-03 选 A，只做可见化）。
+    "engine": "app.contracts.engine",
 }
 
 

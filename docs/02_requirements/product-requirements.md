@@ -86,9 +86,18 @@ BotHot 后端识别出 **9 个业务域**，前端识别出 **10 个功能域**�
 ### REQ-F-003：知识库管理
 - 多空间隔离（用户级 + 公共库）
 - LangBot RAG 1:1 映射
-- 可插拔引擎（builtin / langbot / aidean / redfox）
+- 可插拔引擎：5 个引擎位 builtin / main（RAGFlow 拓展系）/ coze / dify / fastgpt（`engine_port.py` 的 `ENGINE_ORDER`）
 - 公共库共享与发布（allowlist）
 - **验收**：空间 CRUD 正常，引擎切换可用
+
+#### REQ-F-003 实现度（STEP-13，2026-10-20 与代码对齐）
+- **可用**：仅 builtin（LangBot 系）。它是回退通道，恒可用、恒可切回。
+- **骨架**：main（`RagflowAdapter` 六方法）与 coze / dify / fastgpt（`SaaSKnowledgeAdapter` 六方法）都只有接口、未实接，
+  `engine_port.py` 里 `NotImplementedError` 共 16 处（只降不升）；`ENGINE_IMPLEMENTED` 只有 builtin 为真。
+  依 D-V3-03（签 A），本轮不实接（缺凭据与预算），实接排期见 backlog TECH-003b。
+- **怎么看出来**：`GET /api/v1/engines` 每个引擎位带 `reason`，取值 `ok` / `not_allowlisted` / `key_missing` / `not_implemented`
+  （契约 `docs/任务规划V0.12.0/contracts/engine.schema.json`），只报最先该处理的一个：先看是否开放，再看是否登记 Key，最后看是否实接。
+- **切换被拒**：`PATCH /api/v1/spaces/{space_id}/engine` 对不可用引擎一律 403（10004），文案与该引擎位的 `reason` 一一对应，不会 500。
 
 ### REQ-F-004：公众号链接入库
 - 链接解析（RedFox + Wandao）

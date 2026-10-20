@@ -1,0 +1,79 @@
+{
+  "$defs": {
+    "EngineCapability": {
+      "additionalProperties": false,
+      "description": "`GET /api/v1/engines` 的 `items[]` 元素。",
+      "properties": {
+        "activeSource": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "生效的 Key 来源：registered / env；未配置或 builtin 为 null"
+        },
+        "allowlisted": {
+          "type": "boolean"
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "configured": {
+          "type": "boolean"
+        },
+        "decryptFailed": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "engine": {
+          "maxLength": 32,
+          "minLength": 1,
+          "type": "string"
+        },
+        "implemented": {
+          "type": "boolean"
+        },
+        "keyEnv": {
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/EngineReason"
+        }
+      },
+      "required": [
+        "engine",
+        "available",
+        "reason",
+        "implemented",
+        "configured",
+        "allowlisted",
+        "keyEnv",
+        "activeSource",
+        "decryptFailed",
+        "description"
+      ],
+      "type": "object"
+    },
+    "EngineReason": {
+      "description": "引擎位不可用的首要原因；可用时为 `ok`。",
+      "enum": [
+        "ok",
+        "not_allowlisted",
+        "key_missing",
+        "not_implemented"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "bothot://contracts/engine/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "由 scripts/gen_contracts.py 从 apps/api/app/contracts/engine.py 生成，请勿手动修改（--check 幂等门禁）。唯一源是 Python 模型（ADR-0008）。",
+  "title": "BotHot engine 域契约（生成物）",
+  "x-generated-by": "scripts/gen_contracts.py",
+  "x-source-module": "app.contracts.engine"
+}

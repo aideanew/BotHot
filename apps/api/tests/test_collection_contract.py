@@ -37,6 +37,7 @@ from typing import Any, get_type_hints
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from app.contracts import engine as engine_contract
 from app.contracts import envelope as envelope_contract
 from app.contracts import events as events_contract
 from app.contracts import identity as identity_contract
@@ -94,6 +95,12 @@ DOMAINS: dict[str, tuple[Path, Path, tuple[Divergence, ...]]] = {
         CONTRACT_DIR / "api.envelope.schema.json",
         SCHEMA_DIR / "api.envelope.schema.json",
         envelope_contract.CONTRACT_DIVERGENCES,
+    ),
+    # STEP-13 S13.3.1 新冻结的引擎能力面。
+    "engine": (
+        CONTRACT_DIR / "engine.schema.json",
+        SCHEMA_DIR / "engine.schema.json",
+        engine_contract.CONTRACT_DIVERGENCES,
     ),
 }
 
