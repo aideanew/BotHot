@@ -48,7 +48,11 @@ jobs:
       # test_push_and_hot_rank_matrix 5（2 + 参数化 3）+ test_channel_update_extra_config_encrypted 1，
       # 均经 db_session 夹具在本平台以「AIDEANBOT_TEST_PG_DSN 未设置」族 skip ⇒ 444 + 8 = 452。
       # 这是按增量推算的值，交付提交的 CI-Windows 读数（total_skipped）回填进 EVD-V14-25 后才算测量值。
-      SKIP_BASELINE_WIN: "452"
+      # STEP-21（规划方，2026-10-20）新增 88 条连库用例：test_idor_matrix 87（A 22 + 正控 1 + B 62 + C 2）
+      # + test_r11_engine_keys 1，均以「AIDEANBOT_TEST_PG_DSN 未设置」族 skip。
+      # **测量值**：1834c4a run 39353354825 = 1324 passed / 540 skipped / 0 failed，构成 PG-DSN-未设置 431 +
+      # PG-不可达 104 + Redis 3 + LangBot 1 + 代理变量 1，未知族 0 ⇒ 452 + 88 = 540（推算与测量一致）。
+      SKIP_BASELINE_WIN: "540"
     defaults:
       run:
         shell: bash

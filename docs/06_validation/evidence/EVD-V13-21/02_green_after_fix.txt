@@ -2,3 +2,4 @@
 OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6379, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6379)
 redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6379, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6379) connecting to localhost:6379.
 136 passed, 2 warnings in 8.71s
+# 用例数（collect-only 现读）：A=22（含 A 例外 1）正控=1 B=62 C=2；Windows 无 PG 时 test_idor_matrix 87 条 + r11 1 条按 DSN 未设置族 skip
