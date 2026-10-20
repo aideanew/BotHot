@@ -111,4 +111,7 @@
 | P-44 | **`SECRET_ASSIGN` 4 字符下限造成的召回缺口**：① 不足 4 字符的短左值后跟写死兜底字面量（或运算/空值合并/逻辑或/三元/拼接/括号）整类不报；② 带类型注解的口令/令牌赋值不报。新旧门都漏 | STEP-27 独立复查 A 项、F 项附注（`V0.16.0/evidence/28c0d2e/review27_summary.md`） | 归 STEP-29 S29.1/S29.2，只在源码模式放开，新增误报须为 0 | Agent-Guard（29） |
 | P-45 | **`getattr` 属性名字符串被当兜底值（误报，业务文件）**：`apps/api/app/providers/reranker.py` 第 145 行第二参数是 ≥8 字符的属性名，新门报 1 条；后续碰该文件的卡会被挡 | 28c0d2e 普查 | 归 STEP-29 S29.3：只豁免第二参数位，默认值位照判；不改业务代码 | Agent-Guard（29） |
 | P-46 | **新旧门对照读数口径不一**：`EVD-V15-27/s27_3_counts.py` 按文件净差读少报 26/新增 10，逐行对照为 31/15（同文件一增一减被抵掉） | STEP-27 独立复查 B 项 | 归 STEP-29 S29.6（D-V16-02） | Agent-Guard（29） |
+| P-47 | **operator 在 /admin/ops 仍看到引擎 Key 登记/撤销按钮**：D-V16-06 把这两个写接口收为 admin 后，operator 点了得到"登记失败：权限不足"，不是安全洞但体验错 | STEP-21 先红后的 D-V16-06 | 归 STEP-15b（按秩隐藏，V0.17.0 增量） | Agent-Web（15b） |
+| P-48 | **identity `SessionClaims` 的 `extra="forbid"` 登记成 `strictness`**：`Divergence` 文档把 strictness 定义为"接受集不变"，实际拒收多余键是接受集收窄，应为 `tightening`；jsonschema 探针判出 79 条不一致，只因同形状另有 tightening 登记才过 | STEP-01 jsonschema 探针（EVD-V13-01） | 归 STEP-30 S30.4 | Agent-Guard（30） |
+| P-49 | **全仓没有审计设施**：identity 契约 x-permission-matrix 写明运营端"写操作须记录操作者 sub"，`grep -ri audit apps/api/app` 0 命中；推送域、管理端、引擎 Key、来源的写操作都不留操作者痕迹（R-V14-03 的实测结论） | V0.17.0 规划现读 | 归 STEP-31（D-V17-02） | Agent-API（31） |
 
