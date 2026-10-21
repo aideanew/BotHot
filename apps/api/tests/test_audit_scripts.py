@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import ast
 import base64
 import importlib.util
 import sys
@@ -368,7 +369,7 @@ def test_drill_p39_dry_run_writes_nothing(drill_conn, p39_master: str, script_ds
     dsn = script_dsn
     assert p39_master == MASTER
     before = _plain_count(drill_conn)
-    assert p39.main(["--dsn", dsn, "--allow-hosts", "127.0.0.1"]) == 0
+    assert p39.main(["--dsn", dsn, "--allow-hosts", p39.host_of(dsn)]) == 0
     assert _plain_count(drill_conn) == before == 3, "dry-run 写库了"
 
 
@@ -379,7 +380,7 @@ def test_drill_p39_apply_zeroes_plaintext_and_reads_back_identically(
     rows = _seeded_plaintext(drill_conn)
     assert len(rows) == 3, f"播种的明文行没被自己的判据选中：{rows}"
 
-    assert p39.main(["--dsn", dsn, "--apply", "--allow-hosts", "127.0.0.1"]) == 0
+    assert p39.main(["--dsn", dsn, "--apply", "--allow-hosts", p39.host_of(dsn)]) == 0
     assert _plain_count(drill_conn) == 0, "apply 后仍有明文形状的行"
 
     from app.core.secret_crypto import decrypt_extra_config
@@ -390,7 +391,7 @@ def test_drill_p39_apply_zeroes_plaintext_and_reads_back_identically(
 
     # 幂等：第二次跑时判据已经选不出行，已加密的行也不会被再动一次
     assert _seeded_plaintext(drill_conn) == []
-    assert p39.main(["--dsn", dsn, "--apply", "--allow-hosts", "127.0.0.1"]) == 0
+    assert p39.main(["--dsn", dsn, "--apply", "--allow-hosts", p39.host_of(dsn)]) == 0
 
 
 def test_drill_p39_apply_refuses_unlisted_host(drill_conn, p39_master: str, script_dsn: str) -> None:
@@ -398,3 +399,58 @@ def test_drill_p39_apply_refuses_unlisted_host(drill_conn, p39_master: str, scri
     before = _plain_count(drill_conn)
     assert p39.main(["--dsn", dsn, "--apply", "--allow-hosts", "prod-db.internal"]) == 2
     assert _plain_count(drill_conn) == before == 3, "目标门没挡住写入"
+
+
+# ── 防复发层：目标门的取 host 方式（第 2 轮 @ci 红的根因）───────────────────────
+#
+# 第 1 轮红在"引擎 URL 抹口令"，第 2 轮红在**用例自己把 host 写成字面量 127.0.0.1**，
+# 而 @ci 的 postgres service 主机名是 `localhost` ⇒ 门按设计拒绝了写入（`assert 2 == 0`）。
+# 两次红的共同形态是"把我的机器当规格"，所以这里钉两件事：门跟着 DSN 走，且**调用点不许出现字面量 host**。
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "db.internal", "postgres"])
+def test_host_of_follows_the_dsn_and_the_gate_follows_host_of(host: str) -> None:
+    dsn = _conninfo(host)  # 本条只判 host 的取法，端口与库名留给 _conninfo 的默认值
+    assert p39.host_of(dsn) == host, f"host 没从 DSN 里取出来：{host}"
+    assert p39.apply_allowed(dsn, p39.host_of(dsn)) is None, "按 DSN 自取的 host 竟然被自己的门拒绝"
+    assert p39.apply_allowed(dsn, "10.255.255.9") is not None, "非 DSN 主机被放行 ⇒ 门没有按 host 判"
+
+
+def _p39_main_call_sites() -> list[tuple[str, object]]:
+    """本文件里每个 `p39.main([...])` 调用点，配它 `--allow-hosts` 后面那一项的 AST 节点。"""
+    tree = ast.parse(Path(__file__).resolve().read_text(encoding="utf-8"))
+    sites: list[tuple[str, object]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if ast.unparse(node.func) != "p39.main":
+            continue
+        args = node.args[0].elts if node.args and isinstance(node.args[0], ast.List) else []
+        # 字符串元素取**值**而不是 unparse 文本：ast.unparse(Constant "--dsn") 出来是带引号的
+        # '"--dsn"'，拿它和 "--allow-hosts" 比会恒不命中（本条判据第一次跑就是这么红的）。
+        vals = [a.value if isinstance(a, ast.Constant) and isinstance(a.value, str) else ast.unparse(a) for a in args]
+        if "--allow-hosts" not in vals:
+            continue
+        idx = vals.index("--allow-hosts")
+        sites.append((ast.unparse(node), args[idx + 1] if idx + 1 < len(args) else None))
+    return sites
+
+
+def test_drill_call_sites_pass_derived_host_never_a_literal() -> None:
+    sites = _p39_main_call_sites()
+
+    def shape(arg: object) -> str:
+        if isinstance(arg, ast.Call):
+            func = ast.unparse(arg.func)
+            one_name_arg = len(arg.args) == 1 and isinstance(arg.args[0], ast.Name)
+            if func.endswith("host_of") and one_name_arg:
+                # 允许 `p39.host_of(dsn)` 与改名后的 `p39.host_of(别的名)`：改名不是回归
+                return "派生 host"
+        if isinstance(arg, ast.Constant) and arg.value == "prod-db.internal":
+            return "字面量取 host"
+        return f"未预期形态：{ast.unparse(arg) if isinstance(arg, ast.AST) else arg}"
+
+    forms = [shape(arg) for _, arg in sites]
+    # 4 个调用点：3 处必须派生（dry-run / apply / 幂等复跑），1 处必须是"故意拒绝"的哨兵字面量
+    assert forms.count("派生 host") == 3, f"派生调用点数不符：{forms}"
+    assert forms.count("字面量取 host") == 1, f"拒绝哨兵数量不符：{forms}"
+    assert len(sites) == 4, f"调用点总数变了，本条判据要连带重算：{forms}"

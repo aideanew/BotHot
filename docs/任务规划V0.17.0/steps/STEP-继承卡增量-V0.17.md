@@ -30,3 +30,21 @@
 - **允许修改追加**：`push_scheduler.py` 中该调用的位置（只移动这一处调用及其上方注释）；`apps/api/tests/test_push_persist_order.py`（新）；`bots.py` 第 513–518 行那段注释（**只有**当新测试证明"savepoint 回滚会连带撤销未 flush 的 PushLog"与实测不符时，改成实测结论；代码一行不动）；`.github/workflows/ci-windows.yml` 的 `SKIP_BASELINE_WIN`（新增连库用例，按实测值抬）。
 - **仍然禁止**：改 `persist_web_notification` 函数体与异常吞没、改计数器语义（属 STEP-05）、改 bots.py 任何代码。
 - 其余 S26.1.1 / S26.2.1 / S26.2.3 / S26.3 照原卡执行；S26.3.1 的 `persist_web_notification(` 计数口径不变（仍 4 处）。
+
+## STEP-07 改卡（D-V17-04，2026-10-21 12:45，用户授权后由执行方代录）
+
+背景：`S07.V15.1` 两轮 `@ci` FAIL 后按指令熔断交回（`EVD-V17-07` §6.3），待裁定的只有"演练族把
+`--allow-hosts` 写成字面量 host"这一处。用户 2026-10-21 授权重开；因 D-14 的机器门把"主题写出第 ≥3 轮"
+本身判红且无"已升级"通道（登记 `§4 P-56`），按 D-14 列出的出路「重写任务书」换号落地。
+
+- **新增 S07.V15.1-R（授权重开，等价于 `S07.V15.1` 的第 3 轮）**：三处 `p39.main` 调用的
+  `--allow-hosts` 一律由被测 DSN 推导（`p39.host_of(dsn)`）；`prod-db.internal` 这个**故意不等于任何真实
+  host** 的拒绝哨兵保留字面量。
+- **新增两条防复发判据**（都不连库，因此 `@win` 与 `@ci` 同形）：① host 形状参数化（`127.0.0.1` /
+  `localhost` / `db.internal` / `postgres`）断言"门跟着 DSN 走、对非 DSN host 必须拒绝"；
+  ②AST 门钉住本文件所有 `--allow-hosts` 调用点的形态与总数（3 派生 + 1 哨兵 + 总数 4）。
+- **允许修改**：`apps/api/tests/test_audit_scripts.py`（只动演练族的白名单实参与新增用例）。
+- **仍然禁止**：改 `scripts/audit/**` 的任何判据（只读门、目标门、回读校验、幂等）、放宽 `apply_allowed`、
+  改 `SKIP_BASELINE_WIN`（本轮实测不新增 skip，仍 578）。
+- 卡面上 `S07.V15.2` / `S07.V15.3` 与其余项照原卡；本增量的轮次账记在 `S07.V15.1-R` 名下，
+  但**证据与记录里必须写明它是第 3 轮**——换号是为了让机器门可表达"已升级"，不是为了改写事实。

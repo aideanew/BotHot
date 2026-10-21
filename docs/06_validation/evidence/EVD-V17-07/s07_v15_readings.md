@@ -315,3 +315,84 @@ skip 门禁基线是 6，多出 7 条 skip 直接把 job 判红。这红得对�
    卡面『回填输入清单』第 3 行要求"实测为 0 必须写 0，不要留空"，此处按字面执行）。
 5. 付费/外部凭据无关；未发任何真实推送、未连生产库。
 6. P-50～P-53 未动；本卡未新增 P 项。
+
+## 8. 第 3 轮（2026-10-21，用户授权后开）：目标门改按**被测 DSN** 取 host
+
+§6.3 记的熔断状态由用户裁定解除，授权范围就是那一行测试参数（外加一道防复发门）。
+
+**改动面只有一个文件**：`apps/api/tests/test_audit_scripts.py`。脚本面（只读门、目标门、形状判据、
+回读校验、幂等）与演练读数**一行未动**——第 2 轮的判读是"门的行为正确、红在测试写死 host"，
+所以修测试而不是放宽门。三处调用点改成：
+
+```python
+assert p39.main(["--dsn", dsn, "--allow-hosts", p39.host_of(dsn)]) == 0   # dry-run
+assert p39.main(["--dsn", dsn, "--apply", "--allow-hosts", p39.host_of(dsn)]) == 0   # apply + 幂等复跑
+```
+
+拒绝用的 `prod-db.internal` 哨兵**保留字面量**——它的作用就是"不等于任何真实 host"。
+
+新增两条防复发判据（都不需要 DSN，因此 `@win` 无库也能跑）：
+
+1. `test_host_of_follows_the_dsn_and_the_gate_follows_host_of`：对 `127.0.0.1` / `localhost` /
+   `db.internal` / `postgres` 四种 host 形状，断言 `host_of(dsn) == host`、按自取值放行、
+   对 `10.255.255.9` 必须拒绝。CI 那个 `localhost` 形状现在是**被参数化覆盖的一种**，不是意外。
+2. `test_drill_call_sites_pass_derived_host_never_a_literal`：AST 扫本文件所有
+   `p39.main([... "--allow-hosts" ...])` 调用点，要求 3 处实参是 `host_of(<某变量>)`、
+   1 处是拒绝哨兵字面量、总数恰为 4。它不连库，所以"本机绿"不再等于"只在本机成立"。
+
+### 8.1 这条 AST 门自己先红了一次（探针把判据近似错了）
+
+第一版用 `ast.unparse(element)` 和 `"--allow-hosts"` 比——`ast.unparse` 对字符串常量输出的是
+**带引号的文本** `'"--allow-hosts"'`，于是匹配恒不命中、`sites` 为空、
+`forms.count("派生 host") == 3` 报 `assert 0 == 3`。按实测改成"字符串元素取 `.value`，非字符串才 unparse"。
+同一轮里还纠了一处**过严**：原判据要求实参写成 `p39.host_of(dsn)` 一字不差，改名（如
+`host_of(script_dsn)`）会假红，故放宽为"`host_of` 结尾 + 单个 Name 实参"。
+
+### 8.2 反证电池（4 发，字节级还原 + sha256 核对，只跑那条静态门）
+
+| 变异 | 期望 | 实得 |
+|---|---|---|
+| M1 把一处派生改成字面量 `localhost`（第 2 轮 @ci 的真实红形态） | RED | **RED** `1 failed, 23 deselected` |
+| M2 等价改名 `host_of(script_dsn_renamed)` | GREEN | **GREEN** `1 passed, 23 deselected` |
+| M3 改成另一个字面量 `127.0.0.1`（证明不是只认某个地址） | RED | **RED** |
+| M4 摘掉一处 `--allow-hosts`（证明总数也被判） | RED | **RED** |
+
+电池跑完 `还原一致=True`，`.staging/mutate_ast_guard.py` 是 gitignored 的 scratch，不入库。
+
+### 8.3 本机读数与"没有新增 skip"的实测
+
+- 连库（`AIDEANBOT_TEST_PG_DSN` 指向隔离库 `bothot_test`）：`24 passed in 1.33s`（第 2 轮是 19 条）。
+- **无 DSN**（模拟 `@win`/CI-Windows 面）：`17 passed, 7 skipped`，跳过的正好是 300/310/326/335/368/376/397
+  这 7 条连库用例——与第 2 轮的 7 条同一集合。新增 5 条（4 参数化 + 1 静态 AST）**全部落在非连库层**
+  ⇒ CI-Windows 的 skip 计数不变，`SKIP_BASELINE_WIN` 保持 **578**，按 D-V10-11 不抬数。
+- `ruff check app tests` rc=0、`mypy app` 115 files 无问题、`py_compile` 通过（本轮没被 CJK 引号坑到）。
+- 全量真库读数仍以本卡推送后的 `@ci` 为准（第 2 轮那次是 `1 failed / 2060 passed / 6 skipped`）。
+
+### 8.4 同批并入的一笔与本卡无关的主干红
+
+推送这批时带上 `apps/api/uv.lock` 的 certifi 补丁（用户单独授权），根因与新登记见
+`docs/任务规划V0.12.0/00-README.md` 的 P-54 / P-55 与 `EVD-V13-00H` §10。
+一次 push 只建尖端 run（`EVD-V13-00H` §9.1），所以下面 8.5 的三 CI 读数是**整个 tip 提交**的，
+不是单条修复的——引用时按 tip SHA 说。
+
+### 8.5 第 3 轮 `@ci` 读数
+
+（待回填：本卡推送后由 REST 复取 run id + head_sha + conclusion。）
+
+### 8.6 新用例被敏感形门拦下一次（门的召回，不是误报）
+
+写第 8 节那条参数化用例时，第一版把端口号与库名当作**字面量实参**写进了那条"以连接串命名的局部变量"
+的赋值里，`evidence-check` 的敏感形门立刻给出一条 `assign` 类 HIGH（键名就是那个变量名，值已打码）。
+不是 P-40 那一族误报——门的判据是"这类键名的赋值，右侧带**像值的字面量**"（`_src_value_like` 与
+`_literal_is_key` 两问），而那个库名字符串确实是值、不是字段名，所以这条召回是按设计工作的。
+同文件里另外两种写法都不命中：一种右侧只是个变量名，另一种的键名压根不在敏感词表内——
+差别就在两处坐标：**键名**与**右侧有没有值形字面量**。这里不复述被拦的那条串本身，
+按 S00P.2.2 的口径只描述形状：把它写进文档会让文档自己成为下一发命中。
+
+修法不是改名躲门：本条断言只判 host 的取法，端口与库名对它无判定力，所以把那两个字面量实参去掉
+（改由拼装函数的默认值给）——右侧不再有字面量 ⇒ 判据不再适用，同时用例本身也更短。
+改后门回归 0 命中、24 条全绿、`evidence-check` 通过。
+取证手法记录：判"门为什么响"时**直接装载 `scripts/guards.py` 调 `secret_scan_for_path` 问它要匹配**，
+而不是猜正则——本节第一版猜的是"表达式被当凭据"，被门的回答否掉了。
+
+
