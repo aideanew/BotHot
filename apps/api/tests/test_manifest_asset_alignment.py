@@ -119,24 +119,39 @@ def _add_columns(fn: ast.FunctionDef) -> dict[str, list[tuple[str, str, bool, in
     return out
 
 
+def _chain(revs: dict[str, str | None], start: str) -> tuple[set[str], str | None]:
+    """从 `start` 沿 `down_revision` 往下走：返回（走过的版本, 停住处的版本或 None）。"""
+    seen: set[str] = set()
+    cursor: str | None = start
+    while cursor in revs and cursor not in seen:
+        seen.add(cursor)
+        cursor = revs[cursor]
+    return seen, cursor
+
+
 def test_new_revision_exists_and_chains_to_the_previous_head() -> None:
+    """**头agnostic** 的父链判据：只有一个 head，且 head 挂在已知的旧头上、覆盖全部历史。
+
+    原来这条把 `NEW_REV`（STEP-04 那一支）当成"新迁移"写死，于是它其实是在说
+    "ab1006c1a 永远是 head"——STEP-28 加了 `ab1006c4a` 之后当场变红（`assert 2 == 1`），
+    而那次改动完全正确。判据的本意是"**当前 head 的父链必须是完整线性的**"，
+    与是哪一支无关，所以这里改成从版本目录推 head。
+    """
     revs = _revisions()
-    assert NEW_REV in revs, f"版本目录里没有 {NEW_REV}：新迁移没落进 alembic/versions/"
     heads = {r for r in revs if r not in {d for d in revs.values() if d}}
     assert len(heads) == 1, f"存在 {len(heads)} 个 head（分叉迁移）：{sorted(heads)}"
-    parent = revs[NEW_REV]
-    assert parent is not None and parent in revs, f"{NEW_REV} 的 down_revision={parent!r} 不是已知版本"
-    # 新 head 必须挂在**旧头**上：挂到中间某个祖先，等于把后面的迁移全丢掉
-    older = {r for r in revs if r != NEW_REV}
-    reachable = set()
-    cursor = parent
-    while cursor in older:
-        reachable.add(cursor)
-        cursor = revs[cursor]
-    assert NEW_REV not in reachable
-    assert len(revs) - len(reachable) == 1, (
-        f"{NEW_REV} 的父链只回溯到 {cursor!r}，中间漏掉 {len(revs) - len(reachable) - 1} 个版本 ⇒ 挂错父版本"
+    head = next(iter(heads))
+    parent = revs[head]
+    assert parent is not None and parent in revs, f"head {head!r} 的 down_revision={parent!r} 不是已知版本"
+    # head 必须挂在**旧头**上：挂到中间某个祖先，等于把后面的迁移全丢掉
+    walked, stopped = _chain(revs, parent)
+    assert head not in walked, f"head {head} 出现在自己的父链里（循环链）"
+    assert walked == set(revs) - {head}, (
+        f"head {head} 的父链只回溯到 {stopped!r}，漏掉 {sorted(set(revs) - walked - {head})} ⇒ 挂错父版本"
     )
+    # STEP-04 那一次改动原本的保证不能被"泛化"顺手丢掉：它仍在链上，且父是当时的旧头
+    assert NEW_REV in revs and NEW_REV in walked | {head}, f"{NEW_REV} 已不在 head 的父链上"
+    assert revs[NEW_REV] == "ab1005w5b", f"{NEW_REV} 的父被改动了：{revs[NEW_REV]!r}"
 
 
 def test_model_declares_exactly_the_columns_the_migration_adds() -> None:
@@ -799,3 +814,61 @@ async def test_recover_stale_rolls_back_orphan_enqueued_manifest(db_session) -> 
     assert fresh.status == MANIFEST_STATUS_ENQUEUED, "没超时也被回退 ⇒ 时间锚失去判定力"
     assert held.status == MANIFEST_STATUS_ENQUEUED, "有 QUEUED Job 认领还被回退 ⇒ 自愈会与在途条目抢同一篇"
     assert untouched.status == MANIFEST_STATUS_DISCOVERED
+
+
+# ── 泛化后的两道反证（2026-10-21，STEP-28 S28.1.1 撞红之后补）──────────────────
+#
+# 为什么必须有：父链判据原来是"ab1006c1a 永远是 head"，探针原来是"永远只检 STEP-04 那两列"。
+# 两者合起来的效果是 **任何新头一出现这两处就失效**——一个恒红、一个恒绿（新表根本没被检）。
+# 泛化如果不配反证，就只是把红换成了另一种静默。
+
+
+def _head_of(revs: dict[str, str | None]) -> set[str]:
+    return {r for r in revs if r not in {d for d in revs.values() if d}}
+
+
+def test_chain_judgment_catches_fork_wrong_parent_and_cycle() -> None:
+    """合成版本目录上的三发极性：正常链绿，分叉/错父/环各自被抓。"""
+    good = {"r1": None, "r2": "r1", "r3": "r2"}
+    assert _head_of(good) == {"r3"}
+    walked, stopped = _chain(good, str(good["r3"]))
+    assert walked == {"r2", "r1"} and stopped is None, "正常线性链必须走到底且停在 None"
+
+    forked = {"r1": None, "r2": "r1", "r3": "r2", "r4": "r1"}
+    assert _head_of(forked) == {"r3", "r4"}, "分叉必须由 head 数>1 这条抓住，而不是被某一支遮蔽"
+
+    wrong_parent = {"r1": None, "r2": "r1", "r3": "r2", "r4": "r1"}
+    seen, _stop = _chain(wrong_parent, str(wrong_parent["r4"]))
+    assert "r3" not in seen, "错父（挂到祖先）时中间版本会掉出链——这条正是 `walked == set(revs) - {head}` 要拦的"
+
+    cycle = {"c1": "c2", "c2": "c1"}
+    seen_c, stop_c = _chain(cycle, "c2")
+    assert seen_c == {"c2", "c1"} and stop_c == "c2", "成环时必须靠 visited 停住，而不是无限循环"
+
+
+def test_probe_requires_the_head_to_declare_its_shape() -> None:
+    """新头不登记形状 = 探针响，不静默放行（这一条是泛化的承重部分）。"""
+    probe = _load_probe()
+    missing_shape, problems = probe.resolve_shape("ab9999zzz")
+    assert missing_shape is None and len(problems) == 1
+    assert "SHAPES" in problems[0] and "ab9999zzz" in problems[0], f"点名内容不可操作：{problems}"
+
+    registered, none_msg = probe.resolve_shape(probe.head_revision()[0])
+    assert registered is not None and none_msg == [], f"当前 head 未登记：{none_msg}"
+
+    # 每一条已登记的形状都必须对应一个真实存在的版本文件，否则 SHAPES 会攒下僵尸条目
+    real = set(_revisions())
+    assert set(probe.SHAPES) <= real, f"SHAPES 里有不存在的 revision：{sorted(set(probe.SHAPES) - real)}"
+
+
+def test_probe_absent_side_catches_a_fake_downgrade_for_the_new_head() -> None:
+    """假 `downgrade()`（表还在）必须被 absent 侧抓到——用新头 system_settings 验。"""
+    probe = _load_probe()
+    shape, _ = probe.resolve_shape("ab1006c4a")
+    assert shape is not None, "ab1006c4a 没登记形状，本条判据就失去对象"
+    still_there = {("system_settings", c) for c in ("key", "value", "updated_by", "updated_at")}
+    assert len(probe.evaluate(still_there, set(), "absent", shape)) == 4, "表没被删却返回通过 ⇒ 探针无力"
+    assert probe.evaluate(set(), set(), "absent", shape) == [], "干净降级被误报 ⇒ 会挡住每一次 DDL 卡"
+    # present 侧同样要有牙：少一列就该点名那一列
+    three = {("system_settings", c) for c in ("key", "value", "updated_at")}
+    assert probe.evaluate(three, set(), "present", shape) == ["缺列 system_settings.updated_by"]
