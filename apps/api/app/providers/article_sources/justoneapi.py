@@ -34,7 +34,14 @@ from app.core.errors import (
     RateLimitedUpstreamError,
 )
 from app.core.security import upstream_semaphore, upstream_timeout
-from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult, work_list_row_id
+from app.providers.article_sources.base import (
+    WORK_LIST_PAGE_SIZE,
+    ArticleDetail,
+    ArticleSearchResult,
+    WorkListPage,
+    build_work_list_page,
+    work_list_row_id,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -96,17 +103,17 @@ class JustOneApiClient:
     # ── 发现 ──────────────────────────────────────────────────────────
 
     async def query_work_list(self, identifier: str, page: int) -> tuple[list[dict[str, Any]], int | None]:
-        """按 ghid 获取账号历史文章列表。
+        """按 ghid 获取账号历史文章列表（本渠道的行解析**只有这一份**，新端口复用它）。
 
         identifier = ghid（gh_xxx 格式）。
         POST /api/weixin/get-account-history-articles/v2，form 编码：token + ghid。
         响应 data.MsgList.Msg = 10 条/页，data.PagingInfo{Offset, IsEnd} 控制翻页。
+
+        JustOneAPI 用 Offset 游标翻页（首页 Offset=0，后续用 PagingInfo 返回的 Offset）。
+        本入口只给首页：page>1 需要上一页的 Offset，而页号预构不出游标 ⇒ 如实返回空页。
         """
         if not self._api_key:
             raise DependencyUnavailableError("JUSTONEAPI_API_KEY 未配置")
-
-        # JustOneAPI 用 Offset 游标翻页（首页 Offset=0，后续用 PagingInfo 返回的 Offset）
-        # 简化：page=1 → Offset=0；page>1 时返回空（需上页 Offset，无法预构）
         if page > 1:
             return [], None
 
@@ -156,6 +163,28 @@ class JustOneApiClient:
                 rows.append(row)
 
         return rows, None  # IsEnd 控制翻页，不返回 total
+
+    async def query_work_list_page(
+        self, identity: str, cursor: str | None = None, *, page_size: int = WORK_LIST_PAGE_SIZE
+    ) -> WorkListPage:
+        """S8.3.1 的新端口；`next_cursor` 今天**还是** `None`，尽管响应侧游标已经实测在案。
+
+        差在哪一件事实：响应里有 `data.PagingInfo{Offset, IsEnd}`（活体夹具 `justoneapi.json`
+        两键俱在），但**请求侧用什么字段名接收 Offset 从未实测**——TC-A3 系列只跑到首页。
+        拿一个猜出来的键名去翻页，上游要么忽略它（于是每轮多花 ¥0.15 买回同一批条目，
+        表现是"清单不增长"），要么更糟：它把非法参数读成"从头开始"。
+
+        另一条约束记在这里以免有人"顺手改解析"：`tests/proofs/test_provider_shapes.py`
+        按函数名 `query_work_list` 定位渠道读哪些上游键 ⇒ 把游标提取搬进新端口会让那道
+        形状判据空转。两条加起来就是 **P-68** 的内容：本卡的 S8.3.1 只能交付"端口 + 类型"，
+        真翻页要等有实测的那一卡。
+        """
+        if cursor:
+            return WorkListPage(rows=[], next_cursor=None, page_size=page_size, total=None)
+        rows, total = await self.query_work_list(identity, 1)
+        return build_work_list_page(
+            rows, next_cursor=None, page_size=page_size, total=total, channel=self.name
+        )
 
     # ── 详情兜底 ──────────────────────────────────────────────────────
 

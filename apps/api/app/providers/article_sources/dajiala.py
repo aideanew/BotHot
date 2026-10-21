@@ -33,7 +33,14 @@ from app.core.errors import (
     DiscoveryFailedError,
 )
 from app.core.security import upstream_semaphore, upstream_timeout
-from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult, work_list_row_id
+from app.providers.article_sources.base import (
+    WORK_LIST_PAGE_SIZE,
+    ArticleDetail,
+    ArticleSearchResult,
+    WorkListPage,
+    build_work_list_page,
+    work_list_row_id,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -80,7 +87,7 @@ class DajialaClient:
     # ── 发现 ──────────────────────────────────────────────────────────
 
     async def query_work_list(self, identifier: str, page: int) -> tuple[list[dict[str, Any]], int | None]:
-        """按 ghid 获取最新发文清单。
+        """按 ghid 获取最新发文清单（本渠道的行解析**只有这一份**，新端口复用它）。
 
         identifier = ghid（gh_xxx 格式）。
         Dajiala post_condition 每次返回最新 4 条，不支持翻页——page > 1 时返回空。
@@ -122,6 +129,26 @@ class DajialaClient:
             rows.append(row)
 
         return rows, len(rows)
+
+    async def query_work_list_page(
+        self, identity: str, cursor: str | None = None, *, page_size: int = WORK_LIST_PAGE_SIZE
+    ) -> WorkListPage:
+        """S8.3.1 的新端口。`next_cursor` 恒 `None` 有两条实测依据：
+
+        ① post_condition 只回最新批次、不支持翻页（TC-A1-04 备注"不支持翻页，仅返回最新批次"）；
+        ② 传进来的 cursor 不接受——拼一个假游标让上层以为还能翻，等于每轮多花 ¥0.14 买回同一批条目。
+
+        行解析刻意**复用** `query_work_list` 而不是另起一份：`tests/proofs/test_provider_shapes.py`
+        按函数名 `query_work_list` 定位"渠道读哪些上游键"，把解析搬走会让那道形状判据空转
+        （它报的是"一个读取点都没导出"）。该约束与本卡 S8.3.1"provider 交出游标"这半句的冲突
+        登记在 **P-68**。
+        """
+        if cursor:
+            return WorkListPage(rows=[], next_cursor=None, page_size=page_size, total=0)
+        rows, total = await self.query_work_list(identity, 1)
+        return build_work_list_page(
+            rows, next_cursor=None, page_size=page_size, total=total, channel=self.name
+        )
 
     # ── 详情兜底 ──────────────────────────────────────────────────────
 

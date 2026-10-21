@@ -22,8 +22,11 @@ import httpx
 import structlog
 
 from app.providers.article_sources.base import (
+    WORK_LIST_PAGE_SIZE,
     ArticleDetail,
     ArticleSearchResult,
+    WorkListPage,
+    build_work_list_page,
 )
 
 logger = structlog.get_logger(__name__)
@@ -126,6 +129,21 @@ class RSSFeedProvider:
         items = items[:_MAX_ITEMS_PER_FEED]
         logger.info("RSS: 解析 %d 条 item from %s", len(items), feed_url)
         return items, len(items)
+
+    async def query_work_list_page(
+        self, identity: str, cursor: str | None = None, *, page_size: int = WORK_LIST_PAGE_SIZE
+    ) -> WorkListPage:
+        """S8.3.1 的新端口：feed 一次给全（`_MAX_ITEMS_PER_FEED` 截断），**没有翻页语义**。
+
+        ⇒ `next_cursor=None` 是有依据的末页声明，不是"忘了给游标"（契约把 `next_cursor`
+        定成必填可空正是为了分开这两件事）。传进来的 cursor 同样不接受。
+        """
+        if cursor:
+            return WorkListPage(rows=[], next_cursor=None, page_size=page_size, total=0)
+        rows, total = await self.query_work_list(identity, 1)
+        return build_work_list_page(
+            rows, next_cursor=None, page_size=page_size, total=total, channel=self.name
+        )
 
     async def fetch_article_detail(self, url: str) -> ArticleDetail | None:
         """RSS provider 不提供详情兜底——正文由免费直抓主路径处理。"""

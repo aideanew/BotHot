@@ -30,7 +30,14 @@ from app.core.errors import (
     DiscoveryFailedError,
 )
 from app.core.security import upstream_semaphore, upstream_timeout
-from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult, work_list_row_id
+from app.providers.article_sources.base import (
+    WORK_LIST_PAGE_SIZE,
+    ArticleDetail,
+    ArticleSearchResult,
+    WorkListPage,
+    build_work_list_page,
+    work_list_row_id,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -161,6 +168,27 @@ class TikhubClient:
                 rows.append(row)
 
         return rows, None  # TikHub 不返回 total，上层按空页终止
+
+    async def query_work_list_page(
+        self, identity: str, cursor: str | None = None, *, page_size: int = WORK_LIST_PAGE_SIZE
+    ) -> WorkListPage:
+        """S8.3.1 的新端口，但**翻页能力今天还是零**——原因不是没接线，是没有可回传的游标。
+
+        请求侧的 `offset` 是 base64 游标（实测：首页传空串），而**响应里游标放在哪个字段
+        从未实测**（TikHub 余额为 0，TC-A2-02b 402；活体夹具 `tikhub.json` 里也搜不到
+        offset/cursor/next 任何一键）。⇒ 这里如实回 `next_cursor=None`（= 这就是末页），
+        不拿"大概是 data.cursor"去拼一个假游标：拼错的表现是上层每轮多花一次 $0.001~0.01
+        买回同一批条目，而那看起来像"上游就是没新东西"。
+        传进来的 `cursor` 因此也一律不接受（首页之外的请求在本渠道无法表达）。
+
+        实测到响应游标字段后，本方法改成原生翻页即可，`query_work_list` 的旧行为不受影响。
+        """
+        if cursor:
+            return WorkListPage(rows=[], next_cursor=None, page_size=page_size, total=None)
+        rows, _total = await self.query_work_list(identity, 1)
+        return build_work_list_page(
+            rows, next_cursor=None, page_size=page_size, total=None, channel=self.name
+        )
 
     # ── 详情兜底 ──────────────────────────────────────────────────────
 

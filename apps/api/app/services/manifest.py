@@ -37,7 +37,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.contracts.collection import ChannelName, CollectionEvent, ManifestStatus
+from app.contracts.collection import ChannelName, CollectionEvent, ManifestStatus, WorkListPage
 from app.core import metrics
 from app.core.alerting import discovery_idempotency_key, notify_discovery_event
 from app.core.config import Settings
@@ -69,9 +69,15 @@ _HASH_KEYS = ("contentHash", "content_hash", "hash")
 
 
 class WorkListProvider(Protocol):
-    """清单 Provider：与 `RedfoxClient.query_work_list` 同形（page 从 1 起）。
+    """清单 Provider 的**旧端口**：与 `RedfoxClient.query_work_list` 同形（page 从 1 起）。
 
     返回 `(原始行, 上游 total)`：`total` 供增量游标算缺口；上游缺失时为 `None`。
+
+    S8.3.1 之后还有一条**新端口**（不在本协议里，是刻意的）：
+    `async def query_work_list_page(identity, cursor, *, page_size) -> WorkListPage`。
+    五家 article_sources provider 实现它，`_fetch_page` 优先用它；
+    只实现本协议的 Provider（RedFox，它的文件不在本卡所有权内）由旧形状适配，
+    适配出的游标就是下一页页号。不把新端口写进本协议 = 不逼一个不能改的文件加一个方法。
 
     `name` 是指标/告警的 `channel` 维度来源（与发现注册表 `CHANNELS` 同一词表）；
     缺该属性的 Provider 记为 `unknown`，宁可让标签难看，也不要拿 URL 或类型去猜渠道。
@@ -272,9 +278,10 @@ class ManifestSyncService:
         report.known_local = await self._known_count(source_id)
         planned = max_pages
         page = 1
+        cursor: str | None = None
         while page <= max_pages:
             try:
-                rows, total_remote = await self._provider.query_work_list(biz, page)
+                rows, next_cursor, total_remote = await self._fetch_page(biz, cursor, page, size)
             except Exception:
                 metrics.record_discovery_call(self._channel, ok=False)
                 raise
@@ -332,6 +339,9 @@ class ManifestSyncService:
                 break  # 末页：清单已到底
             if saw_existing:
                 break  # 本页已含已知行 → 未见篇前缀到此为止（缺 id 的脏行不算）
+            if not next_cursor:
+                break  # 上游明说没有下一页（S8.3.2 的第二个止页条件）
+            cursor = next_cursor
             page += 1
         await self._session.flush()
         logger.info(
@@ -353,6 +363,25 @@ class ManifestSyncService:
         return report
 
     # ------------------------------------------------------------------ 内部
+
+    async def _fetch_page(
+        self, biz: str, cursor: str | None, page: int, size: int
+    ) -> tuple[list[dict[str, Any]], str | None, int | None]:
+        """两端口归一：新端口（游标进游标出）优先，旧端口（页号）适配一个版本。
+
+        旧端口为什么必须留着：`redfox/client.py` 和 STEP-03 的一批契约用例都不在本卡所有权内，
+        删掉旧形状等于把别人的判据一起删。适配时"游标"就是下一页页号——对页号型渠道
+        （RedFox 的 `offset = (page-1) * PAGE_SIZE`）这是它唯一的游标语义，不是替上游编一个。
+        """
+        paged = getattr(self._provider, "query_work_list_page", None)
+        if paged is None:
+            rows, total = await self._provider.query_work_list(biz, page)
+            return rows, (str(page + 1) if len(rows) >= size else None), total
+        got: WorkListPage = await paged(biz, cursor, page_size=size)
+        # `mode="json"` 不是随手选的：默认 python 模式会把 `publish_time` 落成 **datetime 对象**，
+        # 而 `_parse_time` 只认数值与字符串 ⇒ 时间整列变 None（看起来像"上游没给时间"）。
+        # 走 JSON 形状后它与升级前的字符串同形，消费端一条都不用改。
+        return [row.model_dump(mode="json") for row in got.rows], got.next_cursor, got.total
 
     async def _note_all_skipped_page(
         self, report: ManifestSyncReport, source_id: str, page: int, dropped: int

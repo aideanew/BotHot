@@ -71,14 +71,18 @@ jobs:
       # STEP-08（执行助手，2026-10-21）两片 +11：S8.1.1 的 test_source_identifiers 3 条 DB 不变量
       #   （唯一、跨 kind 同值合法、CASCADE）+ S8.2.1 的 test_identifier_resolver 8 条落库判据
       #   （另 6 条不连库：biz/ghid 的推导规则、"没有渠道能做 biz→ghid"的现读断言、AST 接线门）
-      #   ⇒ 621 + 3 + 8 = 632。本机无 DSN 按文件实测：3 skipped 与 8 skipped；
-      #   卡片收口前还会做一次全量复测来验总数（EVD-V17-08 §5）。
+      #   ⇒ 621 + 3 + 8 = 632。本机无 DSN 按文件实测：3 skipped 与 8 skipped。
+      # S8.3 再加 2 条（test_channel_routing 的两条服务层判据：跟着游标翻页 / 旧端口按页号翻，
+      #   都要 ArticleManifest 真表）⇒ 632 + 2 = **634**；该文件另 27 条不连库
+      #   （端口签名、"没有一家实测到响应游标"的诚实性判据、行级丢弃策略、AST 接线门）。
+      #   这里有一处**自我更正**：S8.2.1 提交时我在下面写过一行"S8.3 那批离线判据不需要动阈值"，
+      #   那是按"服务层判据可以脱库跑"的假设写的，实测两条都要 db_session ⇒ 假设错，按读数改数。
       # **测量值**（收紧依据就地可查，D-V6-02）：上一档 612 的锚是 CI-Windows
       # run 39592643124 @2ab19c2 = 1509 passed / 612 skipped / 0 failed（未知族 0）；
-      # 621 由本机无 DSN 全量复测算出（终端行 1518 passed / 621 skipped），
-      # 其 CI-Windows 读数 = run 39602896737 @066ceeb（success，未知族 0）；
-      # 本档 632 的交付提交读数回填 EVD-V17-08 §5 后才算闭环。
-      SKIP_BASELINE_WIN: "632"
+      # 621 的锚 = run 39602896737 @066ceeb（success，未知族 0）；
+      # 632 的锚 = run 39617514919 @b814938（success：1527 passed / 632 skipped，未知族 0）；
+      # 本档 634 的交付提交读数回填 EVD-V17-08 §8 后才算闭环。
+      SKIP_BASELINE_WIN: "634"
     defaults:
       run:
         shell: bash

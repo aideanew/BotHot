@@ -39,7 +39,14 @@ from app.core.errors import (
     RateLimitedUpstreamError,
 )
 from app.core.security import upstream_semaphore, upstream_timeout
-from app.providers.article_sources.base import ArticleDetail, ArticleSearchResult, work_list_row_id
+from app.providers.article_sources.base import (
+    WORK_LIST_PAGE_SIZE,
+    ArticleDetail,
+    ArticleSearchResult,
+    WorkListPage,
+    build_work_list_page,
+    work_list_row_id,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -176,6 +183,22 @@ class WellbyteClient:
                 rows.append(row)
 
         return rows, None
+
+    async def query_work_list_page(
+        self, identity: str, cursor: str | None = None, *, page_size: int = WORK_LIST_PAGE_SIZE
+    ) -> WorkListPage:
+        """S8.3.1 的新端口；翻页能力同 TikHub 一样如实停在"游标字段未实测"。
+
+        Wellbyte 的 `account_history_articles_v2` 是按文章 URL 驱动的入口（TC-A4-04 实测），
+        活体夹具 `wellbyte.json` 里搜不到 offset/cursor/next 任何一键 ⇒ `next_cursor=None`，
+        即"这就是末页"。传进来的 cursor 不接受（无法把它译成上游参数）。
+        """
+        if cursor:
+            return WorkListPage(rows=[], next_cursor=None, page_size=page_size, total=None)
+        rows, _total = await self.query_work_list(identity, 1)
+        return build_work_list_page(
+            rows, next_cursor=None, page_size=page_size, total=None, channel=self.name
+        )
 
     # ── 详情兜底 ──────────────────────────────────────────────────────
 
