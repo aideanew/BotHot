@@ -5,7 +5,7 @@ title: 架构决策记录索引
 status: active
 owner: architecture
 created: 2026-09-29
-updated: 2026-10-15
+updated: 2026-10-21
 ---
 
 # 架构决策记录（ADR）索引
@@ -24,6 +24,7 @@ updated: 2026-10-15
 | [ADR-0010](adr-0010-externalize-connection-strings.md) | 编排中的数据库/缓存连接串一律来自环境变量 | proposed | 2026-10-12 |
 | [ADR-0011](adr-0011-canonical-article-key.md) | 文章规范键格式（D-V2-01） | accepted | 2026-10-15 |
 | [ADR-0012](adr-0012-manifest-asset-alignment.md) | 清单↔资产键对齐与清单状态机（D-V2-02 / D-V3-01） | accepted | 2026-10-16 |
+| [ADR-0013](adr-0013-system-settings-store.md) | 运营可配置项的存储形状：`system_settings` 单表 KV + JSONB（D-V12-12 / STEP-28） | accepted | 2026-10-21 |
 
 ## 归位记录（STEP-01 S1.1.0 · 2026-10-15）
 
