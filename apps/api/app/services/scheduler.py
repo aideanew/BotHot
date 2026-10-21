@@ -52,6 +52,7 @@ from app.services.manifest import ManifestSyncService, WorkListProvider
 from app.services.process_heartbeat import BEACON_MIN_INTERVAL_SECONDS, BeaconGate
 from app.services.process_heartbeat import beacon as _heartbeat
 from app.services.subscription import SourceSubscriptionService
+from app.services.system_settings import refresh_with as _refresh_system_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -461,6 +462,9 @@ class IncrementalScheduler:
         卡死期间心跳仍是上一轮的旧值，直到阈值超时才暴露，等于用阈值掩盖卡死。
         """
         await self._beacon()
+        # STEP-28：本轮开头刷一次运营配置快照（渠道启用集/默认渠道）。放在开头而不是
+        # 渠道选择处，是因为"这一轮按什么配置跑"必须在整轮内是同一个答案。
+        await _refresh_system_settings(self._factory)
         await self._maybe_enqueue_daily_jobs()
         await self._maybe_enqueue_rescore()
         await self._reconcile_docs()

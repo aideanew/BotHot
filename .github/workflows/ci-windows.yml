@@ -60,7 +60,12 @@ jobs:
       # STEP-07（执行助手，2026-10-21）新增 19 条：test_audit_scripts 里 12 条离线判据（脚本装载、
       # 只读静态门、目标门、明文形状与读侧一致性、DSN 串不被 str() 抹口令）不连库，7 条演练用例走
       # conftest 的「AIDEANBOT_TEST_PG_DSN 未设置」族 ⇒ 本机无 DSN 实测 7 skipped ⇒ 571 + 7 = 578。
-      SKIP_BASELINE_WIN: "578"
+      # STEP-28（执行助手，2026-10-21）新增 33 条连库用例，本机无 DSN 按模块实测：
+      #   test_system_settings 6 + test_discovery_config 10 + test_category_config 15（参数化按条计）
+      #   + test_audit_log 2 —— 后两条不是新用例，是 STEP-31 那条**按写操作参数化**的用例
+      #     随新写的 admin 端点自己变长（23 → 25），它每行都要 db_session。
+      # 合计 578 + 33 = 611（本机全量 total_skipped 实测 611，与增量推算一致）。
+      SKIP_BASELINE_WIN: "611"
     defaults:
       run:
         shell: bash

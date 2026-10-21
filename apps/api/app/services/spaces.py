@@ -29,7 +29,12 @@ from app.models.entities import KnowledgeDocument, KnowledgeSpace, User
 from app.providers.engine_port import EngineRouter
 from app.repositories.asset import AssetRepository, DocumentRepository
 from app.repositories.space import SpaceRepoProto
-from app.services.categorizer import CATEGORIES, DEFAULT_CATEGORY, UNCATEGORIZED
+from app.services.categorizer import (
+    DEFAULT_CATEGORY,
+    UNCATEGORIZED,
+    active_categories,
+    category_allowlist,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -39,8 +44,8 @@ _SPACE_NAME_MAX = 128
 # 简介约束（R0.5.2，F-4）：允许空串（=「未填写简介」），≤512 字符与列宽一致
 _SPACE_DESC_MAX = 512
 
-# 分类人工纠偏：仅允许规则版六类或空串（清空回默认），不接受自由文本
-CATEGORY_ALLOWLIST = frozenset(CATEGORIES) | {""}
+# 分类人工纠偏的取值面改由 `categorizer.category_allowlist()` 现算（STEP-28 S28.3.3）：
+# 清单是运营可配的，模块加载时固化的 frozenset 会把"改了库里的分类"永远读成旧值。
 
 # R0.2.5 批量文档操作（:delete / :recategorize）业务上限；路由侧另有 1..500 体量硬闸
 DEFAULT_MAX_DOC_IDS = 50
@@ -75,23 +80,28 @@ def _iso(dt: object) -> str:
 def validate_category(category: str) -> None:
     """分类人工纠偏取值校验（单篇 PATCH 与批量 :recategorize 共用）：非法 → 10005。
 
-    单点定义，避免两个端点各持一份白名单谓词后漂移。
+    单点定义，避免两个端点各持一份白名单谓词后漂移。白名单**每次调用现算**：
+    清单是运营可配的，把它固化进 import 期就等于"改完要发版"。
+    可选项随报错给出——否则运营只能猜一个不在列表里的名字为什么被拒。
     """
-    if category not in CATEGORY_ALLOWLIST:
-        raise SpaceValidationError(f"分类取值非法：{category}（可选 {'/'.join(CATEGORIES)} 或空串）")
+    if category not in category_allowlist():
+        raise SpaceValidationError(
+            f"分类取值非法：{category}（可选 {'/'.join(active_categories())} 或空串）"
+        )
 
 
 def order_categories(categories: list[str]) -> list[str]:
-    """分类集合呈现序（R0.1.2）：按 CATEGORIES 声明序，未分类以哨兵置末。
+    """分类集合呈现序（R0.1.2）：按声明序，未分类以哨兵置末。
 
     categorizer 约定「声明序即前端筛选项顺序」，故响应不按入库顺序返回——否则下拉
     顺序随数据抖动。未登记的取值排在已知类之后（只读路径不删值）。
     空串在此译为 `__uncategorized__`：`:categories` 返回值可直接回传 `?category=`，
     与 R0.1.1 的查询入参口径对称。
     """
+    known = active_categories()
     present = set(categories)
-    ordered = [c for c in CATEGORIES if c in present]
-    ordered += [c for c in categories if c not in CATEGORIES and c != ""]
+    ordered = [c for c in known if c in present]
+    ordered += [c for c in categories if c not in known and c != ""]
     if "" in present:
         ordered.append(UNCATEGORIZED)
     return ordered

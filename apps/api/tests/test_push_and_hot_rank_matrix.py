@@ -28,6 +28,7 @@ from app.models.entities import User
 
 B = "/api/v1/bots"
 H = "/api/v1/hot"
+A = "/api/v1/admin"
 NOPE = "00000000-0000-0000-0000-000000000000"
 EXISTING_REPORT_DATE = "1999-01-01"
 
@@ -41,6 +42,11 @@ OPERATOR_OK: list[tuple[str, str, str, Any]] = [
     ("改渠道名称/启停", "PUT", f"{B}/{NOPE}", {"name": "x", "status": "disabled"}),
     ("触发热点聚簇", "POST", f"{H}/topics/cluster?days=not-an-int", None),
     ("生成日报", "POST", f"{H}/daily/generate?report_date={EXISTING_REPORT_DATE}", None),
+    # STEP-28 S28.4.1：采集配置面（D-V12-12 放开给 operator 的两写一读）。
+    # body 都故意构造成"过授权门之后才失败"的形状，所以矩阵不会真改配置。
+    ("改采集渠道配置", "PUT", f"{A}/discovery/config", {"enabled": ["nope"], "default": "nope"}),
+    ("改采集分类配置", "PUT", f"{A}/categories", {"categories": []}),
+    ("查采集分类配置", "GET", f"{A}/categories", None),
 ]
 
 ADMIN_ONLY: list[tuple[str, str, str, Any]] = [

@@ -15,6 +15,13 @@
 
 向后兼容：`discovery_channels` 为空串 = **不过滤**（所有已注册渠道参与选择），
 此时行为与硬编码时代逐字一致（RedFox 有 Key 即用，无 Key 则跳过发现）。
+
+STEP-28（D-V12-12）：启用集与默认渠道改成**库值优先、env 兜底**——运营在后台改，
+下一轮调度按新配置跑，不必改环境变量重启。两个读函数签名不变（同步、只收 `Settings`），
+库值经 `system_settings.peek()` 取进程内快照；快照里没有这一行才回落到 env。
+注意 **空集的两种含义**：env 的空串是"没配"（=全开），库里显式的 `enabled=[]` 是
+"决定过：一个都不启用"（=本轮不做发现）。混淆这两者会把"全停"执行成"全开"，
+所以判据是 `peek()` 返回 None 与否，不是集合真假。
 """
 
 from __future__ import annotations
@@ -26,6 +33,7 @@ from typing import Any
 import structlog
 
 from app.core.config import Settings
+from app.services import system_settings
 from app.services.manifest import WorkListProvider, make_redfox_provider
 
 logger = structlog.get_logger(__name__)
@@ -252,8 +260,21 @@ CHANNELS: dict[str, ChannelSpec] = {
 }
 
 
+def _db_config() -> system_settings.DiscoveryConfig | None:
+    """库里的启用集/默认渠道；None = 这一行不存在 ⇒ 整套回落到 env（ADR-0013 不变量 1）。"""
+    return system_settings.peek(system_settings.DISCOVERY_KEY)
+
+
 def _whitelist(settings: Settings) -> set[str]:
-    """启用的渠道白名单；空串 = 空集 = 不过滤（调用方据此回落到全量注册渠道）。"""
+    """启用的渠道集合：**库值优先、env 兜底**。
+
+    空集在这里有**两种**完全不同的含义——库里显式写了 `enabled=[]`（运营决定全停）与
+    env 里 `discovery_channels=""`（没配过 = 全开）。所以调用方判 `_db_config()` 是不是 None，
+    不判本函数的真假；把这条区分弄丢的实现会把"全停"执行成"全开"。
+    """
+    cfg = _db_config()
+    if cfg is not None:
+        return set(cfg.enabled)
     return {item.strip() for item in settings.discovery_channels.split(",") if item.strip()}
 
 
@@ -261,10 +282,11 @@ def enabled_channels(settings: Settings) -> list[str]:
     """参与默认解析的渠道（已注册 ∩ 白名单；白名单为空 = 不过滤）。
 
     白名单里出现未知渠道名时**忽略并告警**，不静默放行——拼错配置项若被当成有效渠道，
-    效果是发现静默停摆且无任何回报，比报错更难查。
+    效果是发现静默停摆且无任何回报，比报错更难查。库值走同一个口径：写库的接口会拒，
+    但直接改库（迁移、运维手抖）也得读得出问题。
     """
     wanted = _whitelist(settings)
-    if wanted:
+    if wanted or _db_config() is not None:
         unknown = wanted - set(CHANNELS)
         if unknown:
             logger.warning("发现渠道白名单含未知渠道（已忽略）: %s", ", ".join(sorted(unknown)))
@@ -280,14 +302,16 @@ def available_channels(settings: Settings) -> list[str]:
 def resolve_default_channel(settings: Settings) -> str | None:
     """解析当前默认发现渠道；无可用渠道返回 None（调度器据此跳过发现）。
 
-    选择顺序：`discovery_default_channel`（若在可用集内）→ 可用集中注册序首个 → None。
+    选择顺序：配置的默认渠道（若在可用集内）→ 可用集中注册序首个 → None。
+    默认渠道的来源同样是"库值优先、env 兜底"。
     由此，「后台只配置了 redfox、没配其他」时 redfox 既是唯一渠道也是默认渠道；
     一个渠道都没启用时返回 None，与历史行为一致。
     """
     available = available_channels(settings)
     if not available:
         return None
-    preferred = settings.discovery_default_channel.strip()
+    cfg = _db_config()
+    preferred = (cfg.default if cfg is not None else settings.discovery_default_channel).strip()
     if preferred in available:
         return preferred
     logger.warning(
@@ -314,16 +338,19 @@ def describe_channels(settings: Settings) -> dict[str, Any]:
     `available` 三者各自独立，`reason` 说明当前不可用的具体原因（未实接 / 未启用 /
     凭据缺失）。不合并成单一布尔，否则配置缺失会被伪装成渠道故障。
     `defaultChannel=null` 即「本轮调度不做发现」，与调度器的跳过日志同源。
+    `source` 说清这套启用/默认是从哪儿取的：`db` = 运营在后台配过，`env` = 还在用部署配置。
     """
+    cfg = _db_config()
     wanted = _whitelist(settings)
+    filtered = bool(wanted) or cfg is not None
     default = resolve_default_channel(settings)
     channels: list[dict[str, object]] = []
     for name, spec in CHANNELS.items():
-        enabled = not wanted or name in wanted
+        enabled = name in wanted if filtered else True
         if not spec.implemented:
             reason = spec.reason
         elif not enabled:
-            reason = "未启用（需加入 discovery_channels 白名单）"
+            reason = "未启用（库里配置与 discovery_channels 白名单里都没有它）"
         elif spec.available(settings):
             reason = ""
         else:
@@ -345,11 +372,14 @@ def describe_channels(settings: Settings) -> dict[str, Any]:
         "defaultChannel": default,
         "selectionReason": _selection_reason(settings, default),
         "configuredChannels": sorted(wanted),
+        "source": "db" if cfg is not None else "env",
     }
 
 
 def _selection_reason(settings: Settings, default: str | None) -> str:
-    """默认渠道的来源口径：显式配置 / 空配置回落注册序 / 无可用渠道。"""
+    """默认渠道的来源口径：库值 / 显式 env 配置 / 空配置回落注册序 / 无可用渠道。"""
     if default is None:
         return "none-available"
+    if _db_config() is not None:
+        return "db-configured"
     return "configured" if _whitelist(settings) else "registration-order"

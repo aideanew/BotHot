@@ -108,15 +108,18 @@ def _json_code(response: Any) -> int | None:
 
 
 def test_write_operation_enumeration_has_a_measured_anchor() -> None:
-    """计数锚（2026-10-20 `@win` 现读）：三个前缀下 23 个写操作（admin 12 / bots 8 / sources 3）。
+    """计数锚（2026-10-21 本机现读，STEP-28 之后）：三个前缀下 25 个写操作（admin 14 / bots 8 / sources 3）。
 
     真加/删写端点时来改这条；不要把断言放宽成 `>= 0`——清单变短就没人发现。
+    STEP-28 加的 2 个（`PUT /admin/discovery/config`、`PUT /admin/categories`）走同一前缀，
+    自动进清单：那两个端点各产生恰好一条审计记录的那条参数化用例在本次全量跑里是绿的，
+    所以这里只是把数追认上，不是给新面开后门。
     """
     assert AUDITED_OPERATIONS, "枚举读空了——`app.routes` 的结构又变了"
-    assert len(AUDITED_OPERATIONS) == 23, AUDITED_OPERATIONS
+    assert len(AUDITED_OPERATIONS) == 25, AUDITED_OPERATIONS
     assert {method for _, method in AUDITED_OPERATIONS} <= WRITE_METHODS
     assert {method for _, method in AUDITED_OPERATIONS} == WRITE_METHODS
-    assert len([p for p, _ in AUDITED_OPERATIONS if p.startswith("/api/v1/admin")]) == 12
+    assert len([p for p, _ in AUDITED_OPERATIONS if p.startswith("/api/v1/admin")]) == 14
     assert len([p for p, _ in AUDITED_OPERATIONS if p.startswith("/api/v1/bots")]) == 8
     assert len([p for p, _ in AUDITED_OPERATIONS if p.startswith("/api/v1/sources")]) == 3
 

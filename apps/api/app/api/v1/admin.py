@@ -43,7 +43,8 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -56,15 +57,17 @@ from app.api.deps import (
     require_roles,
 )
 from app.api.v1.spaces import BatchDocCategoryRequest, BatchDocIdsRequest, PatchSpaceRequest
-from app.core.cache import get_or_set
+from app.core.cache import get_or_set, invalidate
 from app.core.config import get_settings
 from app.core.engine_keyring import KEYABLE_ENGINES, master_key, resolve_engine_key
-from app.core.errors import DependencyUnavailableError
+from app.core.errors import DependencyUnavailableError, RequestInvalidError
 from app.core.response import success
-from app.models.entities import User
-from app.providers.discovery.registry import describe_channels
+from app.models.entities import ContentAsset, User
+from app.providers.discovery.registry import CHANNELS, describe_channels
 from app.providers.langbot.client import LangBotClient
 from app.providers.push import registered_channels
+from app.services import system_settings
+from app.services.categorizer import DEFAULT_CATEGORY, default_categories
 from app.services.engine_keys import EngineKeyService
 from app.services.jobs import JobService
 from app.services.process_heartbeat import DEFAULT_MAX_AGE_SECONDS, describe_liveness
@@ -493,6 +496,137 @@ async def admin_list_discovery_channels(
     channels = await get_or_set("admin:discovery:channels", 120, lambda: _wrap(describe_channels(get_settings())))
     body = success(data=channels)
     return JSONResponse(status_code=200, content=body.model_dump())
+
+
+# ------------------------------------------------------------------ STEP-28 采集配置运营可配
+#
+# 口径（D-V12-12 + ADR-0013）：运营能改"启用哪些渠道 / 默认哪个"和"分类清单与每类关键词"，
+# 落库后**下一轮**调度与入库按新配置跑。**凭据不进这条路**：既不入库，也不经接口，也不回显——
+# 两个请求模型都 `extra="forbid"`，多出来的字段（含任何 key/token/secret 形状）在 pydantic 层就拒。
+
+
+class DiscoveryConfigRequest(BaseModel):
+    """`PUT /admin/discovery/config` 的体：只有 enabled/default 两个字段是合法的。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: list[str] = Field(description="启用渠道名（必须是已注册渠道；空列表=本轮不做发现）")
+    default: str = Field(description="默认渠道名，必须 ∈ enabled（enabled 为空时只允许空串）")
+
+
+class CategoryItemRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    keywords: list[str] = Field(default_factory=list)
+    enabled: bool = True
+
+
+class CategoryConfigRequest(BaseModel):
+    """`PUT /admin/categories` 的体：有序清单，声明序即自动分类的优先级与筛选项顺序。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    categories: list[CategoryItemRequest]
+
+
+@router.put("/discovery/config", summary="采集渠道运营配置（下一轮生效）")
+async def admin_put_discovery_config(
+    payload: DiscoveryConfigRequest,
+    actor: Annotated[User, Depends(require_roles("operator"))],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> JSONResponse:
+    """D-V12-12：operator 改启用渠道与默认渠道，落 `system_settings.discovery`。
+
+    渠道名的**注册性**在这里查（`CHANNELS` 是 provider 层的事实，服务层不反向依赖它），
+    所以库里永远只可能有真渠道；直接改库的坏行由读侧"忽略并告警"兜住。
+
+    200 `{enabled, default, source:"db"}`；未知渠道 / 默认不在启用集内 → 10005/422；
+    未登录 → 10001；非 operator·admin → 10004/403。
+    """
+    unknown = sorted({name for name in payload.enabled if name not in CHANNELS})
+    if unknown:
+        raise RequestInvalidError(
+            f"渠道未注册：{', '.join(unknown)}（可用：{', '.join(CHANNELS)}）"
+        )
+    cfg = await system_settings.put(
+        session,
+        system_settings.DISCOVERY_KEY,
+        {"enabled": payload.enabled, "default": payload.default},
+        actor=actor,
+    )
+    await invalidate("admin:discovery:channels")
+    body = success(data={"enabled": cfg.enabled, "default": cfg.default, "source": "db"})
+    return JSONResponse(status_code=200, content=body.model_dump())
+
+
+@router.get("/categories", summary="采集分类清单（运营视图）")
+async def admin_get_categories(
+    actor: Annotated[User, Depends(require_roles("operator"))],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> JSONResponse:
+    """现生效的分类清单 + 它的来源。
+
+    `source=env` 时回显的是代码默认清单（`default_categories()`）——运营得能看见
+    "现在按什么在分"，而不是只知道自己没配过；读默认值与写默认值同源，才不会出现
+    接口显示一套、入库用另一套。
+    """
+    items = await system_settings.get(session, system_settings.CATEGORIES_KEY)
+    data = {
+        "categories": [item.model_dump() for item in items] if items is not None else default_categories(),
+        "source": "db" if items is not None else "env",
+        "defaultCategory": DEFAULT_CATEGORY,
+    }
+    body = success(data=data)
+    return JSONResponse(status_code=200, content=body.model_dump())
+
+
+@router.put("/categories", summary="采集分类运营配置（下一轮入库生效）")
+async def admin_put_categories(
+    payload: CategoryConfigRequest,
+    actor: Annotated[User, Depends(require_roles("operator"))],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> JSONResponse:
+    """D-V12-12：operator 改分类清单（新增 / 改关键词 / 调顺序 / 停用），落 `system_settings.categories`。
+
+    本卡**不回写历史数据**：`content_assets.category` 存的是改名前的旧值。因此
+    "从清单里去掉一个还被引用的分类"= 删除，必须先解决引用（改成停用即可：停用只是
+    不再自动分进来，历史行与筛选项都还在）。引用数写进报错，运营才知道要处理多少条。
+
+    200 `{categories, source:"db"}`；形状非法 / 缺「其他」/ 删除仍被引用的分类 → 10005/422；
+    未登录 → 10001；非 operator·admin → 10004/403。
+    """
+    items = [item.model_dump() for item in payload.categories]
+    await _refuse_dangling_removals(session, {str(item["name"]) for item in items})
+    parsed = await system_settings.put(session, system_settings.CATEGORIES_KEY, items, actor=actor)
+    body = success(data={"categories": [item.model_dump() for item in parsed], "source": "db"})
+    return JSONResponse(status_code=200, content=body.model_dump())
+
+
+async def _refuse_dangling_removals(session: AsyncSession, keeping: set[str]) -> None:
+    """当前生效清单里存在、新清单里消失 = 删除；仍有资产引用则拒绝并给出引用数。
+
+    "当前生效"取的是库里那份（`get`，TTL 内命中快照）；库里没配过时才是代码默认清单——
+    拿快照当旧值会把"上一轮刚配的"当成"从没配过"，删除保护就漏了。
+    """
+    current = await system_settings.get(session, system_settings.CATEGORIES_KEY)
+    old_names = {str(item.name) for item in current} if current is not None else {
+        str(item["name"]) for item in default_categories()
+    }
+    removed = sorted(old_names - keeping)
+    if not removed:
+        return
+    rows = (
+        await session.execute(
+            select(ContentAsset.category, func.count())
+            .where(ContentAsset.category.in_(removed))
+            .group_by(ContentAsset.category)
+        )
+    ).all()
+    dangling = [(name, int(count)) for name, count in rows if count]
+    if dangling:
+        detail = "、".join(f"{name}（{count} 条资产仍在引用）" for name, count in dangling)
+        raise RequestInvalidError(f"这些分类不能删除，可以改为停用：{detail}")
 
 
 @router.get("/ops/liveness", summary="常驻进程存活")

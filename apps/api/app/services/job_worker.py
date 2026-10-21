@@ -53,6 +53,7 @@ from app.services.manifest import (
 from app.services.process_heartbeat import BEACON_MIN_INTERVAL_SECONDS, BeaconGate
 from app.services.process_heartbeat import beacon as _heartbeat
 from app.services.state_machine import can_transition, validate_transition
+from app.services.system_settings import refresh_with as _refresh_system_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -355,6 +356,9 @@ class JobWorker:
         W2 起按 job.type 分流：hot_cluster/daily_report 走 `_run_hot_job`（无 JobItem，
         单作业直接执行）；其余走既有 `_drain_items` + `_finalize`（按 JobItem counts 收敛）。
         """
+        # STEP-28：本轮开头刷一次运营配置快照（TTL 内是空操作）。入库分类走 `categorize`，
+        # 它读的是进程内快照——不刷的话 worker 会一直按启动时的配置分类。
+        await _refresh_system_settings(self._factory)
         async with self._factory() as session:
             job = await JobRepository(session).claim_next_queued()
             if job is None:
