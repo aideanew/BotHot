@@ -41,12 +41,26 @@
 
 1. **需要临时仓 / 合成树的电池**（`replay_s213.py`、`mutate_replay_r9.py`、`j_attack_r7.py`）——
    它们必须把 harness 复制到只含证据包的目录里跑；这类"会动盘"的脚本今天**故意**不在 `evidence-check` 里。
-2. **需要真实改生产代码的变异电池**（`mutate_s341.py`、`s27_3_mutation.py`）——判据形态是"改了代码 ⇒ 指定用例必须红"，
-   跑一次动一次工作树，只能留作人工反证。
-3. **超时墙型根因探针**（`probe_import_stall.py` 等）——判"进程挂住不返回"，进每次 CI 会把 job 时长顶上去。
+2. **会动盘的真实文件变异电池**：`s27_3_mutation.py`——逐字节备份 `scripts/guards.py`、施加变异、
+   跑该用例文件、还原，再用 sha256 证明还原逐字节。每跑一次改一次工作树，只能留作人工反证。
+3. **需要特殊环境的一次性读数探针**：`probe_import_stall.py`——看门狗是
+   `faulthandler.dump_traceback_later(WATCHDOG_SECONDS, exit=True)`，且要黑洞 `DATABASE_URL`
+   加 `PROBE_SELECTOR=1`（换 `WindowsSelectorEventLoopPolicy`）才复现 pytest 的真实条件。
+
+### 3.1 这一节的归因错过两支，修正按实现重做（第一版留在这是为了可追溯）
+
+第一版把 `mutate_s341.py` 也归进第 2 类，又把 `probe_import_stall.py` 说成"`subprocess` 超时墙"。
+两条都被读实现否证/修正：
+
+- `mutate_s341.py`：全文件 `write_text` 计数 **= 0**，变异体是
+  `read_text → replace → ast.parse → exec` 进一个内存里造的 `ModuleType`（`_load_mutant`，183 行起）
+  ⇒ **它不动盘**，与 STEP-07 那批电池同法，是 **S0T.2.1 的第一顺位迁移对象**，不该在"搬不动"里。
+- `probe_import_stall.py`：超时确实存在，但我用来分类的 grep 词是 `timeout|TIMEOUT|subprocess`，
+  匹配不到 `dump_traceback_later` ⇒ 那条结论**碰巧成立而推理是错的**，现按实现重写。
 
 ⇒ S0T.2 需要**逐支授权**（与 V14.3 当初"逐支 + 两轮复查"的节奏一致），不是本轮能整批推的；
-本卡的处置是把"哪些能迁、哪些迁了会造出假绿、为什么"写成一页清单，交规划方按支签字。
+本卡的处置是把"哪些能迁（至少含 `mutate_s341.py`）、哪些迁了会造出假绿、归因是怎么被验/推翻的"
+写成一页清单，交规划方按支签字。
 
 ## 4. S0T.3 门禁三条
 

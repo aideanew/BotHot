@@ -102,7 +102,7 @@ V14 增量按 V0.14.0 增量文件开头的规则写作 `S00T.V14.<n>`。两套�
 | S0T.1.1 列出全部判据函数（AST） | 已执行 | 20 支 / 11495 行；`EVIDENCE_PROOFS` import 后读常量 ⇒ 被门复跑的只有 **3 支**；自带 `--self-test` 面 9 支 |
 | S0T.1.2 映射到需求锚与 STEP | 已执行 | 映射取自每支脚本 `ast.get_docstring` 首行（S27.1/3/5、G-24、S0.1.2、STEP-00R、S2.1.1–2.1.5、S3.4.1、STEP-00W、STEP-00P），见 `inventory.md` §2 |
 | S0T.1.3 输出 inventory.md | 已执行 | `EVD-V17-00T/inventory.md` |
-| S0T.2.1 有效判据迁为 pytest | **未整批执行**（本轮给出不能整批做的证据） | 三类搬不动：临时仓/合成树电池、需真改生产代码的变异电池、超时墙型探针。逐支归因写在 `inventory.md` §4，需规划方按支签字（节奏同 V14.3 的"逐支 + 两轮复查"） |
+| S0T.2.1 有效判据迁为 pytest | **未整批执行**（本轮给出不能整批做的证据） | 真正搬不动的是两类**会动盘**的（临时仓/合成树电池 `replay_s213`/`mutate_replay_r9`/`j_attack_r7`；直接改真实文件再 sha256 还原的 `s27_3_mutation`）加一类**需要特殊环境的一次性读数探针**（`probe_import_stall`）。⚠️ 第一版把 `mutate_s341.py` 也归进"改真实代码"，读实现后否证：它 `write_text` 计数为 0，变异体在内存里造（`_load_mutant`）⇒ 它是**第一顺位迁移对象**。逐支归因与被推翻的归因都写在 `inventory.md` §4/§4.1，需规划方按支签字（节奏同 V14.3 的"逐支 + 两轮复查"） |
 | S0T.2.2 迁移后删旧脚本 | 同上未执行 | 本轮零删除。删除只发生过一次且有账：V14.3 的 `prove_provider_shapes.py` |
 | S0T.2.3 凭据形字面量改环境变量 | 已核 | 本轮未新增任何内联连接串；`evidence-check` 的敏感形门与 `gitleaks` 均 0 命中 |
 | S0T.3.1 proofs 纳入 CI pytest | **已成立并被证明** | `pytest tests/proofs --collect-only` ⇒ 33 条；`testpaths = ["tests"]` + CI 跑 `pytest tests/` ⇒ 每次 `@ci` 都在跑这 33 条 |
