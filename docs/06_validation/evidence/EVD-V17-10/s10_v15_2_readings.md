@@ -95,7 +95,18 @@ E   AttributeError: type object 'ArticleDetailFallbackCoordinator' has no attrib
 | `ruff check app tests` / `mypy app` | rc=0 / `Success: no issues found in 116 source files` |
 | `alembic heads` | `ab1006c4a (head)` 单头（本卡无迁移） |
 | `gen_contracts --check` / `check_docs_consistency` / guard-ports / structure / versions / evidence-check / rounds-check | 12 项幂等一致 / 23 引用 0 缺失 / rc=0 ×3 / 敏感形门 HIGH 0 + gitleaks no leaks / 无卡越轮次上限 |
-| `@ci` 三条 run id | 待填 |
+| `@ci` 三条 run id | 见 §7 末表：交付提交 `066ceeb` 三条全 success |
+
+## 6b. `@ci` 读数（head_sha 逐条核对 = 交付提交）
+
+| 工作流 | run id | head_sha | 结论 |
+|---|---|---|---|
+| CI（ubuntu，验收面） | 39602896594 | `066ceeb` | ✅ success |
+| CI-Windows | 39602896737 | `066ceeb` | ✅ success（`SKIP_BASELINE_WIN=621` 命中，未知族 0） |
+| Security | 39602896900 | `066ceeb` | ✅ success |
+
+第 1 轮 `b60e1e9` 的同一批：CI ❌ 39601412304（原因与归因见 §7），CI-Windows 与 Security 当轮即绿。
+⇒ **本卡交付提交 = `066ceeb`**。
 
 ## 7. 第 1 轮 CI 的一红：本机全量跑在改 yml **之前**
 
