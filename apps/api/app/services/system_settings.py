@@ -248,6 +248,26 @@ async def refresh_with(
         return False
 
 
+async def ensure_loaded(session: AsyncSession | None, *, force: bool = False) -> bool:
+    """请求驱动的同步读路径用它保证"读到的是现值"：TTL 内空操作，过期才读一次。
+
+    为什么需要：后端进程不像 scheduler / worker 有"轮首"这个概念，而重启后快照是空的。
+    少了这一步，运营在后台配好的分类要等有人打开一次配置页才会被
+    `spaces.validate_category` 认——那是"配了但按旧值拒"的另一半假绿。
+    `session=None`（内存桩装配）返回 False：读默认值，与无库值时逐字一致。
+    """
+    if session is None:
+        return False
+    if not force and is_fresh():
+        return True
+    try:
+        await refresh(session)
+        return True
+    except Exception as exc:  # noqa: BLE001 读不到配置就用最后已知值，不得让请求失败
+        logger.warning("system_settings.ensure_loaded_failed", reason=str(exc)[:200])
+        return False
+
+
 async def put(
     session: AsyncSession,
     key: str,

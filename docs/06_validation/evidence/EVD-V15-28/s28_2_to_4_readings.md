@@ -131,22 +131,23 @@ AssertionError: assert ('redfox' in 'enabled=2[redfox,rss] default=rss' and 'rss
 
 ## 8. 门禁与基线（本机全量，两形状同一天）
 
-同一份代码跑两次全量，差别只在环境变量——这是 D-V10-11 要求的"按族测量"，不是拿一个数猜另一个：
+同一份代码跑两次全量，差别只在环境变量——这是 D-V10-11 要求的"按族测量"，不是拿一个数猜另一个。
+下表是**第 2 轮**（含 `spaces.ensure_loaded` 那一条补的用例）的终值；第 1 轮的同一形状读数写在 §11。
 
 | 形状 | 命令 | junit 读数 |
 |---|---|---|
-| 连库（`bothot_test`@5547，PG 16.4） | `pytest tests -q --junitxml=…` | **2120 tests / 0 failed / 0 errors / 6 skipped**（终端行 `2114 passed, 6 skipped`） |
-| 无 DSN（`env -u AIDEANBOT_TEST_PG_DSN -u DATABASE_URL`，与 CI-Windows 同形状） | 同上 | **2120 tests / 0 failed / 0 errors / 611 skipped**（终端行 `1509 passed, 611 skipped`） |
+| 连库（`bothot_test`@5547，PG 16.4） | `pytest tests -q --junitxml=…` | **2121 tests / 0 failed / 0 errors / 6 skipped**（终端行 `2115 passed, 6 skipped`） |
+| 无 DSN（`env -u AIDEANBOT_TEST_PG_DSN -u DATABASE_URL`，与 CI-Windows 同形状） | 同上 | **2121 tests / 0 failed / 0 errors / 612 skipped**（终端行 `1509 passed, 612 skipped`） |
 
-`SKIP_BASELINE_WIN`：**578 → 611**。算式是测量值相加，不是余量：
+`SKIP_BASELINE_WIN`：**578 → 612**。算式是测量值相加，不是余量：
 
 | 族 | 条数 |
 |---|---|
 | `tests/test_system_settings.py`（写侧与轮首刷新的连库用例） | 6 |
 | `tests/test_discovery_config.py` | 10 |
-| `tests/test_category_config.py`（参数化按条计：5 条非法清单各一条） | 15 |
+| `tests/test_category_config.py`（参数化按条计：5 条非法清单各一条；含第 2 轮补的 1 条） | 16 |
 | `tests/test_audit_log.py::test_each_write_operation_emits_exactly_one_audit_record` 随新写端点变长（23 → 25） | 2 |
-| 合计 | **33** ⇒ 578 + 33 = 611，与全量实测 `total_skipped=611` 一致 |
+| 合计 | **34** ⇒ 578 + 34 = 612，与全量实测 `total_skipped=612` 一致 |
 
 其余门：
 
@@ -208,3 +209,36 @@ structlog 的懒代理在**第一次被调用**时就把绑定结果缓存下来
 
 **为什么这件事值得单独一节**：它的失败方式是"日志一条都没抓到"，而不是"字段不对"。
 下一个人踩到时很可能去放宽断言或删掉用例，那等于把 STEP-31 立的审计可查面自己关掉。
+
+## 11. 第 2 轮：后端进程才是漏掉的那一侧
+
+第 1 轮（`05ff3ff`）把"下一轮生效"接到了 scheduler 与 worker 两个常驻进程的轮首，契约面按 §6 交回，
+三绿读数：
+
+| 工作流 | run id | head_sha | 结论 |
+|---|---|---|---|
+| CI（ubuntu，验收面） | 39589338420 | `05ff3ff` | ✅ success |
+| CI-Windows | 39589338546 | `05ff3ff` | ✅ success（`SKIP_BASELINE_WIN=611` 命中，无 skip 门禁红） |
+| Security | 39589338654 | `05ff3ff` | ✅ success |
+
+**但接口这一侧漏了**，而且是用户最直接碰到的那条路。`system_settings` 的快照只会被
+`put()` / `get()` / `refresh()` 所在的那个进程填充；backend 没有"轮首"这个概念，重启之后快照是空的。
+于是：运营配好一个新分类 ⇒ 分类页（走 `get`）看得见 ⇒ 但**下一次有人拿它去纠偏文档分类会被 10005 拒**，
+因为 `SpaceService.validate_category` 读的是默认清单。这个形状比"没生效"更坏：它一半生效。
+
+补法是 `system_settings.ensure_loaded(session)`（TTL 内空操作，读不到就沿用最后已知值且不让请求失败），
+在 `spaces.py` 的三个调用点前各加一行：单篇纠偏、批量纠偏、`:categories` 呈现序。
+这三处都落在卡面允许面对 `spaces.py` 的限定上（"仅分类校验/呈现序"），不算越界。
+
+判据与反证（不能只说"我接上了"）：
+
+| 步 | 读数 |
+|---|---|
+| 新增用例 | `test_service_path_reads_the_db_value_by_itself`：绕开 `put()`（它会顺手刷快照），用裸 ORM 写配置行 + `reset_snapshot()`，再走 `SpaceService.update_doc_category` ⇒ 新类被接受且出现在 `list_doc_categories` 里。**25 passed**（与 `test_docs_pagination.py` 同跑） |
+| 变异反证 | 把其中一行 `ensure_loaded` 注释掉 ⇒ 同一条用例 **FAILED**（`1 failed in 1.45s`）；还原后 `grep -c MUTATION-PROBE` = **0**，三处调用点齐全（`:448 / :637 / :796`） |
+| 空间面回归 | `test_category_config + test_docs_pagination + test_r02_batch_docs + test_spaces_api` ⇒ **76 passed / 0 failed** |
+| 全量两形状 | 连库 `2121 tests / 0 failed / 6 skipped`；无 DSN `2121 / 0 failed / 612 skipped`（§8） |
+
+**局限要说全**：`ensure_loaded` 让 backend 在 TTL 内最多落后 60 秒，这与 ADR-0013 §5 是同一条代价，
+不是新增的洞；而 `session=None` 的内存桩装配（既有测试里常见）返回 False、读默认清单——
+那条路径本来就没有库可读。

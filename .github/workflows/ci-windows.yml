@@ -65,7 +65,10 @@ jobs:
       #   + test_audit_log 2 —— 后两条不是新用例，是 STEP-31 那条**按写操作参数化**的用例
       #     随新写的 admin 端点自己变长（23 → 25），它每行都要 db_session。
       # 合计 578 + 33 = 611（本机全量 total_skipped 实测 611，与增量推算一致）。
-      SKIP_BASELINE_WIN: "611"
+      # 同一卡第 2 轮（2026-10-21）补 1 条连库用例：test_service_path_reads_the_db_value_by_itself
+      # ——后端进程的请求路径必须自己把库值刷进来（SpaceService 的分类校验/呈现序不能靠
+      # "这个进程碰巧刷过快照"）⇒ 本机无 DSN 全量复测 total_skipped=612（终端行 1509 passed / 612 skipped）。
+      SKIP_BASELINE_WIN: "612"
     defaults:
       run:
         shell: bash

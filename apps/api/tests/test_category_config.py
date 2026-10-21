@@ -323,6 +323,37 @@ async def test_worker_round_picks_up_the_new_categories(db_session: Any) -> None
     assert categorize("某清洗验证通报", "") == NEW_CATEGORY
 
 
+async def test_service_path_reads_the_db_value_by_itself(db_session: Any) -> None:
+    """`SpaceService` 的分类校验读的是**现值**，不靠"这个进程碰巧刷过快照"。
+
+    刻意绕开 `put()`（它顺手把本进程快照刷了），用裸 ORM 写配置行 + `reset_snapshot()`，
+    再走 service 的纠偏路径 ⇒ 新类必须被接受。少了 `spaces.py` 里那句 `ensure_loaded`，
+    这里读到的还是默认清单，新类会被 10005 拒——"运营配好了、接口按旧值拒"就是这条抓的。
+    """
+    from test_docs_pagination import _seed_doc, _seed_source, _seed_user_and_space  # noqa: PLC0415
+
+    from app.repositories.space import SpaceRepository  # noqa: PLC0415
+    from app.services.spaces import SpaceService  # noqa: PLC0415
+
+    tag = id(db_session)
+    user, space = await _seed_user_and_space(db_session, f"sub-s28-live-{tag}", "S28 现值空间")
+    source = await _seed_source(db_session, f"s28-live-biz-{tag}")
+    await _seed_doc(db_session, space.id, source.id, f"s28-live-doc-{tag}")
+    db_session.add(SystemSetting(key=system_settings.CATEGORIES_KEY, value=_with_new_category()))
+    await db_session.flush()
+    doc = (
+        await db_session.execute(select(KnowledgeDocument).where(KnowledgeDocument.space_id == space.id))
+    ).scalar_one()
+
+    system_settings.reset_snapshot()
+    assert NEW_CATEGORY not in category_allowlist(), "前置：快照清空后新类还不可见"
+
+    svc = SpaceService(SpaceRepository(db_session), session=db_session)
+    view = await svc.update_doc_category(user.id, space.id, doc.id, NEW_CATEGORY)
+    assert view["category"] == NEW_CATEGORY, view
+    assert NEW_CATEGORY in await svc.list_doc_categories(user.id, space.id)
+
+
 async def test_ingest_path_assigns_the_configured_category(db_session: Any) -> None:
     """S28.4.2 的端到端读数：PUT 分类 ⇒ `kb.ingest` 落库的 `content_assets.category` 是新值。
 

@@ -29,6 +29,7 @@ from app.models.entities import KnowledgeDocument, KnowledgeSpace, User
 from app.providers.engine_port import EngineRouter
 from app.repositories.asset import AssetRepository, DocumentRepository
 from app.repositories.space import SpaceRepoProto
+from app.services import system_settings
 from app.services.categorizer import (
     DEFAULT_CATEGORY,
     UNCATEGORIZED,
@@ -444,6 +445,7 @@ class SpaceService:
 
         契约：越权/无效空间或 doc → 30004；category 不在规则版六类或空串 → 10005。
         """
+        await system_settings.ensure_loaded(self._session)  # 清单是运营可配的，读前先保证是现值
         validate_category(category)
 
         space = await self._repo.get_by_id(space_id)
@@ -632,6 +634,7 @@ class SpaceService:
         契约：取值非法 → 10005（先校验后取行，零副作用）；越权/无效空间或任一篇缺失
         → 30004；200 {requested, docs, category}。
         """
+        await system_settings.ensure_loaded(self._session)  # 同上：白名单必须是现值
         validate_category(category)
         ids = await self._normalize_doc_ids(raw_ids)
         _space, docs = await self._resolve_owned_docs(space_id, ids, owner=owner)
@@ -790,6 +793,7 @@ class SpaceService:
         space = await self._repo.get_by_id(space_id)
         if space is None or space.user_id != user_id:
             raise ResourceNotFoundError(space_id)
+        await system_settings.ensure_loaded(self._session)  # 呈现序跟库里的声明序走
         return order_categories(await self._repo.list_doc_categories(space_id))
 
     # ------------------------------------------------------------------ 保留 CRUD（B-T4 既有验收面）
