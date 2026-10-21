@@ -138,11 +138,12 @@ jobs:
         # 为什么两个都要：只给 --timeout 时，卡住的用例是"被线程法打断"，拿到的是打断点而不是阻塞点；
         # faulthandler_timeout 到点把**所有线程的原始栈**写进日志，才答得出"卡在哪个调用"。
         # --timeout-method=thread：Windows 上主线程若阻塞在 C 层（connect、DNS），信号法无效。
-        # 300s 单用例上限是刻意宽松的：本 job 的目标不是催绿，而是**任何卡死都必须留下栈**。
+        # S00H.2.3 收紧 300→120：两次连续 success（run 39500601366 @ b7cdaee、39496625738 @ 376cfe3）的日志里 faulthandler 转栈头=0 ⇒ 没有单用例越过 120s。
+        # ⚠️ 收紧后本参数与上面的 faulthandler_timeout=120 **同阈值**，卡死时"先转栈再被杀"不再有保障（见 P-54）。
         run: >-
           python -m pytest tests/ -q --no-header
           -o faulthandler_timeout=120
-          --timeout=300 --timeout-method=thread
+          --timeout=120 --timeout-method=thread
           --junitxml=pytest-report-win.xml
 
       - name: Windows skip 门禁（阈值与 ubuntu 分开设定）

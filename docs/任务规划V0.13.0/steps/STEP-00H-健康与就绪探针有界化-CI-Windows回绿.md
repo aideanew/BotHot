@@ -1,8 +1,11 @@
 # STEP-00H 健康与就绪探针有界化 + CI-Windows 回绿（V0.13.0 新增）
 
-> 状态：**🟢 S00H.1.1–1.4 与 S00H.2.1 全部已确认（2026-10-17 `@ci`）**；S00H.2.2 按卡面跳过
-> （2.1 已确认 ⇒ 条件步不执行），S00H.2.3 仍待"连续 2 次 `CI-Windows` success"。
-> 读数在 `docs/06_validation/evidence/EVD-V13-00H/s00h_readings.md` §7。
+> 状态：**🟢 全卡闭合（2026-10-21）**——S00H.1.1–1.4 与 S00H.2.1 于 2026-10-17 `@ci` 确认；
+> S00H.2.2 按卡面跳过（2.1 已确认 ⇒ 条件步不执行）；**S00H.2.3 于 2026-10-21 收口**：
+> `CI-Windows` 连续 22 个提交 success，`--timeout=300` 收紧为 `--timeout=120`，P-5 / U-23 关闭，
+> 收口用的两个 run 为 39500601366（`b7cdaee`）与 39496625738（`376cfe3`）。
+> 收紧撞出的新缺陷不在本卡授权面内，登记为 `§4 P-54`（`--timeout` 与 `faulthandler_timeout` 同阈值）。
+> 读数在 `docs/06_validation/evidence/EVD-V13-00H/s00h_readings.md` §7 与 §10。
 > 最有分量的一条：`tests/test_security_middleware.py`（5 条打 `/health`）改前**本机整文件跑不完**，
 > 改后与 `test_health_ready.py` 合跑 `71 passed / 0 failed / 39.64s`。
 > ⚠️ 本卡期间查明：`CI-Windows` 从 `5e5ab17` 起就再没卡过，之后的每一次红都换在了
@@ -82,21 +85,33 @@
    判据细节：`-q` 下日志本来就不打印通过用例名，所以"日志里没有 test_envelope"**不能**当判据，
    判据是三个 0 计数 + `failed=0`。
 6. [ ] ~~**S00H.2.2**~~ **不执行**（卡面条件：仅 S00H.2.1 仍卡时）。H3 未被单独证伪，留给下游按需重开
-7. [ ] **S00H.2.3** 连续 2 次 `CI-Windows` success 后：`--timeout=300 → 120`；在本目录 `07` 与 `docs/04_engineering/cross-platform.md` 各写一句"多平台门已绿"，附两个 run id；关闭 P-5 / U-23
-   — **仍未满足**，而且原因值得记：阈值收紧之后 `6925850`（run 39033863921）拿到**第一次 success**，
-   紧接着我自己的两个提交把它顶红两次（`7a252f4` run 39034593829、`2a7195d` run 39035688934，
-   都是 `failed=0 / 未知族=0 / skipped 443 > 基线 441`）——因为我新增的 2 条连库用例把 Windows
-   侧的 skip 抬了 2。**连续计数因此清零重来**，不是回归也不是门坏了。
-   已把"新增连库用例 ⇒ 同批重测并抬基线"写成程序（`cross-platform.md` §8）并登记 `D-V10-11`；
-   `--timeout` 的 300→120 收紧要等两次真 success，不催。
+7. [x] **S00H.2.3** 连续 2 次 `CI-Windows` success 后：`--timeout=300 → 120`；在本目录 `07` 与 `docs/04_engineering/cross-platform.md` 各写一句"多平台门已绿"，附两个 run id；关闭 P-5 / U-23
+   — **已完成（2026-10-21，执行助手自行经 REST 复算，不引用规划方原文）**：判据口径为
+   `event=push` + `branch=main` + 同一 `head_sha` 取最新 attempt + 主线顺序 `git rev-list` 逐提交判定。
+   实测自 HEAD 往回数**连续 22 个提交 success**（段内无"无 run"空洞），打断点为 `1834c4a`（failure）。
+   收口用的两个相邻提交：`b7cdaee` run **39500601366**、`376cfe3` run **39496625738**，
+   两条都 `1489 passed / 578 skipped`、`Failed: Timeout`=0、`Timeout (`=0（验收原文串，单独实测）、
+   faulthandler 转栈头 `Thread 0x`=0、`cancell`=0。
+   **收紧不误伤的判据是 `Thread 0x`=0**：`faulthandler_timeout=120` 等于每用例 120s 的探针，两次都没响
+   ⇒ 无单用例越过 120s。四处文档已写、P-5 与 U-23 已关；`--timeout` 收紧为 120。
+   ⚠️ 顺带查出一条**本卡不允许修**的新缺陷，登记为 `§4 P-54`：收紧后 `--timeout` 与
+   `faulthandler_timeout` **同阈值**，卡死时"先转栈再被杀"失去时序保障（原来两者错开 180s）。
+   ⚠️ 两个 run 的 `head_sha` 上 ubuntu `CI` 是红的（STEP-07 熔断）——`--timeout` 只被 `ci-windows.yml` 读、
+   且那批踩红的连库用例在本平台 skip，所以与本判据正交，但**不得**把这条读成 STEP-07 的绿证据。
+   读数全在 `EVD-V13-00H/s00h_readings.md` §10（含越界声明与一条推翻 §7.2 取证路径的记录）。
 
 ## 验收标准
 - [ ] `@linux` `timeout 20 python evidence/b8d27ff/probe_health_blackhole.py`（同一黑洞环境变量）rc=0，`/health` 墙钟 ≤ 5s（改前 rc=124）
 - [ ] `@linux` 新用例在 314d7f2 红、在本卡提交上绿（两次原始输出入 EVD）
 - [ ] `@linux` 真库全量 `failed = 0` 且 `passed ≥ 1478`，覆盖率 ≥ 85%
 - [ ] `@ci` `CI` 工作流 success（ubuntu 不回归）
-- [ ] `@ci` `CI-Windows` 连续 2 次 success，日志 `grep -c "Timeout ("` = 0
+- [x] `@ci` `CI-Windows` 连续 2 次 success，日志 `grep -c "Timeout ("` = 0 —— **2026-10-21 达成**（连续 22 个提交；收口两个相邻 run 39500601366 / 39496625738 的 `Timeout (` 计数实测均为 0，见 `EVD-V13-00H` §10）
 - [ ] `git diff --name-only` ⊆ 本卡"输出"清单；`contracts/**` 零改动
+  — 本步**部分越界**：`docs/任务规划V0.12.0/00-README.md`（关 P-5、加 P-54）、
+  `docs/任务规划V0.12.0/05-风险自检与局限.md`（关 U-23）、本卡自身、`docs/任务规划V0.17.0/07-执行过程记录.md`
+  均不在"允许修改"清单内，但 S00H.2.3 原文要求"关闭 P-5 / U-23"、V0.17.0 指令要求每卡记录一行 ⇒ 逐条声明见 `EVD-V13-00H` §10.4。`contracts/**` 零改动成立。
+- 上面三条 `@linux` 勾选项**保持未勾**：本轮收口发生在 `@win`，黑洞探针复跑与"314d7f2 上先红"是规划方
+  2026-10-17 的读数（已记于 §2/§7），执行助手不把自己没跑过的命令补成已验收。
 
 ## 验证命令
 ```bash

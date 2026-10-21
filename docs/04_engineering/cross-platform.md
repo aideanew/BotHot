@@ -158,3 +158,11 @@ SKIP_BASELINE_WIN = 当次测量的 skip 总数（**零余量**）
 中间提交没有任何 CI 读数。`b751564` 就是这样没有 run 的（它与 `f7a3a6b` 同批推送）。
 所以按 D-V6-02 引用"某个 run id 证明了某个提交"之前，必须先确认那个 run 的 `head_sha` 就是那个提交——
 否则会把"批处理推送的尖端读数"错记成"中间提交的结论"。要每张卡都有自己的门，就一次提交一次 push。
+
+**多平台门已绿**（2026-10-21，S00H.2.3 收口）：`CI-Windows` 连续两个提交 `success`——
+run **39500601366**（`b7cdaee`）与 run **39496625738**（`376cfe3`），两条都是
+`1489 passed / 578 skipped`、`Failed: Timeout` 与 faulthandler 转栈头双 0、跑完而非被上限砍掉；
+据此 pytest 的 `--timeout=300` 收紧为 `--timeout=120`，P-5 / U-23 关闭。
+"单用例从未越过 120s"这条是收紧不误伤的依据（`faulthandler_timeout=120` 两次都没转栈），
+读数全在 `docs/06_validation/evidence/EVD-V13-00H/s00h_readings.md` §10。
+
