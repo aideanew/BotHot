@@ -123,14 +123,15 @@ def test_route_enumeration_covers_the_openapi_surface() -> None:
 
 
 def test_enumeration_matches_the_measured_baselines() -> None:
-    """读数锚（2026-10-21 本机现读，STEP-28 之后）：96 个操作、47 个带路径参数、31 个落在稿面规则里。
+    """读数锚（2026-10-21 本机现读，STEP-10 V15.2 之后）：98 个操作、47 个带路径参数、31 个落在稿面规则里。
 
     三个数**故意**钉死：本卡的教训是"清单变短没人发现"。真加/删端点时来改这条，
     不要把断言放宽成 `>= 0`——那等于没有守卫。
-    STEP-28 加了 3 条 `/api/v1/admin/**`（两写一读），都不带路径参数 ⇒ 只有总数动。
+    STEP-28 加了 3 条 `/api/v1/admin/**`（两写一读），STEP-10 V15.2 又加 2 条（一读一写），
+    都不带路径参数 ⇒ 只有总数动，`with_params` 与 `checklist` 不变。
     """
     with_params = [x for x in ALL_OPERATIONS if _id_params(x[0])]
-    assert len(ALL_OPERATIONS) == 96, len(ALL_OPERATIONS)
+    assert len(ALL_OPERATIONS) == 98, len(ALL_OPERATIONS)
     assert len(with_params) == 47, len(with_params)
     assert len(CHECKLIST_OPERATIONS) == 31, len(CHECKLIST_OPERATIONS)
 
@@ -407,8 +408,8 @@ def test_enumeration_accounts_for_every_registered_router() -> None:
     """OpenAPI 交叉核对是**单向**的：一只整组 `include_in_schema=False` 的路由器
     会同时从两侧消失，守卫却仍读绿（第十一轮验证 G2 点名）。这里改用注册表逐只对账。
 
-    读数锚（2026-10-21 本机现读，STEP-28 之后）：`APP_ROUTERS` 15 只 + `metrics_router` = 92 个操作，
-    枚举 96 个，差集恰为 FastAPI 自带的 4 个文档路由（`/metrics` 属于 metrics_router，已在 92 内）。
+    读数锚（2026-10-21 本机现读，STEP-10 V15.2 之后）：`APP_ROUTERS` 15 只 + `metrics_router` = 94 个操作，
+    枚举 98 个，差集恰为 FastAPI 自带的 4 个文档路由（`/metrics` 属于 metrics_router，已在 94 内）。
     """
     from app.main import APP_ROUTERS, metrics_router
 
@@ -422,7 +423,7 @@ def test_enumeration_accounts_for_every_registered_router() -> None:
 
     registered_ops = sum(ops_of(rt) for rt in [*APP_ROUTERS, metrics_router])
     assert len(APP_ROUTERS) == 15, len(APP_ROUTERS)
-    assert registered_ops == 92, registered_ops
+    assert registered_ops == 94, registered_ops
     extra = sorted({p for p, _, _ in ALL_OPERATIONS if _is_doc_only(p)})
     assert len(ALL_OPERATIONS) == registered_ops + 4, (len(ALL_OPERATIONS), registered_ops)
     assert set(extra) == DOC_ONLY_PATHS, extra

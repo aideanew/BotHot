@@ -67,6 +67,11 @@ from app.providers.discovery.registry import CHANNELS, describe_channels
 from app.providers.langbot.client import LangBotClient
 from app.providers.push import registered_channels
 from app.services import system_settings
+from app.services.article_detail_fallback import (
+    DETAIL_FALLBACK_PLATFORMS,
+    effective_config,
+    ready_detail_platforms,
+)
 from app.services.categorizer import DEFAULT_CATEGORY, default_categories
 from app.services.engine_keys import EngineKeyService
 from app.services.jobs import JobService
@@ -627,6 +632,100 @@ async def _refuse_dangling_removals(session: AsyncSession, keeping: set[str]) ->
     if dangling:
         detail = "、".join(f"{name}（{count} 条资产仍在引用）" for name, count in dangling)
         raise RequestInvalidError(f"这些分类不能删除，可以改为停用：{detail}")
+
+
+class ArticleFallbackRequest(BaseModel):
+    """S10.V15.2：`{enabled, trigger[], providers[], daily_budget}`，**没有 key 的位置**。
+
+    `extra="forbid"` 让多出来的字段进不了服务层；写侧角色是 **admin**（涉及花钱，
+    D-V12-20 与 D-V12-12 的危险操作同族），读侧仍是 operator。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    trigger: list[str] = Field(default_factory=list)
+    providers: list[str] = Field(default_factory=list)
+    daily_budget: int | None = None
+
+
+@router.get("/article-fallback", summary="付费详情兜底配置（运营视图）")
+async def admin_get_article_fallback(
+    actor: Annotated[User, Depends(require_roles("operator"))],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> JSONResponse:
+    """现在**真正生效**的兜底形状 + 它的来源 + 每家平台是否就绪。
+
+    生效形状由 `article_detail_fallback.effective_config()` 单点算——本接口和协调器用同一个函数，
+    否则会出现"配置页显示已开、入库按关跑"。`platforms[].ready` 只回答"配没配凭据"，
+    **永不回显值**（不变量 2）。`wiredTriggers` 把"能配哪些触发条件"说在响应里，
+    而不是让人照着卡面猜一个本仓没有检测面的值。
+    """
+    stored = await system_settings.get(session, system_settings.ARTICLE_FALLBACK_KEY)
+    eff = effective_config(get_settings(), stored)
+    data = {
+        "source": eff["source"],
+        "effective": {
+            "enabled": eff["enabled"],
+            "trigger": sorted(eff["triggers"]),
+            "providers": sorted(eff["providers"]) if eff["providers"] is not None else None,
+            "dailyBudget": eff["daily_budget"],
+        },
+        "platforms": [
+            {"name": name, "ready": name in ready_detail_platforms(get_settings())}
+            for name in DETAIL_FALLBACK_PLATFORMS
+        ],
+        "wiredTriggers": sorted(system_settings.WIRED_TRIGGERS),
+    }
+    body = success(data=data)
+    return JSONResponse(status_code=200, content=body.model_dump())
+
+
+@router.put("/article-fallback", summary="付费详情兜底配置（仅管理员）")
+async def admin_put_article_fallback(
+    payload: ArticleFallbackRequest,
+    actor: Annotated[User, Depends(require_roles("admin"))],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> JSONResponse:
+    """D-V12-20：付费兜底的"何时触发 / 用哪家 / 一天最多几次"由管理员写；运营只能读。
+
+    供应商名的**存在性**在这里查（名单归 `article_detail_fallback` 所有，服务层不反向依赖
+    provider 层，同 S28.2.2 对 `CHANNELS` 的分工）；触发条件里没接进代码的值由服务层拒
+    （`captcha` 就是——`app/**` 里 `captcha|验证码` 命中 0 处，见 P-64）。
+    开启必须同时给 `daily_budget`：D-V12-20 明确拒绝"可无上限开启付费调用"。
+
+    200 `{effective, source:"db"}`；形状/名单/预算非法 → 10005/422；
+    未登录 → 10001；非 admin → 10004/403（operator 也一样拒）。
+    """
+    unknown = sorted({name for name in payload.providers if name not in DETAIL_FALLBACK_PLATFORMS})
+    if unknown:
+        raise RequestInvalidError(
+            f"这些供应商没有详情兜底能力或不存在：{', '.join(unknown)}"
+            f"（可用：{', '.join(DETAIL_FALLBACK_PLATFORMS)}）"
+        )
+    parsed = await system_settings.put(
+        session,
+        system_settings.ARTICLE_FALLBACK_KEY,
+        {
+            "enabled": payload.enabled,
+            "trigger": payload.trigger,
+            "providers": payload.providers,
+            "daily_budget": payload.daily_budget,
+        },
+        actor=actor,
+    )
+    eff = effective_config(get_settings(), parsed)
+    data = {
+        "source": "db",
+        "effective": {
+            "enabled": eff["enabled"],
+            "trigger": sorted(eff["triggers"]),
+            "providers": sorted(eff["providers"]) if eff["providers"] is not None else None,
+            "dailyBudget": eff["daily_budget"],
+        },
+    }
+    body = success(data=data)
+    return JSONResponse(status_code=200, content=body.model_dump())
 
 
 @router.get("/ops/liveness", summary="常驻进程存活")

@@ -36,12 +36,20 @@ logger = structlog.get_logger(__name__)
 
 DISCOVERY_KEY = "discovery"
 CATEGORIES_KEY = "categories"
+ARTICLE_FALLBACK_KEY = "article_fallback"
 # 白名单是这张表不变成垃圾抽屉的唯一防线（ADR-0013 §3 的承重墙）：
 # 没登记的键读不到、写不进，只能在这里显式加。
-KNOWN_KEYS: frozenset[str] = frozenset({DISCOVERY_KEY, CATEGORIES_KEY})
+KNOWN_KEYS: frozenset[str] = frozenset({DISCOVERY_KEY, CATEGORIES_KEY, ARTICLE_FALLBACK_KEY})
 SNAPSHOT_TTL_SECONDS = 60.0  # 卡面上界；跨进程一致性的代价就写在这个数上
 
 _DEFAULT_CATEGORY = "其他"  # categorizer.DEFAULT_CATEGORY 的镜像，见下方注释
+
+# 已经接进代码的触发条件。**没接的不放进来**的理由：卡面还点名了 `captcha`，
+# 而 `app/**` 里 `captcha|验证码` 命中 0 处（实测读数在 EVD-V17-10）——收下这个值就等于
+# 做一个人能配、机器不执行的旋钮，正是本仓反复登记的"死配置"病。放开它的条件记在 P-64。
+WIRED_TRIGGERS: frozenset[str] = frozenset({"http_error", "empty_body"})
+# 上限是量级保护：写 10 万次不是运营意图，是打字错误，而每一次都可能是一张发票。
+MAX_DAILY_BUDGET = 10_000
 
 
 class DiscoveryConfig(BaseModel):
@@ -65,8 +73,35 @@ class CategorySpec(BaseModel):
     enabled: bool = True
 
 
+class ArticleFallbackConfig(BaseModel):
+    """付费详情兜底的运营配置（D-V12-20）：何时触发 / 用哪家 / 一天最多花几次，**不含 key**。
+
+    `daily_budget=None` 只在 `enabled=False` 时合法：开着兜底却没有预算上限，
+    正是 D-V12-20 明确拒绝的那个替代方案（"运营可无上限开启付费调用"）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    trigger: list[str] = Field(default_factory=list)
+    providers: list[str] = Field(default_factory=list)
+    daily_budget: int | None = None
+
+
 _DISCOVERY_ADAPTER = TypeAdapter(DiscoveryConfig)
 _CATEGORIES_ADAPTER = TypeAdapter(list[CategorySpec])
+_FALLBACK_ADAPTER = TypeAdapter(ArticleFallbackConfig)
+
+_ADAPTERS: dict[str, TypeAdapter[Any]] = {
+    DISCOVERY_KEY: _DISCOVERY_ADAPTER,
+    CATEGORIES_KEY: _CATEGORIES_ADAPTER,
+    ARTICLE_FALLBACK_KEY: _FALLBACK_ADAPTER,
+}
+
+
+def _adapter_for(key: str) -> TypeAdapter[Any]:
+    """键 → 校验器。写侧与读侧共用同一张表，避免"put 认三种形状、refresh 只认两种"这种分叉。"""
+    return _ADAPTERS[key]
 
 
 # ------------------------------------------------------------------ 快照
@@ -134,6 +169,9 @@ def validate(key: str, value: object) -> Any:
         if key == DISCOVERY_KEY:
             parsed = _DISCOVERY_ADAPTER.validate_python(value)
             _validate_discovery(parsed)
+        elif key == ARTICLE_FALLBACK_KEY:
+            parsed = _FALLBACK_ADAPTER.validate_python(value)
+            _validate_fallback(parsed)
         else:
             parsed = _CATEGORIES_ADAPTER.validate_python(value)
             _validate_categories(parsed)
@@ -183,6 +221,30 @@ def _validate_categories(items: list[CategorySpec]) -> None:
         raise RequestInvalidError(f"分类清单必须包含且启用「{_DEFAULT_CATEGORY}」（规则零命中的兜底落点）")
 
 
+def _validate_fallback(cfg: ArticleFallbackConfig) -> None:
+    cfg.trigger = [t.strip() for t in cfg.trigger if t.strip()]
+    if len(set(cfg.trigger)) != len(cfg.trigger):
+        doubled = sorted({t for t in cfg.trigger if cfg.trigger.count(t) > 1})
+        raise RequestInvalidError(f"触发条件重复：{', '.join(doubled)}")
+    unknown = sorted({t for t in cfg.trigger if t not in WIRED_TRIGGERS})
+    if unknown:
+        # 拒收而不是"收下但不执行"：一个能配、没人读的触发条件比报错更难查（P-64 记的就是它）。
+        raise RequestInvalidError(
+            f"这些触发条件本仓还没有检测面，拒收：{', '.join(unknown)}（可用：{', '.join(sorted(WIRED_TRIGGERS))}）"
+        )
+    cfg.providers = [p.strip() for p in cfg.providers if p.strip()]
+    if len(set(cfg.providers)) != len(cfg.providers):
+        raise RequestInvalidError("供应商名单里有重复项")
+    if cfg.enabled:
+        if cfg.daily_budget is None:
+            # D-V12-20 拒绝的替代方案就是"可无上限开启付费调用"。
+            raise RequestInvalidError("开启兜底必须同时给出预算 daily_budget（每天最多几次付费尝试）")
+        if not 1 <= cfg.daily_budget <= MAX_DAILY_BUDGET:
+            raise RequestInvalidError(f"daily_budget 必须在 1～{MAX_DAILY_BUDGET} 之间，实得 {cfg.daily_budget}")
+    elif cfg.daily_budget is not None and not 1 <= cfg.daily_budget <= MAX_DAILY_BUDGET:
+        raise RequestInvalidError(f"daily_budget 要么不给，要么在 1～{MAX_DAILY_BUDGET} 之间")
+
+
 # ------------------------------------------------------------------ 摘要与审计
 
 
@@ -195,6 +257,12 @@ def digest(key: str, value: Any) -> str:
     if key == DISCOVERY_KEY:
         cfg: DiscoveryConfig = value
         return f"enabled={len(cfg.enabled)}[{','.join(cfg.enabled)}] default={cfg.default or '∅'}"
+    if key == ARTICLE_FALLBACK_KEY:
+        fb: ArticleFallbackConfig = value
+        return (
+            f"enabled={fb.enabled} trigger[{','.join(fb.trigger)}] "
+            f"providers[{','.join(fb.providers)}] budget={fb.daily_budget if fb.daily_budget is not None else '∅'}"
+        )
     items: list[CategorySpec] = value
     names = ",".join(item.name for item in items)
     return f"categories={len(items)} enabled={sum(1 for i in items if i.enabled)} [{names}]"[:240]
@@ -284,11 +352,7 @@ async def put(
     existing = (
         await session.execute(select(SystemSetting).where(SystemSetting.key == key))
     ).scalar_one_or_none()
-    dumped = (
-        _DISCOVERY_ADAPTER.dump_python(parsed, mode="json")
-        if key == DISCOVERY_KEY
-        else _CATEGORIES_ADAPTER.dump_python(parsed, mode="json")
-    )
+    dumped = _adapter_for(key).dump_python(parsed, mode="json")
     row = existing or SystemSetting(key=key)
     # 旧值摘要必须在**改这个对象之前**取：`existing` 与 `row` 是同一个 SQLAlchemy 实例，
     # 先赋新值再算摘要会报出"旧值=新值"——审计里那条"改之前是什么"就成了假的（本机实测抓到）。

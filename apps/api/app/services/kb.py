@@ -40,6 +40,7 @@ from app.providers.langbot.client import LangBotClient
 from app.providers.raw_store import RawStore, make_raw_store
 from app.repositories.asset import MIN_FRAGMENT_LEN, AssetRepository, DocumentRepository
 from app.repositories.space import SpaceRepository
+from app.services.article_detail_fallback import paid_detail_to_article
 from app.services.article_identity import canonical_article_key
 from app.services.categorizer import categorize
 from app.services.extractor import ExtractedContent, ExtractorService
@@ -288,6 +289,15 @@ class KnowledgeBaseService:
         extracted = normalize_extracted(ExtractorService().extract(article))
         verdict = score_quality(extracted)
         if not verdict.passed:
+            # S10.V15.2：卡面点名的第二类触发条件 `empty_body`（直抓拿到了页面但正文为空/过短）。
+            # 是否真的付费仍由协调器判：库里没登记 trigger=empty_body 时这里一次都不花，
+            # 行为与 S10.V15.1 的交付态逐字一致。
+            replaced = await self._detail_fallback_article(norm_url, reason="empty_body")
+            if replaced is not None:
+                article = replaced
+                extracted = normalize_extracted(ExtractorService().extract(article))
+                verdict = score_quality(extracted)
+        if not verdict.passed:
             # v0.3h④：低质 → 20003/422（与 B-T6/B-T7 护栏同码），非 30003/502
             raise ExtractQualityLowError(f"内容质量不足 qualityScore={verdict.score}：{verdict.reasons[0]}")
 
@@ -351,25 +361,27 @@ class KnowledgeBaseService:
                 last_exc = exc
                 if attempt < self._RESOLVE_MAX_ATTEMPTS - 1:
                     await asyncio.sleep(self._RESOLVE_BACKOFF_BASE * (2**attempt))
-        # V15.1：只对直抓失败（网络/非 200）兜底；域错误与本仓 bug 不花付费调用掩盖。
-        if isinstance(last_exc, ExtractFailedError) and self._detail_fallback is not None:
-            detail = await self._detail_fallback.fetch_detail(norm_url)
-            if detail is not None and (detail.content_html or detail.content_text):
-                html = detail.content_html or detail.content_text
-                # 清洗器只喂 `id="js_content"` 区段（extractor.py:298），而付费详情给的是正文片段；
-                # 不补这层容器，兜底拿到的正文会在评分前就抛 20003，接线等于白接。
-                if not re.search(r'id="js_content"', html, re.IGNORECASE):
-                    html = f'<div id="js_content">{html}</div>'
-                return ResolvedArticle(
-                    title=detail.title,
-                    author=detail.author,
-                    publish_time=detail.publish_time.isoformat() if detail.publish_time else None,
-                    content=detail.content_text or detail.content_html,
-                    url=detail.url or norm_url,
-                    biz=detail.biz,
-                    html=html,
-                )
+        # V15.1/V15.2：只对直抓失败（网络/非 200）兜底；域错误与本仓 bug 不花付费调用掩盖。
+        # 是否真的花钱由协调器按运营配置判（enabled → trigger → 预算），这里只声明"为什么"。
+        if isinstance(last_exc, ExtractFailedError):
+            replaced = await self._detail_fallback_article(norm_url, reason="http_error")
+            if replaced is not None:
+                return replaced
         raise last_exc  # type: ignore[misc]
+
+    async def _detail_fallback_article(self, norm_url: str, *, reason: str) -> ResolvedArticle | None:
+        """付费详情兜底的**唯一出口**：花不花由协调器判，这里只把结果换成解析产物。
+
+        两个触发点（`http_error`、`empty_body`）共用它，形状转换只有一份
+        （`paid_detail_to_article` 补 `js_content` 容器）——两处各写各的，
+        总有一处会忘记补容器然后静默 20003，那种失败长得像"上游没内容"而不是"接线错了"。
+        """
+        if self._detail_fallback is None:
+            return None
+        detail = await self._detail_fallback.fetch_detail(norm_url, reason=reason)
+        if detail is None or not (detail.content_html or detail.content_text):
+            return None
+        return paid_detail_to_article(detail, norm_url)
 
     async def _find_source_by_anchor(
         self, article_key: str, url: str, legacy_key: str = ""

@@ -47,6 +47,8 @@ OPERATOR_OK: list[tuple[str, str, str, Any]] = [
     ("改采集渠道配置", "PUT", f"{A}/discovery/config", {"enabled": ["nope"], "default": "nope"}),
     ("改采集分类配置", "PUT", f"{A}/categories", {"categories": []}),
     ("查采集分类配置", "GET", f"{A}/categories", None),
+    # D-V12-20 的读面：运营能看当前生效的兜底形状（看不到任何凭据）。
+    ("查付费兜底配置", "GET", f"{A}/article-fallback", None),
 ]
 
 ADMIN_ONLY: list[tuple[str, str, str, Any]] = [
@@ -55,6 +57,9 @@ ADMIN_ONLY: list[tuple[str, str, str, Any]] = [
     ("改渠道 webhook_url", "PUT", f"{B}/{NOPE}", {"webhook_url": "http://127.0.0.1:1/h"}),
     ("改渠道 secret", "PUT", f"{B}/{NOPE}", {"secret": "s"}),
     ("改渠道 extra_config", "PUT", f"{B}/{NOPE}", {"extra_config": "{}"}),
+    # STEP-10 S10.V15.2（D-V12-20）：付费兜底的写面涉及花钱 ⇒ 与"改渠道凭据"同族，只给 admin。
+    # body 给的是"过授权门之后才失败"的形状（无预算 ⇒ 10005），不会真把兜底打开。
+    ("改付费兜底配置", "PUT", f"{A}/article-fallback", {"enabled": True, "trigger": [], "providers": []}),
 ]
 
 
