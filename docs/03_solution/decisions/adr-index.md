@@ -25,6 +25,7 @@ updated: 2026-10-21
 | [ADR-0011](adr-0011-canonical-article-key.md) | 文章规范键格式（D-V2-01） | accepted | 2026-10-15 |
 | [ADR-0012](adr-0012-manifest-asset-alignment.md) | 清单↔资产键对齐与清单状态机（D-V2-02 / D-V3-01） | accepted | 2026-10-16 |
 | [ADR-0013](adr-0013-system-settings-store.md) | 运营可配置项的存储形状：`system_settings` 单表 KV + JSONB（D-V12-12 / STEP-28） | accepted | 2026-10-21 |
+| [ADR-0014](adr-0014-source-identifiers.md) | 信息源标识表 `source_identifiers`：一源多标识与 `(kind,value)` 唯一（D-V2-04 / STEP-08） | accepted | 2026-10-21 |
 
 ## 归位记录（STEP-01 S1.1.0 · 2026-10-15）
 

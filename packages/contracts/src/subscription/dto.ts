@@ -31,3 +31,12 @@ export interface SourceSubscription {
   created_at: string;
   updated_at: string;
 }
+
+export interface SourceIdentifier {
+  id: string;
+  source_id: string;
+  kind: string;
+  value: string;
+  origin: string;
+  created_at: string;
+}

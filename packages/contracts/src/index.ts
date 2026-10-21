@@ -55,4 +55,4 @@ export type { KnowledgeSpace } from "./knowledge/dto";
 export type { PushEvent } from "./push_event/dto";
 
 // ── subscription 域 ──
-export type { Source, SourceSubscription } from "./subscription/dto";
+export type { Source, SourceSubscription, SourceIdentifier } from "./subscription/dto";

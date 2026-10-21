@@ -42,7 +42,7 @@ DOMAIN_ENTITIES: dict[str, tuple[str, list[str]]] = {
     "hot": ("bothot_entities", ["HotTopic", "HotTopicArticle", "DailyReport", "FeedItem"]),
     "push_event": ("bothot_entities", ["PushEvent"]),
     "knowledge": ("entities", ["KnowledgeSpace"]),
-    "subscription": ("entities", ["Source", "SourceSubscription"]),
+    "subscription": ("entities", ["Source", "SourceSubscription", "SourceIdentifier"]),
     "ingest": ("entities", ["Job", "JobItem"]),
 }
 

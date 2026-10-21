@@ -43,6 +43,19 @@ SHAPES: dict[str, dict[str, object]] = {
         "columns": {"system_settings": ["key", "value", "updated_by", "updated_at"]},
         "indexes": {},
     },
+    "ab1006c2a": {
+        # STEP-08 S8.1.1：一源多标识。列与索引都按迁移声明逐条对账——
+        # `(kind, value)` 的唯一性是这张表的存在理由之一（同一标识不得属于两个源），
+        # 所以它的索引名必须在"降级后消失"的清单里，不能只探列。
+        "columns": {
+            "source_identifiers": ["id", "source_id", "kind", "value", "origin", "created_at"]
+        },
+        "indexes": {
+            "uq_source_identifier_kind_value": "source_identifiers",
+            "ix_source_identifiers_source_id": "source_identifiers",
+            "ix_source_identifiers_kind": "source_identifiers",
+        },
+    },
 }
 
 

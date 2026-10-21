@@ -67,6 +67,34 @@ class Source(TimestampMixin, Base):
     __table_args__ = (UniqueConstraint("type", "external_id", name="uq_source_type_external"),)
 
 
+class SourceIdentifier(Base):
+    """一个源持有的一个标识（STEP-08 S8.1.1，形状与理由见 ADR-0014）。
+
+    `Source.external_id` 仍是源的对外身份（biz），本表**不取代**它——本表回答的是另一个问题：
+    "要拿这个源去某家渠道，我还认识它的哪些标识"（ghid / 入口 URL / feed_url）。
+
+    两条不变量在 DB 侧：`(kind, value)` 唯一（同一标识不得属于两个源），
+    `source_id` 级联删除（源没了，它的标识不留孤儿）。
+    `kind` 用 String 而不是 DB enum（AGENTS.md 关键约束 3：加一类标识不该发一次 DDL），
+    合法集由 `app/services/identifier_resolver.py` 的 `IDENTIFIER_KINDS` 在应用侧把关。
+    """
+
+    __tablename__ = "source_identifiers"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    source_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("sources.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # biz | ghid | sample_url | feed_url
+    value: Mapped[str] = mapped_column(String(512), nullable=False)
+    origin: Mapped[str] = mapped_column(String(16), nullable=False, default="source")  # source | resolver
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=sa_text("now()"), nullable=False
+    )
+
+    __table_args__ = (UniqueConstraint("kind", "value", name="uq_source_identifier_kind_value"),)
+
+
 class SourceSubscription(TimestampMixin, Base):
     """订阅：整库导入的增量同步生命周期（Manifest Diff 水位）。"""
 
