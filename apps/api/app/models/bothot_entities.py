@@ -7,8 +7,10 @@
 """
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, TimestampMixin, gen_uuid
@@ -299,4 +301,25 @@ class Notification(TimestampMixin, Base):
     # 历史查询热路：按用户 + 时间倒序（与迁移 ab1005w5a 同建，模型与迁移一致）
     __table_args__ = (
         Index("ix_notifications_sub_created", "sub", "created_at"),
+    )
+
+
+class SystemSetting(Base):
+    """运营可配置项（ADR-0013）：一行一个配置键，`value` 是 jsonb。
+
+    形状本身带两条不变量，它们是本表的存在理由：
+    - **不播种、不给默认值**：库里没有这个键 = 走环境变量兜底，所以"删掉这行"就是回退，
+      而不是回退到另一个藏在代码里的默认值。
+    - **凭据永不进本表**：`value` 里出现 key/token/secret 形状即为实现缺陷（写侧 `extra="forbid"` 拒收）。
+      渠道凭据走 `bot_channels.extra_config` 那条已加密的路径，两条路不合并。
+    """
+
+    __tablename__ = "system_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    # NULL 的语义是"这行不是人写的"（未来的播种/迁移写入），不是"审计字段可以忘填"
+    updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
