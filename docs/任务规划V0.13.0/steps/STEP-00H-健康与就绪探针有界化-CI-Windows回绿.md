@@ -99,6 +99,9 @@
    ⚠️ 两个 run 的 `head_sha` 上 ubuntu `CI` 是红的（STEP-07 熔断）——`--timeout` 只被 `ci-windows.yml` 读、
    且那批踩红的连库用例在本平台 skip，所以与本判据正交，但**不得**把这条读成 STEP-07 的绿证据。
    读数全在 `EVD-V13-00H/s00h_readings.md` §10（含越界声明与一条推翻 §7.2 取证路径的记录）。
+   收紧后的实际执行已复算到**第二发**：`0c1815c` run 39536915781 与 `b146d34` run 39556315026
+   （`1494 passed / 578 skipped`，四条 0 计数齐全，且日志里 `--timeout=300` 的回显计数变为 0，
+   这就是收紧已在命令行上生效的自证），见 §11/§11.1。
 
 ## 验收标准
 - [ ] `@linux` `timeout 20 python evidence/b8d27ff/probe_health_blackhole.py`（同一黑洞环境变量）rc=0，`/health` 墙钟 ≤ 5s（改前 rc=124）

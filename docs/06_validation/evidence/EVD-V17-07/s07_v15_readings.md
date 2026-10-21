@@ -375,9 +375,24 @@ assert p39.main(["--dsn", dsn, "--apply", "--allow-hosts", p39.host_of(dsn)]) ==
 一次 push 只建尖端 run（`EVD-V13-00H` §9.1），所以下面 8.5 的三 CI 读数是**整个 tip 提交**的，
 不是单条修复的——引用时按 tip SHA 说。
 
-### 8.5 第 3 轮 `@ci` 读数
+### 8.5 第 3 轮 `@ci` 读数（tip `b146d34`，三绿）
 
-（待回填：本卡推送后由 REST 复取 run id + head_sha + conclusion。）
+一次 push 只建尖端 run（`EVD-V13-00H` §9.1），所以下面这三条是**整个 tip 提交**的读数，
+不是单条修复的；引用时按 tip SHA 说。
+
+| job | run | 结论 | 关键读数 |
+|---|---|---|---|
+| `CI`（ubuntu） | **39556314989** | ✅ success | backend `2065 passed, 6 skipped`——比第 2 轮多出的 5 条正是 R 新增的参数化 + AST 门；`skip 门禁` 仍 `6 = SKIP_BASELINE` |
+| `CI-Windows` | **39556315026** | ✅ success | `1494 passed, 578 skipped, 1 warning in 1013.74s`；`Failed: Timeout`=0、`Timeout (`=0、`Thread 0x`=0、`cancelled`=0；**`--timeout=300` 的回显计数 = 0**（收紧后的命令行在这发上第一次被执行） |
+| `Security` | **39556314942** | ✅ success | 四扫描器 verdict 全 OK；certifi 的 trivy 阻断随 `uv.lock` 补丁消失 |
+
+skip 数与第 2 轮完全相同（578），所以 §8.3 的"新增 5 条全在非连库层 ⇒ 不抬基线"这条判断
+在 `@ci` 上也成立——两个平台的 junit 形状一致，不是我本机的特例。
+
+中途还有一笔要留痕：tip 之前的 `1244534` 那发 `CI` 是红的，红的**不是本卡的用例**，
+而是台账守卫把我写在 D-V17-04 行里的证据目录名切成了一个不存在的裁决号（`1 failed / 2065 passed`）。
+措辞去歧义后转绿，门的缺口另登记 `§4 P-57`。这条之所以要写下来：
+如果只记"最后三绿"，下一轮就会以为第 3 轮一次过。
 
 ### 8.6 新用例被敏感形门拦下一次（门的召回，不是误报）
 
