@@ -45,6 +45,7 @@ from app.services.article_identity import canonical_article_key
 from app.services.categorizer import categorize
 from app.services.extractor import ExtractedContent, ExtractorService
 from app.services.feed_service import on_article_indexed
+from app.services.identifier_resolver import IdentifierResolver
 from app.services.normalizer import normalize_extracted
 from app.services.quality import score_quality
 from app.services.resolver import ResolvedArticle, SourceResolverService
@@ -538,6 +539,12 @@ class KnowledgeBaseService:
         AB-P004 P0：upsert 时透传既有 hit_count（防盲写 0 冲掉命中计数）。"""
         url = article.url
         source = await self._ensure_source(article.biz, extracted, url)
+        # S8.2.1（STEP-08 在 kb.py 的唯一一处）：入库成功即把这一源已可得的标识落进
+        # source_identifiers——biz/sample_url 来自源记录本身，ghid 从**这次已在手**的页面原文里读，
+        # 不额外发一次请求。不做这一步，迁移里那次一次性回填之后新建的源永远没有标识行。
+        await IdentifierResolver(self._session).ensure_identifiers(
+            source, html=str(getattr(article, "html", "") or "")
+        )
         asset_repo = AssetRepository(self._session)
         prior = await asset_repo.get_by_source_external(source.id, _article_key(url))
         hit_count = int(prior.hit_count or 0) if prior is not None else 0
