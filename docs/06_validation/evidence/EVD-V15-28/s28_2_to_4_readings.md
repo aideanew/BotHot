@@ -239,6 +239,16 @@ structlog 的懒代理在**第一次被调用**时就把绑定结果缓存下来
 | 空间面回归 | `test_category_config + test_docs_pagination + test_r02_batch_docs + test_spaces_api` ⇒ **76 passed / 0 failed** |
 | 全量两形状 | 连库 `2121 tests / 0 failed / 6 skipped`；无 DSN `2121 / 0 failed / 612 skipped`（§8） |
 
+第 2 轮交付提交 `2ab19c2` 的 `@ci` 三条（`head_sha` 逐条核对 = `2ab19c2`）：
+
+| 工作流 | run id | 结论 |
+|---|---|---|
+| CI（ubuntu，验收面） | 39592643116 | ✅ success |
+| CI-Windows | 39592643124 | ✅ success（`SKIP_BASELINE_WIN=612` 命中：新增那一条连库用例落在「AIDEANBOT_TEST_PG_DSN 未设置」族，没有未知族） |
+| Security | 39592643147 | ✅ success |
+
+⇒ **STEP-28 后端面的交付提交 = `2ab19c2`**（`05ff3ff` 是第 1 轮，三绿但漏了后端进程那一侧，见本节）。
+
 **局限要说全**：`ensure_loaded` 让 backend 在 TTL 内最多落后 60 秒，这与 ADR-0013 §5 是同一条代价，
 不是新增的洞；而 `session=None` 的内存桩装配（既有测试里常见）返回 False、读默认清单——
 那条路径本来就没有库可读。

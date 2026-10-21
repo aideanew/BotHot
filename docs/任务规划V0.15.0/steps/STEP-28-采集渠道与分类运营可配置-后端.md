@@ -30,34 +30,40 @@ operator 通过 `PUT` 接口改"启用哪些发现渠道 / 默认渠道"和"分�
 ## 3. 原子任务（WP → Atomic Task → Execution Step）
 
 ### S28.1 存储
-- [ ] **S28.1.1** 迁移 ab1006c4a：新表 `system_settings(key varchar(64) PK, value jsonb NOT NULL, updated_by varchar(36) NULL FK users.id, updated_at timestamptz NOT NULL)`；只建表，不播种（无行 = 走 env 兜底）
-  - S28.1.1.a 迁移往返：`alembic upgrade head && alembic downgrade -1 && alembic upgrade head` 真库 rc=0，读数入 EVD
-- [ ] **S28.1.2** `app/services/system_settings.py`：`get(key)`（TTL≤60s 进程内缓存，Redis 可选）/ `put(key, value, actor)`（写库 + 清缓存 + 结构化审计日志：谁、何时、旧值摘要、新值摘要）
+- [x] **S28.1.1** 迁移 ab1006c4a：新表 `system_settings(key varchar(64) PK, value jsonb NOT NULL, updated_by varchar(36) NULL FK users.id, updated_at timestamptz NOT NULL)`；只建表，不播种（无行 = 走 env 兜底）⇒ ✅ `7c4bda8`，形状与不变量的理由在 ADR-0013
+  - S28.1.1.a 迁移往返：`alembic upgrade head && alembic downgrade -1 && alembic upgrade head` 真库 rc=0，读数入 EVD ⇒ ✅ `EVD-V15-28/s28_1_readings.md` §1（含"低点表必须真的不在"的探针，因为往返步看不见假 downgrade）
+- [x] **S28.1.2** `app/services/system_settings.py`：`get(key)`（TTL≤60s 进程内缓存，Redis 可选）/ `put(key, value, actor)`（写库 + 清缓存 + 结构化审计日志：谁、何时、旧值摘要、新值摘要）⇒ ✅ 交付于 `05ff3ff`。口径差一条并留账：同步读 `peek()` **不做 IO**（签名不变的同步函数不能 await），跨进程一致靠"每轮开头刷一次"+TTL；Redis 那一层不做（配置面只有两个键，读缓存另有 `admin:discovery:channels` 那条既有路径）。审计摘要必须在赋值**之前**取，第一版把顺序写反过，被自己的用例抓到（`EVD-V15-28` §4）
 
 ### S28.2 采集渠道
-- [ ] **S28.2.1** `registry.py` 的 `_enabled_set` / `resolve_default_channel` 改为"库值优先、env 兜底"；签名不变
-  - S28.2.1.a 先红：连库用例写入 `discovery={"enabled":["tikhub"],"default":"tikhub"}` 后 `resolve_default_channel` 仍返回 env 的 redfox ⇒ 红
-  - S28.2.1.b 无库值时与改前逐字一致（复用现有 registry 测试，0 修改）
-- [ ] **S28.2.2** `PUT /api/v1/admin/discovery/config`（`require_roles("operator")`）：只收 `enabled: list[str]`、`default: str`；校验名字必须在 `registered_channels`、`default ∈ enabled`；**拒收任何含 key/token/secret 的字段**（pydantic `extra="forbid"`）
-- [ ] **S28.2.3** `GET /api/v1/admin/discovery/channels` 回显增加 `source: "db"|"env"`；写后缓存 `admin:discovery:channels` 立即失效
+- [x] **S28.2.1** `registry.py` 的 `_enabled_set`（实读函数名是 `_whitelist`） / `resolve_default_channel` 改为"库值优先、env 兜底"；签名不变 ⇒ ✅ `05ff3ff`
+  - S28.2.1.a 先红：连库用例写入 `discovery={"enabled":["tikhub"],"default":"tikhub"}` 后 `resolve_default_channel` 仍返回 env 的 redfox ⇒ 红 ⇒ ✅ 红读数 `redfox`、绿读数 `tikhub`（`EVD-V15-28` §1 §3）
+  - S28.2.1.b 无库值时与改前逐字一致（复用现有 registry 测试，0 修改）⇒ ✅ `test_discovery.py` 一行未改，与 `test_categorizer.py`、`test_docs_pagination.py` 同批通过
+  - 补一条卡面没写但会致命的判据：库里 `enabled=[]` 是"决定全停"，env 的 `""` 是"没配=全开"，两者必须能区分（`test_empty_db_list_means_no_channel_not_every_channel`）——只改 `_whitelist` 不改它的 3 个调用点就会把"全停"执行成"全开"
+- [x] **S28.2.2** `PUT /api/v1/admin/discovery/config`（`require_roles("operator")`）：只收 `enabled: list[str]`、`default: str`；校验名字必须在 `registered_channels`、`default ∈ enabled`；**拒收任何含 key/token/secret 的字段**（pydantic `extra="forbid"`）⇒ ✅；服务层 `validate()` 也 `extra="forbid"`，两道闸不合并
+- [x] **S28.2.3** `GET /api/v1/admin/discovery/channels` 回显增加 `source: "db"|"env"`；写后缓存 `admin:discovery:channels` 立即失效 ⇒ ✅（失效在 commit **之后**，否则并发读会把提交前的形状再塞回缓存）
 
 ### S28.3 采集分类
-- [ ] **S28.3.1** `categorizer.py`：`CATEGORIES`/`_RULES` 变为默认值；`categorize()` 与 `CATEGORY_ALLOWLIST` 读 `system_settings["categories"]`（结构：`[{name, keywords[], enabled}]` 有序），无库值时与今天逐字一致
-  - S28.3.1.a 先红：库里新增分类"安全·合规"+ 关键词"漏洞" ⇒ `categorize("某漏洞通报", "")` 仍得"其他" ⇒ 红
-- [ ] **S28.3.2** `GET/PUT /api/v1/admin/categories`（operator）：校验名字非空≤32 字、不重复、至少 1 个启用、`其他` 必须存在且不可停用（`DEFAULT_CATEGORY` 兜底）；删除仍被 `content_assets` 引用的分类 ⇒ `request_invalid` + 引用数
-- [ ] **S28.3.3** `spaces.py` 的分类校验与呈现序跟随库值（`CATEGORY_ALLOWLIST` 改函数，调用点同步）
+- [x] **S28.3.1** `categorizer.py`：`CATEGORIES`/`_RULES` 变为默认值；`categorize()` 与 `CATEGORY_ALLOWLIST` 读 `system_settings["categories"]`（结构：`[{name, keywords[], enabled}]` 有序），无库值时与今天逐字一致 ⇒ ✅（新增 `active_categories()` / `enabled_rules()` / `category_allowlist()` / `default_categories()`）
+  - S28.3.1.a 先红：库里新增分类"安全·合规"+ 关键词"漏洞" ⇒ `categorize("某漏洞通报", "")` 仍得"其他" ⇒ 红 ⇒ ✅ 本批用同形状的「质量·验收」+「验证」量到红读数 `其他`、绿读数 `质量·验收`
+- [x] **S28.3.2** `GET/PUT /api/v1/admin/categories`（operator）：校验名字非空≤32 字、不重复、至少 1 个启用、`其他` 必须存在且不可停用（`DEFAULT_CATEGORY` 兜底）；删除仍被 `content_assets` 引用的分类 ⇒ `request_invalid` + 引用数 ⇒ ✅（32 字的上界不是凑数：`content_assets.category` 实测 `String(32)`）；**停用 ≠ 删除**：有引用也放行，历史行与筛选项都还在
+- [x] **S28.3.3** `spaces.py` 的分类校验与呈现序跟随库值（`CATEGORY_ALLOWLIST` 改函数，调用点同步）⇒ ✅ 第 2 轮 `2ab19c2` 补完后端口径：`ensure_loaded(session)` 在三个调用点前各一行，否则"重启后的 backend 看得见配置、却按默认清单拒新分类"——一半生效比没生效更难查（判据带变异反证，`EVD-V15-28` §11）
 
 ### S28.4 权限矩阵与证据
-- [ ] **S28.4.1** 把新 3 个写端点加进 `tests/test_push_and_hot_rank_matrix.py` 的 `OPERATOR_OK`（user 10004 / operator·admin 非 10004）；`test_require_roles_single_arg.py` 自动覆盖
-- [ ] **S28.4.2** EVD：`docs/06_validation/evidence/EVD-V15-28/`——迁移往返、各先红原文、改后绿、端到端读数（PUT 渠道 → 调 `resolve_default_channel` 得新值；PUT 分类 → `kb.ingest` 路径分类得新值）、`@ci` 三条 run id 且 `head_sha` = 交付提交
+- [x] **S28.4.1** 把新 3 个写端点加进 `tests/test_push_and_hot_rank_matrix.py` 的 `OPERATOR_OK`（user 10004 / operator·admin 非 10004）；`test_require_roles_single_arg.py` 自动覆盖 ⇒ ✅ 追加 3 行（`PUT /discovery/config`、`PUT /categories` 两个写 + `GET /categories` 一个读——卡面写"3 个新写端点"，实数是 2 写 1 读；把读也纳入矩阵，数量与覆盖面同时成立）
+- [x] **S28.4.2** EVD：`docs/06_validation/evidence/EVD-V15-28/`——迁移往返、各先红原文、改后绿、端到端读数（PUT 渠道 → 调 `resolve_default_channel` 得新值；PUT 分类 → `kb.ingest` 路径分类得新值）、`@ci` 三条 run id 且 `head_sha` = 交付提交 ⇒ ✅ `s28_1_readings.md` + `s28_2_to_4_readings.md`（端到端三条都在 §3/§11；交付提交 `2ab19c2`，`head_sha` 核对见 §4 末条）
 
 ## 4. 验收标准
-- [ ] 迁移单头、往返 rc=0
-- [ ] 无库值时：现有 registry / categorizer / spaces 全部用例 0 修改通过
-- [ ] 有库值时：S28.2.1.a、S28.3.1.a 改前红、改后绿
-- [ ] 接口拒收凭据字段（422），响应体不含任何 key
-- [ ] 权限矩阵：3 个新写端点 user=10004、operator/admin≠10004
-- [ ] 后端全量 0 failed；ruff/mypy；CI / CI-Windows / Security 三绿；CI-Windows `SKIP_BASELINE_WIN` 按新增连库用例数抬高并在 EVD 写明算式
+- [x] 迁移单头、往返 rc=0 ⇒ `ab1006c4a (head)` 单头；往返 + 低点探针读数在 `s28_1_readings.md` §1
+- [x] 无库值时：现有 registry / categorizer / spaces 全部用例 0 修改通过 ⇒ `test_discovery.py`、`test_categorizer.py`、`test_docs_pagination.py` 零修改，82 passed（改后绿那一批里）
+- [x] 有库值时：S28.2.1.a、S28.3.1.a 改前红、改后绿 ⇒ 红：`redfox` / `其他`；绿：`tikhub` / `质量·验收`
+- [x] 接口拒收凭据字段（422），响应体不含任何 key ⇒ 拒收：`PUT` 夹带凭据形字段 ⇒ 422/10005 且库里 0 行；回显：`GET` 的响应文本里没有 `api_key`/`token`/`secret` 任一字段名。**但**框架层那一份 422 文案会回显被拒的输入值（`main.py` 取 `exc.errors()[:1]`，pydantic 恒带 `input`）——已登记 P-62，不在本卡改
+- [x] 权限矩阵：3 个新写端点 user=10004、operator/admin≠10004 ⇒ 见 S28.4.1；矩阵用例整体通过
+- [x] 后端全量 0 failed；ruff/mypy；CI / CI-Windows / Security 三绿；CI-Windows `SKIP_BASELINE_WIN` 按新增连库用例数抬高并在 EVD 写明算式 ⇒ 本机全量两形状：连库 `2121 tests / 0 failed / 6 skipped`、无 DSN `2121 / 0 failed / 612 skipped`；`SKIP_BASELINE_WIN` 578→612（算式 `EVD-V15-28` §8）；`ruff`/`mypy` rc=0；交付提交 `2ab19c2` 三绿：CI 39592643116 / CI-Windows 39592643124 / Security 39592643147，`head_sha` 逐条核对一致（第 1 轮 `05ff3ff` 也三绿，但它漏了后端进程那一侧，见 `EVD-V15-28` §11）
+
+## 4b. 交回规划方的两项（本卡不做，卡面自己划的线）
+
+1. **契约步**（卡面 §2「先在 `packages/contracts/src/**` 新增 DTO」）：三条实现路径各自是墙——`src/**` 是生成物（手改在 `--check` 逐字节比对必红）；加进 `app.contracts.collection` 会让生成物多出 `$defs`，而比对门对"稿里没有的 def"是无条件红且不查登记表；新起一个域要先有规划方落的冻结稿。⇒ 登记 **P-61**，读数与复现见 `EVD-V15-28` §6。本批的接口形状仍在 OpenAPI 里可见（三个请求模型），14b 有依据，缺的是 `packages/contracts` 那一份生成物。
+2. **卡面允许面缺接线点**：§0 的目标句要求"下一轮"生效，而 §5 允许面不含 `scheduler.py` / `job_worker.py`。已按最小面（各 1 行）接上并各带行为用例，属申报过的越界，一并记在 P-61 与 `EVD-V15-28` §5。
 
 ## 5. 允许修改
 - `apps/api/alembic/versions/ab1006c4a_*.py`（新建）、`apps/api/app/models/**`（仅新增 `SystemSetting`）
