@@ -94,10 +94,35 @@ E   AttributeError: type object 'ArticleDetailFallbackCoordinator' has no attrib
 | `SKIP_BASELINE_WIN` | **612 → 621**。算式（按模块实测，不是猜）：`test_article_fallback_config` 8（该文件 18 条里另 10 条不连库）+ `test_audit_log` 1（按写操作参数化的那条又随新 admin 写端点变长，25→26）⇒ 612 + 9 = 621，与全量 `total_skipped=621` 一致 |
 | `ruff check app tests` / `mypy app` | rc=0 / `Success: no issues found in 116 source files` |
 | `alembic heads` | `ab1006c4a (head)` 单头（本卡无迁移） |
-| `gen_contracts --check` / `check_docs_consistency` / `evidence-check` / `rounds-check` | 待填（提交前后各跑一次，读数不预判） |
+| `gen_contracts --check` / `check_docs_consistency` / guard-ports / structure / versions / evidence-check / rounds-check | 12 项幂等一致 / 23 引用 0 缺失 / rc=0 ×3 / 敏感形门 HIGH 0 + gitleaks no leaks / 无卡越轮次上限 |
 | `@ci` 三条 run id | 待填 |
 
-## 7. 局限（先说，不等被问）
+## 7. 第 1 轮 CI 的一红：本机全量跑在改 yml **之前**
+
+`b60e1e9` 的 ubuntu CI 红在 `tests/test_ci_windows_skip_gate.py::test_declared_baseline_carries_its_own_measurement_anchor`：
+
+```
+>       assert re.search(r"run\s*\d{9,}", block), "依据里必须有可复查的 run id（D-V6-02）"
+E       AssertionError: 依据里必须有可复查的 run id（D-V6-02）
+1 failed, 2132 passed, 6 skipped, 1 warning in 219.70s
+```
+
+它判的是 `SKIP_BASELINE_WIN` 前 **1600 字符**里必须同时出现 `run <9 位以上>` 与 7 位 `head_sha`。
+我把 STEP-10 的算式写在旧锚之前，把上一档的 run id 挤出了窗口 ⇒ 门红得对：
+它防的就是"数字没有可复查的来源"，而窗口是按"紧贴数字的那段注释"算的，不是按整个文件算的。
+
+两件事分开记：
+
+1. **门的判据没问题，我的验证顺序有问题**。本机两形状全量是在改 `ci-windows.yml` **之前**跑的，
+   所以那 6 条 skip 门用例根本没看过新的注释块——"全量绿"不等于"改完之后再绿"，
+   尤其当我改的是被门读取的那个文件。修法是把 yml 改动纳入提交前的最后一次全量/定向复跑
+   （本次提交前已跑 `pytest tests/test_ci_windows_skip_gate.py -q` ⇒ 6 passed）。
+2. **窗口会随每批追加而滑动**，所以旧锚迟早被挤出去。这一版把"紧贴数字的那一段"改写成
+   自带锚的形式（上一档的 `run 39592643124 @2ab19c2` + 本档 621 的来源与本批算式同处一段），
+   下一张加连库用例的卡不必再靠"上面某批留的 run id 还在窗口里"碰运气。
+   这条不属于新缺陷，不另开 P 项；记在这里是因为它是**每个加连库用例的卡都会踩一次**的形状。
+
+## 8. 局限（先说，不等被问）
 
 - **预算是进程内、按业务日的**。跨进程不共享、重启即归零。真正"按渠道日计数、跨进程持久"的那张表
   是 S10.2.1/S10.2.2，仍被两件事卡着：需要迁移号（STEP-10 卡面字段 13 禁止动 `alembic/**`）

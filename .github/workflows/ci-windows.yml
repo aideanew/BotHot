@@ -60,19 +60,17 @@ jobs:
       # STEP-07（执行助手，2026-10-21）新增 19 条：test_audit_scripts 里 12 条离线判据（脚本装载、
       # 只读静态门、目标门、明文形状与读侧一致性、DSN 串不被 str() 抹口令）不连库，7 条演练用例走
       # conftest 的「AIDEANBOT_TEST_PG_DSN 未设置」族 ⇒ 本机无 DSN 实测 7 skipped ⇒ 571 + 7 = 578。
-      # STEP-28（执行助手，2026-10-21）新增 33 条连库用例，本机无 DSN 按模块实测：
-      #   test_system_settings 6 + test_discovery_config 10 + test_category_config 15（参数化按条计）
-      #   + test_audit_log 2 —— 后两条不是新用例，是 STEP-31 那条**按写操作参数化**的用例
-      #     随新写的 admin 端点自己变长（23 → 25），它每行都要 db_session。
-      # 合计 578 + 33 = 611（本机全量 total_skipped 实测 611，与增量推算一致）。
-      # 同一卡第 2 轮（2026-10-21）补 1 条连库用例：test_service_path_reads_the_db_value_by_itself
-      # ——后端进程的请求路径必须自己把库值刷进来（SpaceService 的分类校验/呈现序不能靠
-      # "这个进程碰巧刷过快照"）⇒ 本机无 DSN 全量复测 total_skipped=612（终端行 1509 passed / 612 skipped）。
-      # STEP-10 S10.V15.2（执行助手，2026-10-21）新增 9 条连库用例，本机无 DSN 按模块实测：
-      #   test_article_fallback_config 8（该文件另 10 条不连库：形状校验、AST 接线门、
-      #     trigger/预算的单点驱动都只喂进程内快照）
-      #   + test_audit_log 1 —— 仍是那条**按写操作参数化**的用例随新写的 admin 端点自己变长（25 → 26）。
-      #   ⇒ 612 + 9 = 621，本机全量复测 total_skipped=621（终端行 1518 passed / 621 skipped）。
+      # STEP-28（执行助手，2026-10-21）+33：test_system_settings 6 + test_discovery_config 10
+      #   + test_category_config 15（参数化按条计）+ test_audit_log 2（STEP-31 那条按写操作参数化的
+      #   用例随新写的 admin 端点自己变长 23 → 25，每行都要 db_session）；同一卡第 2 轮再 +1
+      #   （后端进程的请求路径必须自己把库值刷进来）⇒ 578 + 33 + 1 = 612。
+      # STEP-10 S10.V15.2（执行助手，2026-10-21）+9：test_article_fallback_config 8（该文件另 10 条
+      #   不连库：形状校验、AST 接线门、trigger/预算单点驱动都只喂进程内快照）
+      #   + test_audit_log 1（同那条参数化用例，又随新 admin 写端点变长 25 → 26）⇒ 612 + 9 = 621。
+      # **测量值**（收紧依据就地可查，D-V6-02）：上一档 612 的锚是 CI-Windows
+      # run 39592643124 @2ab19c2 = 1509 passed / 612 skipped / 0 failed（未知族 0）；
+      # 本档 621 由本机无 DSN 全量复测算出（`env -u AIDEANBOT_TEST_PG_DSN -u DATABASE_URL`，
+      # 终端行 1518 passed / 621 skipped），交付提交的 CI-Windows 读数回填 EVD-V17-10 §6 后才算闭环。
       SKIP_BASELINE_WIN: "621"
     defaults:
       run:
