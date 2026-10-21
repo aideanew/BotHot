@@ -90,6 +90,9 @@
 - 未改任何 `apps/**` 文件（禁止面），也未改 CI 工作流——本轮没有新增连库用例，
   `SKIP_BASELINE_WIN` 维持 578 的实测依据写在 STEP-07-R 的证据里。
 - 未复核自己的交付：S0R.3.1 归规划方。
-- `docs/04_engineering/db_noise.md` §2 里 ubuntu 那一列的"门打了 `pg_unreachable=0`"这一行
-  **本批没取到**（我的过滤式没匹配上那一步的输出），所以文中用的是等价的加法而不是引用那行输出。
-  要补的位置是 `ci.yml` backend job 的 skip 门禁步。
+- `docs/04_engineering/db_noise.md` §2 里 ubuntu 那一列的判据行**本批最终取到了**：
+  run 39559617499 打的是 `skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0`。
+  过程值得留一行：我第一次没抓到它，是因为过滤式要求"以『门禁』开头且含 `=`"，
+  而那行以 `skip ` 起头——**过滤式比目标行窄会产生"这行不存在"的假阴性**，
+  这正是本仓反复提醒的"探针近似了判据"的又一种形态。修正后 `db_noise.md` 引用的是门的原文，
+  不再是我用 6 条族表倒推的等价加法。
