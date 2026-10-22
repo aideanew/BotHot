@@ -172,8 +172,13 @@ V0.13.0 及以后的树里没有 `ux_states.schema.json`（`ls docs/任务规划
 
 ## 10. 三绿（验收面 = `@ci` ubuntu-latest）
 
-待回填（交付提交 sha 与 CI / Security / CI-Windows run id；`SKIP_BASELINE_WIN` 653 的实测锚在
-`.github/workflows/ci-windows.yml` 的注释里，与 §9 同口径）。
+交付是**第 2 轮** `5f16de9`（第 1 轮 `c9cb215` 的 Security 🔴 见 §11）：
+
+| 工作流 | run id | 结论 |
+|---|---|---|
+| CI | 39722164669 | success（attempt 1）——正式验收面 |
+| Security | 39722164679 | success（attempt 1）：`.gitleaksignore` 生效后本机与 CI 双双 `no leaks found`（本机实测 335 commits scanned） |
+| CI-Windows | 39722164694 | success（attempt 1）：`SKIP_BASELINE_WIN` **653** 与实测相符，未知族 0 |
 
 ## 11. 第 1 轮的 Security 🔴（是我写出来的缺陷，不是环境抖动）
 
@@ -211,6 +216,10 @@ guards.secret_scan(line, code=False, lang="md") ⇒ []
 | 第 1 轮 CI / CI-Windows | 见 §12（两维绿，与本轮这红无关） |
 | 第 2 轮复跑（本地） | `pytest tests/test_r19_sso_session.py` ⇒ `4 passed`；`ruff check` 通过；改后该文件已无 `eyJ` 开头的字面量（`grep -c` 复核） |
 
-## 12. 第 2 轮三绿（交付）
+## 12. 第 2 轮之后没再动的事
 
-待回填。
+本卡没有第 3 轮（D-14 阈值 ≤2 轮，`rounds-check` 在本卡范围内读数：第 1 轮 `c9cb215` + 第 2 轮 `5f16de9`）。
+§5 的 REQ-F-005 前端八态仍是 `证据不足`，它等的是 **STEP-15 的关 mock 通道 + 人工供给的 LLM 凭据**，
+不是再一轮施工——把那条 spec 真跑起来的人拿到的读数，才是这张判定表缺的最后两行。
+§4 的端口表漂移、§5 的 ux_states 契约缺位、§11 的门禁覆盖面缺口，全部按 P-78 / P-80 / P-81 交回，
+本卡一行 `app/**` 都没改（卡面「禁止修改」）。

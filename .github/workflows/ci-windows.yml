@@ -104,7 +104,9 @@ jobs:
       # **本档 641 的锚** = run 39714496408 @22b9ede（success，未知族 0）——STEP-09 交付提交；
       # 同一提交的 Security 39714496311 attempt 1 红在 `pnpm audit` 的 registry socket timeout
       # （scanner 失败被汇总门禁判成 🔴，非漏洞），attempt 2 重跑转绿 ⇒ 登记 P-77。
-      # 本档 653 待 STEP-19 交付提交回填。
+      # 本档 653 的锚 = run 39722164694 @5f16de9（success，未知族 0）——STEP-19 第 2 轮交付提交；
+      # 同一提交 CI 39722164669 / Security 39722164679 均 attempt 1 success（第 1 轮 c9cb215 的
+      # Security 🔴 是源码里手编的假 JWT 被 gitleaks `jwt` 规则命中，已按 D-12 登记 + 改现签 ⇒ P-81）。
       SKIP_BASELINE_WIN: "653"
     defaults:
       run:
