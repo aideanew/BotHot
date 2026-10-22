@@ -160,7 +160,8 @@ pydantic.errors.PydanticUserError: `TypeAdapter[typing.Annotated[ForwardRef(
 | OpenAPI 那条的先红读数 | `PydanticUserError: TypeAdapter[... ForwardRef(...le=max_size...) ...] is not fully defined` ⇒ §5.2 处置后转绿，并留下 `test_openapi_builds_and_documents_both_paging_dialects` 作防回归 |
 | `ruff check app tests` | All checks passed |
 | `mypy app` | Success: no issues found in **119** source files（新增 `app/schemas/` 两个文件在覆盖面内） |
-| CI / CI-Windows / Security | `fbb0409`：CI success 39782742068、**Security 🔴 39782742059**、**CI-Windows 🔴 39782742078**。Security 的命中是测试夹具里 Job 的幂等键字面量被 `generic-api-key` 判成凭据 ⇒ `1872910` 把夹具值对齐到本仓既有冒号约定（列名与领域值都没动，本地以仓库根配置复扫该文件 0 命中），那一次红不重跑、不改写。CI-Windows 的红是 skip 门禁按设计工作：`failed=0 total_skipped=658 baseline=653`，+5 全是本卡新增的连库判据（另 3 条不连库）⇒ 按 D-V10-11 把 `SKIP_BASELINE_WIN` 抬到 **658**（锚 `run 39782742078 @fbb0409`，未知族 0）。`1872910` 的 Security 仍 🔴 39784495358，读数 `commit=fbb04092 …:156`——**CI 扫的是历史 blob，而豁免指纹写在下一笔 `41c2124` 里**，所以这一格红是"晚一笔"的必然，不是修复无效。本卡验收锚 = `41c2124`（含 658 基线 + fbb0409 指纹），三维读数待回填 |
+| CI / CI-Windows / Security | `fbb0409`：CI success 39782742068、**Security 🔴 39782742059**、**CI-Windows 🔴 39782742078**。Security 的命中是测试夹具里 Job 的幂等键字面量被 `generic-api-key` 判成凭据 ⇒ `1872910` 把夹具值对齐到本仓既有冒号约定（列名与领域值都没动，本地以仓库根配置复扫该文件 0 命中），那一次红不重跑、不改写。CI-Windows 的红是 skip 门禁按设计工作：`failed=0 total_skipped=658 baseline=653`，+5 全是本卡新增的连库判据（另 3 条不连库）⇒ 按 D-V10-11 把 `SKIP_BASELINE_WIN` 抬到 **658**（锚 `run 39782742078 @fbb0409`，未知族 0）。`1872910` 的 Security 仍 🔴 39784495358，读数 `commit=fbb04092 …:156`——**CI 扫的是历史 blob，而豁免指纹写在下一笔 `41c2124` 里**，所以这一格红是"晚一笔"的必然，不是修复无效。本卡验收锚 = `41c2124`：**三绿达成**（CI 39786612036 / CI-Windows 39786612301 / Security 39786612047，
+均 attempt 1 success），收尾文档批 `979a393` 亦三绿（39786785944 / 39786785667 / 39786786235）|
 
 ## 7. 交回规划方的两条
 
