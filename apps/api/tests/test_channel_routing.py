@@ -43,7 +43,7 @@ from app.providers.article_sources.justoneapi import JustOneApiClient
 from app.providers.article_sources.rss import RSSFeedProvider
 from app.providers.article_sources.tikhub import TikhubClient
 from app.providers.article_sources.wellbyte import WellbyteClient
-from app.providers.discovery.registry import CHANNELS, identity_for, select_channels
+from app.providers.discovery.registry import CHANNELS, available_channels, identity_for, select_channels
 from app.repositories.space import SpaceRepository
 from app.repositories.user import SqlAlchemyUserStore
 from app.services import system_settings
@@ -450,14 +450,32 @@ def test_biz_only_source_cannot_reach_a_ghid_channel() -> None:
 
 
 def test_eligible_channels_come_back_in_cost_order() -> None:
-    """同一源给了 biz + ghid ⇒ 候选是"要 biz 的那一家 + 要 ghid 的三家"，按成本序、未知成本垫底。
+    """同一源给了 biz + ghid ⇒ 候选是"要 biz 的那一家 + 要 ghid 且**实接**的两家"，按成本序、未知成本垫底。
 
     判整个序列而不是判首个：只判首个的话，把列表缩成只剩默认渠道它也绿。
-    `wellbyte` 与 `rss` 不在里面**是因为这一源没有 sample_url / feed_url 标识**，
-    不是因为它们没启用——那正是上一条（biz-only）与这一条合起来要区分的维度。
+    `wellbyte`/`rss` 不在里面是因为这一源没有 sample_url/feed_url 标识；
+    `tikhub` 不在里面是因为它的发现格未实接（下一条判据专管这一维）。
     """
     got = select_channels({"biz": "MjM5MjgwNTQ1MQ==", "ghid": GHID}, _settings(), preferred=None)
-    assert got == ["tikhub", "dajiala", "justoneapi", "redfox"], got
+    assert got == ["dajiala", "justoneapi", "redfox"], got
+
+
+def test_an_unwired_channel_is_reported_but_never_dispatched() -> None:
+    """S8.5.1 的核实结论必须同时管住两件事：**报得上、派不出去**。
+
+    - `available_channels`（STEP-28 的三轴之一）仍然把 tikhub 算作"凭据就位"——那一轴答的是
+      "配了 key 吗"，不该被接线状态污染；
+    - `select_channels` 必须把它剔除——这一轴答的是"这轮派谁去打"，派一个端点不在现行契约里的
+      渠道出去，拿到的是 404 或空清单，而调度日志看起来像"这一源没有新东西"。
+    两个口径分开写在这里，是因为把它们合并成一个布尔正是 STEP-28 立卡时反对过的形状。
+    """
+    settings = _settings()
+    assert CHANNELS["tikhub"].implemented is False, "发现格的核实结论被改回去了？见 EVD-V17-08 §11"
+    assert "tikhub" in available_channels(settings)
+    assert "tikhub" not in select_channels({"biz": "B", "ghid": GHID}, settings)
+    reason = CHANNELS["tikhub"].reason
+    assert "fetch_account_articles" in reason and "OpenAPI" in reason, reason
+
 
 
 def test_each_channel_is_handed_its_own_identifier() -> None:
@@ -486,14 +504,14 @@ def test_channel_with_unmeasured_cost_is_not_treated_as_free() -> None:
     got = select_channels({"biz": "MjM5MjgwNTQ1MQ=="}, _settings(), preferred=None)
     assert got == ["redfox"], got  # 只有它凑得上 biz，成本序在这里没有对手
     with_ghid = select_channels({"biz": "B", "ghid": GHID}, _settings(), preferred=None)
-    assert with_ghid.index("redfox") > with_ghid.index("tikhub")
+    assert with_ghid.index("redfox") > with_ghid.index("dajiala")
 
 
 def test_preferred_channel_leads_only_when_it_is_eligible() -> None:
     """首选渠道够不着这一源的标识时**不许硬顶到首位**：否则整轮发现停在它身上，靠降级补。"""
     only_ghid = select_channels({"ghid": GHID}, _settings(), preferred="redfox")
     assert "redfox" not in only_ghid, only_ghid
-    assert only_ghid[0] == "tikhub", only_ghid
+    assert only_ghid[0] == "dajiala", only_ghid
 
 
 def test_the_degradation_switch_has_no_config_field_yet() -> None:
@@ -579,15 +597,15 @@ async def test_degradation_off_raises_and_never_touches_the_second_channel(
     而每轮实际多打一家。
     """
     calls: list[str] = []
-    _patch_factories(monkeypatch, calls, failing={"tikhub"})
+    _patch_factories(monkeypatch, calls, failing={"dajiala"})
     sub, source_id = await _seed_subscription(db_session)
     await _give_ghid(db_session, source_id)
     runner = make_routed_sync_runner(
-        _settings(), default_channel="tikhub", default_provider=None, fallback_enabled=False
+        _settings(), default_channel="dajiala", default_provider=None, fallback_enabled=False
     )
     with pytest.raises(DiscoveryFailedError):
         await runner(db_session, sub, "tok-off")
-    assert calls == ["tikhub"], f"开关关却调了 {calls}"
+    assert calls == ["dajiala"], f"开关关却调了 {calls}"
 
 
 async def test_degradation_on_calls_the_second_channel_exactly_once(
@@ -599,14 +617,14 @@ async def test_degradation_on_calls_the_second_channel_exactly_once(
     而且每多一家的成本在本卡这一层是不可见的（协调器的预算面只管详情，不管发现）。
     """
     calls: list[str] = []
-    _patch_factories(monkeypatch, calls, failing={"tikhub"})
+    _patch_factories(monkeypatch, calls, failing={"dajiala"})
     sub, source_id = await _seed_subscription(db_session)
     await _give_ghid(db_session, source_id)
     runner = make_routed_sync_runner(
-        _settings(), default_channel="tikhub", default_provider=None, fallback_enabled=True
+        _settings(), default_channel="dajiala", default_provider=None, fallback_enabled=True
     )
     await runner(db_session, sub, "tok-on")
-    assert calls == ["tikhub", "dajiala"], calls
+    assert calls == ["dajiala", "justoneapi"], calls
 
 
 async def test_degradation_on_still_raises_when_the_second_channel_fails(
@@ -614,13 +632,13 @@ async def test_degradation_on_still_raises_when_the_second_channel_fails(
 ) -> None:
     """降级后第二家也失败 ⇒ 如实上抛，不许"试过两家"被读成"本轮成功"。"""
     calls: list[str] = []
-    _patch_factories(monkeypatch, calls, failing={"tikhub", "dajiala"})
+    _patch_factories(monkeypatch, calls, failing={"dajiala", "justoneapi"})
     sub, source_id = await _seed_subscription(db_session)
     await _give_ghid(db_session, source_id)
     runner = make_routed_sync_runner(
-        _settings(), default_channel="tikhub", default_provider=None, fallback_enabled=True
+        _settings(), default_channel="dajiala", default_provider=None, fallback_enabled=True
     )
     with pytest.raises(DiscoveryFailedError):
         await runner(db_session, sub, "tok-both")
-    assert calls == ["tikhub", "dajiala"], calls
+    assert calls == ["dajiala", "justoneapi"], calls
 

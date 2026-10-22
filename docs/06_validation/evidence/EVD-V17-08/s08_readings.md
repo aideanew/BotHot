@@ -232,6 +232,72 @@ FAILED test_an_all_dropped_page_is_error_not_just_a_warning
 本机能负责的是：修前的全量读数只有那一条红（`1 failed, 2182 passed, 6 skipped`），
 红项已修且修复面已被上面那 415 条覆盖。收口批会再跑一次完整全量把终值写回本节。
 
+### 9b. 三家夹具的游标检索，与"端口交付、翻页未交付"的界线
+
+| 渠道 | 响应侧游标 | 请求侧字段名 | 本卡 `next_cursor` |
+|---|---|---|---|
+| JustOneAPI | ✅ 实测在案（`justoneapi.json` 的 `data.PagingInfo{Offset, IsEnd}`） | ❌ 从未实测（TC-A3 只跑到首页） | `None` |
+| TikHub | ❌（夹具里 offset/cursor/next 一键皆无；余额 0，TC-A2-02b 402） | 请求侧 `offset` 在案（首页传空串） | `None` |
+| Wellbyte | ❌（夹具只有 `meta.endpoint`） | ❌ | `None` |
+| Dajiala | — 上游明说"不支持翻页，仅返回最新批次"（TC-A1-04 备注） | — | `None` |
+| RSS | — feed 一次给全 | — | `None` |
+
+⇒ 卡面 S8.3.1 的"provider 交出游标"这一半**在本卡不可满足**，两个具体的拦路石：
+① 没有一家同时实测到"响应游标 + 请求侧字段名"（猜的键名会让上层每轮多花一次付费调用买回同一批条目，
+表现是"清单不增长"而不是"接线错了"）；② 想在本卡把它做出来必须把行解析从 `query_work_list` 搬进新端口，
+而 `tests/proofs/test_provider_shapes.py` 是按**函数名** `query_work_list` 定位"渠道读哪些上游键"的
+（实测搬走 ⇒ 4 条形状判据红，读数见下），那个文件属于 STEP-00T，不在本卡所有权内。
+⇒ 登记 **P-68**，本卡交付"端口 + 类型 + 服务层翻页机制"，真游标留给有活体读数的那一卡。
+
+搬动行解析的实测代价（我先试过再撤回）：
+
+```
+把 dajiala/justoneapi 的解析搬进私有方法后：
+tests/proofs ⇒ 4 failed, 282 passed
+  test_sample_covers_every_main_path_read_key[dajiala.json / justoneapi.json]
+  test_paid_provider_rows_reach_a_manifest_identity_source[dajiala.py / justoneapi.py]
+  （报错原文：`query_work_list 一个 .get()/[] 读取点都没导出 ⇒ 提取器失效，证据为空`）
+撤回成"解析仍住在 query_work_list，新端口复用它"后 ⇒ 286 全绿
+```
+
+### 9c. 行级策略：为什么"丢且出声"只写一份
+
+`build_work_list_page` 是五家唯一的收页口。约束不过的行（`url` 短于 8、缺 id/url/title）
+`warning` 一条 + 整页再计数一条。两条反面形状都在本仓历史上出现过：一条脏项打挂整页（P-17）
+与整页静默消失（P0-3），所以"抛"和"默默丢"都不许。
+
+一处刻意的设计：**typed `publish_time` 是加一格，不是换一格**。
+`_map_row` 的别名表按 `publishTime` 优先，而 `_parse_time` 不认 datetime 对象
+（实测：给它 `datetime` 返回 `None`）⇒ 若 provider 把原键改名，时间整列静默变空，
+看起来像"上游没时间"。判据因此取"两条路径解出同一个瞬间"而不是"字段非空"；
+RSS 的 RFC 822 那一支**不在 provider 层解析**（那份解析全仓只该有一份，见 P-28 的口径未定），
+它的 typed 格就是 `None`，由判据 `test_non_numeric_time_shape_is_left_to_the_consumer` 钉住。
+
+代价如实登记：迁移后的 provider 里"被丢掉几行"只在这两条日志里可见，
+`ManifestSyncReport.skipped` 计的是消费端解不出身份的行——两者不是同一件事，
+本卡没有指标面（`core/metrics.py` 不在所有权内），也不顺手加一个指标（那是 STEP-05 的地盘）。
+
+更硬的一层：**旧端口路径上这些行原本会走 `_map_row` 返回 None ⇒ `page_dropped == page_rows`
+⇒ `_note_all_skipped_page` 打 P0-3 那条告警**；换成新端口后它们在上游就被契约挡下，
+服务层收到的是空页，于是按"上游没内容"止页、`skipped=0`、`all_skipped_pages=0`
+⇒ 告警面在这一页上是空的。本卡把"整页丢光"升成 `error`（`discovery.page_all_dropped`，
+判据 `test_an_all_dropped_page_is_error_not_just_a_warning`），缺口本身登记为 **P-69**——
+它是本卡的改动造成的，不是继承来的，所以更要写在台账里而不是只写在代码注释里。
+
+`_parse_time` 对 datetime 对象的行为是实测的（不是读码推测）：
+
+```
+_parse_time(datetime(2026,9,28,8,0, tz=UTC))            ⇒ None
+_parse_time("1790659200")                                ⇒ 2026-09-29 05:20:00+00:00
+_parse_time("2026-09-28T08:00:00+00:00")                 ⇒ 2026-09-28 08:00:00+00:00
+```
+
+⇒ 第二行与 typed 格解出的是同一个瞬间（判据 `test_typed_time_and_original_key_are_the_same_instant`）；
+第一行就是"把 `publishTime` 改名成 typed datetime"的后果——时间整列静默变空，
+看起来像"上游没时间"。所以 `_fetch_page` 用 `model_dump(mode="json")` 而不是 python 模式。
+
+
+
 ### 9d. S8.3 的终值读数（补跑，同一份工作树 = 提交 `211533c`）
 
 | 面 | 读数 |
@@ -346,68 +412,75 @@ bool(getattr(Settings(), "discovery_fallback_enabled", False)) ⇒ False
 
 
 
-### 9b. 三家夹具的游标检索，与"端口交付、翻页未交付"的界线
+## 11. S8.5.1 TikHub 端点核实（👤 位，本批用"零成本可复算的官方契约"完成）
 
-| 渠道 | 响应侧游标 | 请求侧字段名 | 本卡 `next_cursor` |
-|---|---|---|---|
-| JustOneAPI | ✅ 实测在案（`justoneapi.json` 的 `data.PagingInfo{Offset, IsEnd}`） | ❌ 从未实测（TC-A3 只跑到首页） | `None` |
-| TikHub | ❌（夹具里 offset/cursor/next 一键皆无；余额 0，TC-A2-02b 402） | 请求侧 `offset` 在案（首页传空串） | `None` |
-| Wellbyte | ❌（夹具只有 `meta.endpoint`） | ❌ | `None` |
-| Dajiala | — 上游明说"不支持翻页，仅返回最新批次"（TC-A1-04 备注） | — | `None` |
-| RSS | — feed 一次给全 | — | `None` |
-
-⇒ 卡面 S8.3.1 的"provider 交出游标"这一半**在本卡不可满足**，两个具体的拦路石：
-① 没有一家同时实测到"响应游标 + 请求侧字段名"（猜的键名会让上层每轮多花一次付费调用买回同一批条目，
-表现是"清单不增长"而不是"接线错了"）；② 想在本卡把它做出来必须把行解析从 `query_work_list` 搬进新端口，
-而 `tests/proofs/test_provider_shapes.py` 是按**函数名** `query_work_list` 定位"渠道读哪些上游键"的
-（实测搬走 ⇒ 4 条形状判据红，读数见下），那个文件属于 STEP-00T，不在本卡所有权内。
-⇒ 登记 **P-68**，本卡交付"端口 + 类型 + 服务层翻页机制"，真游标留给有活体读数的那一卡。
-
-搬动行解析的实测代价（我先试过再撤回）：
+卡面写"人核 `api.tikhub.io/openapi.json`（U-04），结论写 registry `verified_scope`；不符则
+`implemented=False` + reason"。本批的核实**不需要凭据也不产生费用**，所以由机器拉取官方契约完成，
+读数逐条可复算（GET 一个公开 JSON，无 key、无计费）：
 
 ```
-把 dajiala/justoneapi 的解析搬进私有方法后：
-tests/proofs ⇒ 4 failed, 282 passed
-  test_sample_covers_every_main_path_read_key[dajiala.json / justoneapi.json]
-  test_paid_provider_rows_reach_a_manifest_identity_source[dajiala.py / justoneapi.py]
-  （报错原文：`query_work_list 一个 .get()/[] 读取点都没导出 ⇒ 提取器失效，证据为空`）
-撤回成"解析仍住在 query_work_list，新端口复用它"后 ⇒ 286 全绿
+curl --noproxy "*" https://api.tikhub.io/openapi.json   ⇒ HTTP 200，3,091,262 字节
+paths 总数            ⇒ 1050（与 2026-09-29 那次读数逐字相同 ⇒ 契约未漂移）
+含 wechat 的 paths      ⇒ 26 条；其中 /api/v1/wechat_mp/ 共 11 条、全部 v2、web/ 一条都没有
+代码在打的那条          ⇒ /api/v1/wechat_mp/web/fetch_account_articles  → 不在 paths 里（False）
+现行那条                ⇒ /api/v1/wechat_mp/v2/fetch_account_articles   → 在（POST）
+请求 schema FetchAccountArticlesRequest ⇒ username 必填；page_size 默认 20；offset；item_show_type；raw 默认 true
+offset 的官方描述       ⇒ "翻页游标（base64），首页留空；翻页传上一页响应的 next_offset"
+响应 schema             ⇒ ResponseModel.data = anyOf[{}, null]（**没有字段表**）
 ```
 
-### 9c. 行级策略：为什么"丢且出声"只写一份
+三条结论，各自管一件不同的事：
 
-`build_work_list_page` 是五家唯一的收页口。约束不过的行（`url` 短于 8、缺 id/url/title）
-`warning` 一条 + 整页再计数一条。两条反面形状都在本仓历史上出现过：一条脏项打挂整页（P-17）
-与整页静默消失（P0-3），所以"抛"和"默默丢"都不许。
+1. **发现格与契约不符 ⇒ `implemented=False` + `reason`**（卡面给的处理）。同族 `web/*` 的 404 是
+   活体实测（TC-A2-04），而本条路径本身没打活体（余额 0，TC-A2-02b 402）——
+   `reason` 里把这两件事分开写，不让"没打活体"混进"实测过"。
+2. **`select_channels` 从此排除 `implemented=False` 的渠道**（判据
+   `test_an_unwired_channel_is_reported_but_never_dispatched`，变异读数见 §11b）。
+   而 `available_channels()` 那一轴**不动**：它答"配了 key 吗"（STEP-28 的三轴分离口径），
+   合并成一个布尔就回到本仓反对过的那个形状。
+3. **P-68 的响应侧游标对 tikhub 仍未闭合**：官方文字指向 `next_offset`（在**请求参数的描述里**），
+   而 `ResponseModel.data` 在契约里没有字段表 ⇒ 仍然只能写"契约说有这么个字段，形状不在案"。
+   这就是为什么本卡没有顺手把 tikhub 接成真游标翻页。
 
-一处刻意的设计：**typed `publish_time` 是加一格，不是换一格**。
-`_map_row` 的别名表按 `publishTime` 优先，而 `_parse_time` 不认 datetime 对象
-（实测：给它 `datetime` 返回 `None`）⇒ 若 provider 把原键改名，时间整列静默变空，
-看起来像"上游没时间"。判据因此取"两条路径解出同一个瞬间"而不是"字段非空"；
-RSS 的 RFC 822 那一支**不在 provider 层解析**（那份解析全仓只该有一份，见 P-28 的口径未定），
-它的 typed 格就是 `None`，由判据 `test_non_numeric_time_shape_is_left_to_the_consumer` 钉住。
-
-代价如实登记：迁移后的 provider 里"被丢掉几行"只在这两条日志里可见，
-`ManifestSyncReport.skipped` 计的是消费端解不出身份的行——两者不是同一件事，
-本卡没有指标面（`core/metrics.py` 不在所有权内），也不顺手加一个指标（那是 STEP-05 的地盘）。
-
-更硬的一层：**旧端口路径上这些行原本会走 `_map_row` 返回 None ⇒ `page_dropped == page_rows`
-⇒ `_note_all_skipped_page` 打 P0-3 那条告警**；换成新端口后它们在上游就被契约挡下，
-服务层收到的是空页，于是按"上游没内容"止页、`skipped=0`、`all_skipped_pages=0`
-⇒ 告警面在这一页上是空的。本卡把"整页丢光"升成 `error`（`discovery.page_all_dropped`，
-判据 `test_an_all_dropped_page_is_error_not_just_a_warning`），缺口本身登记为 **P-69**——
-它是本卡的改动造成的，不是继承来的，所以更要写在台账里而不是只写在代码注释里。
-
-`_parse_time` 对 datetime 对象的行为是实测的（不是读码推测）：
+### 11b. 摘掉"未实接不派发"这道过滤的变异读数
 
 ```
-_parse_time(datetime(2026,9,28,8,0, tz=UTC))            ⇒ None
-_parse_time("1790659200")                                ⇒ 2026-09-29 05:20:00+00:00
-_parse_time("2026-09-28T08:00:00+00:00")                 ⇒ 2026-09-28 08:00:00+00:00
+把 `pool = [n for n in available_channels(s) if CHANNELS[n].implemented]` 改回不筛 implemented
+⇒ 5 failed, 35 passed
+  test_an_unwired_channel_is_reported_but_never_dispatched / test_preferred_channel_leads_only_when_it_is_eligible
+  / test_eligible_channels_come_back_in_cost_order
+  / test_degradation_on_calls_the_second_channel_exactly_once
+  / test_degradation_on_still_raises_when_the_second_channel_fails
+还原 ⇒ 35 passed / 5 skipped
 ```
 
-⇒ 第二行与 typed 格解出的是同一个瞬间（判据 `test_typed_time_and_original_key_are_the_same_instant`）；
-第一行就是"把 `publishTime` 改名成 typed datetime"的后果——时间整列静默变空，
-看起来像"上游没时间"。所以 `_fetch_page` 用 `model_dump(mode="json")` 而不是 python 模式。
+⇒ 后两条是**降级判据**：一个未实接的渠道混进候选，被派到的是"必然拿不回东西"的第一家，
+降级机制看起来在工作、实际每一次都在多打一家 ⇒ 核实结论不落到派发面上，就只是一句注释。
 
+### 11c. 这一格仍然欠一个人类决定
 
+核实做完了，但"要不要为此切端点"不是执行方能定的：切到 v2 需要一次**有余额的活体调用**才能确认
+响应形状与 `next_offset` 的位置，而那要花钱（$0.001~0.01/请求）。⇒ 端点切换与真游标接线一起
+登记为 **P-72**，归 STEP-03/20 的证据面；本卡只把不匹配固定在事实面上（registry + 判据 + 本节）。
+
+## 12. 本卡终值读数与一条流程教训
+
+| 面 | 终值（本机，提交 `df488f7` + 本收口批的工作树） |
+|---|---|
+| 全量连库（独立 PG@5547，复刻 ubuntu CI 的连库面） | `2193 passed / 6 skipped / 0 failed`（1036.50s） |
+| 全量无 DSN（复刻 CI-Windows 的取材面） | `1562 passed / 637 skipped`（1094.93s）——与阈值 `637` 逐字相等 |
+| `ruff check app tests` / `mypy app` | 均 rc=0（mypy 面 117 files） |
+| 已交付 | S8.1.1（迁移 `ab1006c2a` + 回填 + ADR-0014）、S8.2.1（标识补全接进入库链）、S8.3.1+S8.3.2（`WorkListPage` 端口、两端口归一、服务层止页）、S8.4.1（按源标识选渠道 + 降级只多试一家）、S8.5.1（TikHub 端点核实并落到派发面） |
+| 交回规划方 | P-66（同一编号两个判据版本）、P-67（ghid 无样本可证）、P-68（响应游标未实测 + 解析被函数名锚钉住）、P-69（整页丢光的告警面变薄）、P-70（降级开关没有配置位）、P-71（并发判据会飘）、P-72（TikHub 端点切换要活体）、P-73（卡面验证命令点名的 `apps/api/tests/test_e2e_collection.py` 在本仓不存在） |
+
+### 12b. 一条我自己撞上的流程错：全量跑期间不许动工作树
+
+第一次全量连库复跑读数 `1 failed, 2192 passed, 6 skipped`，红的是
+`test_provider_defects_p15_p17.py::test_p16_the_degrade_is_narrower_than_a_blanket_except[fetch_article_detail]`。
+它用 `inspect.getsource(TikhubClient.fetch_article_detail)` 读**源码**判"降级只兜领域异常"，
+而我在那一轮跑到一半时正在改 `tikhub.py` 的模块文档串——`getsource` 读到的是一份被截断/半写的内容。
+单跑该条 2 passed、与相邻两个文件组合跑 243 passed、干净全量重跑 2193 passed 0 failed。
+
+⇒ 结论不是"判据脆弱"，而是**我的测量动作污染了被测面**：只要判据里有"读源码"这一类
+（本仓的 AST 门与 `inspect.getsource` 门不少），跑套件期间就不能再改工作树。
+这条与 P-63（`capture_logs` 对窗外 logger 失明）是同一族：判据看起来在测代码，实际测的是"那一刻文件系统的状态"。

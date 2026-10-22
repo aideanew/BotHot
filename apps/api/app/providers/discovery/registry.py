@@ -251,15 +251,27 @@ CHANNELS: dict[str, ChannelSpec] = {
             "⚠️ Excel 报价表 web/* 旧端点已从现行 OpenAPI 下线（TC-A2-04 404）；"
             "契约真源=api.tikhub.io/openapi.json（1050 paths），不是 Excel。"
         ),
-        implemented=True,
+        implemented=False,
         required_setting="TIKHUB_API_KEY",
         available=lambda s: bool(s.tikhub_api_key),
         factory=_make_tikhub_provider,
-        contract_verified_at="2026-09-29",
+        reason=(
+            "发现端点未实接：代码打的是 `/api/v1/wechat_mp/web/fetch_account_articles`"
+            "（`tikhub.py:130`），而 2026-10-22 实读的现行 OpenAPI（api.tikhub.io/openapi.json，"
+            "1050 paths，269 条 web/* 仍在册）里**没有这一条**——wechat_mp 族现行只有 v2 组。"
+            "同族 web/* 的 404 是活体实测（TC-A2-04），本条路径本身未打活体（余额 0，TC-A2-02b 402）"
+            "⇒ 判 implemented=False 是按卡面 S8.5.1 的「不符则 False + reason」，不是「实测它炸」。"
+        ),
+        contract_verified_at="2026-10-22",
         verified_scope=(
-            "格级证据：发现(fetch_account_articles v2)=契约级（OpenAPI 在案，TC-A2-02b 402 未实测）；"
+            "格级证据：发现=`/api/v1/wechat_mp/v2/fetch_account_articles` 在现行 OpenAPI 在案"
+            "（2026-10-22 实读；请求 `FetchAccountArticlesRequest`：username 必填、page_size 默认 20、"
+            "offset=base64 游标且官方文本明写「翻页传上一页响应的 next_offset」、raw 默认 true）；"
+            "但**代码打的是已下线的 web/ 那条** ⇒ 发现格按未实接计。"
+            "响应游标仍无法从契约确定：`ResponseModel.data` 在 spec 里是无字段表的 anyOf[{}, null]，"
+            "游标只出现在请求侧的描述文字里（这就是 P-68 说的「契约说有这么个字段，但形状不在案」）。"
             "搜索(fetch_search)=契约级（TC-A2-02b 402 证实路由在，$0.01）；"
-            "详情(v2 组 fetch_article_detail/h5/full 等 13 端点)=契约级（OpenAPI 在案，未实测）；"
+            "详情(v2 组 fetch_article_detail/h5/full 等)=契约级（OpenAPI 在案，未实测，代码已指 v2）；"
             "详情(web/* 旧端点)=活体实测已下线 TC-A2-04 404（Excel 漂移）。"
         ),
         # 入参 = ghid（`tikhub.py:16` 的 username=gh_ 形态）。
@@ -378,6 +390,11 @@ def select_channels(
     """按"这一源能给哪种标识"筛渠道，再按成本序排（S8.4.1）。
 
     候选 = 已启用 ∩ 凭据就位 ∩ **本源的标识凑得上这一家的入参**。
+    候选 = 已启用 ∩ 凭据就位 ∩ **代码实接**（`implemented`）∩ **本源的标识凑得上这一家的入参**。
+    `implemented=False` 不进候选是 S8.5.1 的核实直接带出来的：一个渠道的端点不在上游现行契约里
+    （TikHub 的发现格就是这一形），派它出去只会拿到 404 或空清单，而调度日志看起来像"这一源没新东西"。
+    注意这与 `available_channels()` **不是一件事**：那一轴答"配了 key 吗"（STEP-28 的三轴分离口径），
+    这一轴答"这轮派谁去打"。
     凑不上的直接不进候选，而不是进了再让上游报错——`query_work_list_page` 各家对 identifier
     的语义互不相通（biz / gh_ / 文章 URL / feed URL），传错的那一种通常不会炸，而是返回空清单，
     于是"渠道可用而清单恒空"，正是本仓反复登记过的那族静默失败（P0-3、P-9 同族）。
@@ -387,7 +404,7 @@ def select_channels(
     等于让整轮发现停在它身上然后靠降级去补，白花一次调用。
     其余按 `cost_rank` 升序，`None`（成本未实测）一律排最后；未知与未知之间按注册序，稳定可复算。
     """
-    pool = available_channels(settings)
+    pool = [name for name in available_channels(settings) if CHANNELS[name].implemented]
     eligible = [name for name in pool if (identifiers.get(CHANNELS[name].required_identifier) or "").strip()]
     if not eligible:
         logger.warning(

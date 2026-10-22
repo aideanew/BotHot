@@ -1,13 +1,23 @@
 """TikHub 文章来源 Provider。
 
-**契约来源**：2026-09-29 活体实测（TC-A2 系列），base URL https://api.tikhub.io
-OpenAPI 契约获取：GET /openapi.json（1050 paths，wechat_mp v2 仅 13 端点）。
+**契约来源**：2026-09-29 活体实测（TC-A2 系列）+ 2026-10-22 重读现行契约，
+base URL https://api.tikhub.io；OpenAPI 实读 = GET /openapi.json（1050 paths，
+其中 `/api/v1/wechat_mp/` 共 11 条、**全部是 v2**、`web/` 一条都没有）。
+（旧文本写"v2 仅 13 端点"且未标读数日期 ⇒ 今天实读 11 条，无法区分"上游撤了 2 条"与
+"当年数错"——契约类读数从此带日期与总数，见 EVD-V17-08 §11。）
 
 鉴权：Header `Authorization: Bearer <key>`。
 
-接口清单（OpenAPI 确认）：
+接口清单（2026-10-22 重读现行 OpenAPI，1050 paths）：
 - POST /api/v1/wechat_search/v2/fetch_search — 关键词搜索（需付费，free credit 不接受）
-- POST /api/v1/wechat_mp/web/fetch_account_articles — 账号文章列表（username=gh_xxx，offset=base64 游标）
+- POST /api/v1/wechat_mp/v2/fetch_account_articles — 账号文章列表（现行**只有 v2**：
+  请求 `FetchAccountArticlesRequest` = username 必填 / page_size 默认 20 / offset（base64 游标，
+  官方描述"首页留空；翻页传上一页响应的 next_offset"）/ item_show_type / raw 默认 true）
+- /api/v1/wechat_mp/**web**/fetch_account_articles — ⚠️ **不在现行 OpenAPI 里**，
+  而本文件 `query_work_list` 的调用点（`:130`）打的就是它。同族 `web/*` 的 404 是活体实测
+  （TC-A2-04），本条路径本身没打活体（余额 0）。⇒ 发现格在 `discovery/registry.py` 里判
+  `implemented=False`（S8.5.1 的处置），路由不会派它出去；**本卡没有擅自切到 v2**——
+  换端点要一次有余额的活体调用才能确认响应形状与游标落点，见 P-72
 - fetch_mp_article_detail_json — Excel 标注免费但 OpenAPI 中已下线（404）
 
 **实测状态**：key 有效（鉴权通过）但付费余额为 0，全部端点返回 402。
