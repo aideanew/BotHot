@@ -39,6 +39,7 @@ from app.core.errors import (
     AppError,
     DependencyUnavailableError,
     ExtractQualityLowError,
+    MalformedUrlError,
     RateLimitedUpstreamError,
     SourceUrlUnrecognizedError,
 )
@@ -152,13 +153,17 @@ def _is_throttle_error(exc: Exception) -> bool:
 
 
 def _is_permanent_error(exc: Exception) -> bool:
-    """不可重试的域错误：链接本身不是公众号文章 / 正文质量不足，重采必然同结果。
+    """不可重试的域错误：链接本身不是公众号文章 / 正文质量不足 / 链接形态非法，重采必然同结果。
 
-    `kb._resolve_with_retry` 内部已跳过这两类的重试，但 worker 每次重试都是**从头再跑一遍
+    `kb._resolve_with_retry` 内部已跳过这几类的重试，但 worker 每次重试都是**从头再跑一遍
     ingest_url**，等于把同一结论重采 4 次（含退避等待）。实测 2026-09-25：一条假链接
     retry_count 到 3、耗时 ~14s，纯属浪费上游额度。
+
+    `MalformedUrlError`(10006) 归进来是 STEP-09 S9.2.1：非白名单域名/超长/控制字符是**解析前**
+    就能判定的静态事实，重试同一个 URL 必然得到同一个结论。RSS 的外链条目让这一类第一次可能
+    批量出现——没有它，每条被滤掉后仍进入队列的外链都会被从头重采一轮。
     """
-    return isinstance(exc, SourceUrlUnrecognizedError | ExtractQualityLowError)
+    return isinstance(exc, SourceUrlUnrecognizedError | ExtractQualityLowError | MalformedUrlError)
 
 
 def make_default_ingest(settings: Settings) -> IngestInvoker:

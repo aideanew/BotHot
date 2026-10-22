@@ -355,7 +355,16 @@ def _fed_provider(
 
 class TestFetchPath:
     async def test_query_work_list_fetches_alias_resolved_feed_and_parses(self) -> None:
-        provider, http, seen = _fed_provider(RSS2_SAMPLE)
+        # 样例链接用白名单域名：STEP-09 S9.1.2 之后，发现层会把非白名单（外链）条目滤掉
+        # （D-V2-03「外链仅发现、不入库」）。本用例判的是"抓取发生了、行能被消费端接住"，
+        # 与域名名单无关，所以换的是喂进去的样本，不是断言。
+        body = (
+            '<?xml version="1.0"?><rss version="2.0"><channel>'
+            '<item><title>文章一</title><link>https://mp.weixin.qq.com/s/one</link><guid>g1</guid></item>'
+            '<item><title>文章二</title><link>https://mp.weixin.qq.com/s/two</link><guid>g2</guid></item>'
+            "</channel></rss>"
+        )
+        provider, http, seen = _fed_provider(body)
         try:
             rows, total = await provider.query_work_list("https://example.com/feed.xml", 1)
         finally:
@@ -401,7 +410,7 @@ class TestFetchPath:
     async def test_item_cap_bounds_one_feed(self) -> None:
         """单 feed 条数封顶 `_MAX_ITEMS_PER_FEED`：上游灌一万条也不能全量进发现链。"""
         items = "".join(
-            f"<item><title>文章{i}</title><link>https://example.com/a/{i}</link></item>"
+            f"<item><title>文章{i}</title><link>https://mp.weixin.qq.com/s/{i}</link></item>"
             for i in range(_MAX_ITEMS_PER_FEED + 5)
         )
         body = f'<?xml version="1.0"?><rss version="2.0"><channel>{items}</channel></rss>'

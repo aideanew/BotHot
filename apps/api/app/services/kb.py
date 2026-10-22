@@ -31,6 +31,7 @@ from app.core.errors import (
     ForbiddenError,
     IngestFailedError,
     LangbotApiError,
+    MalformedUrlError,
     ResourceNotFoundError,
     SourceUrlUnrecognizedError,
 )
@@ -351,12 +352,16 @@ class KnowledgeBaseService:
     _RESOLVE_BACKOFF_BASE = 1.0
 
     async def _resolve_with_retry(self, norm_url: str):
-        """R6.3.5：单篇路径有限重试（指数退避，仅网络类错误重试）。"""
+        """R6.3.5：单篇路径有限重试（指数退避，仅网络类错误重试）。
+
+        `MalformedUrlError` 与另两类域错误一样立刻抛出：它是**解析前**就能判定的静态事实
+        （非白名单域名/超长/控制字符），退避两次再打同一个 URL 只会得到同一个结论（S9.2.1）。
+        """
         last_exc: Exception | None = None
         for attempt in range(self._RESOLVE_MAX_ATTEMPTS):
             try:
                 return await self._resolver.resolve(norm_url)
-            except (SourceUrlUnrecognizedError, ExtractQualityLowError):
+            except (SourceUrlUnrecognizedError, ExtractQualityLowError, MalformedUrlError):
                 raise
             except Exception as exc:
                 last_exc = exc

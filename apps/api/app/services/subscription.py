@@ -13,10 +13,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Any
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import structlog
@@ -39,6 +41,7 @@ from app.models.entities import (
 from app.repositories.job import JobItemRepository, JobRepository
 from app.repositories.space import SpaceRepository
 from app.services.article_identity import parse_wechat_url
+from app.services.identifier_resolver import IdentifierResolver
 from app.services.manifest import MANIFEST_STATUS_DISCOVERED, MANIFEST_STATUS_ENQUEUED
 from app.services.state_machine import validate_transition
 
@@ -64,6 +67,27 @@ SYNC_ANCHOR_HOUR_MAX = 23
 # 取值域，此处独立一份是因为校验点在服务层（注册入口），不能为了让 Service 依赖 Provider
 # 而去 import `app.providers.source_resolver`（会引入 httpx 抓取链路）。
 _BIZ_SHAPE_RE = re.compile(r"^M[A-Za-z0-9+/]{11,25}={0,2}$")
+
+# 可注册的信息源类型（STEP-09 S9.1.1）。写报错时要把它**点名**给用户：
+# 只说"类型非法"会让人以为自己的拼写有问题，而真实缺口是"这一版还没接这个类型"。
+SOURCE_TYPES: tuple[str, ...] = ("wechat_oa", "rss")
+# feed 地址的形态：必须是带域名的 http(s) 绝对地址，且不超过 `sources.url` / `source_identifiers.value`
+# 两个列的 512。这里独立写一份谓词，与上面 biz 形态校验同一个理由——校验点必须在注册入口，
+# 不能为了让 Service 依赖 Provider 而 import 抓取链路（`rss.py` 带着 httpx 客户端）。
+# 两处判据若有偏差，后果不是静默：注册能过、同步时 `_resolve_feed_url` 抛
+# `DiscoveryFailedError`，是一条会响的失败。
+_FEED_URL_MAX_LEN = 512
+
+
+def _feed_external_id(feed_url: str) -> str:
+    """RSS 源的 `sources.external_id` = feed 地址摘要（不是 feed 原文）。
+
+    为什么不直接放 URL：该列是 `String(128)` 且带 `uq_source_type_external`，而 feed 地址可达
+    512 字符——截断会让两条不同 feed 撞成同一个源（数据合并级别的错误，不是显示问题），
+    留空又会被唯一约束挡住第二个 RSS 源。真身份在 `source_identifiers(kind='feed_url')`
+    （`uq_source_identifier_kind_value` 全局唯一），这里只保留一个稳定、不冒充 biz 的占位锚。
+    """
+    return "rss:" + hashlib.sha256(feed_url.encode("utf-8")).hexdigest()[:32]
 
 
 def _assert_subscription_settings(
@@ -107,13 +131,31 @@ class SourceSubscriptionService:
     # ------------------------------------------------------------------ sources
 
     async def register_source(
-        self, user_id: str, biz: str = "", profile_url: str = "", name: str = ""
+        self,
+        user_id: str,
+        biz: str = "",
+        profile_url: str = "",
+        name: str = "",
+        *,
+        source_type: str = "wechat_oa",
+        feed_url: str = "",
     ) -> dict[str, Any]:
-        """POST /sources：注册公众号 Source（biz 或 profile_url 二选一；uq_source_type_external 幂等）。
+        """POST /sources：注册信息源（`uq_source_type_external` 幂等）。
 
+        `source_type='wechat_oa'`（默认，形状不变）：biz 或 profile_url 二选一。
         biz 必须通过形态校验：RedFox 广域库仅接受 `__biz` 定位，落一个形态非法的 biz 等于
         注册一个永不可采的源（此前无任何校验，前端误贴红狐文档链接也照单全收）。
+        `source_type='rss'`（STEP-09 S9.1.1）：feed_url 必填，见 `_register_rss_source`。
+        其余取值直接 10005 报错并点名可用类型——不许回落到 wechat_oa 的 biz 通道，
+        那等于把用户写错的类型"治好"成一个错误的源。
         """
+        if source_type not in SOURCE_TYPES:
+            raise RequestInvalidError(
+                f"信息源类型非法：{source_type}（当前支持 {'/'.join(SOURCE_TYPES)}；"
+                "rss 源须带 feedUrl，公众号源须带 biz 或 profile_url）"
+            )
+        if source_type == "rss":
+            return await self._register_rss_source(name, feed_url)
         external_id = biz or self._biz_from_profile_url(profile_url)
         if not external_id:
             raise RequestInvalidError("biz 或 profile_url 至少提供一个")
@@ -142,6 +184,44 @@ class SourceSubscriptionService:
             row = source
         await self._session.commit()
         return {"sourceId": row.id, "biz": row.external_id, "name": row.name, "url": row.url}
+
+    async def _register_rss_source(self, name: str, feed_url: str) -> dict[str, Any]:
+        """注册 RSS 源（STEP-09 S9.1.1）：`sources(type='rss')` + `source_identifiers(kind='feed_url')`。
+
+        标识行是这一支的关键，不是顺手多写的：卡面 3『执行逻辑穿透』写的是
+        订阅 → source_identifiers(feed_url) → rss provider → 过滤外链 → 清单 → 入库，而 S8.4 的
+        `select_channels` 按 `CHANNELS['rss'].required_identifier` 筛源——注册时不补这一格，
+        源就永远派不到 rss 渠道，表现是"订阅建好了、每轮什么都不采"的静默失败。
+        写入走 `IdentifierResolver.ensure_identifiers`（唯一的标识写入口，撞 `(kind,value)`
+        唯一约束时告警不覆盖），服务层不自己 `add(SourceIdentifier(...))` 开第二个写入口。
+        """
+        feed = (feed_url or "").strip()
+        if not feed:
+            raise RequestInvalidError("rss 源必须提供 feedUrl")
+        parts = urlsplit(feed)
+        if parts.scheme not in ("http", "https") or not parts.netloc:
+            raise RequestInvalidError(
+                f"feedUrl 形态非法：须为带域名的 http(s) 绝对地址，收到 {feed[:48]!r}"
+            )
+        if len(feed) > _FEED_URL_MAX_LEN:
+            raise RequestInvalidError(
+                f"feedUrl 超长（{len(feed)} > {_FEED_URL_MAX_LEN}）：`sources.url` 与 "
+                "`source_identifiers.value` 两个列都只有 512"
+            )
+        external_id = _feed_external_id(feed)
+        row = (
+            await self._session.execute(
+                select(Source).where(Source.type == "rss", Source.external_id == external_id)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            source = Source(type="rss", external_id=external_id, name=name or feed, url=feed)
+            self._session.add(source)
+            await self._session.flush()
+            row = source
+        await IdentifierResolver(self._session).ensure_identifiers(row)
+        await self._session.commit()
+        return {"sourceId": row.id, "type": "rss", "feedUrl": feed, "name": row.name, "url": row.url}
 
     async def list_sources(
         self, source_type: str = "wechat_oa", *, limit: int = 50, offset: int = 0

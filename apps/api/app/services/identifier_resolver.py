@@ -117,26 +117,36 @@ class IdentifierResolver:
         ).scalars().first()
 
     async def ensure_identifiers(self, source: Source, html: str = "") -> dict[str, str]:
-        """补齐并返回该源的标识：biz（external_id 优先，其次从样例链接解析）+ sample_url + ghid。
+        """补齐并返回该源的标识：公众号源 = biz（external_id 优先，其次从样例链接解析）+ sample_url + ghid；
+        RSS 源 = feed_url。
 
         `html` 是调用方**已经抓到手**的那篇文章页原文（入库路径天然有），传进来只为顺带读一个
         `gh_` ⇒ 零额外请求；不传则这一格留空，不影响别的标识。
+
+        RSS 源走另一支是因为它的身份**不是** biz：`sources.url` 存的就是 feed 地址，
+        把它当 sample_url 登记会占掉 `(kind,value)` 唯一约束里的一格并给出一个假名字，
+        而 S8.4 的 `select_channels` 找的是 `CHANNELS["rss"].required_identifier == "feed_url"`
+        ——这一格不写，路由就永远看不见这个 RSS 源（表现仍是"渠道可用而清单恒空"）。
 
         幂等靠"先查后插 + 撞唯一约束就当作已有"，不是靠 upsert 的 `DO NOTHING`：
         撞约束说明**另一个源**已经占了这个标识，那正是必须发生告警的一刻
         （号主身份被两个源共用 = P0-1 那一族的形状）。
         """
         wanted: list[tuple[str, str, str]] = []
-        if source.external_id:
-            wanted.append(("biz", str(source.external_id), ORIGIN_SOURCE))
-        derived_biz = biz_from_sample_url(source.url or "")
-        if derived_biz:
-            wanted.append(("biz", derived_biz, ORIGIN_RESOLVER))
-        if source.url:
-            wanted.append(("sample_url", str(source.url), ORIGIN_SOURCE))
-        derived_ghid = ghid_from_html(html)
-        if derived_ghid:
-            wanted.append(("ghid", derived_ghid, ORIGIN_RESOLVER))
+        if source.type == "rss":
+            if source.url:
+                wanted.append(("feed_url", str(source.url), ORIGIN_SOURCE))
+        else:
+            if source.external_id:
+                wanted.append(("biz", str(source.external_id), ORIGIN_SOURCE))
+            derived_biz = biz_from_sample_url(source.url or "")
+            if derived_biz:
+                wanted.append(("biz", derived_biz, ORIGIN_RESOLVER))
+            if source.url:
+                wanted.append(("sample_url", str(source.url), ORIGIN_SOURCE))
+            derived_ghid = ghid_from_html(html)
+            if derived_ghid:
+                wanted.append(("ghid", derived_ghid, ORIGIN_RESOLVER))
 
         have = await self.identifiers(source.id)
         for kind, value, origin in wanted:

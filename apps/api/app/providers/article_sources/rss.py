@@ -10,6 +10,12 @@ manifest._map_row 的字段别名（link/url, title, pubDate/publishTime, guid/i
 - 多 feed 聚合：identifier 参数为 feed URL 或预配置的 feed 别名
 
 依赖：httpx（已有）+ xml.etree.ElementTree（标准库），无额外依赖。
+
+两条 STEP-09 的收口（都在「看起来能用其实不能用」这一族）：
+- 未知标识 ⇒ `DiscoveryFailedError`，且**发请求之前**就失败（见 `_resolve_feed_url`）；
+- 非白名单域名的链接在**发现层**就被滤掉且计数（D-V2-03：外链仅发现、不入库，见 `_split_offsite`）。
+  预置的 `FREE_RSS_FEEDS` 多为通用新闻/博客源，其条目按这条规则通常整批被滤——那是设计后果，
+  不是故障，`docs/RSS订阅渠道.md` 已标注。
 """
 
 from __future__ import annotations
@@ -21,6 +27,7 @@ from xml.etree import ElementTree as ET
 import httpx
 import structlog
 
+from app.core.errors import DiscoveryFailedError, MalformedUrlError
 from app.providers.article_sources.base import (
     WORK_LIST_PAGE_SIZE,
     ArticleDetail,
@@ -28,6 +35,7 @@ from app.providers.article_sources.base import (
     WorkListPage,
     build_work_list_page,
 )
+from app.providers.source_resolver import normalize_article_url
 
 logger = structlog.get_logger(__name__)
 
@@ -56,6 +64,9 @@ class RSSFeedProvider:
     - feed URL（http(s)://...）→ 直接抓取该 feed
     - 预配置别名 → 查找 self._feeds 中匹配的 URL
     - 空串 → 抓取第一个配置的 feed
+    - **其余（既不是 URL 也不是已配置别名）⇒ `DiscoveryFailedError`**，不再当成 URL 去打。
+
+    `filtered_offsite`：累计被滤掉的不可入库条数（STEP-09 S9.1.2，见 `_split_offsite`）。
     """
 
     def __init__(
@@ -67,6 +78,7 @@ class RSSFeedProvider:
         self._feeds = feeds or []
         self._timeout = timeout
         self._client: httpx.AsyncClient | None = None
+        self.filtered_offsite = 0
 
     @property
     def name(self) -> str:
@@ -86,23 +98,33 @@ class RSSFeedProvider:
         return self._client
 
     def _resolve_feed_url(self, identifier: str) -> str:
-        """将 identifier 解析为 feed URL。"""
+        """将 identifier 解析为 feed URL；解析不了就失败，不静默把标识当地址。
+
+        旧实现在最后一行 `return identifier`：一个 biz 串会发到 `GET "MjM5MjgwNTQ1MQ=="`，
+        httpx 抛错后被 `except HTTPError` 收成空清单 ⇒ 一轮同步读起来像"这个 feed 今天没发文"。
+        这正是本仓反复登记的那族静默失败（P0-3、P-9 同族），所以判据不是"最终没入库"，
+        而是**一个请求都不该发出去**（错误在 `client.get` 之前抛出）。
+        """
         if identifier.startswith("http://") or identifier.startswith("https://"):
             return identifier
-        # 按别名查找
         for feed in self._feeds:
             if feed.alias == identifier:
                 return feed.url
-        # 空标识符 → 第一个 feed
-        if not identifier and self._feeds:
-            return self._feeds[0].url
-        # 当作 URL 直接用
-        return identifier
+        if not identifier:
+            # 空标识 = 未指定 feed：有配置就取第一个，没配置就是真的没配，交回调用方给空清单
+            # （`test_rss_provider.py::test_empty_identifier_with_no_feeds` 钉住这个形状）。
+            return self._feeds[0].url if self._feeds else ""
+        raise DiscoveryFailedError(
+            f"RSS 标识无法解析为 feed 地址：{identifier!r} 既不是 http(s) URL，也不在已配置别名里"
+            f"（可用别名={'/'.join(f.alias for f in self._feeds if f.alias) or '（无）'}）。"
+            "公众号 biz 不是 RSS 标识——RSS 源的标识是 feed_url（见 source_identifiers）"
+        )
 
     async def query_work_list(self, identifier: str, page: int) -> tuple[list[dict[str, Any]], int | None]:
         """抓取并解析 RSS feed，返回 work_list 行。
 
         RSS feed 通常不分页——page=1 返回全部 item，page>1 返回空。
+        `total` 说"上游给了几行"，返回的 `rows` 只含可入库的那些（差额见 `filtered_offsite`）。
         """
         if page > 1:
             return [], 0
@@ -127,8 +149,18 @@ class RSSFeedProvider:
 
         # 限制条数
         items = items[:_MAX_ITEMS_PER_FEED]
+        kept, dropped = _split_offsite(items)
+        if dropped:
+            self.filtered_offsite += dropped
+            logger.warning(
+                "RSS: %s 共 %d 条，滤掉 %d 条不可入库链接（仅发现，不入库：D-V2-03），保留 %d 条",
+                feed_url,
+                len(items),
+                dropped,
+                len(kept),
+            )
         logger.info("RSS: 解析 %d 条 item from %s", len(items), feed_url)
-        return items, len(items)
+        return kept, len(items)
 
     async def query_work_list_page(
         self, identity: str, cursor: str | None = None, *, page_size: int = WORK_LIST_PAGE_SIZE
@@ -159,6 +191,27 @@ class RSSFeedProvider:
         if self._client is not None:
             await self._client.aclose()
             self._client = None
+
+
+def _split_offsite(items: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """按入库主路径的同一个判据切掉不可入库的行，返回 (保留, 滤掉条数)。
+
+    判据委托 `source_resolver.normalize_article_url`（D-V2-03：只有白名单域名的 http(s) 链接能入库），
+    **不在这里另写一份域名名单**——两处各存一份白名单是 P-28 那一族：名单改了一处，
+    另一处继续按旧域名放行，表现是"清单里有若干条永远入库失败的行"，而不是报错。
+    无链接（只有 guid）的 item 也算不可入库：它连"去哪抓正文"都没回答，计数仍归在这一格。
+    """
+    kept: list[dict[str, Any]] = []
+    dropped = 0
+    for item in items:
+        link = (item.get("url") or item.get("link") or "").strip()
+        try:
+            normalize_article_url(link)
+        except MalformedUrlError:
+            dropped += 1
+        else:
+            kept.append(item)
+    return kept, dropped
 
 
 # ── RSS/Atom 解析（纯函数，无外部依赖）──────────────────────────────

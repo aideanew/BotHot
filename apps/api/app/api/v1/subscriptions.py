@@ -1,6 +1,6 @@
 """AB-P004 P2 整号订阅路由：sources/subscriptions/jobs 端点。
 
-- POST /api/v1/sources {biz|profile_url}（登录保护 10001；uq_source_type_external 幂等）
+- POST /api/v1/sources {type,biz|profile_url|feedUrl}（登录保护 10001；uq_source_type_external 幂等）
 - GET  /api/v1/sources?type=wechat_oa（登录保护；返回**全用户共享**源清单，非「我的信息源」）
 - PATCH /api/v1/sources/{source_id}（R4.8；admin，改全局源展示名/上游地址）
 - DELETE /api/v1/sources/{source_id}（R0.2.3；admin 且仅零下游引用可删）
@@ -22,7 +22,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -50,8 +50,19 @@ jobs_router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 
 
 class RegisterSourceRequest(BaseModel):
+    """POST /sources 请求体。
+
+    `type` 缺省 = `wechat_oa`（旧客户端只发 biz，形状不变）。`feedUrl` 是卡面写的 camelCase
+    （STEP-09 S9.1.1 `{type:'rss', feedUrl}`）；`populate_by_name` 让 snake_case 也收，
+    因为本仓其它请求体都是 snake_case，只放开一种写法会把已有调用方晾在外面。
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    type: str = Field(default="wechat_oa", max_length=32)
     biz: str = Field(default="", max_length=128)
     profile_url: str = Field(default="", max_length=512)
+    feed_url: str = Field(default="", max_length=512, validation_alias="feedUrl")
     name: str = Field(default="", max_length=255)
 
 
@@ -73,9 +84,19 @@ async def register_source(
     user_id: Annotated[str, Depends(get_current_user_id)],
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> JSONResponse:
-    """注册公众号 Source（biz 或 profile_url 二选一；幂等）。201 创建 / 200 已存在。"""
+    """注册信息源（公众号：biz 或 profile_url 二选一；RSS：feedUrl）。
+
+    重复注册由服务层按 `uq_source_type_external` 落回既有行，HTTP 状态恒为 201（不区分 200）。
+    """
     svc = SourceSubscriptionService(session)
-    result = await svc.register_source(user_id, biz=payload.biz, profile_url=payload.profile_url, name=payload.name)
+    result = await svc.register_source(
+        user_id,
+        biz=payload.biz,
+        profile_url=payload.profile_url,
+        name=payload.name,
+        source_type=payload.type,
+        feed_url=payload.feed_url,
+    )
     body = success(data=result)
     return JSONResponse(status_code=201, content=body.model_dump())
 
