@@ -152,13 +152,21 @@ AGENTS.md 关键约束 3）、`source_identifiers.kind` 是 `String(16)` 且无 
 | P-74 | 本卡四处越界（含 STEP-08 的 AST 门改点名三处调用）——所有权矩阵没覆盖 RSS 身份写入链 |
 | P-75 | `filtered_offsite` 只到 provider 实例，`WorkListPage` 契约里没有这一格（形状的归属在 STEP-08）⇒ 跨轮/跨进程汇总读不到 |
 | P-76 | `GET/PATCH /sources` 的视图把 `external_id` 放在 `biz` 格：RSS 源在清单里显示为 sha 摘要，且 `list_sources` 的 `type` 参数与注册类型无联动校验 |
+| P-77 | Security 工作流把 scanner 自己的网络失败（`pnpm audit` 的 socket timeout）判成 🔴 阻断 ⇒ 交付面可被上游 registry 抖动挡住；`SCANNER_ERROR` 与 `VULN` 该分档，读数见 §9 |
 
 ## 9. 三绿（验收面 = `@ci` ubuntu-latest；skip≠pass）
 
+交付提交 `22b9ede`（`22b9ede7b38c4417d0d798e375f5017122d42480`）：
+
 | 工作流 | run id | 结论 |
 |---|---|---|
-| CI | 待回填 | — |
-| Security | 待回填 | — |
-| CI-Windows | 待回填 | —（本平台对连库结论零主张，只读 skip 计数 = 641 与未知族） |
+| CI | 39714496417 | success（attempt 1）——正式验收面 |
+| Security | 39714496311 | **attempt 1 红 ⇒ attempt 2 success**（见下） |
+| CI-Windows | 39714496408 | success（attempt 1）：`SKIP_BASELINE_WIN` 641 与实测相符，未知族 0（本平台对连库结论零主张） |
 
-交付提交 sha：待回填（本文件先写"待回填"，不预测读数）。
+Security 那一红**不是本卡的失败**，但它被记在这里而不是抹平：attempt 1 红在 `② pnpm audit` 一步，
+日志原文是 `ERR_SOCKET_TIMEOUT / request to https://registry.npmjs.org/-/npm/v1/security/audits failed,
+reason: Socket timeout`，脚本把"三种已知 JSON 形状均不匹配"落成 `SCANNER_ERROR`，汇总门禁按
+`阻断 1 项 / 告警 3 项` 直接 `exit 1`。同一 run 里 pip-audit / trivy / gitleaks 三条全 OK，
+本卡 diff 不含任何 Node 依赖改动。重跑失败 job（`rerun-failed-jobs`，attempt 2）后同一提交转绿——
+"重跑就绿"正是这一档该叫 UNKNOWN 而不是 🔴 的理由，已登记 **P-77**（分档与自动重试的判据写在台账里）。

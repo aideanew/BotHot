@@ -94,7 +94,9 @@ jobs:
       # 634 的锚 = run 39694539088 @211533c（success，未知族 0）；
       # **637 的锚已到手** = run 39709185171 @b26fef5（success，未知族 0）——
       # STEP-08 收口提交三绿：CI 39709185123 / Security 39709185110 / CI-Windows 39709185171。
-      # 本档 641 待本卡交付提交回填。
+      # **本档 641 的锚** = run 39714496408 @22b9ede（success，未知族 0）——STEP-09 交付提交；
+      # 同一提交的 Security 39714496311 attempt 1 红在 `pnpm audit` 的 registry socket timeout
+      # （scanner 失败被汇总门禁判成 🔴，非漏洞），attempt 2 重跑转绿 ⇒ 登记 P-77。
       SKIP_BASELINE_WIN: "641"
     defaults:
       run:
