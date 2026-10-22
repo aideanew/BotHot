@@ -71,11 +71,18 @@ def test_backchannel_logout_without_a_token_keeps_the_user_session_alive() -> No
 def test_backchannel_logout_from_an_unrelated_body_deletes_no_session() -> None:
     """畸形体（不是 form、或带一个签不出来的串）同样"200 + 零删除"——把上一条的极性坐实。
 
-    只判空串的话，"任何请求体都当作合法"的实现也能绿；这里给一枚形状合法但签名错误的 JWT。
+    只判空串的话，"任何请求体都当作合法"的实现也能绿；这里给一枚**形状合法但签名不匹配**的 JWT。
+    判据语义不变（仍是一枚"形状合法、签名不匹配"的 token）。它不是运行时现签的话，源码里就会
+    留下一段三段式点分的 base64url —— 那是本仓 gitleaks 步会 🔴 阻断的敏感形
+    （CI run 39721460521 实测命中过本文件第 77 行），而"测试用的假串"不是豁免理由：
+    **源码里不该存在任何密钥形状的字面量**。
     """
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from test_backchannel_logout import _token
+
+    other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     client, _sid, _svc = _logged_in()
-    forged = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImsxIn0.eyJpc3MiOiJ4Iiwic3ViIjoieSJ9.c2lnLW5vdC12YWxpZA"
-    resp = client.post(BACKCHANNEL, data={"logout_token": forged})
+    resp = client.post(BACKCHANNEL, data={"logout_token": _token(key=other_key)})
     assert resp.status_code == 200
     assert client.get("/api/v1/auth/me").status_code == 200, "验签失败的 token 也导致了删除"
 

@@ -66,3 +66,14 @@ de78125b91434caa3ef711e5382d6e955d8557af:docs/06_validation/evidence/EVD-V2-00R/
 # 用户名。工作树里这一行已在下一个提交（15470ee）改成无密码形态，命中只活在历史 blob 里，
 # 而 gitleaks 扫的是历史——所以只能在此登记，不能靠改文件消掉。
 5e5ab178a4371dafb8023a640da4d1efff87d768:apps/api/tests/test_health_probe_bounded.py:connection-string-embedded-password:64
+
+# ── 9) c9cb215 一条：STEP-19 的登出判据里手写的假 JWT ────────────────────────
+# 那枚三段式点分串是我为了"验签失败的 backchannel token 不许删会话"这条极性判据**现编的假 token**
+# （签名段 `c2lnLW5vdC12YWxpZA` = "sig-not-valid" 的 base64，不对应任何私钥签名；
+# header 声明 RS256 而本项目没有任何服务用这把"钥"验过它），没有任何服务会接受它。
+# 第 2 轮（本提交之后的那一轮）已把源码改成**运行时现签**：`_token(key=另一把临时生成的 RSA 私钥)`，
+# 工作树里不再存在任何 JWT 形状的字面量（`grep -c eyJ apps/api/tests/test_r19_sso_session.py` = 0）。
+# 但 gitleaks 走 git 模式扫历史，c9cb215 那个 blob 永久存在，而 D-V4-04 禁止重写历史
+# ⇒ 依 D-12 逐指纹登记这一条。同轮另登记 **P-81**：本仓自有的敏感形门 `guards.secret_scan`
+# 对同一行文本两种口径都返回空集（抓不到 jwt 形状），所以这处命中只有烧一轮 CI 才看得见。
+c9cb2150207bde2543a336ae71694d4e1341de09:apps/api/tests/test_r19_sso_session.py:jwt:77

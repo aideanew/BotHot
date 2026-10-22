@@ -174,3 +174,43 @@ V0.13.0 及以后的树里没有 `ux_states.schema.json`（`ls docs/任务规划
 
 待回填（交付提交 sha 与 CI / Security / CI-Windows run id；`SKIP_BASELINE_WIN` 653 的实测锚在
 `.github/workflows/ci-windows.yml` 的注释里，与 §9 同口径）。
+
+## 11. 第 1 轮的 Security 🔴（是我写出来的缺陷，不是环境抖动）
+
+第 1 轮提交 `c9cb215`：CI 与 CI-Windows 绿，**Security 🔴**，日志一行到位——
+
+```
+gitleaks：🔴 检出 1 处明文密钥
+  🔴 jwt | apps/api/tests/test_r19_sso_session.py:77 | commit=c9cb2150 | 命中已打码：REDACTED
+```
+
+命中的是我为了"验签失败的 token 也不许删会话"那条极性判据**手写在源码里的一枚 JWT 字面量**
+（`eyJhbGciOi…`）。它不是真凭据，但**源码里存在密钥形状这件事本身**就是这条门要拦的东西——
+"只是测试用的假串"不是豁免理由：形状扫描无法分辨真假，一旦放行这类写法，
+下一条真凭据就会混在同一种形状里被提交进来。第 2 轮的处置是**改成运行时现签**
+（`_token(key=rsa.generate_private_key(...))`，复用 `test_backchannel_logout.py` 的签名助手），
+判据语义不变（仍是一枚"形状合法、签名不匹配"的 token），源码里零密钥形状字面量。
+
+顺带量出一处**本地门与 CI 门的覆盖面缺口**（登记 **P-81**）：同一行文本喂给本仓自己的敏感形扫描器
+
+```
+guards.secret_scan(line, code=True,  lang="py") ⇒ []
+guards.secret_scan(line, code=False, lang="md") ⇒ []
+```
+
+也就是 `entry.py evidence-check` 里那道"扫 index blob"的门**看不见 JWT 形状**，
+所以我在提交前拿到的是"✅ evidence-check 全部通过"，推送后 CI 的 gitleaks 却红了。
+本机又没有 gitleaks 可执行文件（`which gitleaks` 空 ⇒ `entry.py scan-secrets` 在这台机器上是 rc=3
+"工具缺失，不是通过"），所以本地没有任何一道门能复现 CI 的这一维。
+这不是"CI 冤枉人"，是**本地门禁的覆盖面比验收面小**：一个只在 CI 存在的 🔴 类别，
+执行方必然要烧一轮 CI 才发现（本轮就是这么烧的）。
+
+| 读数 | 值 |
+|---|---|
+| 第 1 轮 Security | run 39721460521 failure（`gitleaks` 那一维 BLOCK，其余 pip-audit / pnpm-audit / trivy 三轴 OK） |
+| 第 1 轮 CI / CI-Windows | 见 §12（两维绿，与本轮这红无关） |
+| 第 2 轮复跑（本地） | `pytest tests/test_r19_sso_session.py` ⇒ `4 passed`；`ruff check` 通过；改后该文件已无 `eyJ` 开头的字面量（`grep -c` 复核） |
+
+## 12. 第 2 轮三绿（交付）
+
+待回填。
