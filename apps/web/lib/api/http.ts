@@ -11,12 +11,16 @@ import { ApiError, type Envelope } from "./types";
 // ---------- MOCK 开关 ----------
 
 /**
- * MOCK 开关：true 时所有请求走本地契约样例数据。
- * 优先级：环境变量 NEXT_PUBLIC_API_MOCK 显式指定 > 默认开启（M1 后端未就绪阶段）。
- * 后端联调窗口开启时由 A 通知，届时设 NEXT_PUBLIC_API_MOCK=false。
+ * MOCK 开关：true 时请求走本地契约样例数据。
+ * **默认关闭**（STEP-15b S15b.1.1，D-V10-03 代选：翻默认值而不是删开关）——
+ * 只有显式 `NEXT_PUBLIC_API_MOCK=true` 才回到样例数据。
+ * 翻之前的形状是 `(process.env.NEXT_PUBLIC_API_MOCK ?? "true") !== "false"`，
+ * 那条 `?? "true"` 让"没配"被读成"要 mock"，于是开发者打开页面看到的是演示数据，
+ * 而真后端在同一时刻正在给同一个接口回 404/500（STEP-22 证据 3 的 `/bots/tasks` 就是实例）。
+ * 生产不受影响：`package.json` 的 `prebuild` 仍要求显式 `=false`，`Dockerfile` 仍 ARG 成 false，
+ * 纯 UI 开发与 e2e 数据面走显式 `=true`（`ci.yml` 的 mock UI e2e 早已显式设置，不依赖这条默认值）。
  */
-export const MOCK_ENABLED: boolean =
-  (process.env.NEXT_PUBLIC_API_MOCK ?? "true") !== "false";
+export const MOCK_ENABLED: boolean = process.env.NEXT_PUBLIC_API_MOCK === "true";
 
 /** 供顶栏状态徽标等 UI 展示当前数据来源（mock 数据 / 真实后端） */
 export const MOCK_LABEL = MOCK_ENABLED ? "演示数据" : "真实后端";
