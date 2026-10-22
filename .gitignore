@@ -11,6 +11,11 @@ __pycache__/
 *.pyc
 .next/
 coverage/
+# STEP-06 S6.3：覆盖率门的输入是这两个产物（`--cov` 的数据文件与 json 读数）。
+# 它们每次运行都变，且 `coverage/` 那条只挡 HTML 目录——不挡就会在共享工作树里
+# 长期挂着一个未跟踪文件，等一次宽 add 就被扫进提交。
+.coverage
+coverage.json
 *.egg-info/
 .workbuddy/
 .box-agent/

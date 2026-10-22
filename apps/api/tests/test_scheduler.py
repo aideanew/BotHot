@@ -9,15 +9,24 @@
 
 连库口径（真提交连接，与 T2.3/T2.7 同法）：PG 不可达 → skip 并标注原因；用例级清场
 （订阅 id 前缀 `t24-` 收敛命名空间）保证套件自身幂等可重复。时钟可控（now_fn 注入）。
+
+S6.2.1（STEP-06 纠偏）：清单夹具与 READY 资产改用**真实形态**键。旧写法把资产 external_id
+铺成渠道内 id（`t24-w0`），而清单行 `article_key` 是那条短路径 URL 算出来的 `h:` 兜底支——
+两支永不相等 ⇒ Diff 的 ready 键减恒不命中；又因为首轮已把清单翻成 ENQUEUED，Diff 的首道谓词
+是 status，于是"已入库篇不得再入列"这条断言实际由状态门守着，ready 门写坏也照样绿。
+现在两支按生产各自的真源铺（`_article_seed`），并把 Job 置终态 + 清单合法回退成 DISCOVERED，
+让 ready 键减成为**唯一**能救那条断言的门（变异读数见 EVD-V17-06 §1）。
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import time
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -38,11 +47,14 @@ from app.repositories.space import SpaceRepository
 from app.repositories.user import SqlAlchemyUserStore
 from app.services.article_identity import canonical_article_key
 from app.services.scheduler import IncrementalScheduler
+from app.services.state_machine import validate_transition
 
 PG_DSN = os.environ.get("AIDEANBOT_TEST_PG_DSN", "postgresql+psycopg://bothot:bothot@localhost:5433/bothot")
 _T24_SUB = "sub-t24-sched"
 _T24_SPACE = "T24调度空间"
-_T24_BIZ = "T24SCHEDBIZ"
+# S6.2.1：biz 取 base64 形态（真实 `__biz` 值形如 `MjM5MjgwNTQ1MQ==`），保留 `T24` 前缀
+# 是为了让 `_purge_t24` 的 `external_id LIKE 'T24%'` 仍能收敛命名空间。
+_T24_BIZ = "T24SCHEDZHhkZg=="
 
 
 # ---------------------------------------------------------------- 夹具 / 清场
@@ -186,32 +198,100 @@ async def _seed_sub(
         return sub_id, space.id, source.id
 
 
+class ArticleSeed(NamedTuple):
+    """一篇清单行的真实形态（三键同时给出，调用方不许自己拼形状）。"""
+
+    external_id: str
+    url: str
+    article_key: str
+    title_hint: str
+    content_hash: str
+
+
+def _article_seed(prefix: str, index: int) -> ArticleSeed:
+    external_id = hashlib.sha256(f"{prefix}{index}".encode()).hexdigest()[:32]
+    url = (
+        f"https://mp.weixin.qq.com/s?__biz={_T24_BIZ}&mid={2650000000 + index}&idx=1&sn={external_id[:16]}"
+        f"&chksm=f2b6330c&from=timeline#wechat_redirect"
+    )
+    key = canonical_article_key(url)
+    assert key.startswith("b:") and key.count(":") == 3, f"长链夹具必须解出 b: 支，实得 {key}"
+    assert key != external_id, "两支键空间必须可区分，否则本夹具退化回被掩盖的形态"
+    return ArticleSeed(
+        external_id=external_id,
+        url=url,
+        article_key=key,
+        title_hint=f"T24清单{external_id[:8]}",
+        content_hash=f"hash-{external_id[:8]}",
+    )
+
+
 async def _seed_manifests(
-    factory,
+    factory,  # noqa: ANN001
     source_id: str,
     count: int,
     *,
     prefix: str = "t24-w",  # noqa: ANN001
-) -> list[str]:
-    """铺 count 篇 DISCOVERED 清单行（= 1.2.1 _sync_manifests 的合法 PG 产物，非伪造抓取）。"""
-    ext_ids = [f"{prefix}{i}" for i in range(count)]
+) -> list[ArticleSeed]:
+    """铺 count 篇 DISCOVERED 清单行（= 1.2.1 _sync_manifests 的合法 PG 产物，非伪造抓取）。
+
+    三个字段都必须按**生产者真实形态**铺（S6.2.1）：
+    - `external_id` = 32 位小写 hex（渠道内幂等键，redfox `workUuid` 同形）；
+    - `url` = 带 `__biz/mid/idx/sn` 的微信长链（不是"短链路径 + 伪 biz 参数"）；
+    - `article_key` = `canonical_article_key(url)`，于是这一支是 `b:{biz}:{mid}:{idx}`，
+      与 `external_id` **互不相等**——旧夹具让两者同串，Diff 的按键减就永远"看起来对"。
+    """
     async with factory() as session:
-        for ext in ext_ids:
-            url = f"https://mp.weixin.qq.com/s/{ext}"
+        seeds = [_article_seed(prefix, i) for i in range(count)]
+        for seed in seeds:
             session.add(
                 ArticleManifest(
                     source_id=source_id,
-                    external_id=ext,
+                    external_id=seed.external_id,
                     # STEP-04 S4.4.1：Diff 按 `article_key` 减资产/减在途，铺数据必须带规范键
-                    article_key=canonical_article_key(url),
-                    url=url,
-                    title=f"T24清单{ext}",
-                    content_hash=f"hash-{ext}",
+                    article_key=seed.article_key,
+                    url=seed.url,
+                    title=seed.title_hint,
+                    content_hash=seed.content_hash,
                     status="DISCOVERED",
                 )
             )
         await session.commit()
-    return ext_ids
+    return seeds
+
+
+async def _mark_ingested_and_reshare(factory, source_id: str, seeds: list[ArticleSeed]) -> None:  # noqa: ANN001
+    """把 seeds 变成"资产已 READY、清单回到 DISCOVERED"的合法存量（S6.2.1 的判据补强）。
+
+    只置资产不改状态的话，本用例第三条断言是**空的**：`_populate_job_items` 已把这些行翻成
+    ENQUEUED，而 Diff 的第一道谓词就是 `status == DISCOVERED` ⇒ 返回 0 条与"ready 键减没减对"
+    无关，把 `ready_keys` 改成按 `external_id` 减也照样绿。改状态走真状态机（ENQUEUED→DISCOVERED
+    是合法回退，生产里由批次 6 的失败重试 `_reopen_manifests` 产生），不是手写一个非法值。
+    """
+    async with factory() as session:
+        for seed in seeds:
+            session.add(
+                ContentAsset(
+                    source_id=source_id,
+                    external_id=seed.article_key,  # 规范键，不是渠道内 workUuid（uq_asset_source_external 同键空间）
+                    url=seed.url,
+                    title=seed.title_hint,
+                    content_hash=seed.content_hash,
+                    content_markdown="x",
+                    status="READY",
+                )
+            )
+            row = (
+                await session.execute(
+                    select(ArticleManifest).where(
+                        ArticleManifest.source_id == source_id,
+                        ArticleManifest.external_id == seed.external_id,
+                    )
+                )
+            ).scalar_one()
+            validate_transition("manifest", row.status, "DISCOVERED")
+            row.status = "DISCOVERED"
+        await session.commit()
 
 
 async def _read_sub(factory, sub_id: str) -> SourceSubscription:  # noqa: ANN001
@@ -498,7 +578,7 @@ async def test_incremental_sync_creates_job_with_diff_items() -> None:
         sub_id, _space_id, source_id = await _seed_sub(
             factory, sub_id="t24-incr", next_run_at=clock.now - timedelta(minutes=1), interval_minutes=60
         )
-        ext_ids = await _seed_manifests(factory, source_id, 2)
+        seeds = await _seed_manifests(factory, source_id, 2)
         sched = IncrementalScheduler(
             factory,
             settings=Settings(),
@@ -512,7 +592,7 @@ async def test_incremental_sync_creates_job_with_diff_items() -> None:
         assert len(jobs) == 1, "一轮非空增量应恰建 1 个 Job"
         assert jobs[0].idempotency_key.startswith(f"sync_account:{sub_id}:"), jobs[0].idempotency_key
         items = await _items_for(factory, jobs[0].id)
-        assert sorted(i.external_id for i in items) == sorted(ext_ids)
+        assert sorted(i.external_id for i in items) == sorted(s.external_id for s in seeds)
         assert all(i.status == "PENDING" for i in items)
 
         sub = await _read_sub(factory, sub_id)
@@ -527,20 +607,10 @@ async def test_incremental_sync_creates_job_with_diff_items() -> None:
         sub2 = await _read_sub(factory, sub_id)
         assert sub2.consecutive_empty_syncs == 1, "在途去重后本轮=空轮询"
 
-        # 已入库去重：把篇置 READY 资产 + Job 终态 → 仍非空轮询
+        # 已入库去重：置 READY 资产（按规范键）+ 清单回 DISCOVERED + Job 终态 → 仍不重复入列。
+        # Job 必须先进终态：否则"第二轮 0 条"可以是**在途键减**救的，ready 键支写错也照样绿。
+        await _mark_ingested_and_reshare(factory, source_id, seeds)
         async with factory() as session:
-            for ext in ext_ids:
-                session.add(
-                    ContentAsset(
-                        source_id=source_id,
-                        external_id=ext,
-                        url="",
-                        title="",
-                        content_hash=f"h-{ext}",
-                        content_markdown="x",
-                        status="READY",
-                    )
-                )
             job = await session.get(Job, jobs[0].id)
             assert job is not None
             job.status = "SUCCEEDED"

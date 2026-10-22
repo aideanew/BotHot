@@ -190,6 +190,22 @@ def guard(target: str):
     return run
 
 
+def coverage_gate():
+    """模块覆盖率门（STEP-06 S6.3.1）：实体在 scripts/check_module_coverage.py，纯 stdlib。
+
+    用 `sys.executable` 而不是 `venv_python()`：这份脚本只吃 json/argparse，
+    绑 venv 解释器会让"没建 venv"表现为 rc=3 的 SKIP，而门没跑与门过了必须一眼可分。
+    """
+    def run() -> int:
+        script = ROOT / "scripts" / "check_module_coverage.py"
+        if not script.exists():
+            print(f"❌ 缺少 {script}")
+            return RC_FAIL
+        return spawn([sys.executable, str(script)], ROOT, None)
+
+    return run
+
+
 def bash_script(rel: str):
     def run() -> int:
         b = find_tool("bash")
@@ -366,6 +382,10 @@ for _t, _d in (("guard-ports", "端口守卫"), ("guard-versions", "版本锚守
 # check_entry_parity 要求 Makefile 每个目标名都在 BY_NAME 里，漏注册就是红。
 add("guard", "全部架构/证据/治理门", composite=("guard-ports", "guard-structure",
                                               "guard-versions", "rounds-check", "evidence-check"))
+# 刻意不进 `guard` 复合目标：它吃的是 pytest 刚产出的 coverage.json，
+# 没有那次运行就没有输入——放进聚合门只会让每次都多一个 rc=2，反而把"缺输入"这件事喊废。
+add("coverage-gate", "模块覆盖率门（先跑 `--cov=app --cov-report=json`；实体在 check_module_coverage.py）",
+    [coverage_gate()])
 
 BY_NAME = {name: (desc, steps, composite) for name, desc, steps, composite in TASKS}
 

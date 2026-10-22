@@ -3,11 +3,17 @@
 机器门口径（T-016）：
 - ① 命中复用不抓：同一 URL 第二次 ingest_url 不产生 resolver 网络请求，hit_count 自增；
 - ② hash 变化 version+1 且旧 doc 标 superseded；
-- ③ hit_count 计数 SQL 直查。
+- ③ hit_count 计数 SQL 直查；
+- ④（S6.2.2）同一账号的**两篇**长链各自独立：计数不串、版本不串、不互相顶正文。
+
+S6.2.2（STEP-06 纠偏）：`URL_A` 由「短链路径 + 伪 `biz=`/`hid=` 参数」改成**真实长链形态**。
+旧写法把 D-01b（解析层只读 `biz` 不读 `__biz`）掩盖掉了——微信长链的真实参数名是 `__biz`，
+而 `hid` 不是微信的参数。形状取自唯一样本源 `tests/fixtures/wechat_urls.py`，不再自造。
 """
 
 from __future__ import annotations
 
+from fixtures.wechat_urls import BIZ_A, LONG_A, LONG_B
 from sqlalchemy import select
 from test_langbot import _client, _lb_transport, _StubResolver  # noqa: F401  (桩工厂复用)
 
@@ -18,12 +24,13 @@ from app.services.article_identity import canonical_article_key
 from app.services.kb import KnowledgeBaseService
 from app.services.resolver import ResolvedArticle
 
-# T-016 修复（测试写法缺陷①）：URL 携 biz 锚参数——P0 锚点设计为「biz 参数锚 +
-# article_key 兜底」（kb._find_source_by_anchor），裸长链无 biz 参数时首抓落库的
-# source 行以页面 biz（MjM5MjgwNTQ1MQ==）为 external_id，二次入库先查必然失配。
-# URL_A 对齐带 biz 短链形态后，机器门①③可在不改生产逻辑下自洽（②的门面缺口
-# 属生产设计缺陷 D-2/D-3，见 t016-analysis.md，由 worker-b 修复）。
-URL_A = "https://mp.weixin.qq.com/s/p0-cache-001?biz=MjM5MjgwNTQ1MQ==&hid=h0"
+#: 真实长链（`__biz` + `mid` + `idx` + `sn`）⇒ 规范键走 `b:{biz}:{mid}:{idx}` 支。
+#: 改前这里是 `https://mp.weixin.qq.com/s/p0-cache-001?biz=…&hid=h0`：短链路径挂伪参数，
+#: 规范键退成 `h:` 兜底支、`hid` 无人解析，于是 P0 的"先查后抓"实际是在一条**生产里不存在**
+#: 的 URL 形态上验证的（T-016 当年改它是为了让 ①③ 自洽，方向反了——该改的是形状本身）。
+URL_A = LONG_A
+#: 同一 `__biz` 的第二篇（只差 `mid`）：机器门④ 的对照组。
+URL_B = LONG_B
 
 
 class _CountingStubResolver(_StubResolver):
@@ -36,7 +43,8 @@ class _CountingStubResolver(_StubResolver):
     async def resolve(self, raw_url: str) -> ResolvedArticle:
         self.fetch_count += 1
         article = await super().resolve(raw_url)
-        # 短链跳转后 url 即稳定长链——按 P0 口径：article_key 取最终 URL 末段
+        # 把解析结果的 URL 钉回请求的那一条：命中判据必须按入库入参算，
+        # 否则样本页里的固定 URL 会让两篇"看起来"是同一条（fetch_count 就不再是判据）。
         article.url = raw_url
         return article
 
@@ -58,8 +66,8 @@ async def _seeder_space(db_session, name: str):
 
 
 def _biz_anchor() -> str:
-    """SAMPLE_RICH 中 biz = MjM5MjgwNTQ1MQ==（与既有测试同一锚点口径）。"""
-    return "MjM5MjgwNTQ1MQ=="
+    """号主身份锚 = `BIZ_A`：SAMPLE_RICH 页内 biz 与 URL_A 的 `__biz` 同一个值（唯一样本源）。"""
+    return BIZ_A
 
 
 def _article_key(url: str) -> str:
@@ -262,3 +270,40 @@ async def test_p0_hit_count_counter_increments(db_session) -> None:  # type: ign
     asset = await _asset(db_session, URL_A)
     assert int(asset.hit_count) == 2  # 两次命中（首抓 hitCount=0 起算）
     await db_session.commit()
+
+
+async def test_p0_same_account_two_long_links_are_isolated(db_session) -> None:  # type: ignore[no-untyped-def]
+    """机器门④（S6.2.2）：同一 `__biz` 的两篇长链——资产行、身份键、命中计数各自独立。
+
+    与 `test_kb_longlink_ingest.py::test_two_distinct_long_links` 的分工：那条证 P-3 的
+    **身份坍缩**（第二篇不许领到第一篇的正文），本条证 P0 缓存面在同号两篇之间**不串号**
+    （两个 asset 行、hit_count 与 version 各归各的）。旧夹具整个文件只有一条 URL，
+    这两件事当时都没有对照面——`?biz=`/`hid=` 的伪形状把「同号第二篇」这个维度直接抹掉了。
+    """
+    user, space = await _seeder_space(db_session, "P0同号两篇空间")
+    resolver = _CountingStubResolver()
+    svc = _svc(db_session, resolver)
+
+    first_a = await svc.ingest_url(space.id, URL_A)
+    first_b = await svc.ingest_url(space.id, URL_B)
+    assert (first_a["hitCache"], first_b["hitCache"]) == (False, False)
+    assert first_a["docId"] != first_b["docId"], (first_a, first_b)
+    assert resolver.fetch_count == 2, f"同号两篇只抓了一次 ⇒ B 顶到了 A 的资产：{first_b!r}"
+
+    key_a, key_b = _article_key(URL_A), _article_key(URL_B)
+    assert key_a.startswith("b:") and key_b.startswith("b:") and key_a != key_b, (key_a, key_b)
+
+    asset_a = await _asset(db_session, URL_A)
+    asset_b = await _asset(db_session, URL_B)
+    assert asset_a.id != asset_b.id, "两篇必须落在两个 asset 行上"
+    assert asset_a.source_id == asset_b.source_id, "同一号主 ⇒ 同一 source 行"
+    assert (asset_a.external_id, asset_b.external_id) == (key_a, key_b), "资产按规范键存，不按渠道内 id"
+
+    second_a = await svc.ingest_url(space.id, URL_A)
+    assert second_a["hitCache"] is True and second_a["hitCount"] == 1
+    assert resolver.fetch_count == 2, "B 的存在不得让 A 退回重抓"
+
+    asset_a = await _asset(db_session, URL_A)
+    asset_b = await _asset(db_session, URL_B)
+    assert (int(asset_a.hit_count), int(asset_b.hit_count)) == (1, 0), "命中计数串了号"
+    assert (asset_a.version, asset_b.version) == (1, 1)

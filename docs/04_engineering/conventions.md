@@ -88,6 +88,12 @@ docs(architecture): 更新系统架构设计文档
     按此新建子目录会让 pytest 采集路径与 CI 的 `--junitxml` skip 门禁口径错位。
 - 测试文件命名：`test_<module>.py`（沿用）
 - 覆盖率目标：core/ 和 application/ 层 > 80%（沿用；实测口径见 `docs/06_validation/`）
+- 模块覆盖率门（STEP-06 S6.3，2026-10-22）：全局 `--cov-fail-under` 之外另有一道按模块的门，
+  阈值表在 `scripts/check_module_coverage.py`（article_identity 100、manifest/kb/subscription 85、
+  四家 provider 80、全局 79）。跑法：`pytest --cov=app --cov-report=json:coverage.json` 之后
+  `make coverage-gate`；CI 的 `backend` job 已接同一步。**为什么不让全局分抵掉单模块**：
+  总分可以靠别的域涨回来，采集链空了却看不出来。反证常驻
+  `apps/api/tests/test_module_coverage_gate.py`（含"人为调高阈值 ⇒ rc≠0"与"缺输入 ⇒ rc=2 ≠ 通过"）。
 
 ### 4.2 前端
 - 单元测试：`apps/web/tests/*.spec.ts` / `*.spec.tsx`（**集中在 `tests/`，不与组件同目录**）

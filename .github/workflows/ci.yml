@@ -163,7 +163,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          pytest tests/ -q -rs --junitxml=pytest-report.xml --cov=app --cov-report=term-missing --cov-fail-under="$COV_BASELINE" 2>&1 | tee pytest-output.log
+          pytest tests/ -q -rs --junitxml=pytest-report.xml --cov=app --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under="$COV_BASELINE" 2>&1 | tee pytest-output.log
           pytest_status=${PIPESTATUS[0]}
           python - <<'PY'
           import os
@@ -209,6 +209,17 @@ jobs:
             exit "$pytest_status"
           fi
           exit "$gate_status"
+      # STEP-06 S6.3.2：模块覆盖率门（在全局 `--cov-fail-under` 之上再加按模块的线）。
+      #
+      # 为什么单独一步而不是并进上面的 pytest：那一步已经串了 skip 门禁，再串第三个判据
+      # 就会把「哪一类红」压进同一个退出码——覆盖率掉线与 skip 增长是两件事，分开才看得见。
+      # 为什么读 coverage.json 而不是再跑一遍 pytest：同一份读数只允许产生一次，重跑等于
+      # 拿两次不同的执行去判同一件事（用例顺序/隔离级别一变就分叉）。
+      # 判据的反证常驻 apps/api/tests/test_module_coverage_gate.py（含「人为调高阈值 ⇒ rc≠0」
+      # 与「缺输入 / 模块失配 ⇒ rc=2，不等于通过」）。
+      - name: Module coverage gate (check_module_coverage)
+        shell: bash
+        run: python "$GITHUB_WORKSPACE/scripts/check_module_coverage.py" --json coverage.json
       # STEP-27 S27.2（D-V12-03 / D-V12-04）：两道范围门进 CI。
       #
       # 为什么必须在这里跑：D-14（轮次熔断）与 D-V4-03（证据↔用例耦合）改前只有本机

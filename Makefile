@@ -92,6 +92,10 @@ test: test-backend test-frontend-unit ## 运行全部测试（不含 e2e）
 test-all: test-backend test-frontend-unit test-frontend-e2e ## 运行全部测试（含 e2e）
 	@:  # 由前置目标转调，本体不重复执行
 
+.PHONY: coverage-gate
+coverage-gate: ## 模块覆盖率门（读 apps/api/coverage.json；阈值表在 scripts/check_module_coverage.py）
+	@$(ENTRY) coverage-gate
+
 # ─── 代码检查 ───────────────────────────────────────
 .PHONY: lint-backend
 lint-backend: ## 后端代码检查（与 CI 同口径：ruff check app tests，格式检查另拆非阻断目标）
