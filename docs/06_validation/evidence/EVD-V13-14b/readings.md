@@ -133,4 +133,15 @@ mock 产物 e2e **31 passed / 11 skipped / 0 failed**。反证一条：把保存
 
 ## 8. 三绿
 
-验收提交待回填。本卡零 `apps/api/**` 改动 ⇒ 零 pytest 新增，`SKIP_BASELINE_WIN` 保持 **653**。
+本卡零 `apps/api/**` 改动 ⇒ 零 pytest 新增，`SKIP_BASELINE_WIN` 保持 **653**。三个提交的读数分开记，
+不把任何一次红说成绿：
+
+| 提交 | 内容 | CI | CI-Windows | Security |
+|---|---|---|---|---|
+| `4b8c1ee` | 告警条 + 渠道启停 + 视觉取证 | success 39737896080 | success 39737896129 | success 39737896134 ⇒ **三绿** |
+| `848afb2` | 采集配置屏 | success 39742151980 | success 39742152030 | **failure** 39742151962 |
+| `a0c6a6c` | 把内联的命中形状改成形状描述 + 登记历史指纹 | success 39743435762 | 待回填 | success 39743435791 |
+
+`848afb2` 那次 Security 🔴 的两处命中都在**我自己的说明文字里**（`.gitleaksignore:82` 与执行记录
+第 29 行），成因与前因记在同一处：`EVD-V17-INC/readings.md` §7。处置没有走"重跑掩盖"，
+是按 D-12 登记两条历史指纹 + 把三处描述改成形状描述，红如实留在表里。
