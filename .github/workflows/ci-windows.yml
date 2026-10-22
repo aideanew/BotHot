@@ -111,12 +111,13 @@ jobs:
       # （同次 pytest `1587 passed / 658 skipped`）。+5 全部是 STEP-14a 新增的连库用例
       # （`tests/test_admin_contract.py` 里 5 条走 db_session 的分页/重试判据，另 3 条不连库），
       # 未知族 0 ⇒ 按 D-V10-11 抬到测量值，不留余量。
-      # **本档 666 = 658 + 8**（STEP-06 新增的连库用例：`tests/test_e2e_collection.py` 六渠道
-      # 往返 + 一条三次一致性 = 7 条，`test_p0_asset_cache.py` 的同号两篇机器门④ = 1 条；
-      # 同卡的 `tests/test_module_coverage_gate.py` 10 条不连库，不进 skip 账）。
-      # ⚠ 这一档是**按用例数算出来的预测值，不是 @win 实测值**：本机 PG 可达，这 8 条在本地是
-      # 执行不是 skip，无法在本机测到 Windows 档的 skip 数。若 CI-Windows 实测 ≠ 666，
-      # 由后续记录批按实测值纠正（D-V10-11：基线必须等于测量值，余量一律为零）。
+      # **本档 666 的锚** = run 39803393352 @88381e2：门禁读数 `failed=0 total_skipped=666 baseline=666`
+      # （同次 pytest `1597 passed / 666 skipped`，未知族 0）。+8 全部是 STEP-06 新增的连库用例
+      # （`tests/test_e2e_collection.py` 六渠道往返 + 一条三次一致性 = 7，`test_p0_asset_cache.py`
+      # 的同号两篇机器门④ = 1）；同卡的 `tests/test_module_coverage_gate.py` 10 条不连库，不进 skip 账。
+      # ⚠ 这一档提交前是**按新增用例数算出来的预测值**（本机 PG 可达，这 8 条在本地是执行不是 skip，
+      # 无法在本机测到 @win 的 skip 数）；推送后实测与之逐字相符 ⇒ 预测与测量在此对齐，不是巧合：
+      # 每加一条连库用例就是 +1 条「PG 不可达 / DSN 未设置」族，加了多少条可从 diff 数出来。
       SKIP_BASELINE_WIN: "666"
     defaults:
       run:

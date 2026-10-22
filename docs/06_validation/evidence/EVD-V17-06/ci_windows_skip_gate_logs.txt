@@ -1,0 +1,6 @@
+# run 39803393352（@win windows-latest, attempt 1）· job `windows-dev` 第 13/14 步原文摘录
+# 只保留读数行（门禁脚本自身的源码行在日志里会重复出现，抄进来只会淹掉结论）。
+
+13_Backend tests: 1597 passed, 666 skipped, 2 warnings in 1056.67s (0:17:36)
+14_Windows skip 门禁: windows 门禁：failed=0 total_skipped=666 baseline=666
+14_Windows skip 门禁: ✅ windows 门：无失败；skip 全部落在已知环境族且在阈值内（连库结论仍以 ubuntu job 为准）

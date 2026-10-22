@@ -1,0 +1,26 @@
+# STEP-06 S6.4.1 四探针逐条本机复跑（M1 收口，不抄 61739f0 旧读数）· 2026-10-22
+# P-1/P-2 为独立脚本；P-3/P-4 按探针自带用法复制到 apps/api/tests/test_zz_probe_*.py 跑完即删。
+# 每段前先给命令，其后是原样输出。
+
+## P-1 probe_row_mapping.py
+$ .venv/Scripts/python.exe -X utf8 docs/任务规划V0.2.0/evidence/probe_row_mapping.py
+  dajiala -> {'external_id': 'h:23dc94258690c5dbaf88498d89d73742', 'article_key': 'h:23dc94258690c5dbaf88498d89d73742', 'url': 'https://mp.weixin.qq.com/s/abc', 'title': 't', 'publish_time': datetime.datetime(2026, 9, 29, 5, 20, tzinfo=datetime.timezone.utc), 'content_hash': 'abb43d5e3b72ff8c9696db107030dbecadbb13dfb297ca4f820f7f097f978843', 'status': 'DISCOVERED'}
+  justoneapi -> {'external_id': 'h:b3f4562057e0931aacffd763c12c7f26', 'article_key': 'h:b3f4562057e0931aacffd763c12c7f26', 'url': 'https://mp.weixin.qq.com/s?__biz=X&mid=1&idx=1&sn=a', 'title': 't', 'publish_time': datetime.datetime(2026, 9, 29, 5, 20, tzinfo=datetime.timezone.utc), 'content_hash': 'b9b0b1917fd8c0177a26bec46c2864cfd91d4012365d44e5d15d4e55cda38f3e', 'status': 'DISCOVERED'}
+  redfox -> {'external_id': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'article_key': 'h:3e412524d28feafc7d6b6420563d79e1', 'url': 'https://mp.weixin.qq.com/s/x', 'title': 't', 'publish_time': datetime.datetime(2026, 9, 27, 7, 42, tzinfo=zoneinfo.ZoneInfo(key='Asia/Shanghai')), 'content_hash': '053404e840147e71dd16cfa52834cd1ce30b4d2709486b870b55449f58606326', 'status': 'DISCOVERED'}
+  rss item {'title': 'A', 'url': 'https://ex.com/a', 'link': 'https://ex.com/a', 'pubDate': 'Mon, 12 Oct 2026 07:00:00 +0000', 'publishTime': 'Mon, 12 Oct 2026 07:00:00 +0000', 'guid': 'https://ex.com/a', 'id': 'https://ex.com/a', 'description': '', 'digest': ''}
+  rss -> {'external_id': 'https://ex.com/a', 'article_key': 'h:93f1f24c9eb2f35f1f352cf665b281e4', 'url': 'https://ex.com/a', 'title': 'A', 'publish_time': datetime.datetime(2026, 10, 12, 7, 0, tzinfo=datetime.timezone.utc), 'content_hash': '64c8bbc346e2615025e8bdace76872b48d2b0784aa8256d0ed126dbd04d12646', 'status': 'DISCOVERED'}
+  atom -> {'external_id': 'tag:b', 'article_key': 'h:ff0bd40c6041e501729e64bfe0226078', 'url': 'https://ex.com/b', 'title': 'B', 'publish_time': datetime.datetime(2026, 10, 12, 7, 0, tzinfo=datetime.timezone.utc), 'content_hash': 'c6f6f67cc58cd3da8953d4e0a9e6852d91ba51aa6f1d6dd4d8811d486f8a4dce', 'status': 'DISCOVERED'}
+
+## P-2 probe_reenqueue_loop.py（原件末行 asyncio.run 在 Windows 触发 ProactorEventLoop 不兼容，本机改用 SelectorEventLoop 显式建环；仓库原件未改）
+$ PYTHONPATH=. .venv/Scripts/python.exe -X utf8 D:/tmp/probe_p2_win.py
+  2026-10-22 23:47:57 [warning  ] manifest.diff.null_key_backlog hint='这些 DISCOVERED 行还没有 article_key，按 D-V9-04 故意不入列；回填在 STEP-07' rows=1 source_id=1035aa58-555e-4e23-826e-0f2b5df33941 subscription_id=b8228f52-481b-4511-891d-d6df783c604d
+  manifest.external_id= aaaaaaaaaaaaaaaaaaaaaaaa0e20b0db asset.external_id= s:RealToken0e20b0db
+  已 READY 入库后 Diff 仍判为新增篇数 = 0
+
+## P-3 / P-4（pytest -q -s tests/test_zz_probe_p3.py tests/test_zz_probe_p4.py，跑后已删除副本）
+  PROBE fetch_count= 2 A.hitCache= False B.hitCache= False same_doc= False
+  PROBE2 ok False
+  2 passed, 1 warning in 2.35s
+
+# 跑后自检：tests/ 下 zz_probe 副本数必须为 0
+  count=0

@@ -8,6 +8,9 @@
 - 环境：Win10 + Git Bash；`apps/api/.venv` Python 3.12；`PYTHONUTF8=1`；隔离 PG16@127.0.0.1:5547；
   Redis/LangBot 未起；**五个付费 provider 一次真实上游调用都没发**（全部 `httpx.MockTransport`
   吃 `tests/fixtures/provider_payloads/` 样本），LangBot 与文章页抓取同为桩。
+- 证据件命名：源卡 §7 写的是 `EVD-V2-06`（V0.3.0 年代的目录名，`docs/任务规划V0.3.0/steps/STEP-06-*:30`
+  把它列为输出路径）。本队列⑮的同批卡一律用 `EVD-V<规划版本>-<step号>`（已有
+  `EVD-V17-04 / -05 / -07 / -08 / -09 / -10`），故本件落在 `EVD-V17-06/`，内容契约不变。
 
 ## 0. 现读（写代码之前）
 
@@ -144,6 +147,7 @@ rc=2，把"缺输入"这件事喊废。
 | `kb.py` 84.99（其余落线） | rc=1 | 绿 |
 | 全局 totals 78.9（模块全绿） | rc=1 | 绿 |
 | **人为调高阈值**（同一份落线输入 + `--set app/services/kb.py=85.01`） | rc=1 | 绿（先 0 后 1，两条都在同一条用例里断言） |
+| **调低 / 置零 / 非数字 / 未知模块** 四种 `--set` 输入 | rc=2 | 绿（这一面是独立验证者指出漏洞后补的，见 §8） |
 | coverage.json 不存在 | rc=2 | 绿 |
 | 内容不是合法 JSON | rc=2 | 绿 |
 | 顶层缺 `totals` | rc=2 | 绿 |
@@ -151,7 +155,7 @@ rc=2，把"缺输入"这件事喊废。
 | 阈值表被悄悄下调（与卡面数字比对） | 红 | 绿 |
 | ci.yml / Makefile / entry.py 三处接线文字在场 | 红 | 绿 |
 
-读数：`pytest tests/test_module_coverage_gate.py -q` → `10 passed`（不连库，因此不计入 skip 家族）。
+读数：`pytest tests/test_module_coverage_gate.py -q` → `11 passed`（不连库，因此不计入 skip 家族）。
 
 ### 3.3 覆盖率读数（本机全量，隔离 PG16@5547）
 
@@ -179,8 +183,26 @@ rc=2，把"缺输入"这件事喊废。
 本卡能改的（改阈值=违卡面，补覆盖=别人的测试文件在本卡允许面之外），但它是下一张碰到这两个
 文件的卡的必然红点。
 
-## 4. 四探针复跑终值（M1 收口，逐条本机重跑，不抄 `61739f0` 旧读数）
+### 3.4 CI 面读数（`@ci` ubuntu-latest，验收权威面 D-V4-01）
 
+同一次运行（run 39803393349，attempt 1）：`2257 passed / 6 skipped / 0 failed in 170.66s`，
+skip 门禁 `total_skipped=6 baseline=6 pg_unreachable=0`。新接的那一步在 pytest 之后执行，
+它对 CI 自己那份 `coverage.json` 的判定：
+
+| 模块 | 线 | CI 实测 | 行 | 与本机差 |
+|---|---|---|---|---|
+| `app/services/article_identity.py` | 100 | 100.00% | 63/63 | 0 |
+| `app/services/manifest.py` | 85 | 95.22% | 219/230 | +2 行 |
+| `app/services/kb.py` | 85 | 87.61% | 304/347 | −5 行 |
+| `app/services/subscription.py` | 85 | **85.19%** | **351/412** | **−1 行** |
+| 四家 provider | 80 | 100 / 99.39 / 100 / 99.42% | 122/163/140/171 | 同本机 |
+| TOTAL | 79 | 88.00% | 8914/10129 | −4 行 |
+
+`✅ 全部模块与全局达标`，rc=0。**CI 面比本机更薄**：`subscription.py` 只剩 1 行余量
+（351/412；再有一行没被覆盖就 84.95% 跌破 85）——P-98 因此是按 CI 读数登记的，不是按本机。
+`test_module_coverage_gate.py` 的 10 条也在这次全量里（本机那轮跑在它落地之前，故 §3.3 是 2247）。
+
+## 4. 四探针复跑终值（M1 收口，逐条本机重跑，不抄 `61739f0` 旧读数）
 探针原件在 `docs/任务规划V0.2.0/evidence/`，本卡只读不改。
 
 | 探针 | 原件 2026-10-12 读数 | 修复后期望 | 本轮实测（2026-10-22） | 判定 |
@@ -217,30 +239,79 @@ ProactorEventLoop 下 psycopg 直接拒（`InterfaceError: Psycopg cannot use th
 | S6.3.1 `check_module_coverage.py` + `Makefile coverage-gate` | 已交付（另需 `scripts/entry.py` 注册，否则 `check_entry_parity` 红） | §3.1、`make coverage-gate` rc=2 的 NOT-PASS 读数、parity 门绿 |
 | S6.3.1.1 人为调高阈值 ⇒ rc≠0 | 已交付（常驻反证，不是一次性手工） | §3.2 表第 4 行 |
 | S6.3.2 ci.yml pytest 步后接 coverage-gate | 已交付 | `ci.yml` 新增步 + `tests/test_module_coverage_gate.py::test_ci_wires_the_gate_after_the_pytest_step` |
-| S6.4.1 双环境全量 + 四探针 + coverage-gate + evidence-check + CI 双绿 | 本机面已交付；CI 面见 §7 | §3.3、§4、§6 |
+| S6.4.1 双环境全量 + 四探针 + coverage-gate + evidence-check + CI 双绿 | 已交付 | §3.3 / §3.4（本机与 CI 两面同为 `2257 / 6 / 0`）、§4、§7（三绿 run id）、§8（独立验证者） |
 | 卡面 §1「6 渠道 E2E，连跑 3 次一致」 | 达成 | §2 / §2.1 |
 | 卡面 §1「纠偏掩盖缺陷的夹具」 | 达成（两处，各带一条只有它才红的变异） | §1 |
-| 卡面 §1「模块覆盖率门 …；全局保持 ≥79%」 | 达成（实测 88.04%） | §3.3 |
-| 卡面 §1「M1 收口：四探针全部达修复后期望，独立验证者判 PASS」 | **探针达成；独立验证者待派**（P-2 的达成原因变化已如实写出） | §4 |
+| 卡面 §1「模块覆盖率门 …；全局保持 ≥79%」 | 达成（CI 面 88.00%，本机 88.04%） | §3.3 / §3.4 |
+| 卡面 §1「M1 收口：四探针全部达修复后期望，独立验证者判 PASS」 | 探针四条达期望（P-2 的达成原因变化已如实写出）；独立验证者五项判定 4 PASS + 1 FAIL（所有权申报漏三处），FAIL 已在 §6 补齐并另触发 §8 的一处加固 | §4 / §6 / §8 |
 
 ## 6. 所有权越界声明与新登记
 
 卡面所有权（源卡字段 W）：`tests/test_e2e_collection.py`(新)、`test_scheduler.py`、
 `test_p0_asset_cache.py`、`scripts/check_module_coverage.py`(新)、`Makefile`、`ci.yml`。
-本批另动四处，逐条声明：
+**本批 diff 共 14 个文件，其中 8 个在允许面之外**，逐条声明——
+这张表第一版只写了四条，独立验证者按 diff 逐文件核对后判 §6 为 FAIL（漏了三条），
+下面的版本是补齐后的：
 
 | 路径 | 为什么必须动 | 动了什么 |
 |---|---|---|
 | `scripts/entry.py` | Makefile 只做薄转调，新目标名必须在 `BY_NAME` 里，否则 `check_entry_parity`（常驻门）红 | 新增 `coverage_gate()` 步骤 + `add("coverage-gate", …)` |
-| `apps/api/tests/test_module_coverage_gate.py`（新） | S6.3.1.1 的反证必须常驻才能防复发；判据文件不在允许面内是 P-87/P-95 已登记的同一族冲突 | 新文件，10 条不连库用例 |
+| `apps/api/tests/test_module_coverage_gate.py`（新） | S6.3.1.1 的反证必须常驻才能防复发；判据文件不在允许面内是 P-87/P-95 已登记的同一族冲突 | 新文件，11 条不连库用例 |
 | `.gitignore` | `.coverage` 与 `coverage.json` 是本卡新门的输入产物，未忽略会在共享工作树里长期挂着未跟踪文件，一次宽 add 就被扫进提交 | 加两条规则 |
 | `docs/04_engineering/conventions.md` | AGENTS.md 开发流程要求「代码改动同步到文档」；新增的 CI 门不写进规范就等于没有 | §4.1 追加一段（门的位置、跑法、为什么不许被全局分抵掉） |
+| `.github/workflows/ci-windows.yml` | 执行助手指令的硬规：新增连库用例必须把 `SKIP_BASELINE_WIN` 抬到测量值、零余量（D-V10-11）。卡面 W 只写了 `ci.yml`，但那条规则来自指令层且优先级更高 | `658 → 666` + 锚注释 |
+| `docs/任务规划V0.12.0/00-README.md` | 执行助手指令：新缺陷一律从台账续号登记，不许在卡内顺手修 | 追加 P-97 / P-98 两行 |
+| `docs/任务规划V0.17.0/07-执行过程记录.md` | 同上：每张交付卡在该表追加一行 | 追加第 31 行 |
+| `docs/06_validation/evidence/EVD-V17-06/**` | 卡面 §7 要求的交付证据（卡面命名 `EVD-V2-06` 与本队列现行 `EVD-V17-<step>` 同义，见文件头） | 读数件 + 四份原始日志件 |
 
 新登记（写入 `docs/任务规划V0.12.0/00-README.md` 台账）：
 - **P-97**：RSS 的 Diff 少一道守卫（ready 键减跨不到 source），实测于 §2.2 的变异；本卡不修。
 - **P-98**：卡面阈值表里 `article_identity=100` 与 `subscription≥85` 两条是零/薄余量
-（实测 85.44%，差 2 行），下一张碰这两个文件的卡会必然红，请规划方裁定是棘轮还是留余量。
+（本机 85.44% 差 2 行，CI 面只有 85.19% 差 1 行），下一张碰这两个文件的卡会必然红，
+请规划方裁定是棘轮还是留余量。
 
-## 7. CI 三绿
+## 7. CI 三绿（交付提交 `88381e2`，父提交 `8e5b23e`）
 
+三条检查全部 **attempt 1 即 success**（原文摘录入库：`ci_backend_gate_logs.txt`、
+`ci_windows_skip_gate_logs.txt`）：
+
+| 检查 | run id | 结论 | 关键读数 |
+|---|---|---|---|
+| CI（ubuntu-latest，验收面） | 39803393349 | success | `2257 passed / 6 skipped / 0 failed in 170.66s`；skip 门禁 `total_skipped=6 baseline=6 pg_unreachable=0`；新步 `Module coverage gate` 打印 `✅ 全部模块与全局达标`，TOTAL 88.00% |
+| Security | 39803393049 | success | gitleaks 无新增泄漏 |
+| CI-Windows | 39803393352 | success | `1597 passed / 666 skipped`；门禁 `failed=0 total_skipped=666 baseline=666`，未知族 0 ⇒ 交付前算的预测值与实测逐字相符 |
+
+本机第二轮全量（含覆盖率门文件落地后）：`2257 passed / 6 skipped / 0 failed in 1102.54s`
+——与 CI 面的用例数完全一致（本机 6 条 skip 同族：LangBot 2 / Redis 3 / 代理变量 1）。
+门禁：`ruff check app tests` 0、`mypy app` 119 files 无问题、`check_docs_consistency.py`
+23 个路径引用 0 个不存在、`entry.py evidence-check` rc=0（含 gitleaks 356 commits no leaks
++ `protect --staged` no leaks）。
+
+如实记一条流程偏差：**交付提交 `88381e2` 里本节的标题是空的**（当时三绿未回）。
+这是本队列既有的"先交付、后回填"做法，但它在 `88381e2` 这个时刻确实让卡面 §8 的
+「run id 入 EVD」不成立，独立验证者据此点了名；回填批（本提交）之后才成立。
+
+## 8. 独立验证者结论与它触发的两处改动
+
+验证者与执行者分离（卡面字段 2），只给 diff 与读数、不给意图。五项判定：
+**1 S6.1 PASS、2 S6.1.2 PASS、3 S6.2 PASS、4 S6.3 PASS、5 所有权 FAIL**。
+它另外给的三条不支持声明是：§7 当时为空、CI 数字无入库件可复算、`D:/tmp` 里的日志与
+P-2 副本不在仓库——三条都由本批的 `ci_*.txt` / `e2e_channel_readings.txt` /
+`four_probe_readings.txt` 与 §7 补齐。
+
+它点出的一个**真实漏洞**已被修：`--set KEY=PCT` 原先也接受**调低**，
+于是 `--set app/services/article_identity.py=0` 会打印「达标」并 rc=0 ——
+一个永不红的降级出口，比没有门更糟。现在写小一律 rc=2 拒收，判据常驻
+`test_lowering_a_threshold_via_the_counterproof_channel_is_refused`
+（四个输入：调低、置零、非数字、未知模块）。
+
+它给的两条局限如实收下、不粉饰：
+1. 参数化里"同一 scenario 的前五条断言"与 `test_kb_longlink_ingest::test_two_distinct_long_links`
+   重叠，真正独有的是 per-row 的 `(hit_count, version)` 隔离那一维（§1.2 已这样写）。
+2. 夹具用 `canonical_article_key` 自己算期望键，所以"整套键方案被换掉"这一类改动不在这里被抓住
+   ——算法判定力在 `test_article_identity.py`，本卡不动它。
+3. 它自己的环境连不上 PG（默认 DSN 指向 `bothot/bothot@5433`，本机未监听），报
+   `7 skipped 测试 PG 不可达（OperationalError）`；因此它对 E2E 的判定是基于 diff 与
+   committed bytes 的静态复核，"7 passed ×3" 那两条对它而言是转录。这条限制同样如实记在这里，
+   读数的可复算性由 §3.4/§7 的 CI 面与两份入库日志件承担。
 

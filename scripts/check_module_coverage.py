@@ -9,8 +9,9 @@
 - 阈值表里的每一个 key 必须在 coverage.json 里**恰好命中一个文件**。命中 0 个（改名/删文件）
   不是「这条没要求了」，而是判据失去作用面 ⇒ rc=2 并点名是哪个 key（`scanned==0` 不等于通过）。
 - 读不到 / 解析不了 / 形状不对 ⇒ rc=2，且必须打印 NOT-PASS。缺输入与达标是两件事。
-- 反证通道 `--set KEY=PCT` 只用于把阈值**调高**以证明门禁真的会拦（S6.3.1.1），CI 不使用它；
-  它存在的理由是「判据必须能被证伪」，不是给运营开的后门——真要改基线就改这张表并提 PR。
+- 反证通道 `--set KEY=PCT` 只用于把阈值**调高**以证明门禁真的会拦（S6.3.1.1），CI 不使用它，
+  且**写小一律 rc=2 拒收**——允许调低的开关等于给门禁装一个"跑不过就关掉它"的出口，而这个
+  开关本身不会红。真要改基线就改这张表并提 PR。
 
 退出码：0 全部达标 / 1 有模块或全局未达标 / 2 输入缺失、形状不符或阈值失配。
 """
@@ -104,9 +105,17 @@ def main(argv: list[str] | None = None) -> int:
         if key not in thresholds:
             return _fail(f"--set 的 KEY 必须已在阈值表里，收到未知模块 {key!r}（表内：{sorted(thresholds)}）")
         try:
-            thresholds[key] = float(value)
+            raised = float(value)
         except ValueError:
             return _fail(f"--set 的阈值必须是数字，收到 {value!r}")
+        # 只许调高：这是一道**反证通道**，不是降级出口。允许写小它就等于给门禁装了一个
+        # 「跑不过就把它关掉」的开关，而开关本身不会红（独立验证者指出的一条真实漏洞）。
+        if raised <= thresholds[key]:
+            return _fail(
+                f"--set 只用于抬高阈值以证明门禁会拦：{key} 现值 {thresholds[key]:g}，收到 {raised:g}"
+                f"（要长期改基线请改 THRESHOLDS 并提 PR）"
+            )
+        thresholds[key] = raised
 
     loaded = _resolve(Path(args.json_path))
     if isinstance(loaded, int):

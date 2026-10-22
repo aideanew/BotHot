@@ -5,8 +5,8 @@
 ① coverage.json 读不到（CI 里那一步没跑、路径写错）；
 ② 阈值表里的某个模块在 coverage.json 里命中 0 个文件（改名/删文件）。
 这两种情况的共同点是"一条都没判"，而在 shell 里"一条都没判"和"全判过了"退出码可以一样。
-所以每一面都要有自己的输入：全达标 / 单模块不达标 / 全局掉线 / 阈值调高 / 缺输入 /
-形状不符 / 模块失配，再加一条静态闸盯住阈值表本身。
+所以每一面都要有自己的输入：全达标 / 单模块不达标 / 全局掉线 / 阈值调高 / 阈值调低被拒 /
+缺输入 / 形状不符 / 模块失配，再加一条静态闸盯住阈值表本身。
 
 判据跑的是仓库里那份脚本（`importlib` 按路径加载 `scripts/check_module_coverage.py`），
 不是本文件抄一份逻辑——抄的那份红了不代表 CI 里那段会红。
@@ -111,6 +111,20 @@ def test_raising_a_threshold_turns_green_into_red(tmp_path: Path) -> None:
     path = _json(tmp_path, _doc())
     assert gate.main(["--json", path]) == 0, "各模块恰好落线时本该绿"
     assert gate.main(["--json", path, "--set", "app/services/kb.py=85.01"]) == 1
+
+
+def test_lowering_a_threshold_via_the_counterproof_channel_is_refused(tmp_path: Path) -> None:
+    """`--set` 只许调高（独立验证者指出：允许写小就是给门禁装了个「跑不过就关掉它」的开关）。
+
+    这条用例的存在理由：`--set article_identity=0` 原本会打印「达标」并 rc=0 —— 一个
+    永远不红的降级出口，比没有门更糟，因为它长得像门。
+    """
+    gate = _gate()
+    path = _json(tmp_path, _doc())
+    assert gate.main(["--json", path, "--set", "app/services/kb.py=80"]) == 2
+    assert gate.main(["--json", path, "--set", "app/services/article_identity.py=0"]) == 2
+    assert gate.main(["--json", path, "--set", "app/services/kb.py=abc"]) == 2
+    assert gate.main(["--json", path, "--set", "app/services/nosuch.py=99"]) == 2
 
 
 def test_missing_input_is_not_pass(tmp_path: Path) -> None:
