@@ -79,10 +79,20 @@ de78125b91434caa3ef711e5382d6e955d8557af:docs/06_validation/evidence/EVD-V2-00R/
 c9cb2150207bde2543a336ae71694d4e1341de09:apps/api/tests/test_r19_sso_session.py:jwt:77
 
 # ── 10) d839eb7 一条：契约枚举名 key_missing 配 Tailwind 类名被当成凭据——误报，非凭据 ──────
-# `apps/web/app/engines/page.tsx:35` 的那一行是 `key_missing: "bg-neutral-300",`——
+# `apps/web/app/engines/page.tsx:35` 那一行的形状是「以 key 开头的契约枚举名 + 引号内一段样式类名」——
 # generic-api-key 规则看到的是「键名含 key + 一个引号里的 13 字符值」，值是状态点的样式类名。
 # 不整形：`key_missing` 是契约 `EngineReason` 的枚举名（engine.schema.json），改成拼接式写法能骗过扫描器，
 # 但代价是把唯一源的字段名在源码里变形（掩码不等于去形，见 P-81 同族教训）。
 # 依 D-12 逐指纹登记，并登记 P-92 请守卫 owning 卡把这类"枚举名 + 样式串"做成 allowlist 规则，
 # 否则今后任何 `key_*: "..."` 的前端映射表都会再红一次。
 d839eb741a464466b1096f4627eb10196b19ba03:apps/web/app/engines/page.tsx:generic-api-key:35
+
+# ── 11) 848afb2 两条：登记第 10 节时把命中形状原文内联进了说明文字 ─────────────
+# 这两条命中不在代码里，而在**解释那条误报的两句说明文字**里：豁免文件自己的注释（第 82 行）
+# 与执行记录第 29 行都内联了「以 key 开头的枚举名 + 引号内样式类名」那一行的原文。
+# 工作树里现在两处都已改成形状描述（本文件下一节起不再出现该形状），但 848afb2 的 blob 永久存在，
+# 而 D-V4-04 禁止重写历史 ⇒ 依 D-12 逐指纹登记这两条。
+# 教训同记在 EVD-V17-INC §7 与执行记录：**描述误报时也不能内联命中形状**，
+# 而且 CI 的 gitleaks 步扫的是本批变更文件全文，豁免文件自己也在扫描面上。
+848afb2da4e809aec262c99bfabc57948da7d406:.gitleaksignore:generic-api-key:82
+848afb2da4e809aec262c99bfabc57948da7d406:docs/任务规划V0.17.0/07-执行过程记录.md:generic-api-key:34
