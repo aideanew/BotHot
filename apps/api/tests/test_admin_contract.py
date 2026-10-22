@@ -153,7 +153,7 @@ async def test_retry_reopens_the_failed_manifest(db_session: Any) -> None:
     manifest.status = "FAILED"
     db_session.add(manifest)
     await db_session.flush()
-    job = Job(type="ingest_url", user_id=owner.id, idempotency_key="ingest_14a_p18")
+    job = Job(type="ingest_url", user_id=owner.id, idempotency_key="ingest:14a-p18")
     job.status = "FAILED"
     db_session.add(job)
     await db_session.flush()
