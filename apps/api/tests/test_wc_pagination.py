@@ -1,7 +1,10 @@
 """WC 3.3 / W8 C.1 分页形状单测：验证端点 items/total/limit/offset 形状。
 
-W8 C.1 后：路由层切片移除，handler 接 `paging=(limit,offset)` 依赖、service 返回
-(items, total)。直接 await handler 验证响应形状（不连库、不起 HTTP）。
+W8 C.1 后：路由层切片移除，handler 接分页依赖、service 返回 (items, total)，
+直接 await handler 验证响应形状（不连库、不起 HTTP）。
+
+STEP-14a 起 admin 侧的分页依赖从元组换成 `PageParams`：本文件两个 admin 用例随之**只改调用面**，
+四条断言（total/limit/offset/items 长度）一字未动——它们锁的是响应形状，与依赖类型无关。
 """
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ import pytest
 
 from app.api.v1.admin import admin_list_spaces, admin_list_subscriptions
 from app.api.v1.spaces import list_public_spaces, list_spaces
+from app.schemas.pagination import PageParams
 
 
 def _body(resp) -> dict:  # noqa: ANN001
@@ -45,7 +49,7 @@ async def test_list_spaces_pagination_shape() -> None:
 @pytest.mark.asyncio
 async def test_admin_list_spaces_pagination_shape() -> None:
     items = [{"id": str(i)} for i in range(50)]
-    resp = await admin_list_spaces(None, _StubSpaceSvc(items, 60), paging=(50, 0))  # type: ignore[arg-type]
+    resp = await admin_list_spaces(None, _StubSpaceSvc(items, 60), paging=PageParams(50, 0))  # type: ignore[arg-type]
     data = _body(resp)
     assert data["total"] == 60
     assert data["limit"] == 50
@@ -81,7 +85,7 @@ async def test_admin_list_subscriptions_pagination(monkeypatch) -> None:  # noqa
     from app.services.subscription import SourceSubscriptionService
 
     monkeypatch.setattr(SourceSubscriptionService, "list_subscriptions_any", _stub)
-    resp = await admin_list_subscriptions(None, session=None, paging=(25, 0))  # type: ignore[arg-type]
+    resp = await admin_list_subscriptions(None, session=None, paging=PageParams(25, 0))  # type: ignore[arg-type]
     data = _body(resp)
     assert data["total"] == 40
     assert data["limit"] == 25

@@ -660,6 +660,29 @@ class SourceSubscriptionService:
         view["cancelled"] = was_active
         return view
 
+    async def _reopen_manifests(self, items: list[Any]) -> int:
+        """P-18：重试面把清单行从 `FAILED` 拉回 `DISCOVERED`（迁移表里的合法边，D-V2-02「人工重试」）。
+
+        不拉回会怎样：条目重跑成功后 worker 要跨 `FAILED → INGESTED`，而迁移表没有这条边，
+        `_apply_manifest_status` 于是拦下并结构化告警 `manifest.status.illegal`——
+        数据没坏，坏的是读数（篇已入库、清单仍显示失败）。这正是 P-18 记的那格失真。
+
+        只动 `FAILED` 行：`ENQUEUED`/`DISCOVERED` 由 stale 回退那条路负责，
+        重试抢它会把一个还在跑的条目拽回队列。
+        """
+        reopened = 0
+        for item in items:
+            manifest_id = getattr(item, "manifest_id", None)
+            if not manifest_id:
+                continue
+            row = await self._session.get(ArticleManifest, manifest_id)
+            if row is None or row.status != "FAILED":
+                continue
+            validate_transition("manifest", row.status, "DISCOVERED")
+            row.status = "DISCOVERED"
+            reopened += 1
+        return reopened
+
     async def retry_job_any(self, job_id: str) -> dict[str, Any]:
         """R7.4.2：admin 跨用户重试终态 Job——不做归属校验。
 
@@ -682,6 +705,7 @@ class SourceSubscriptionService:
             await self._item_repo.bump_retry(item.id)
         if failed:
             await self._job_repo.set_status(job.id, "QUEUED", "retried: admin 重试")
+            await self._reopen_manifests(failed)
         await self._session.commit()
         return {
             "oldJobId": job_id,
@@ -796,6 +820,7 @@ class SourceSubscriptionService:
 
         if failed:
             await self._job_repo.set_status(job.id, "QUEUED", "")
+            await self._reopen_manifests(failed)
         await self._session.commit()
         return {"jobId": job_id, "retried": len(failed), "status": "QUEUED" if failed else job.status}
 

@@ -52,7 +52,6 @@ from app.api.deps import (
     get_job_service,
     get_langbot_client,
     get_space_service,
-    limit_offset_query,
     record_audit_actor,
     require_roles,
 )
@@ -66,6 +65,7 @@ from app.models.entities import ContentAsset, User
 from app.providers.discovery.registry import CHANNELS, describe_channels
 from app.providers.langbot.client import LangBotClient
 from app.providers.push import registered_channels
+from app.schemas.pagination import PageParams, make_page_query, page_query, page_shell
 from app.services import system_settings
 from app.services.article_detail_fallback import (
     DETAIL_FALLBACK_PLATFORMS,
@@ -177,7 +177,7 @@ async def admin_delete_space(
 async def admin_list_spaces(
     actor: Annotated[User, Depends(require_roles("admin"))],
     svc: Annotated[SpaceService, Depends(get_space_service)],
-    paging: Annotated[tuple[int, int], Depends(limit_offset_query)],
+    paging: Annotated[PageParams, Depends(page_query)],
 ) -> JSONResponse:
     """M3 批次 2（T5.2/T5.3 读面）：admin 跨用户空间清单，每条带归属。
 
@@ -188,11 +188,13 @@ async def admin_list_spaces(
 
     C.1：LIMIT/OFFSET 下沉 service/repo SQL（路由层切片已移除）。
 
+    D-V3-02：响应走分页目标壳（`page`/`pageSize`/`hasMore` **只增键**，旧键 `limit`/`offset`
+    保留），故旧客户端零回归；请求侧同一端点两种口径都可，见 `page_query` 的优先级说明。
+
     未登录 → 10001；非 admin → 10004/403。
     """
-    limit, offset = paging
-    items, total = await svc.list_space_views_any(limit=limit, offset=offset)
-    body = success(data={"items": items, "total": total, "limit": limit, "offset": offset})
+    items, total = await svc.list_space_views_any(limit=paging.limit, offset=paging.offset)
+    body = success(data=page_shell(items, total, paging))
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
@@ -201,8 +203,7 @@ async def admin_list_space_docs(
     space_id: str,
     actor: Annotated[User, Depends(require_roles("admin"))],
     svc: Annotated[SpaceService, Depends(get_space_service)],
-    limit: Annotated[int, Query(ge=1, le=200)] = 100,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    paging: Annotated[PageParams, Depends(make_page_query(default_size=100, max_size=200))],
     category: Annotated[str | None, Query(max_length=32)] = None,
 ) -> JSONResponse:
     """M3 批次 2（T5.3 读面）：admin 跨用户文档清单——批量操作面板的目标来源。
@@ -215,8 +216,10 @@ async def admin_list_space_docs(
     与写面同口径：无效空间 → 30004（404），不校验存在性会让「空间不存在」与
     「空间为空」无法区分。未登录 → 10001；非 admin → 10004/403。
     """
-    items, total = await svc.list_space_docs_any(space_id, limit=limit, offset=offset, category=category)
-    body = success(data={"items": items, "total": total, "limit": limit, "offset": offset})
+    items, total = await svc.list_space_docs_any(
+        space_id, limit=paging.limit, offset=paging.offset, category=category
+    )
+    body = success(data=page_shell(items, total, paging))
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
@@ -231,10 +234,9 @@ async def admin_list_space_docs(
 async def admin_list_jobs(
     actor: Annotated[User, Depends(require_roles("admin"))],
     svc: Annotated[JobService, Depends(get_job_service)],
+    paging: Annotated[PageParams, Depends(page_query)],
     type_: Annotated[str | None, Query(alias="type")] = None,
     status: Annotated[str | None, Query()] = None,
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> JSONResponse:
     """R4.8（A-2 叠加）：admin 跨用户 Job 清单——不按 user_id 过滤。
 
@@ -245,8 +247,10 @@ async def admin_list_jobs(
 
     未登录 → 10001；非 admin → 10004/403。
     """
-    result = await svc.list_job_views_any(status=status, job_type=type_, limit=limit, offset=offset)
-    body = success(data=result)
+    result = await svc.list_job_views_any(
+        status=status, job_type=type_, limit=paging.limit, offset=paging.offset
+    )
+    body = success(data=page_shell(result["items"], result["total"], paging))
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
@@ -275,7 +279,7 @@ async def admin_get_job(
 async def admin_list_subscriptions(
     actor: Annotated[User, Depends(require_roles("admin"))],
     session: Annotated[AsyncSession, Depends(get_db)],
-    paging: Annotated[tuple[int, int], Depends(limit_offset_query)],
+    paging: Annotated[PageParams, Depends(page_query)],
     space_id: Annotated[str | None, Query()] = None,
 ) -> JSONResponse:
     """R4.8（A-2 叠加）：admin 跨用户订阅清单。
@@ -292,10 +296,11 @@ async def admin_list_subscriptions(
     给定不存在的 space_id → 30004/404（不校验存在性会让「空间不存在」与「空间无订阅」
     无法区分）；未登录 → 10001；非 admin → 10004/403。
     """
-    limit, offset = paging
     svc = SourceSubscriptionService(session)
-    items, total = await svc.list_subscriptions_any(space_id=space_id, limit=limit, offset=offset)
-    body = success(data={"items": items, "total": total, "limit": limit, "offset": offset})
+    items, total = await svc.list_subscriptions_any(
+        space_id=space_id, limit=paging.limit, offset=paging.offset
+    )
+    body = success(data=page_shell(items, total, paging))
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
@@ -867,7 +872,7 @@ async def admin_cancel_subscription(
 async def admin_list_sources(
     actor: Annotated[User, Depends(require_roles("admin"))],
     session: Annotated[AsyncSession, Depends(get_db)],
-    paging: Annotated[tuple[int, int], Depends(limit_offset_query)],
+    paging: Annotated[PageParams, Depends(page_query)],
     type_: Annotated[str | None, Query(alias="type")] = None,
 ) -> JSONResponse:
     """R7.4.4：admin 信息源清单（含引用计数）。
@@ -880,10 +885,11 @@ async def admin_list_sources(
     C.1：LIMIT/OFFSET 下沉 service/repo SQL（路由层切片已移除）。
     未登录 → 10001；非 admin → 10004/403。
     """
-    limit, offset = paging
     svc = SourceSubscriptionService(session)
-    items, total = await svc.list_sources_with_counts(source_type=type_, limit=limit, offset=offset)
-    body = success(data={"items": items, "total": total, "limit": limit, "offset": offset})
+    items, total = await svc.list_sources_with_counts(
+        source_type=type_, limit=paging.limit, offset=paging.offset
+    )
+    body = success(data=page_shell(items, total, paging))
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
