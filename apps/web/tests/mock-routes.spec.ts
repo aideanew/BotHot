@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -67,21 +67,40 @@ describe("统一 mock 拦截表", () => {
     await expect(patchSpaceEngine("sp-42", "coze")).rejects.toMatchObject({ code: 10004 });
   });
 
-  it("未登记路径：迁移期交给真实 fetch（口径是导出的常量，不是散落行为）", async () => {
-    const { UNREGISTERED_MOCK_MODE } = await import("@/lib/api/mock-routes");
-    expect(["passthrough", "error"]).toContain(UNREGISTERED_MOCK_MODE);
+  it("未登记且未豁免的端点：mock 态抛 50101，而不是回一份看起来正常的空数据", async () => {
     const { listJobs } = await importApi();
-    if (UNREGISTERED_MOCK_MODE === "passthrough") {
-      vi.mocked(fetch).mockImplementation(() =>
-        Promise.resolve(envelope({ items: [], total: 0, limit: 20, offset: 0 })) as never
-      );
-      // 任务域从未有 mock 分支：表里没有 ⇒ 不假装成功，真打（这条也钉住 r024 的订阅域口径）
-      await expect(listJobs()).resolves.toBeDefined();
-      expect(vi.mocked(fetch)).toHaveBeenCalled();
-    } else {
-      await expect(listJobs()).rejects.toMatchObject({ code: 50101 });
-      expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+    vi.mocked(fetch).mockImplementation(() =>
+      Promise.resolve(envelope({ items: [], total: 0, limit: 20, offset: 0 })) as never
+    );
+    // jobs 在豁免清单里 ⇒ 演示态仍真打后端（不假装成功），这一半先钉住清单生效
+    await expect(listJobs()).resolves.toBeDefined();
+    expect(vi.mocked(fetch)).toHaveBeenCalled();
+
+    const { request } = await importApi();
+    vi.mocked(fetch).mockClear();
+    await expect(request("/api/v1/never-heard-of-this")).rejects.toMatchObject({ code: 50101 });
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it("豁免清单的完整性：lib/api 里每一条字面 /api/v1 路径都必须有归属（表或清单）", async () => {
+    const { MOCK_PASSTHROUGH, MOCK_ROUTES } = await import("@/lib/api/mock-routes");
+    const files = readdirSync("lib/api")
+      .filter((f) => f.endsWith(".ts") && f !== "mock-routes.ts")
+      .map((f) => [`lib/api/${f}`, readFileSync(`lib/api/${f}`, "utf-8")] as const);
+    const seen = new Set<string>();
+    for (const [file, src] of files) {
+      for (const m of src.matchAll(/["`](\/api\/v1\/[^"'`\s]*)/g)) {
+        // 把 `${encodeURIComponent(x)}` 之类的插值填成一个具体段，得到一条可匹配的样例路径
+        const concrete = m[1].replace(/\$\{[^}]*\}/g, "sample").split("?")[0];
+        seen.add(concrete);
+        const covered =
+          MOCK_ROUTES.some((r) => r.pattern.test(concrete)) ||
+          MOCK_PASSTHROUGH.some((p) => p.path.test(concrete));
+        expect(covered, `${file} 里的 ${m[1]} 既不在表里也不在豁免清单里`).toBe(true);
+      }
     }
+    // 扫描面非空：读不到任何路径就说明正则或目录假设变了，这条判据会静默恒绿
+    expect(seen.size).toBeGreaterThan(10);
   });
 
   it("已迁移的域文件里不许再留自己的 mock 分支（判源码，不判行为措辞）", async () => {

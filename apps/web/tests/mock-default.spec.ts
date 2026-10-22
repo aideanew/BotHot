@@ -22,7 +22,8 @@ async function loadWith(value?: string): Promise<{ MOCK_ENABLED: boolean; MOCK_L
   } else {
     process.env.NEXT_PUBLIC_API_MOCK = value;
   }
-  return import("@/lib/api/http");
+  // 从 barrel 读：`http.ts` 里那个常量是内部名，公开名由 barrel 别名转出（S15b.2.3 的判据）
+  return import("@/lib/api");
 }
 
 afterEach(() => {

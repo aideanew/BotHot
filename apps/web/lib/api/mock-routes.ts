@@ -1,7 +1,7 @@
 /**
  * lib/api/mock-routes —— 演示数据的**唯一**来源表（STEP-15b S15b.2.1）。
  *
- * 为什么要一张表而不是九个文件各写各的 `if (MOCK_ENABLED)`：
+ * 为什么要一张表而不是九个文件各写各的演示分支：
  * 分支散在各域时，"mock 态返回什么"与"真后端返回什么"是**两份各自维护的形状**——
  * 域函数在 mock 分支里直接返回它自己想要的对象，于是同一条 `d.items` 解包逻辑
  * 只在真实路径上被执行过。演示态看起来永远正确，恰恰因为它绕过了自己要展示的东西。
@@ -21,7 +21,8 @@
  * 而不是在这里手写一批新类型冒充契约。
  */
 
-import { ApiError, ERROR_MESSAGES } from "./types";
+import { ApiError, CATEGORIES, ERROR_MESSAGES, UNCATEGORIZED } from "./types";
+import { MOCK_DOCS, MOCK_SPACE_DETAILS, MOCK_SPACES } from "./mock-data";
 import type { EngineItem } from "./engines";
 import type {
   ExtractedArticle,
@@ -65,17 +66,36 @@ export interface MockRoute {
 export const MOCK_ROUTES: MockRoute[] = [];
 
 /**
- * 未登记路径的口径。两档，**迁移期与收尾期不同**：
+ * 没有样例、**明确**交给真实后端的端点前缀。
  *
- * - `"passthrough"`（S15b.2.2 期间）：交给真实 fetch。这等价于"这个域还没有 mock 分支"的
- *   迁移前行为（`r024-lifecycle-api` 甚至专门钉住"订阅域整域无 mock 分支，写函数仍走真实 fetch"），
- *   所以逐文件删分支的过程中 CI 的 mock e2e 不会被误伤；
- * - `"error"`（S15b.2.3 收尾必须翻到这一档）：表成为唯一来源后，漏登记必须抛 50101。
+ * 这条清单是"passthrough 是决定，不是缺席"的载体：七个域（bots / hot / jobs /
+ * subscriptions / admin / admin-ops / batch）从设计上就没有演示态样例——
+ * 任务状态、整号订阅、后台跨用户读面都必须来自真后端，造一份假 Job 会让"Job 在排队"
+ * 这种状态在演示里永远看不出问题。把它们写成声明而不是"表里恰好没有"，
+ * 才让"表里没登记又不在豁免清单 ⇒ 抛 50101"这条硬规则可以立刻生效（新端点一进来就必须表态）。
  *
- * 留在 `"passthrough"` 的后果写在注释里而不是藏在代码里：漏登记的接口会在演示态
- * 真打后端、被 rewrite 代理到不存在的 3300，得到一条 500——那条引擎位的老病（CI run 37749239965）。
+ * 配套判据在 `tests/mock-routes.spec.ts`：扫 `lib/api/*.ts` 里出现的每一条字面
+ * `/api/v1/...`，断言"要么命中表、要么命中本清单"——清单的完整性由机器守，不靠人记。
  */
-export const UNREGISTERED_MOCK_MODE: "passthrough" | "error" = "passthrough";
+export const MOCK_PASSTHROUGH: ReadonlyArray<{ path: RegExp; reason: string }> = [
+  { path: /^\/api\/v1\/bots\b/, reason: "渠道与推送任务态必须来自真后端（STEP-22 起 /bots/tasks 才被后端接住）" },
+  { path: /^\/api\/v1\/channels\b/, reason: "同上：渠道列表与密钥状态不造样例" },
+  { path: /^\/api\/v1\/push\b/, reason: "推送日志与投递回执不造样例" },
+  { path: /^\/api\/v1\/hot\b/, reason: "热点域读面来自真聚簇结果" },
+  { path: /^\/api\/v1\/jobs\b/, reason: "Job 状态机（QUEUED→RUNNING→终态）造样例会遮蔽积压与失败" },
+  { path: /^\/api\/v1\/sources\b/, reason: "整号采集依赖真实清单链路（r024 同口径）" },
+  { path: /^\/api\/v1\/spaces\/[^/]+\/subscriptions\b/, reason: "订阅生命周期与 Job 水位不造样例" },
+  { path: /^\/api\/v1\/system\/notifications$/, reason: "SSE 流由 EventSource 自己开、不经信封表；演示态在 connectNotifications 里由唯一谓词门短路" },
+  { path: /^\/api\/v1\/spaces\/[^/]+\/docs:batch$/, reason: "批量入库必须真打：演示态跑的是同一套轮询与部分成功语义（T2.6.2）" },
+  { path: /^\/api\/v1\/admin\b/, reason: "后台跨用户读面与批量运维不造样例" },
+  { path: /^\/api\/v1\/chat\b/, reason: "问答由 ask.ts 的伪流式与真流式两支自己处理，不走信封表" },
+  { path: /^\/api\/v1\/auth\/login\b/, reason: "整页跳转端点（302），不是 fetch 目标" },
+  { path: /^\/api\/v1\/auth\/callback\b/, reason: "SSO 回调页直取原始信封语义，不经 request()" },
+];
+
+export function isMockPassthrough(path: string): boolean {
+  return MOCK_PASSTHROUGH.some((entry) => entry.path.test(path));
+}
 
 export function registerMockRoutes(...routes: MockRoute[]): void {
   MOCK_ROUTES.push(...routes);
@@ -390,6 +410,185 @@ registerMockRoutes(
       status: "READY",
       langbotFileId: "file-mock",
     }),
+  }
+);
+
+// ── notifications 域（第五个迁入的域：历史与已读回执）─────────────────
+
+registerMockRoutes(
+  {
+    // 演示数据没有真实通知历史 ⇒ 空页；但 limit/offset 必须**回显请求里的值**，
+    // 否则前端分页窗口（"这一页拿满 ⇒ 还有下一页"）在演示态永远算错。
+    method: "GET",
+    pattern: /^\/api\/v1\/system\/notifications\/history$/,
+    handle: ({ query }) => ({
+      items: [],
+      total: 0,
+      limit: Number(query.get("limit") ?? 20),
+      offset: Number(query.get("offset") ?? 0),
+      unread_total: 0,
+    }),
+  },
+  {
+    method: "PUT",
+    pattern: /^\/api\/v1\/system\/notifications\/read$/,
+    handle: () => ({ updated: 0 }),
+  }
+);
+
+// ── spaces 域（第六个迁入的域，也是最后一个带演示态分支的域）──────────
+//
+// 样例数据本身留在 `mock-data.ts`（跨域共享：ask 域也按空间名取样例），
+// 但**改写它们的动作**（删除/改分类就地生效）跟着路由走，仍只在这一处发生。
+// 注意注册顺序：本段的通用 `/spaces/{id}` 模式一律排在 `public`、`docs`、
+// `docs:categories`、`docs/{docId}/status` 之后——先命中的生效，反了就会把
+// "public" 当成一个空间 id 返回详情样例。
+
+/** 按 category 过滤后切片（口径与后端 `_docs_stmt` 一致）。 */
+function sliceMockDocs(id: string, query: URLSearchParams) {
+  const all = MOCK_DOCS[id] ?? [];
+  const category = query.get("category") ?? "";
+  const filtered = category
+    ? category === UNCATEGORIZED
+      ? all.filter((d) => !d.category)
+      : all.filter((d) => (d.category ?? "") === category)
+    : all;
+  const limit = Number(query.get("limit") ?? 100);
+  const offset = Number(query.get("offset") ?? 0);
+  return { items: filtered.slice(offset, offset + limit), total: filtered.length, limit, offset };
+}
+
+/** 复刻后端 `order_categories`（声明序、未登记取值置后、未分类哨兵置末）。 */
+function orderMockCategories(id: string): string[] {
+  const all = MOCK_DOCS[id] ?? [];
+  const present = new Set(all.map((d) => d.category ?? "").filter((c) => c !== ""));
+  const ordered = CATEGORIES.filter((c) => present.has(c));
+  ordered.push(...all.map((d) => d.category ?? "").filter((c) => c && !CATEGORIES.includes(c)));
+  if (all.some((d) => !d.category)) ordered.push(UNCATEGORIZED);
+  return ordered;
+}
+
+function bodyOf(ctx: MockContext): Record<string, unknown> {
+  return (ctx.body as Record<string, unknown> | undefined) ?? {};
+}
+registerMockRoutes(
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/spaces$/,
+    handle: (ctx) => {
+      const now = new Date().toISOString();
+      const payload = bodyOf(ctx);
+      return {
+        id: `sp-mock-${Date.now()}`,
+        name: String(payload.name ?? ""),
+        description: String(payload.description ?? ""),
+        docCount: 0,
+        updatedAt: now,
+        createdAt: now,
+        stats: { docs: 0, chunks: null },
+      };
+    },
+  },
+  {
+    // 具体路径先行：`docs:categories` / `docs:delete` / `docs:recategorize` / `docs` 都在前面注册
+    method: "GET",
+    pattern: /^\/api\/v1\/spaces$/,
+    handle: () => ({ items: MOCK_SPACES }),
+  },
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/spaces\/([^/]+)\/docs$/,
+    paramNames: ["id"],
+    handle: ({ params, query }) => sliceMockDocs(params.id ?? "", query),
+  },
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/spaces\/([^/]+)\/docs:categories$/,
+    paramNames: ["id"],
+    handle: ({ params }) => ({ items: orderMockCategories(params.id ?? "") }),
+  },
+  {
+    method: "DELETE",
+    pattern: /^\/api\/v1\/spaces\/([^/]+)\/docs\/([^/]+)$/,
+    paramNames: ["id", "docId"],
+    handle: ({ params }) => {
+      const list = MOCK_DOCS[params.id ?? ""];
+      const docId = params.docId ?? "";
+      if (list) {
+        const idx = list.findIndex((d) => d.id === docId);
+        if (idx >= 0) list.splice(idx, 1);
+      }
+      return { ok: true, docId, docs: 1, assets: 0 };
+    },
+  },
+  {
+    method: "PATCH",
+    pattern: /^\/api\/v1\/spaces\/([^/]+)\/docs\/([^/]+)$/,
+    paramNames: ["id", "docId"],
+    handle: ({ params, body }) => {
+      const list = MOCK_DOCS[params.id ?? ""];
+      const doc = (list ?? []).find((d) => d.id === (params.docId ?? ""));
+      const category = String((body as { category?: string } | undefined)?.category ?? "");
+      if (doc) doc.category = category;
+      return { docId: params.docId ?? "", category: category || "其他" };
+    },
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/spaces\/([^/]+)\/docs:delete$/,
+    paramNames: ["id"],
+    handle: ({ params, body }) => {
+      const list = MOCK_DOCS[params.id ?? ""];
+      const ids = ((body as { ids?: string[] } | undefined)?.ids ?? []);
+      const failed: { docId: string; code: number; error: string }[] = [];
+      if (list) {
+        for (const id of ids) {
+          const idx = list.findIndex((d) => d.id === id);
+          if (idx < 0) failed.push({ docId: id, code: 30004, error: "RESOURCE_NOT_FOUND" });
+          else list.splice(idx, 1);
+        }
+      }
+      return {
+        ok: true,
+        requested: ids.length,
+        docs: Math.max(0, ids.length - failed.length),
+        assets: 0,
+        failed,
+      };
+    },
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/spaces\/([^/]+)\/docs:recategorize$/,
+    paramNames: ["id"],
+    handle: ({ params, body }) => {
+      const list = MOCK_DOCS[params.id ?? ""];
+      const payload = (body ?? {}) as { ids?: string[]; category?: string };
+      const ids = (payload.ids as string[]) ?? [];
+      const normalized = String(payload.category ?? "") || "其他";
+      (list ?? []).forEach((d) => {
+        if (ids.includes(d.id)) d.category = normalized;
+      });
+      return { ok: true, requested: ids.length, docs: ids.length, category: normalized };
+    },
+  },
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/spaces\/([^/]+)$/,
+    paramNames: ["id"],
+    handle: ({ params }) => {
+      const detail = MOCK_SPACE_DETAILS[params.id ?? ""];
+      if (!detail) {
+        throw new ApiError(30101, ERROR_MESSAGES[30101], `mock-${Date.now()}`);
+      }
+      return detail;
+    },
+  },
+  {
+    method: "DELETE",
+    pattern: /^\/api\/v1\/spaces\/([^/]+)$/,
+    paramNames: ["id"],
+    handle: () => ({ ok: true }),
   }
 );
 

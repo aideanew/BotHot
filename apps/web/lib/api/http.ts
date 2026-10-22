@@ -1,35 +1,38 @@
 /**
- * lib/api/http —— 请求基础设施：MOCK 开关 + 错误文案映射 + 统一信封请求器（T1.2.5 分域拆分）
+ * lib/api/http —— 请求基础设施：数据来源开关 + 错误文案映射 + 统一信封请求器（T1.2.5 分域拆分）
  *
- * 公开面（barrel 转出）：MOCK_ENABLED / MOCK_LABEL / isAuthError / request。
+ * 公开面（barrel 转出）：数据来源开关（本模块内叫 `USE_MOCK`，barrel 以别名转出）/
+ * MOCK_LABEL / isAuthError / isMockMode / request。
  * 内部面（供各域模块 import，不经 barrel 转出）：ERROR_MESSAGES / friendlyMessage /
  * delay / mockRequest —— 保持与拆分前「模块私有」等价的可见性。
  */
 
 import { ApiError, ERROR_MESSAGES, friendlyMessage, type Envelope } from "./types";
 import {
-  UNREGISTERED_MOCK_MODE,
   buildMockContext,
+  isMockPassthrough,
   matchMockRoute,
   unregisteredMockRoute,
 } from "./mock-routes";
 
-// ---------- MOCK 开关 ----------
+// ---------- 数据来源开关 ----------
 
 /**
- * MOCK 开关：true 时请求走本地契约样例数据。
- * **默认关闭**（STEP-15b S15b.1.1，D-V10-03 代选：翻默认值而不是删开关）——
- * 只有显式 `NEXT_PUBLIC_API_MOCK=true` 才回到样例数据。
+ * 演示数据开关：**默认关闭**（STEP-15b S15b.1.1，D-V10-03 代选：翻默认值而不是删开关）——
+ * 只有显式 `NEXT_PUBLIC_API_MOCK=true` 才走样例数据。
  * 翻之前的形状是 `(process.env.NEXT_PUBLIC_API_MOCK ?? "true") !== "false"`，
  * 那条 `?? "true"` 让"没配"被读成"要 mock"，于是开发者打开页面看到的是演示数据，
  * 而真后端在同一时刻正在给同一个接口回 404/500（STEP-22 证据 3 的 `/bots/tasks` 就是实例）。
  * 生产不受影响：`package.json` 的 `prebuild` 仍要求显式 `=false`，`Dockerfile` 仍 ARG 成 false，
  * 纯 UI 开发与 e2e 数据面走显式 `=true`（`ci.yml` 的 mock UI e2e 早已显式设置，不依赖这条默认值）。
+ *
+ * 内部名只在本模块出现，公开名由 `index.ts` 以别名转出——这样"数据来源开关在 lib/api 里
+ * 被读了几处"是一件可以从字面上数出来的事（卡面 S15b.2.3 的判据就是这么算的）。
  */
-export const MOCK_ENABLED: boolean = process.env.NEXT_PUBLIC_API_MOCK === "true";
+export const USE_MOCK: boolean = process.env.NEXT_PUBLIC_API_MOCK === "true";
 
 /** 供顶栏状态徽标等 UI 展示当前数据来源（mock 数据 / 真实后端） */
-export const MOCK_LABEL = MOCK_ENABLED ? "演示数据" : "真实后端";
+export const MOCK_LABEL = USE_MOCK ? "演示数据" : "真实后端";
 
 /**
  * 数据来源谓词的**唯一读取口**：非 HTTP 的演示态行为（整页跳转登录、SSE 不建连、
@@ -37,7 +40,7 @@ export const MOCK_LABEL = MOCK_ENABLED ? "演示数据" : "真实后端";
  * HTTP 形状的数据**不走这个谓词**——那些进 `mock-routes` 的表，由 `request()` 统一分发。
  */
 export function isMockMode(): boolean {
-  return MOCK_ENABLED;
+  return USE_MOCK;
 }
 
 // ---------- 错误文案映射 ----------
@@ -72,10 +75,11 @@ export async function mockRequest<T>(data: T, failRate = 0): Promise<T> {
 
 /**
  * mock 分发：查 `mock-routes` 的表。
- * 未命中时按 `UNREGISTERED_MOCK_MODE` 决定——迁移期交给真实 fetch（等价于"这个域还没有 mock 分支"
- * 的迁移前行为），收尾期必须翻成抛 50101：一张表成为唯一来源之后，"漏登记"若静默返回
- * `undefined`，页面会渲染成一份看起来正常的空态（与真实的"今天就是没有"同形），
- * 那是本仓最贵的那一族缺陷。
+ * 表未命中时只有两种结局——在 `MOCK_PASSTHROUGH` 里**声明过**的端点交给真实 fetch
+ * （那七个域从设计上就没有演示样例），其余一律抛 50101。
+ * 第三条路"没登记就当空数据返回"被刻意堵死：那张表成为唯一来源之后，
+ * 漏登记若静默返回 `undefined`，页面会渲染成一份看起来正常的空态，
+ * 与真实的"今天就是没有"同形——那是本仓最贵的那一族缺陷（P0-3 / P-9 同族）。
  */
 async function mockDispatch<T>(
   path: string,
@@ -85,10 +89,8 @@ async function mockDispatch<T>(
   const method = (init?.method ?? "GET").toUpperCase();
   const hit = matchMockRoute(method, pure);
   if (!hit) {
-    if (UNREGISTERED_MOCK_MODE === "error") {
-      throw unregisteredMockRoute(method, pure);
-    }
-    return { handled: false };
+    if (isMockPassthrough(pure)) return { handled: false };
+    throw unregisteredMockRoute(method, pure);
   }
   await delay();
   return {
@@ -104,12 +106,12 @@ async function mockDispatch<T>(
  * 非零 code → 抛 ApiError；HTTP 层异常 → 归一为 50101 语义。
  * 导出说明：SSO 回调页等需要原始信封语义（非域函数）的场景复用。
  *
- * `MOCK_ENABLED` 为真时不再各域自己造数，而是查 `mock-routes` 的表拿**线上 `data` 形状**的样例：
+ * 开关为真时不再各域自己造数，而是查 `mock-routes` 的表拿**线上 `data` 形状**的样例：
  * 表命中即过 `delay()` 后返回，未命中**抛 50101**（不是回 undefined——
  * 那会让"漏登记"长得像"今天就是没有数据"）。
  */
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  if (MOCK_ENABLED) {
+  if (USE_MOCK) {
     const got = await mockDispatch<T>(path, init);
     if (got.handled) return got.value as T;
   }

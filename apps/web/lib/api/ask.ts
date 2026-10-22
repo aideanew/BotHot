@@ -7,7 +7,7 @@
  * onChunk：累积内容回调；onCitations：引用就绪回调；opts.signal：取消（不误报服务器故障）。
  */
 
-import { ERROR_MESSAGES, MOCK_ENABLED, delay, friendlyMessage } from "./http";
+import { ERROR_MESSAGES, delay, friendlyMessage, isMockMode } from "./http";
 import { MOCK_SPACE_DETAILS } from "./mock-data";
 import { ApiError, type ChatAnswer, type ChatCitation, type Envelope } from "./types";
 
@@ -47,7 +47,9 @@ export async function askQuestion(
   /** C-T4R：请求取消（页面卸载/切换空间时 abort，不误报为服务器故障） */
   opts?: { signal?: AbortSignal }
 ): Promise<ChatAnswer> {
-  if (MOCK_ENABLED) {
+  // 伪流式不是"一次 HTTP 请求"（分片节奏与错误注入都是演示要复现的界面行为），
+  // 收不进路由表，因此这里读唯一谓词口——与 mock-routes 判的是同一个开关表达式，只有一处。
+  if (isMockMode()) {
     // 错误注入：带触发词的提问首轮失败，重试放行（重试按钮验收路径）
     if (question.includes(MOCK_FAIL_TRIGGER)) {
       const prev = Number(window.sessionStorage.getItem(MOCK_FAIL_KEY) ?? "0");
@@ -66,7 +68,6 @@ export async function askQuestion(
     let sent = "";
     for (let i = 0; i < chars.length; i += step) {
       await delay(80 + Math.floor(Math.random() * 60));
-      if (!MOCK_ENABLED) return answer; // 中途切换模式时立即收敛
       sent += chars.slice(i, i + step).join("");
       onChunk?.(sent);
     }

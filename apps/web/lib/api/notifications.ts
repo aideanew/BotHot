@@ -9,12 +9,12 @@
  *
  * 载荷契约（与 providers/push/web.py 发布体一一对应）：
  *   通知帧 {title, message, url, space_id, doc_id}；
- *   （mock 态不建连——connectNotifications 的 MOCK_ENABLED 门）
+ *   （mock 态不建连——connectNotifications 的 `isMockMode()` 门）
  *   控制帧 {type: "service_unavailable" | ...}（含 type 键即控制帧，非通知）。
  * 心跳（": ping" 注释行）由 EventSource 自动忽略，不经 onmessage。
  */
 
-import { MOCK_ENABLED, delay, mockRequest, request } from "./http";
+import { isMockMode, request } from "./http";
 
 /** 后端 web provider 发布的站内通知载荷 */
 export interface AppNotification {
@@ -100,7 +100,7 @@ export function connectNotifications(handlers: NotificationHandlers): () => void
   // 验证连接生命周期，门短路会让 stub 永不被触达（2026-10-08 本地回归实证，
   // w9-notification-enhance.spec 4 例全红）；mock e2e 跑 build 产物
   // （NODE_ENV=production），门在该场景保持生效。
-  if (MOCK_ENABLED && process.env.NODE_ENV !== "test") {
+  if (isMockMode() && process.env.NODE_ENV !== "test") {
     return () => {};
   }
   const es = new EventSource(NOTIFICATIONS_ENDPOINT, { withCredentials: true });
@@ -148,19 +148,11 @@ export interface NotificationHistoryPage {
 }
 
 /**
- * 拉取通知历史（倒序分页）。mock 态返回空页（与 connectNotifications 的
- * MOCK 门语义一致：演示数据无真实通知历史）。
+ * 拉取通知历史（倒序分页）。演示态由 `mock-routes` 给空页
+ * （与 `connectNotifications` 的门同一语义：演示数据没有真实通知历史），
+ * 但 `limit/offset` 由表按请求回显——分页窗口算法在演示态也算得对。
  */
 export async function fetchHistory(limit = 20, offset = 0): Promise<NotificationHistoryPage> {
-  if (MOCK_ENABLED) {
-    return mockRequest<NotificationHistoryPage>({
-      items: [],
-      total: 0,
-      limit,
-      offset,
-      unread_total: 0,
-    });
-  }
   return request<NotificationHistoryPage>(
     `/api/v1/system/notifications/history?limit=${limit}&offset=${offset}`
   );
@@ -171,9 +163,6 @@ export async function fetchHistory(limit = 20, offset = 0): Promise<Notification
  * 返回服务端实际标记数（越权 id 视同不存在 → 0）。
  */
 export async function markRead(payload: { id?: string; before?: string }): Promise<number> {
-  if (MOCK_ENABLED) {
-    return mockRequest<number>(0);
-  }
   const data = await request<{ updated: number }>("/api/v1/system/notifications/read", {
     method: "PUT",
     body: JSON.stringify(payload),

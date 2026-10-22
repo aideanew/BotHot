@@ -28,7 +28,7 @@
 export * from "./types";
 
 // ---------- 请求基础设施（仅公开面；ERROR_MESSAGES/friendlyMessage/delay/mockRequest 属内部） ----------
-export { MOCK_ENABLED, MOCK_LABEL, isAuthError, request } from "./http";
+export { USE_MOCK as MOCK_ENABLED, MOCK_LABEL, isAuthError, isMockMode, request } from "./http";
 
 // ---------- 各业务域 ----------
 export * from "./auth";

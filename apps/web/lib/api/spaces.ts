@@ -5,13 +5,9 @@
  * 列表类返回统一解包信封 data.items。
  */
 
-import { ERROR_MESSAGES, MOCK_ENABLED, mockRequest, request } from "./http";
-import { MOCK_DOCS, MOCK_SPACE_DETAILS, MOCK_SPACES } from "./mock-data";
+import { request } from "./http";
 import {
-  ApiError,
   BATCH_DOCS_MAX_IDS,
-  CATEGORIES,
-  UNCATEGORIZED,
   type BatchDocFailure,
   type DeleteDocResult,
   type DeleteDocsBatchResult,
@@ -35,18 +31,6 @@ export interface CreateSpacePayload {
  * MOCK 态返回本地样例空间，保证引导页无后端时仍可走完 3 步。
  */
 export async function createSpace(payload: CreateSpacePayload): Promise<SpaceDetail> {
-  if (MOCK_ENABLED) {
-    const now = new Date().toISOString();
-    return {
-      id: `sp-mock-${Date.now()}`,
-      name: payload.name,
-      description: payload.description ?? "",
-      docCount: 0,
-      updatedAt: now,
-      createdAt: now,
-      stats: { docs: 0, chunks: null },
-    };
-  }
   return request<SpaceDetail>("/api/v1/spaces", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -56,9 +40,6 @@ export async function createSpace(payload: CreateSpacePayload): Promise<SpaceDet
 
 /** GET /api/v1/spaces —— 知识空间列表（信封 data.items 解包） */
 export async function listSpaces(): Promise<Space[]> {
-  if (MOCK_ENABLED) {
-    return mockRequest(MOCK_SPACES);
-  }
   return request<{ items: Space[] }>("/api/v1/spaces").then((d) => d.items);
 }
 
@@ -67,13 +48,6 @@ export async function listSpaces(): Promise<Space[]> {
  * 不存在/无权（30101/10102）由调用方渲染 404 语义空态页，不白屏。
  */
 export async function getSpace(id: string): Promise<SpaceDetail> {
-  if (MOCK_ENABLED) {
-    const detail = MOCK_SPACE_DETAILS[id];
-    if (!detail) {
-      throw new ApiError(30101, ERROR_MESSAGES[30101], `mock-${Date.now()}`);
-    }
-    return mockRequest(detail);
-  }
   return request<SpaceDetail>(`/api/v1/spaces/${encodeURIComponent(id)}`);
 }
 
@@ -87,10 +61,6 @@ export async function listSpaceDocs(
   id: string,
   opts: ListSpaceDocsOptions = {}
 ): Promise<SpaceDocsPage> {
-  if (MOCK_ENABLED) {
-    const { items, total, limit, offset } = sliceMockDocs(id, opts);
-    return mockRequest({ items, total, limit, offset });
-  }
   const q = new URLSearchParams();
   q.set("limit", String(opts.limit ?? 100));
   q.set("offset", String(opts.offset ?? 0));
@@ -108,9 +78,6 @@ export async function listSpaceDocs(
  * `listSpaceDocs({ category })` 的入参回传；空空间返回空数组。
  */
 export async function listSpaceDocCategories(id: string): Promise<string[]> {
-  if (MOCK_ENABLED) {
-    return mockRequest(orderMockCategories(id));
-  }
   return request<{ items: string[] }>(
     `/api/v1/spaces/${encodeURIComponent(id)}/docs:categories`
   ).then((d) => d.items);
@@ -132,36 +99,11 @@ export async function getDocIngestStatus(
   spaceId: string,
   docId: string
 ): Promise<DocIngestStatus> {
-  if (MOCK_ENABLED) {
-    return mockRequest({ docId, status: "READY", langbotFileId: "" });
-  }
   return request<DocIngestStatus>(
     `/api/v1/spaces/${encodeURIComponent(spaceId)}/docs/${encodeURIComponent(docId)}/status`
   );
 }
 
-/** mock 分支：按 category 过滤后切片（口径与后端 `_docs_stmt` 一致）。 */
-function sliceMockDocs(id: string, opts: ListSpaceDocsOptions) {
-  const all = MOCK_DOCS[id] ?? [];
-  const filtered = opts.category
-    ? opts.category === UNCATEGORIZED
-      ? all.filter((d) => !d.category)
-      : all.filter((d) => (d.category ?? "") === opts.category)
-    : all;
-  const limit = opts.limit ?? 100;
-  const offset = opts.offset ?? 0;
-  return { items: filtered.slice(offset, offset + limit), total: filtered.length, limit, offset };
-}
-
-/** mock 分支：复刻后端 `order_categories`（声明序、未登记取值置后、未分类哨兵置末）。 */
-function orderMockCategories(id: string): string[] {
-  const all = MOCK_DOCS[id] ?? [];
-  const present = new Set(all.map((d) => d.category ?? "").filter((c) => c !== ""));
-  const ordered = CATEGORIES.filter((c) => present.has(c));
-  ordered.push(...all.map((d) => d.category ?? "").filter((c) => c && !CATEGORIES.includes(c)));
-  if (all.some((d) => !d.category)) ordered.push(UNCATEGORIZED);
-  return ordered;
-}
 
 /**
  * R0.2.1 —— DELETE /api/v1/spaces/{id}/docs/{docId}：删除单篇（引擎先删、失败整体回滚）。
@@ -169,14 +111,6 @@ function orderMockCategories(id: string): string[] {
  * MOCK 态就地改写样例库，使演示模式下删除/改分类可闭环。
  */
 export async function deleteSpaceDoc(spaceId: string, docId: string): Promise<DeleteDocResult> {
-  if (MOCK_ENABLED) {
-    const list = MOCK_DOCS[spaceId];
-    if (list) {
-      const idx = list.findIndex((d) => d.id === docId);
-      if (idx >= 0) list.splice(idx, 1);
-    }
-    return mockRequest({ ok: true, docId, docs: 1, assets: 0 });
-  }
   return request<DeleteDocResult>(
     `/api/v1/spaces/${encodeURIComponent(spaceId)}/docs/${encodeURIComponent(docId)}`,
     { method: "DELETE" }
@@ -192,11 +126,6 @@ export async function patchSpaceDocCategory(
   docId: string,
   category: string
 ): Promise<PatchDocResult> {
-  if (MOCK_ENABLED) {
-    const doc = (MOCK_DOCS[spaceId] ?? []).find((d) => d.id === docId);
-    if (doc) doc.category = category;
-    return mockRequest({ docId, category: category || "其他" });
-  }
   return request<PatchDocResult>(
     `/api/v1/spaces/${encodeURIComponent(spaceId)}/docs/${encodeURIComponent(docId)}`,
     {
@@ -218,24 +147,6 @@ export async function deleteSpaceDocsBatch(
   spaceId: string,
   ids: string[]
 ): Promise<DeleteDocsBatchResult> {
-  if (MOCK_ENABLED) {
-    const list = MOCK_DOCS[spaceId];
-    const failed: BatchDocFailure[] = [];
-    if (list) {
-      for (const id of ids) {
-        const idx = list.findIndex((d) => d.id === id);
-        if (idx < 0) failed.push({ docId: id, code: 30004, error: "RESOURCE_NOT_FOUND" });
-        else list.splice(idx, 1);
-      }
-    }
-    return mockRequest({
-      ok: true,
-      requested: ids.length,
-      docs: Math.max(0, ids.length - failed.length),
-      assets: 0,
-      failed,
-    });
-  }
   return request<DeleteDocsBatchResult>(
     `/api/v1/spaces/${encodeURIComponent(spaceId)}/docs:delete`,
     {
@@ -258,14 +169,6 @@ export async function recategorizeSpaceDocsBatch(
   ids: string[],
   category: string
 ): Promise<RecategorizeDocsBatchResult> {
-  if (MOCK_ENABLED) {
-    const list = MOCK_DOCS[spaceId];
-    const normalized = category || "其他";
-    (list ?? []).forEach((d) => {
-      if (ids.includes(d.id)) d.category = normalized;
-    });
-    return mockRequest({ ok: true, requested: ids.length, docs: ids.length, category: normalized });
-  }
   return request<RecategorizeDocsBatchResult>(
     `/api/v1/spaces/${encodeURIComponent(spaceId)}/docs:recategorize`,
     {
