@@ -26,7 +26,7 @@ STEP-28（D-V12-12）：启用集与默认渠道改成**库值优先、env 兜�
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -47,6 +47,14 @@ class ChannelSpec:
     `available`：给定配置现在能否真的用（凭据就位）。与 implemented 分离。
     `required_setting`：凭据缺失时在就绪度回报里点名的配置项名（便于照抄修正）。
     `factory`：装配 provider；不可用时返回 None（显式缺省，不造数）。
+    `required_identifier`（S8.4.1）：这个渠道**必须**拿到哪一种源标识才能工作。
+        存在理由：调度器过去不分标识，一律把 `sources.external_id`（= biz）传给当轮渠道，
+        而 dajiala/justoneapi/tikhub 的入参语义是 ghid、wellbyte 是文章 URL
+        （各家 docstring 与 `query_work_list_page` 的入参说明写死）。拿 biz 去打要 ghid 的接口，
+        表现是"渠道可用而清单恒空"——与"上游今天没发文"在日志里长得一模一样。
+    `cost_rank`（S8.4.1）：单价的**序位**，不是单价。升序尝试时用；`None` = 单价未实测，
+        排序时一律排在已实测之后（这不是断言它贵，是断言"我们不知道它在哪一档"）。
+        各家序位的推导与证据锚在 CHANNELS 字面量旁边，不写在本文档里（写了就会与注释漂移）。
     """
 
     name: str
@@ -56,6 +64,8 @@ class ChannelSpec:
     available: Callable[[Settings], bool]
     factory: Callable[[Settings], WorkListProvider | None]
     reason: str = ""
+    required_identifier: str = "biz"
+    cost_rank: int | None = None
     # 证据状态：与 implemented / available **正交**。渠道可以 available=True 而契约从未
     # 活体实测过；两者必须分开，否则「能启用」会被误读成「字段形状已确认」。
     contract_verified_at: str = ""
@@ -149,6 +159,11 @@ CHANNELS: dict[str, ChannelSpec] = {
         # 尚未实测，那是 L1-6 的目标，不是已完成项。
         contract_verified_at="2026-09-28",
         verified_scope="契约层（请求体/响应字段/分页/错误码）；端到端未验证",
+        # 入参 = biz（`redfox/client.py` 的 `query_work_list(biz, page)`）。
+        # 单价：R8 只验到契约层，资费未在册 ⇒ cost_rank=None。未知不当"便宜"也不当"免费"，
+        # 它只是不参与成本序（今天它靠 `discovery_default_channel` 在位，不是靠排序赢的）。
+        required_identifier="biz",
+        cost_rank=None,
     ),
     "rss": ChannelSpec(
         name="rss",
@@ -163,6 +178,11 @@ CHANNELS: dict[str, ChannelSpec] = {
         factory=_make_rss_provider,
         contract_verified_at="2026-10-02",
         verified_scope="单元测试：RSS 2.0 / Atom 解析 + 字段映射 + 分页语义",
+        # 入参 = feed URL（`rss.py` 的 `_resolve_feed_url`，identifier 也可以是配置里的短别名）。
+        # 自建/公开源不按次收费 ⇒ 成本序 0（最前）。它与微信系渠道不是同一用途：能覆盖的号主
+        # 由"该号有没有开 feed"决定，所以标识缺 `feed_url` 时它根本不该进候选（S8.4.1.1）。
+        required_identifier="feed_url",
+        cost_rank=0,
     ),
     "dajiala": ChannelSpec(
         name="dajiala",
@@ -186,6 +206,10 @@ CHANNELS: dict[str, ChannelSpec] = {
             "详情(article_detail)=活体实测 TC-A1-03/05/08 缺陷禁用（扣费 data=null）；"
             "搜索(kw_search)=文档级（chunk 反解，未调用，单价/参数/响应未知）。"
         ),
+        # 入参 = ghid（`dajiala.py:85` 写死 identifier=ghid）。只有 biz 的源不该拿到这个渠道（S8.4.1.1）。
+        # 成本序 20：清单入口 post_condition 实测 ¥0.16/次（TC-A1-09，比资费页 ¥0.14 高，差值在册）。
+        required_identifier="ghid",
+        cost_rank=20,
     ),
     "justoneapi": ChannelSpec(
         name="justoneapi",
@@ -210,6 +234,10 @@ CHANNELS: dict[str, ChannelSpec] = {
             "（价目表在册 293 接口，未调用）；"
             "convert-article-link=活体实测 TC-A3-02/03/04 不可用（405/参数名不符）。"
         ),
+        # 入参 = ghid（`justoneapi.py:101`）。成本序 30：清单入口在 ¥0.15~0.40 区间内，
+        # 按**区间下界可判、上界不可判**的保守口径排在 dajiala（¥0.16 明确实测）之后。
+        required_identifier="ghid",
+        cost_rank=30,
     ),
     "tikhub": ChannelSpec(
         name="tikhub",
@@ -234,6 +262,12 @@ CHANNELS: dict[str, ChannelSpec] = {
             "详情(v2 组 fetch_article_detail/h5/full 等 13 端点)=契约级（OpenAPI 在案，未实测）；"
             "详情(web/* 旧端点)=活体实测已下线 TC-A2-04 404（Excel 漂移）。"
         ),
+        # 入参 = ghid（`tikhub.py:16` 的 username=gh_ 形态）。
+        # 成本序 10（$0.001~0.01/请求，付费渠道里最便宜的一档）。⚠️ 这是**成本**序不是**可靠度**序：
+        # 它的格级证据停在契约级（TC-A2-02b 402，余额为 0），所以它不会因为排前面就该被默认启用——
+        # 默认位仍由 `discovery_default_channel` 决定，本序位只在降级排队时起作用。
+        required_identifier="ghid",
+        cost_rank=10,
     ),
     "wellbyte": ChannelSpec(
         name="wellbyte",
@@ -256,6 +290,10 @@ CHANNELS: dict[str, ChannelSpec] = {
             "详情(detail_v2)=活体实测 TC-A4-05/06/07 422 三连拒禁用（0 扣费）；"
             "CF 指纹坑=活体实测 TC-A4-03（urllib 被 1010 拦截，httpx 通过）。"
         ),
+        # 入参 = **文章 URL**（`wellbyte.py:115`：传一条长链即返回该号的历史清单）。
+        # 成本序 40：account_history_v2 实测 78cr × $0.001 ≈ ¥0.56，是已实测渠道里最贵的一档。
+        required_identifier="sample_url",
+        cost_rank=40,
     ),
 }
 
@@ -329,6 +367,46 @@ def make_default_provider(settings: Settings) -> WorkListProvider | None:
     if name is None:
         return None
     return CHANNELS[name].factory(settings)
+
+
+def select_channels(
+    identifiers: Mapping[str, str],
+    settings: Settings,
+    *,
+    preferred: str | None = None,
+) -> list[str]:
+    """按"这一源能给哪种标识"筛渠道，再按成本序排（S8.4.1）。
+
+    候选 = 已启用 ∩ 凭据就位 ∩ **本源的标识凑得上这一家的入参**。
+    凑不上的直接不进候选，而不是进了再让上游报错——`query_work_list_page` 各家对 identifier
+    的语义互不相通（biz / gh_ / 文章 URL / feed URL），传错的那一种通常不会炸，而是返回空清单，
+    于是"渠道可用而清单恒空"，正是本仓反复登记过的那族静默失败（P0-3、P-9 同族）。
+
+    `preferred` 是调用方给的"本轮首位渠道"（生产里就是 `resolve_default_channel` 的结果）。
+    它在**凑得上**时才顶到首位；凑不上就不顶——把一个拿不到入参的渠道放到第一位，
+    等于让整轮发现停在它身上然后靠降级去补，白花一次调用。
+    其余按 `cost_rank` 升序，`None`（成本未实测）一律排最后；未知与未知之间按注册序，稳定可复算。
+    """
+    pool = available_channels(settings)
+    eligible = [name for name in pool if (identifiers.get(CHANNELS[name].required_identifier) or "").strip()]
+    if not eligible:
+        logger.warning(
+            "按源标识筛渠道后为空（标识=%s / 可用=%s）：本轮不做发现，"
+            "缺的是哪一格标识见 CHANNELS[*].required_identifier",
+            sorted(k for k, v in identifiers.items() if v),
+            ",".join(pool) or "（无可用渠道）",
+        )
+        return []
+    ordered = sorted(eligible, key=lambda name: (CHANNELS[name].cost_rank is None, CHANNELS[name].cost_rank or 0))
+    if preferred is not None and preferred in ordered:
+        ordered = [preferred, *(name for name in ordered if name != preferred)]
+    return ordered
+
+
+def identity_for(channel: str, identifiers: Mapping[str, str]) -> str:
+    """该渠道实际要传的标识值；渠道没声明这种标识 ⇒ 空串（调用方据此跳过，不传 None）。"""
+    required = CHANNELS[channel].required_identifier
+    return (identifiers.get(required) or "").strip()
 
 
 def describe_channels(settings: Settings) -> dict[str, Any]:

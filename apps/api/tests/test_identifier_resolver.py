@@ -228,18 +228,23 @@ def _ensure_calls(tree: ast.AST) -> list[ast.Call]:
     ]
 
 
-def test_the_resolver_has_exactly_one_production_caller() -> None:
-    """标识补全在生产代码里只许有一处调用，且就在入库落库那一步。
+def test_the_resolver_has_exactly_two_claimed_production_callers() -> None:
+    """标识补全在生产代码里只许有**两处**调用，且两处各自的角色写死。
 
-    多于一处 = 有人在别的路径上顺手写标识（迁移回填之外的第二个写入口，正是要避免的分裂）；
-    零处 = 本模块退化成只有测试在用的死代码。
+    - `services/kb.py` 1 处 = 入库落库那一步（卡面 S8.2.1 的"入库成功时写"）；
+    - `services/scheduler.py` 1 处 = 每轮调度按源取渠道之前的"读侧补行"
+      （S8.4.1 要用标识筛渠道；不补的话，迁移回填之后建出来、又没再入库的源没有标识行，
+      路由会把"我们没读过它"读成"这一源哪一家都去不了" ⇒ 整轮静默不发现）。
+
+    判"两处各一次"而不是判"存在"：第三处调用 = 出现了没人认领的写入口（迁移回填之外的分裂），
+    正是 ADR-0014 要防的；零处 = 本模块退化成只有测试在用的死代码。
     """
     hits: list[tuple[str, int]] = []
     for path in sorted(p for p in _APP.rglob("*.py") if "__pycache__" not in p.parts):
         count = len(_ensure_calls(ast.parse(path.read_text(encoding="utf-8"))))
         if count:
             hits.append((path.relative_to(_APP).as_posix(), count))
-    assert hits == [("services/kb.py", 1)], f"标识补全的调用面={hits}"
+    assert hits == [("services/kb.py", 1), ("services/scheduler.py", 1)], f"标识补全的调用面={hits}"
 
 
 def test_that_one_call_hands_it_the_page_it_already_fetched() -> None:

@@ -45,9 +45,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings, assert_production_ready, get_settings
+from app.core.errors import DiscoveryFailedError
 from app.models.entities import Source, SourceSubscription, User
-from app.providers.discovery.registry import make_default_provider, resolve_default_channel
+from app.providers.discovery.registry import (
+    CHANNELS,
+    identity_for,
+    make_default_provider,
+    resolve_default_channel,
+    select_channels,
+)
 from app.repositories.subscription import SourceSubscriptionRepository
+from app.services.identifier_resolver import IdentifierResolver
 from app.services.manifest import ManifestSyncService, WorkListProvider
 from app.services.process_heartbeat import BEACON_MIN_INTERVAL_SECONDS, BeaconGate
 from app.services.process_heartbeat import beacon as _heartbeat
@@ -148,8 +156,9 @@ def make_sync_runner(
 def make_default_sync_runner(settings: Settings | None = None) -> SyncRunner:
     """生产默认调用口：按后台配置解析默认发现渠道并装配（无可用渠道 → 跳过发现）。
 
-    渠道选择全在 `providers/discovery/registry.py`（注册表 ∩ 启用白名单 → 默认解析）；
-    此处只装配，不判渠道。
+    渠道**可用性**选择全在 `providers/discovery/registry.py`（注册表 ∩ 启用白名单 → 默认解析）；
+    此处只装配，不判渠道凭据。S8.4.1 之后，装配出来的那一个是"首选"，
+    而**每一源实际用哪个渠道**由该源的标识凑得上哪一家决定（`make_routed_sync_runner`）。
     """
     s = settings or get_settings()
     max_pages = int(getattr(s, "manifest_sync_max_pages", 20))
@@ -162,11 +171,98 @@ def make_default_sync_runner(settings: Settings | None = None) -> SyncRunner:
             s.discovery_default_channel,
         )
         return make_sync_runner(None, max_pages=max_pages)
-    return make_sync_runner(
-        make_default_provider(s),
+    return make_routed_sync_runner(
+        s,
+        default_channel=channel,
+        default_provider=make_default_provider(s),
         max_pages=max_pages,
-        skip_reason=f"发现渠道 {channel} provider 装配失败",
     )
+
+
+def make_routed_sync_runner(
+    settings: Settings,
+    *,
+    default_channel: str,
+    default_provider: WorkListProvider | None,
+    max_pages: int = 20,
+    fallback_enabled: bool | None = None,
+) -> SyncRunner:
+    """S8.4.1：按**这一源的标识**决定用哪个渠道；降级只在开关开时发生，且只多试一家。
+
+    为什么必须按源路由：各家 `query_work_list_page` 的入参语义互不相通（biz / gh_ / 文章 URL /
+    feed URL），而升级前的调度器不分标识——一律把 `sources.external_id`（= biz）传给当轮渠道。
+    拿 biz 去打要 ghid 的接口通常不报错，只返回空清单 ⇒ "渠道可用而清单恒空"，
+    与"上游今天没发文"在日志里长得一模一样（P0-3/P-9 那一族静默失败）。
+
+    `fallback_enabled=None` 时读配置项 `discovery_fallback_enabled`（缺省 False）。
+    ⚠️ 本卡不许动 `app/core/config.py`，而 `Settings` 今天**没有**这一项 ⇒ 实际读出来恒为 False，
+    开关在生产里结构性关着（机制已就位并有判据，能打开的那一步属规划方给配置面）。
+    这条不是"顺手兼容一下"：`getattr(..., False)` 静默兜底会把"配置项不存在"伪装成"运营选了关"，
+    所以读数与判据都写在 EVD-V17-08 §10，缺口登记为 P-70。
+
+    资源边界：默认渠道的那一个 provider 是装配期建好的、跨轮共用，**不在这里关**；
+    本轮按需装配的（降级换到的渠道）用完即 `aclose()`——不然每轮泄漏一个 HTTP 客户端。
+    """
+    fallback = (
+        bool(getattr(settings, "discovery_fallback_enabled", False))
+        if fallback_enabled is None
+        else fallback_enabled
+    )
+
+    async def _run(session: AsyncSession, sub: SourceSubscription, run_token: str) -> int:
+        src = await session.get(Source, sub.source_id)
+        if src is None:
+            logger.warning("订阅指向不存在的源 %s：跳过发现，仅按既有清单 Diff", sub.source_id)
+        else:
+            identifiers = await IdentifierResolver(session).ensure_identifiers(src)
+            channels = select_channels(identifiers, settings, preferred=default_channel)
+            attempts: list[tuple[str, WorkListProvider, str]] = []
+            for name in channels:
+                identity = identity_for(name, identifiers)
+                if not identity:  # select_channels 已滤过；留这一层是为了"以后有人改了筛选"也不空传
+                    continue
+                provider = (
+                    default_provider
+                    if name == default_channel and default_provider is not None
+                    else CHANNELS[name].factory(settings)
+                )
+                if provider is None:
+                    logger.warning("渠道 %s 装配失败（凭据缺失或工厂判不可用）：跳过该候选", name)
+                    continue
+                attempts.append((name, provider, identity))
+            if not attempts:
+                logger.warning(
+                    "源 %s 本轮无可装配的发现渠道（标识=%s / 首选=%s）：仅按既有清单 Diff",
+                    sub.source_id,
+                    sorted(k for k, v in identifiers.items() if v),
+                    default_channel,
+                )
+            spent = 0
+            for name, provider, identity in attempts:
+                owns = provider is not default_provider
+                try:
+                    await ManifestSyncService(session, provider).sync_source(
+                        sub.source_id, identity, max_pages=max_pages
+                    )
+                    break
+                except DiscoveryFailedError as exc:
+                    spent += 1
+                    # 开关关 ⇒ 如实上抛（承 STEP-05 的口径：清单主失败不许被吞）。
+                    # 开关开 ⇒ 只多试**一家**（第三家不再试：那是拿预算赌一个没人验证过的链路）。
+                    if not fallback or spent >= 2:
+                        raise
+                    logger.warning(
+                        "discovery.fallback",
+                        source_id=sub.source_id,
+                        failed_channel=name,
+                        error=str(exc)[:120],
+                    )
+                finally:
+                    if owns:
+                        await provider.aclose()
+        return await SourceSubscriptionService(session).run_incremental_sync(sub, run_token)
+
+    return _run
 
 
 def make_default_doc_reconciler(settings: Settings | None = None) -> DocReconcileFn:

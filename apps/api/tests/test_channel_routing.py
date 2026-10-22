@@ -23,6 +23,7 @@ import inspect
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -32,7 +33,9 @@ import pytest
 import structlog
 
 from app.contracts.collection import WorkListPage
-from app.models.entities import Source
+from app.core.config import Settings
+from app.core.errors import DiscoveryFailedError
+from app.models.entities import Source, SourceIdentifier, SourceSubscription
 from app.providers.article_sources import base as base_module
 from app.providers.article_sources.base import WORK_LIST_PAGE_SIZE, build_work_list_page
 from app.providers.article_sources.dajiala import DajialaClient
@@ -40,10 +43,16 @@ from app.providers.article_sources.justoneapi import JustOneApiClient
 from app.providers.article_sources.rss import RSSFeedProvider
 from app.providers.article_sources.tikhub import TikhubClient
 from app.providers.article_sources.wellbyte import WellbyteClient
+from app.providers.discovery.registry import CHANNELS, identity_for, select_channels
+from app.repositories.space import SpaceRepository
+from app.repositories.user import SqlAlchemyUserStore
+from app.services import system_settings
 from app.services.manifest import ManifestSyncService
+from app.services.scheduler import make_routed_sync_runner
 
 API = Path(__file__).resolve().parents[1]
 SAMPLE_DIR = API / "tests" / "fixtures" / "provider_payloads"
+GHID = "gh_b9465228558d"
 
 #: 已经**接到真游标**的渠道。今天为空。
 #: 判据不是"上游有没有分页能力"，而是"响应游标字段 + 请求侧字段名是否都实测在案"：
@@ -54,9 +63,9 @@ CHANNELS_WITH_WIRED_CURSOR: frozenset[str] = frozenset()
 
 #: 五家的清单入参（形状取自各家 docstring 写死的 identifier 语义）。
 _IDENTIFIER: dict[str, str] = {
-    "dajiala": "gh_b9465228558d",
-    "justoneapi": "gh_b9465228558d",
-    "tikhub": "gh_b9465228558d",
+    "dajiala": GHID,
+    "justoneapi": GHID,
+    "tikhub": GHID,
     "wellbyte": "https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=1&idx=1&sn=aaaa",
     "rss": "https://example.com/feed.xml",
 }
@@ -392,3 +401,226 @@ def test_the_paged_port_branch_is_actually_taken_by_the_service() -> None:
     } | {n.attr for n in ast.walk(func) if isinstance(n, ast.Attribute)}
     assert "query_work_list_page" in referenced, "_fetch_page 不再检查新端口"
     assert "query_work_list" in referenced, "_fetch_page 把旧端口删了（RedFox 与 STEP-03 的用例失去落点）"
+
+
+# ── ⑤ S8.4.1 按源标识选渠道 ──────────────────────────────────────────────────
+
+
+ALL_KEYS = {
+    "redfox_api_key": "k" * 24,
+    "dajiala_api_key": "k" * 24,
+    "justoneapi_api_key": "k" * 24,
+    "tikhub_api_key": "k" * 24,
+    "wellbyte_api_key": "k" * 24,
+    "discovery_rss_feeds": "https://example.com/feed.xml",
+}
+
+
+def _settings(**overrides: Any) -> Settings:
+    """六家凭据全配齐 + 白名单不过滤 ⇒ 候选集只由**标识**决定（这正是要判的那一维）。
+
+    每个键都显式给值：`Settings()` 会继承 `.env`，不写死的用例在别人的机器上会换结论。
+    """
+    values = dict(ALL_KEYS)
+    values.update({"discovery_channels": "", "discovery_default_channel": "redfox"})
+    values.update(overrides)
+    return Settings(**values)
+
+
+@pytest.fixture(autouse=True)
+def _no_settings_snapshot() -> Iterator[None]:
+    """清掉进程内配置快照。
+
+    `enabled_channels()` 是"库值优先、env 兜底"，而快照是进程级单例：
+    全量跑时前面某张卡留下的快照会让这里传的 settings 被无声覆盖 ⇒ 判据判的不再是标识筛选。
+    """
+    system_settings.reset_snapshot()
+    yield
+    system_settings.reset_snapshot()
+
+
+def test_biz_only_source_cannot_reach_a_ghid_channel() -> None:
+    """S8.4.1.1：只有 biz 的源，候选里不许出现需要 ghid / sample_url / feed_url 的渠道。
+
+    升级前的调度器不分标识——一律把 `external_id`（biz）传给当轮渠道。拿 biz 去打要 ghid 的接口
+    通常不报错，只回空清单 ⇒ "渠道可用而清单恒空"，与"上游今天没发文"在日志里同形（P0-3 那一族）。
+    """
+    got = select_channels({"biz": "MjM5MjgwNTQ1MQ=="}, _settings())
+    assert got == ["redfox"], f"biz-only 的候选集={got}"
+
+
+def test_eligible_channels_come_back_in_cost_order() -> None:
+    """同一源给了 biz + ghid ⇒ 候选是"要 biz 的那一家 + 要 ghid 的三家"，按成本序、未知成本垫底。
+
+    判整个序列而不是判首个：只判首个的话，把列表缩成只剩默认渠道它也绿。
+    `wellbyte` 与 `rss` 不在里面**是因为这一源没有 sample_url / feed_url 标识**，
+    不是因为它们没启用——那正是上一条（biz-only）与这一条合起来要区分的维度。
+    """
+    got = select_channels({"biz": "MjM5MjgwNTQ1MQ==", "ghid": GHID}, _settings(), preferred=None)
+    assert got == ["tikhub", "dajiala", "justoneapi", "redfox"], got
+
+
+def test_each_channel_is_handed_its_own_identifier() -> None:
+    """路由传给渠道的是**它那一种**标识，不是"反正都传 external_id"。
+
+    针对升级前的形状：调度器一律把 `sources.external_id`（= biz）交给当轮渠道，而 dajiala/
+    justoneapi/tikhub 要 ghid、wellbyte 要文章 URL——传错那种不报错，只回空清单。
+    `rss` 那一支是负面判据：没有 `feed_url` 时必须拿不到值（空串），而不是把 biz 冒充过去——
+    `rss._resolve_feed_url` 对"看起来像 URL 的入参"会直接发一次抓取，那等于拿一个号主 ID 当 feed 地址打。
+    """
+    identifiers = {"biz": "MjM5MjgwNTQ1MQ==", "ghid": GHID, "sample_url": "https://mp.weixin.qq.com/s/x"}
+    assert identity_for("redfox", identifiers) == "MjM5MjgwNTQ1MQ=="
+    assert identity_for("dajiala", identifiers) == GHID
+    assert identity_for("wellbyte", identifiers) == "https://mp.weixin.qq.com/s/x"
+    assert identity_for("rss", identifiers) == "", "没有 feed_url 时不许把别的标识冒充过去"
+
+
+
+def test_channel_with_unmeasured_cost_is_not_treated_as_free() -> None:
+    """`cost_rank=None`（单价未实测）排最后，而不是被当成 0 排最前。
+
+    这条是口径判据：把未知读成"免费"会让最贵的那一家拿到每一次首发机会，
+    而日志里只会看到"我们在用 redfox"。
+    """
+    assert CHANNELS["redfox"].cost_rank is None
+    got = select_channels({"biz": "MjM5MjgwNTQ1MQ=="}, _settings(), preferred=None)
+    assert got == ["redfox"], got  # 只有它凑得上 biz，成本序在这里没有对手
+    with_ghid = select_channels({"biz": "B", "ghid": GHID}, _settings(), preferred=None)
+    assert with_ghid.index("redfox") > with_ghid.index("tikhub")
+
+
+def test_preferred_channel_leads_only_when_it_is_eligible() -> None:
+    """首选渠道够不着这一源的标识时**不许硬顶到首位**：否则整轮发现停在它身上，靠降级补。"""
+    only_ghid = select_channels({"ghid": GHID}, _settings(), preferred="redfox")
+    assert "redfox" not in only_ghid, only_ghid
+    assert only_ghid[0] == "tikhub", only_ghid
+
+
+def test_the_degradation_switch_has_no_config_field_yet() -> None:
+    """现状钉：`Settings` 里没有 `discovery_fallback_enabled` 这一项 ⇒ 开关在生产里结构性关着。
+
+    这条刻意判"字段不存在"。有人加上那一行时它会红——红的是"机制终于能被运营打开了"，
+    那时要一起改的是 EVD-V17-08 §10 与 P-70 的处置，而不是顺手把断言删掉。
+    """
+    assert "discovery_fallback_enabled" not in Settings.model_fields
+    assert bool(getattr(Settings(), "discovery_fallback_enabled", False)) is False
+
+
+class _RoutingProvider:
+    """按渠道名记账的假 provider：可指定某些渠道抛 `DiscoveryFailedError`。
+
+    旧端口形状（`query_work_list`）就够——本条判据在的是"选了哪家、调了几次"，
+    翻页机制已由上面 §9 的服务层判据钉过。
+    """
+
+    def __init__(self, name: str, failing: set[str], calls: list[str]) -> None:
+        self.name = name
+        self.description = f"fake {name}"
+        self._failing = failing
+        self._calls = calls
+
+    async def query_work_list(self, biz: str, page: int) -> tuple[list[dict[str, Any]], int | None]:
+        self._calls.append(self.name)
+        if self.name in self._failing:
+            raise DiscoveryFailedError(f"{self.name} 清单上游失败")
+        return [_rows(1)[0]], 1
+
+    async def aclose(self) -> None:
+        return None
+
+
+def _patch_factories(monkeypatch: pytest.MonkeyPatch, calls: list[str], failing: set[str]) -> None:
+    """把六家的 factory 换成记账假件。
+
+    就地 `setitem` 而不是替换整个 `CHANNELS` 引用：调度器与注册表各自拿着同一个 dict 对象，
+    换引用要补两处补丁、且漏一处就测到真工厂；`setitem` 由 monkeypatch 逐键还原。
+    """
+    for name in list(CHANNELS):
+        monkeypatch.setitem(
+            CHANNELS, name, replace(CHANNELS[name], factory=lambda _s, _n=name: _RoutingProvider(_n, failing, calls))
+        )
+
+
+async def _seed_subscription(db_session: Any) -> tuple[SourceSubscription, str]:
+    """真实 user/space/source/subscription 四件（`run_incremental_sync` 会按它们建 Job ⇒ 不能是野指针）。"""
+    user = await SqlAlchemyUserStore(db_session).upsert_by_sub("s08-route-user", "s08@r.test", "S08")
+    space = await SpaceRepository(db_session).create(user_id=user.id, name="s08-route-space")
+    src = Source(type="wechat_oa", external_id="S08-ROUTE-BIZ", name="S08-ROUTE-BIZ", url="https://e.invalid/x")
+    db_session.add(src)
+    await db_session.flush()
+    sub = SourceSubscription(
+        id="s08-route-sub",
+        user_id=user.id,
+        source_id=str(src.id),
+        space_id=space.id,
+        sync_interval_minutes=60,
+    )
+    db_session.add(sub)
+    await db_session.flush()
+    return sub, str(src.id)
+
+
+async def _give_ghid(db_session: Any, source_id: str) -> None:
+    """给这个源补一条 ghid 标识（`ensure_identifiers` 今天造不出它，见 §7b/P-66）。
+
+    判据要的形状是"这一源确实凑得齐三家 ghid 渠道的入参"——标识行由运营录入或未来卡产出，
+    这里直接写库，是为了不把"ghid 从哪来"混进本条要判的东西里。
+    """
+    db_session.add(SourceIdentifier(source_id=source_id, kind="ghid", value=GHID, origin="source"))
+    await db_session.flush()
+
+
+async def test_degradation_off_raises_and_never_touches_the_second_channel(
+    db_session: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """开关关（缺省）⇒ 第一家抛错就如实上抛，第二家一次都不许被调。
+
+    与下一条是一对：只看"降级能试第二个"会放过"开关关着也在试"——那是运营以为没花钱、
+    而每轮实际多打一家。
+    """
+    calls: list[str] = []
+    _patch_factories(monkeypatch, calls, failing={"tikhub"})
+    sub, source_id = await _seed_subscription(db_session)
+    await _give_ghid(db_session, source_id)
+    runner = make_routed_sync_runner(
+        _settings(), default_channel="tikhub", default_provider=None, fallback_enabled=False
+    )
+    with pytest.raises(DiscoveryFailedError):
+        await runner(db_session, sub, "tok-off")
+    assert calls == ["tikhub"], f"开关关却调了 {calls}"
+
+
+async def test_degradation_on_calls_the_second_channel_exactly_once(
+    db_session: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S8.4.1.2：降级开 ⇒ 第一家失败后**第二家被调 1 次**；第三家不试。
+
+    "1 次"是判据而不是日志：试到第三家看起来更稳，但那是拿预算赌一条没人验证过的链路，
+    而且每多一家的成本在本卡这一层是不可见的（协调器的预算面只管详情，不管发现）。
+    """
+    calls: list[str] = []
+    _patch_factories(monkeypatch, calls, failing={"tikhub"})
+    sub, source_id = await _seed_subscription(db_session)
+    await _give_ghid(db_session, source_id)
+    runner = make_routed_sync_runner(
+        _settings(), default_channel="tikhub", default_provider=None, fallback_enabled=True
+    )
+    await runner(db_session, sub, "tok-on")
+    assert calls == ["tikhub", "dajiala"], calls
+
+
+async def test_degradation_on_still_raises_when_the_second_channel_fails(
+    db_session: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """降级后第二家也失败 ⇒ 如实上抛，不许"试过两家"被读成"本轮成功"。"""
+    calls: list[str] = []
+    _patch_factories(monkeypatch, calls, failing={"tikhub", "dajiala"})
+    sub, source_id = await _seed_subscription(db_session)
+    await _give_ghid(db_session, source_id)
+    runner = make_routed_sync_runner(
+        _settings(), default_channel="tikhub", default_provider=None, fallback_enabled=True
+    )
+    with pytest.raises(DiscoveryFailedError):
+        await runner(db_session, sub, "tok-both")
+    assert calls == ["tikhub", "dajiala"], calls
+

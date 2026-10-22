@@ -141,13 +141,15 @@ user_name；再加一支帐号信息框。token 形状 `gh_ + 6~40 位`取自四
 变异 1（kb.py 的调用删掉 html= 实参）⇒ 1 failed, 13 passed
         FAILED test_that_one_call_hands_it_the_page_it_already_fetched
 变异 2（kb.py 的那一处调用整段删除）  ⇒ 2 failed, 12 passed
-        FAILED test_the_resolver_has_exactly_one_production_caller
+        FAILED test_the_resolver_has_exactly_two_claimed_production_callers
         FAILED test_that_one_call_hands_it_the_page_it_already_fetched
 ```
 
-⇒ 两条判据分别红在"传什么"与"有没有人叫"，且 `test_the_resolver_has_exactly_one_production_caller`
-把调用面钉死成 `[("services/kb.py", 1)]`——多一处调用同样红（第二个写入口正是 ADR-0014 要防的分裂）。
+⇒ 两条判据分别红在"传什么"与"有没有人叫"，且 `test_the_resolver_has_exactly_two_claimed_production_callers`
+把调用面钉成一份**带名字与次数的清单**——多一处同样红（第二个没人认领的写入口正是 ADR-0014 要防的分裂）。
 生产里"零额外请求"是结构性的：`_persist_document` 拿到的 `article.html` 就是本次直抓已在手的原文。
+（本条在 S8.2.1 交付时清单是 `[("services/kb.py", 1)]`；S8.4 加了调度器那一处，
+被这条门当场拦住并迫使改动写进判据——见 §10e。改名一次是为了名字不与内容撒谎。）
 
 ## 8. `SKIP_BASELINE_WIN` 的分片算法（本卡内还会动）
 
@@ -155,7 +157,9 @@ user_name；再加一支帐号信息框。token 形状 `gh_ + 6~40 位`取自四
 |---|---|---|
 | 起点（STEP-10 交付 `066ceeb`） | — | 621 |
 | S8.1.1 | `test_source_identifiers` 3 | 624 |
-| S8.2.1 | `test_identifier_resolver` 8 | **632** |
+| S8.2.1 | `test_identifier_resolver` 8 | 632 |
+| S8.3 | `test_channel_routing` 2 | 634 |
+| S8.4 | `test_channel_routing` 再 3（三条调度器判据） | **637** |
 
 每片的增量都是**该文件在无 DSN 下单跑**实测的 skipped 数（不是按"写了几个用例"推算），
 收口前再做一次全量无 DSN 复测验总数并把 `@ci` 三条 run id 回填本节。
@@ -227,6 +231,118 @@ FAILED test_an_all_dropped_page_is_error_not_just_a_warning
 所以本片的全量终判**不由本机给**，由 CI 的 ubuntu 全量面（`@ci`）判——
 本机能负责的是：修前的全量读数只有那一条红（`1 failed, 2182 passed, 6 skipped`），
 红项已修且修复面已被上面那 415 条覆盖。收口批会再跑一次完整全量把终值写回本节。
+
+### 9d. S8.3 的终值读数（补跑，同一份工作树 = 提交 `211533c`）
+
+| 面 | 读数 |
+|---|---|
+| 全量连库（本机 PG@5547） | `2183 passed / 6 skipped / 0 failed`（= 上一档 2153 + 本片 30 条） |
+| 全量无 DSN（= CI-Windows 取材面） | `1554 passed / 634 skipped` ⇒ 与阈值 `634` 逐字相等 |
+| CI（ubuntu，验收面） | run 39694539066 @211533c = success |
+| Security | run 39694539158 @211533c = success |
+| CI-Windows | run 39694539088 @211533c（634 的验证在这一条上） |
+
+⇒ 上一段说的"收口批会再跑一次完整全量"已经兑现：2183 与 634 两个数都是**补跑后的实测值**，
+不是从 2153/632 推的。CI-Windows 那条如果与 634 不符，红在本节留痕，不改阈值凑数（D-V10-11）。
+
+**S8.4 又加 3 条连库判据 ⇒ 本档 637**（同文件无 DSN 单跑实测 `34 passed / 5 skipped`）；
+634 这一档的 CI-Windows 终判已在 `@ci` 落地（三条见下表），不沿用为终值。
+
+| 提交 | CI | CI-Windows | Security |
+|---|---|---|---|
+| `211533c`（S8.3） | run 39694539066 success | run 39694539088 success（634 的验证在这条上） | run 39694539158 success |
+
+## 10. S8.4.1 按源标识选渠道 + 降级开关
+
+先红读数（改前形状，静态可复算）：
+
+```
+git grep -c "required_identifier" HEAD -- apps/api/app  ⇒ 0 命中
+git grep -c "select_channels"     HEAD -- apps/api/app  ⇒ 0 命中
+工作树同两条                                             ⇒ registry.py 11 处 / select_channels 三处引用
+```
+
+四条变异实测（每条单独施加、跑完立即回滚；回滚后 `39 passed`）：
+
+| 变异 | 改动 | 读数 | 这条抓到的是什么 |
+|---|---|---|---|
+| A | `select_channels` 的标识筛选整条去掉（候选=全部可用） | `4 failed, 35 passed`（四条筛选判据全红） | S8.4.1.1：拿 biz 去打要 ghid 的接口不报错、只回空清单 |
+| B | 排序键里把 `cost_rank=None` 当 0（未知=免费） | `4 failed, 35 passed`（含两条调度器判据） | 未实测成本被当成最便宜 ⇒ 最贵那家拿到每一次首发 |
+| C | 去掉"只多试一家"的上限（`spent >= 2` 删除） | **1 failed, 38 passed** | 见下方"判据的局限" |
+| D | `fallback` 开关恒 True（忽略传入值） | `1 failed, 38 passed`：`test_degradation_off_...` | 开关关着却在试第二家 = 运营以为没花钱而每轮多打一家 |
+
+### 10b. 判据的局限（写在交付里，不藏在脑子里）
+
+变异 C 只红**一条**：`test_degradation_on_calls_the_second_channel_exactly_once` 抓不到它——
+那条的第二家（dajiala）是成功的，成功就 `break`，上限在这条路径上根本看不见。
+有牙的是 `test_degradation_on_still_raises_when_the_second_channel_fails`：两家都失败时，
+没有上限就会去调第三家，`calls` 从 2 变 3 就红。⇒ "1 次"这个判据的判定力**来自失败路径**，
+不来自成功路径；只留前者会留下一条没有牙齿的判据。
+
+### 10c. 降级开关今天打不开，是实测结论不是遗漏
+
+```
+"discovery_fallback_enabled" in Settings.model_fields   ⇒ False
+bool(getattr(Settings(), "discovery_fallback_enabled", False)) ⇒ False
+```
+
+⇒ 机制（`make_routed_sync_runner(..., fallback_enabled=...)`）已交付并有判据（§10 表的 C/D 两条），
+但**运营侧还打不开它**：那一行配置位在 `app/core/config.py`，不在本卡所有权内。
+判据 `test_the_degradation_switch_has_no_config_field_yet` 钉的就是"字段不存在"这个现状——
+将来有人补上那一行，这条会**红**，那时该改的是本节与 P-70 的处置，而不是顺手把断言删掉。
+登记 **P-70**。
+
+### 10d. 顺带撞到的一个飘（不是本卡造成的，但读数留在本卡）
+
+S8.4 的判据要在 `test_channel_routing + test_scheduler + test_discovery` 合并跑，
+其中 `test_scheduler.py::test_run_once_runs_due_subscriptions_in_parallel` **红过一次**：
+
+| 组合 | 次数 | 结果 |
+|---|---|---|
+| 本卡文件 + scheduler + discovery | 3 | 2 绿 1 红（红的是那条并行判据） |
+| scheduler + discovery（不带本卡新文件） | 3 | 2 绿 1 红 |
+| 只跑那一条 | 5 | 5 绿 |
+| A/B：HEAD 版 scheduler（去掉本卡改动）+ scheduler + discovery | 3 | 3 绿 |
+| A/B：本卡版 scheduler 还原后 + 同上 | 6 | 6 绿 |
+
+⇒ 红与本卡改动**无因果**（同一组合在我没改调度器时也红过；A/B 各跑都不稳定复现）。
+它的形状是判据自称"不受测试机负载影响"，实际靠 `asyncio.sleep(0.05)` 造出的 50 毫秒墙钟窗判重叠。
+⇒ 登记 **P-71**（含"换成 `asyncio.Event` 会合点"的出门判据），本卡不改那个文件。
+顺带一条环境读数：本机隔离 PG（`D:/tmp/pg16`）在今晨停过一次，5 条连库判据当时是被 conftest
+判成"PG 不可达 ⇒ skip"而不是失败——`2153/2183` 那种"passed"数一旦掉到 `34 passed / 5 skipped`
+就是库没了的信号，这个对照关系比看退出码可靠（PG 起来后 39 条全绿）。
+
+### 10e. S8.2.1 那道接线门当场拦下了 S8.4 的第二处调用
+
+S8.4 的调度器要按源标识选渠道，于是加了对 `ensure_identifiers` 的调用。全量无 DSN 复测时：
+
+```
+1 failed, 1560 passed, 637 skipped
+FAILED tests/test_identifier_resolver.py::test_the_resolver_has_exactly_one_production_caller
+  assert hits == [("services/kb.py", 1)]
+   +  where hits = [('services/kb.py', 1), ('services/scheduler.py', 1)]
+```
+
+⇒ 这条门是 S8.2.1 那批写的，它的存在理由就是"不许出现第二个没人认领的写入口"，
+这次它抓到的是**本卡自己的**新增调用点。处置方式是把第二处的角色写进判据
+（`kb` = 入库时写、`scheduler` = 按源路由前的读侧补行，两处各一次，第三处仍红），
+而不是把断言放松成"≥1 处"或删掉——放松的措辞会让下一次真正的分裂静默通过。
+判据的名字也一并改掉（原名"exactly_one"已与内容不符，名字不该对内容撒谎）。
+
+
+
+```
+"discovery_fallback_enabled" in Settings.model_fields   ⇒ False
+bool(getattr(Settings(), "discovery_fallback_enabled", False)) ⇒ False
+```
+
+⇒ 机制（`make_routed_sync_runner(..., fallback_enabled=...)`）已交付并有判据（§10 表 C/D 两条），
+但**运营侧还打不开它**：那一行配置位在 `app/core/config.py`，不在本卡所有权内。
+判据 `test_the_degradation_switch_has_no_config_field_yet` 钉的就是"字段不存在"这个现状——
+将来有人补上那一行，这条会**红**，红的时候该做的是更新 EVD 本节与 P-70 的处置，
+而不是把断言删掉。登记 **P-70**。
+
+
 
 
 
