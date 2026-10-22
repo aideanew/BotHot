@@ -5,6 +5,7 @@ import { useAdminData } from "@/components/useAdminData";
 import AdminDocSection from "@/components/AdminDocSection";
 import AdminSpaceCard from "@/components/AdminSpaceCard";
 import AdminOpsSection from "@/components/AdminOpsSection";
+import AlertBanner from "@/components/admin/AlertBanner";
 import {
   deleteAdminSpaceDocsBatch,
   recategorizeAdminSpaceDocsBatch,
@@ -87,6 +88,9 @@ export default function AdminPage() {
           ← 返回空间列表
         </Link>
       </div>
+
+      {/* S14b.2.3：卡面要求"在 /admin 顶部加告警状态条"，读的是 /ready 的 alerting 字段 */}
+      <AlertBanner />
 
       <section className="mt-6">
         <h2 className="text-title-sm font-semibold text-neutral-900">全部空间</h2>

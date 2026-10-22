@@ -18,6 +18,7 @@ import AuthGate from "@/components/AuthGate";
 import { useAuth } from "@/components/AuthContext";
 import { usePageTitle } from "@/components/usePageTitle";
 import DiscoveryChannelsPanel from "@/components/admin/DiscoveryChannelsPanel";
+import AlertBanner from "@/components/admin/AlertBanner";
 import EngineKeysPanel from "@/components/admin/EngineKeysPanel";
 import LivenessPanel from "@/components/admin/LivenessPanel";
 import PushConsolePanel from "@/components/admin/PushConsolePanel";
@@ -45,8 +46,8 @@ function OpsConsole() {
         <div>
           <h1 className="text-title-lg font-semibold text-neutral-900">运维台</h1>
           <p className="mt-1 text-caption text-neutral-600">
-            后台健康与采集能力面。数据来源为 <code className="font-mono">/api/v1/admin/*</code> 真实端点，
-            本域无演示数据。
+            后台健康与采集能力面。数据来源为 <code className="font-mono">/api/v1/admin/*</code> 与{" "}
+            <code className="font-mono">/api/v1/system/ready</code> 真实端点，本域无演示数据。
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -62,6 +63,8 @@ function OpsConsole() {
           </Link>
         </div>
       </header>
+
+      <AlertBanner />
 
       <nav aria-label="运维屏切换" className="mb-4 flex flex-wrap gap-2">
         {SCREENS.map((s, i) => (

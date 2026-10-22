@@ -54,7 +54,9 @@
 
 ## 4. 三绿
 
-本卡只改文档，验收提交待回填（`SKIP_BASELINE_WIN` 仍为 653：本卡零 pytest 新增）。
+本卡只改文档：验收提交 `6a6525f`（`docs(STEP-15 收口)`）**三绿**——
+`CI` check-run 39732678380 success、`CI-Windows` 39732678239 success、`Security` 39732678237 success
+（attempt 1，无需重跑）。`SKIP_BASELINE_WIN` 仍为 653：本卡零 pytest 新增。
 
 本地门的两条读数如实分开记：`scripts/check_docs_consistency.py` 23 个路径引用 / 0 个不存在；
 `entry.py evidence-check` 在**尚未 `git add` 时返回 rc=3**——敏感形门的待检面取的是索引

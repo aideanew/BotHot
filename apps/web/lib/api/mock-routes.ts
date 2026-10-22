@@ -91,6 +91,11 @@ export const MOCK_PASSTHROUGH: ReadonlyArray<{ path: RegExp; reason: string }> =
   { path: /^\/api\/v1\/chat\b/, reason: "问答由 ask.ts 的伪流式与真流式两支自己处理，不走信封表" },
   { path: /^\/api\/v1\/auth\/login\b/, reason: "整页跳转端点（302），不是 fetch 目标" },
   { path: /^\/api\/v1\/auth\/callback\b/, reason: "SSO 回调页直取原始信封语义，不经 request()" },
+  {
+    path: /^\/api\/v1\/system\/ready$/,
+    reason:
+      "就绪探针回显的是**部署事实**（ALERTING_ENABLED、PG/Redis/schema 当下可达性），给它造一份样例等于向运维宣布一个不存在的服务栈的状态；演示态真打失败后由 AlertBanner 降级为「未知」",
+  },
 ];
 
 export function isMockPassthrough(path: string): boolean {

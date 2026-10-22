@@ -21,17 +21,22 @@ vi.mock("@/lib/api/admin-ops", () => ({
   registerEngineKey: vi.fn(),
   revokeEngineKey: vi.fn(),
   adminPush: vi.fn(),
+  getReadyProbe: vi.fn(),
+  putDiscoveryConfig: vi.fn(),
 }));
 
 import LivenessPanel from "@/components/admin/LivenessPanel";
 import DiscoveryChannelsPanel from "@/components/admin/DiscoveryChannelsPanel";
 import PushConsolePanel from "@/components/admin/PushConsolePanel";
 import EngineKeysPanel from "@/components/admin/EngineKeysPanel";
+import AlertBanner from "@/components/admin/AlertBanner";
 import {
   getOpsLiveness,
   listDiscoveryChannels,
+  getReadyProbe,
   listEngineKeys,
   listPushChannels,
+  putDiscoveryConfig,
 } from "@/lib/api/admin-ops";
 import { ApiError } from "@/lib/api/types";
 
@@ -105,6 +110,75 @@ describe("发现渠道屏", () => {
     expect(screen.getByText("未启用")).toBeTruthy();
     expect(screen.getByText("缺凭据")).toBeTruthy();
     expect(screen.getByText(/缺 TIKHUB_TOKEN/)).toBeTruthy();
+  });
+});
+
+describe("发现渠道启停（S14b.3.3 的写侧）", () => {
+  const row = (name: string, enabled: boolean) => ({
+    name,
+    description: name,
+    implemented: true,
+    enabled,
+    available: true,
+    reason: "",
+    contractVerifiedAt: null,
+    verifiedScope: "search",
+  });
+
+  /** 服务端此刻：a、b 都启用，默认 a */
+  const view = () => ({
+    channels: [row("a", true), row("b", true)],
+    defaultChannel: "a",
+    selectionReason: "",
+    configuredChannels: ["a", "b"],
+  });
+
+  it("取消当前默认渠道后保存，发出的 default 必须跟着换——悬空默认一定被后端 10005 拒", async () => {
+    vi.mocked(listDiscoveryChannels).mockResolvedValue(view());
+    vi.mocked(listPushChannels).mockResolvedValue([]);
+    vi.mocked(putDiscoveryConfig).mockResolvedValue({ enabled: ["b"], default: "b", source: "db" });
+    render(<DiscoveryChannelsPanel />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存启停配置" })).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText("启用 a")); // 取消的正是当前默认渠道
+    fireEvent.click(screen.getByRole("button", { name: "保存启停配置" }));
+    // 判的是**发出去的载荷**：select 的 DOM value 会被 options 自动纠正，
+    // 只看它就看不见组件 state 里那个悬空默认——上一版这条判据就是这么假绿的。
+    await waitFor(() => expect(putDiscoveryConfig).toHaveBeenCalledWith(["b"], "b"));
+  });
+
+  it("保存只发 enabled 与 default，成功后重读注册表（勾选是草稿，丸是事实）", async () => {
+    vi.mocked(listDiscoveryChannels).mockResolvedValue(view());
+    vi.mocked(listPushChannels).mockResolvedValue([]);
+    vi.mocked(putDiscoveryConfig).mockResolvedValue({
+      enabled: ["a", "b"],
+      default: "a",
+      source: "db",
+    });
+    render(<DiscoveryChannelsPanel />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存启停配置" })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "保存启停配置" }));
+    await waitFor(() => expect(putDiscoveryConfig).toHaveBeenCalledWith(["a", "b"], "a"));
+    await waitFor(() => expect(screen.getByText(/下一轮调度生效/)).toBeTruthy());
+    expect(listDiscoveryChannels).toHaveBeenCalledTimes(2);
+  });
+
+  it("10005 时草稿不丢：一次失败不能吞掉运营刚勾的选择", async () => {
+    vi.mocked(listDiscoveryChannels).mockResolvedValue(view());
+    vi.mocked(listPushChannels).mockResolvedValue([]);
+    vi.mocked(putDiscoveryConfig).mockRejectedValue(
+      new ApiError(10005, "渠道未注册：x（可用：a, b）")
+    );
+    render(<DiscoveryChannelsPanel />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存启停配置" })).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText("启用 b"));
+    fireEvent.click(screen.getByRole("button", { name: "保存启停配置" }));
+    await waitFor(() => expect(screen.getByText(/启停未生效/)).toBeTruthy());
+    expect((screen.getByLabelText("启用 b") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("启用 a") as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText(/渠道未注册：x/)).toBeTruthy();
   });
 });
 
@@ -185,5 +259,64 @@ describe("引擎密钥屏", () => {
     await waitFor(() => expect(screen.getByText("k-de…0001")).toBeTruthy());
     expect(screen.queryByText("k-demo-0001")).toBeNull();
     expect(screen.getByText("有登记行")).toBeTruthy();
+  });
+});
+
+describe("告警状态条（S14b.2.3）", () => {
+  /** 一份"依赖全就绪"的 /ready 读数，只有 alerting 由用例决定 */
+  const ready = (alerting: "enabled" | "disabled") => ({
+    status: "ready" as const,
+    checks: {
+      postgres: { ok: true, state: "ok" },
+      redis: { ok: true, state: "ok" },
+      schema: { ok: true, state: "ok" },
+    },
+    alerting,
+  });
+
+  it("依赖就绪但 ALERTING_ENABLED=false ⇒ 画降级并点名环境变量", async () => {
+    vi.mocked(getReadyProbe).mockResolvedValue(ready("disabled"));
+    render(<AlertBanner />);
+    const bar = await screen.findByRole("status");
+    expect(bar.querySelector('[data-tone="degraded"]')).toBeTruthy();
+    expect(bar.textContent).toContain("ALERTING_ENABLED=false");
+    // 告警关着时绝不出现"健康"丸——这一条就是这屏存在的理由（否则关着与开着同形）
+    expect(bar.querySelector('[data-tone="ok"]')).toBeNull();
+  });
+
+  it("依赖未就绪优先于告警关闭：点名是哪一项、处于什么 state", async () => {
+    vi.mocked(getReadyProbe).mockResolvedValue({
+      status: "not_ready",
+      checks: {
+        postgres: { ok: true, state: "ok" },
+        redis: { ok: false, state: "unreachable" },
+        schema: { ok: true, state: "ok" },
+      },
+      alerting: "disabled",
+    });
+    render(<AlertBanner />);
+    const bar = await screen.findByRole("status");
+    expect(bar.querySelector('[data-tone="bad"]')).toBeTruthy();
+    expect(bar.textContent).toContain("依赖未就绪");
+    expect(bar.textContent).toContain("Redis（unreachable）");
+  });
+
+  it("探针读不到 ⇒ 画「未知」而不是绿：读取失败的处置是 fail-closed", async () => {
+    vi.mocked(getReadyProbe).mockRejectedValue(new ApiError(50101, "网络异常，请检查连接后重试"));
+    render(<AlertBanner />);
+    const bar = await screen.findByRole("status");
+    expect(bar.querySelector('[data-tone="unknown"]')).toBeTruthy();
+    expect(bar.textContent).toContain("不当作健康");
+  });
+
+  it("全就绪且告警已启用 ⇒ 健康；挂载只取一次，新读数靠「重读」", async () => {
+    vi.mocked(getReadyProbe).mockResolvedValue(ready("enabled"));
+    render(<AlertBanner />);
+    const bar = await screen.findByRole("status");
+    expect(bar.querySelector('[data-tone="ok"]')).toBeTruthy();
+    // /ready 整段只有 4s 预算（PG ping + Redis ping + schema 比对），常驻页面定时轮询等于把探针做成负载源
+    expect(getReadyProbe).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "重读" }));
+    await waitFor(() => expect(getReadyProbe).toHaveBeenCalledTimes(2));
   });
 });

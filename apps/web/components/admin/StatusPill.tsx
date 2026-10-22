@@ -7,6 +7,10 @@
  * 同时对比度按 WCAG AA 取深色文字配浅底（不是彩色底配白字）。
  * `tone="unknown"` 是给"数据缺失"用的第四态——它不等于"故障"，
  * 把未知画成故障会让人去查一个本来就没人启动的进程。
+ *
+ * `whitespace-nowrap` 是 375px 实测逼出来的：窄屏下丸内文本会被拆成"有登/记/行"三行，
+ * 徽标一旦换行就不再是一个能一眼读完的事实。表格挤不下由 `.card.overflow-x-auto` 横向滚动，
+ * 不是把丸压碎。
  */
 
 export type PillTone = "ok" | "degraded" | "bad" | "unknown";
@@ -34,7 +38,7 @@ interface Props {
 export default function StatusPill({ tone, label }: Props) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-caption font-medium ${STYLES[tone]}`}
+      className={`inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-caption font-medium ${STYLES[tone]}`}
       data-tone={tone}
     >
       {label ?? LABELS[tone]}

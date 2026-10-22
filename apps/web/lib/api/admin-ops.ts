@@ -103,6 +103,31 @@ export function listDiscoveryChannels(): Promise<DiscoveryChannelView> {
   return request<DiscoveryChannelView>("/api/v1/admin/discovery/channels");
 }
 
+export interface DiscoveryConfigResult {
+  enabled: string[];
+  /** 后端回的是字符串：库里那份生效配置里的默认渠道，空串=不设默认 */
+  default: string;
+  /** 写成功后恒为 `db`（读侧可能是 `env`，写一次就以库为准） */
+  source: string;
+}
+
+/**
+ * PUT /api/v1/admin/discovery/config —— 渠道启停与默认渠道，**下一轮调度生效，不需重启 backend**。
+ *
+ * 体是 `extra="forbid"` 的两个字段，且 `default` 必须 ∈ `enabled`（`enabled` 为空时只允许空串）。
+ * 所以"取消勾选当前默认渠道"不是一次合法请求：调用方必须同时给出新的默认，
+ * 这条约束由面板在选择器里强制，而不是发出去等后端 10005。
+ */
+export function putDiscoveryConfig(
+  enabled: string[],
+  defaultChannel: string
+): Promise<DiscoveryConfigResult> {
+  return request<DiscoveryConfigResult>("/api/v1/admin/discovery/config", {
+    method: "PUT",
+    body: JSON.stringify({ enabled, default: defaultChannel }),
+  });
+}
+
 // ---------- 常驻进程存活 ----------
 
 export interface ProcessLivenessRow {
@@ -160,4 +185,35 @@ export interface AdminPushReceipt {
   delivered: boolean;
   /** 未投递时的可读原因（delivered=true 时后端不带该字段） */
   reason?: string;
+}
+
+// ---------- 就绪探针（AlertBanner 的唯一读侧）----------
+
+/** 一项依赖的就绪读数；`state` 可能是 `ok` / `down` / `unreachable`（超时那一路也点名） */
+export interface ReadyCheckItem {
+  ok: boolean;
+  state: string;
+}
+
+export interface ReadyProbe {
+  status: "ready" | "not_ready";
+  checks: {
+    postgres: ReadyCheckItem;
+    redis: ReadyCheckItem;
+    schema: ReadyCheckItem;
+  };
+  /**
+   * STEP-16 刻意把它放在 `checks` **外面**：`ALERTING_ENABLED=false` 不该让 `/ready` 变 503
+   * （摘流量与"没人替你盯着"是两件事），但它是运维必须看得见的一条部署事实。
+   */
+  alerting: "enabled" | "disabled";
+}
+
+/**
+ * GET /api/v1/system/ready —— 依赖未就绪时后端回 **503 + 标准信封（code=0）**，
+ * 所以这条读取拿到的仍是明细，不是异常：`request()` 只在 `code!==0` 抛错，
+ * 这正是 AlertBanner 能点名"哪一项没就绪"的前提。
+ */
+export function getReadyProbe(): Promise<ReadyProbe> {
+  return request<ReadyProbe>("/api/v1/system/ready");
 }
