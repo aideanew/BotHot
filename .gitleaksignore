@@ -96,3 +96,10 @@ d839eb741a464466b1096f4627eb10196b19ba03:apps/web/app/engines/page.tsx:generic-a
 # 而且 CI 的 gitleaks 步扫的是本批变更文件全文，豁免文件自己也在扫描面上。
 848afb2da4e809aec262c99bfabc57948da7d406:.gitleaksignore:generic-api-key:82
 848afb2da4e809aec262c99bfabc57948da7d406:docs/任务规划V0.17.0/07-执行过程记录.md:generic-api-key:34
+
+# ── 12) fbb0409 一条：测试夹具里的幂等键字面量（工作树已不存在该形状）─────────────
+# STEP-14a 的 P-18 用例给 Job 造幂等键，列名以 key 结尾、值是一段字母数字串，
+# generic-api-key 因此命中。1872910 已把夹具值对齐到本仓既有的冒号约定（列名与领域值都没动），
+# 但 gitleaks 走 git 模式扫历史，fbb0409 那个 blob 永久存在，而 D-V4-04 禁止重写历史
+# ⇒ 依 D-12 逐指纹登记。CI 的 gitleaks 步扫的是本批变更文件，故后续批次不再因此红。
+fbb04092c0e5f25b00e51cac4b039cea13295f43:apps/api/tests/test_admin_contract.py:generic-api-key:156

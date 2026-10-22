@@ -107,7 +107,11 @@ jobs:
       # 本档 653 的锚 = run 39722164694 @5f16de9（success，未知族 0）——STEP-19 第 2 轮交付提交；
       # 同一提交 CI 39722164669 / Security 39722164679 均 attempt 1 success（第 1 轮 c9cb215 的
       # Security 🔴 是源码里手编的假 JWT 被 gitleaks `jwt` 规则命中，已按 D-12 登记 + 改现签 ⇒ P-81）。
-      SKIP_BASELINE_WIN: "653"
+      # **本档 658 的锚** = run 39782742078 @fbb0409：门禁读数 `failed=0 total_skipped=658 baseline=653`
+      # （同次 pytest `1587 passed / 658 skipped`）。+5 全部是 STEP-14a 新增的连库用例
+      # （`tests/test_admin_contract.py` 里 5 条走 db_session 的分页/重试判据，另 3 条不连库），
+      # 未知族 0 ⇒ 按 D-V10-11 抬到测量值，不留余量。
+      SKIP_BASELINE_WIN: "658"
     defaults:
       run:
         shell: bash
