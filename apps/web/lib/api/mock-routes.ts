@@ -23,7 +23,13 @@
 
 import { ApiError, ERROR_MESSAGES } from "./types";
 import type { EngineItem } from "./engines";
-import type { LinkResult, MeData, PublicSpace } from "./types";
+import type {
+  ExtractedArticle,
+  LinkResult,
+  MeData,
+  PublicSpace,
+  ResolvedArticle,
+} from "./types";
 
 /** 一次 mock 分发拿到的上下文——与真实那次 fetch 能拿到的信息同集。 */
 export interface MockContext {
@@ -295,3 +301,100 @@ registerMockRoutes(
     handle: () => MOCK_LINK_RESULT,
   }
 );
+
+// ── ingest 域（第四个迁入的域：解析 / 抽取 / 提交 / 状态轮询）──────────
+
+/** 正常文章（高质量） */
+const MOCK_RESOLVE_OK: ResolvedArticle = {
+  title: "深度解析：大模型知识库落地的三个关键环节",
+  author: "技术前沿周刊",
+  publishTime: "2026-09-05 08:30",
+  content:
+    "知识库的质量决定了问答效果的上限。\n采集、清洗、评分是入库前的三道关口。\n本文逐一拆解每个环节的最佳实践。",
+  url: "https://mp.weixin.qq.com/s/mock-ok-001",
+  biz: "mock-biz-001",
+};
+
+const MOCK_EXTRACT_OK: ExtractedArticle = {
+  title: "深度解析：大模型知识库落地的三个关键环节",
+  author: "技术前沿周刊",
+  publishTime: "2026-09-05 08:30",
+  paragraphs: [
+    "知识库的质量决定了问答效果的上限。",
+    "采集、清洗、评分是入库前的三道关口。",
+    "本文逐一拆解每个环节的最佳实践，并给出可落地的操作建议。",
+  ],
+  images: [{ src: "https://mock.example/fig-1.png", caption: "图 1：入库流程" }],
+  wordCount: 2860,
+  langbotFormat: "markdown-v1",
+  qualityScore: 86,
+  qualityPassed: true,
+  qualityReasons: [],
+};
+
+/** 低质样例：URL 含"低质"时命中，用于演示后端 20003 的同步拦截 */
+const MOCK_LOW_QUALITY: ExtractedArticle = {
+  title: "（低质样例）标题党短文",
+  author: "营销号日报",
+  publishTime: "2026-09-06 12:00",
+  paragraphs: ["点关注不迷路。"],
+  images: [],
+  wordCount: 7,
+  langbotFormat: "markdown-v1",
+  qualityPassed: false,
+  qualityScore: 12,
+  qualityReasons: ["正文过短（少于 200 字）", "无有效配图"],
+};
+
+function bodyUrl(ctx: MockContext): string {
+  return String((ctx.body as { url?: string } | undefined)?.url ?? "");
+}
+
+registerMockRoutes(
+  {
+    // 非 http(s) 链接在演示态也必须现 10006：否则"链接校验"这条前端路径永不执行
+    method: "POST",
+    pattern: /^\/api\/v1\/resolve$/,
+    handle: (ctx) => {
+      if (!bodyUrl(ctx).startsWith("http")) {
+        throw new ApiError(10006, ERROR_MESSAGES[10006], `mock-${Date.now()}`);
+      }
+      return MOCK_RESOLVE_OK;
+    },
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/extract$/,
+    handle: (ctx) => (bodyUrl(ctx).includes("低质") ? MOCK_LOW_QUALITY : MOCK_EXTRACT_OK),
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/spaces\/[^/]+\/docs$/,
+    handle: () => ({
+      docId: `doc-mock-${Date.now()}`,
+      title: "深度解析：大模型知识库落地的三个关键环节",
+      status: "INDEXED",
+      langbotFileId: `file-mock-${Date.now()}`,
+      taskId: "",
+      hitCache: false,
+      hitCount: 0,
+    }),
+  },
+  {
+    // 演示态"3s 后即 READY"的演练路径：轮询循环照跑，只是第一跳就返回终态
+    method: "GET",
+    pattern: /^\/api\/v1\/spaces\/[^/]+\/docs\/([^/]+)\/status$/,
+    paramNames: ["docId"],
+    handle: ({ params }) => ({
+      docId: params.docId ?? "",
+      status: "READY",
+      langbotFileId: "file-mock",
+    }),
+  }
+);
+
+// ── 注册顺序备忘 ────────────────────────────────────────────────────
+// 本文件按域分段注册，段内顺序即匹配顺序（首个命中生效）。迁入 spaces 域时务必把
+// `GET /spaces/public`、`POST /spaces/{id}/docs`、`GET /spaces/{id}/docs/{docId}/status`
+// 这类**具体路径**排在通用 `/spaces/{id}` 之前，否则通用模式会先把具体路径吃掉，
+// 表现是"页面拿到一份结构正确但内容错误的样例"——不是异常，是最难查的那类缺陷。

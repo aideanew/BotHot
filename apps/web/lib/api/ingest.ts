@@ -7,58 +7,8 @@
  * 纯函数（批量粘贴/预览断点/轮询提示）见同目录 batch.ts。
  */
 
-import { ERROR_MESSAGES, MOCK_ENABLED, delay, mockRequest, request } from "./http";
+import { delay, request } from "./http";
 import { ApiError, type ExtractedArticle, type ResolvedArticle } from "./types";
-
-// ---------- mock 样例 ----------
-
-/** mock 样例：正常文章（高质量） */
-const MOCK_RESOLVE_OK: ResolvedArticle = {
-  title: "深度解析：大模型知识库落地的三个关键环节",
-  author: "技术前沿周刊",
-  publishTime: "2026-09-05 08:30",
-  content: "知识库的质量决定了问答效果的上限。\n采集、清洗、评分是入库前的三道关口。\n本文逐一拆解每个环节的最佳实践。",
-  url: "https://mp.weixin.qq.com/s/mock-ok-001",
-  biz: "mock-biz-001",
-};
-
-const MOCK_EXTRACT_OK: ExtractedArticle = {
-  title: "深度解析：大模型知识库落地的三个关键环节",
-  author: "技术前沿周刊",
-  publishTime: "2026-09-05 08:30",
-  paragraphs: [
-    "知识库的质量决定了问答效果的上限。",
-    "采集、清洗、评分是入库前的三道关口。",
-    "本文逐一拆解每个环节的最佳实践，并给出可落地的操作建议。",
-  ],
-  images: [
-    { src: "https://mock.example/fig-1.png", caption: "图 1：入库流程" },
-  ],
-  wordCount: 2860,
-  langbotFormat: "markdown-v1",
-  qualityScore: 86,
-  qualityPassed: true,
-  qualityReasons: [],
-};
-
-/** mock 样例：低质文章（触发 20003 拦截演示） */
-const MOCK_LOW_QUALITY: ExtractedArticle = {
-  title: "（低质样例）标题党短文",
-  author: "营销号日报",
-  publishTime: "2026-09-06 12:00",
-  paragraphs: ["点关注不迷路。"],
-  images: [],
-  wordCount: 7,
-  langbotFormat: "markdown-v1",
-  qualityScore: 12,
-  qualityPassed: false,
-  qualityReasons: ["正文过短（少于 200 字）", "无有效配图"],
-};
-
-/** 链接是否命中低质 mock 样例（含“低质”关键词时返回低质样例，供拦截演示） */
-function pickMockExtract(url: string): ExtractedArticle {
-  return url.includes("低质") ? MOCK_LOW_QUALITY : MOCK_EXTRACT_OK;
-}
 
 // ---------- 链接本地预校验（C-T7R 返工：对齐后端 normalize_article_url） ----------
 
@@ -128,12 +78,6 @@ export function validateArticleUrl(
  * 错误：10006 链接格式不正确 / 20001 非公众号文章 / 20002 网络失败。
  */
 export async function resolveUrl(url: string): Promise<ResolvedArticle> {
-  if (MOCK_ENABLED) {
-    if (!url.startsWith("http")) {
-      throw new ApiError(10006, ERROR_MESSAGES[10006], `mock-${Date.now()}`);
-    }
-    return mockRequest(MOCK_RESOLVE_OK);
-  }
   return request<ResolvedArticle>("/api/v1/resolve", {
     method: "POST",
     body: JSON.stringify({ url }),
@@ -148,9 +92,6 @@ export async function resolveUrl(url: string): Promise<ResolvedArticle> {
 export async function extractUrl(
   url: string
 ): Promise<ExtractedArticle & { qualityReasons: string[] }> {
-  if (MOCK_ENABLED) {
-    return mockRequest(pickMockExtract(url));
-  }
   return request<ExtractedArticle>("/api/v1/extract", {
     method: "POST",
     body: JSON.stringify({ url }),
@@ -188,17 +129,6 @@ export async function submitDoc(
   spaceId: string,
   url: string
 ): Promise<SubmitDocResult> {
-  if (MOCK_ENABLED) {
-    return mockRequest({
-      docId: `doc-mock-${Date.now()}`,
-      title: "深度解析：大模型知识库落地的三个关键环节",
-      status: "INDEXED",
-      langbotFileId: `file-mock-${Date.now()}`,
-      taskId: "",
-      hitCache: false,
-      hitCount: 0,
-    });
-  }
   return request<SubmitDocResult>(
     `/api/v1/spaces/${encodeURIComponent(spaceId)}/docs`,
     { method: "POST", body: JSON.stringify({ url }) }
@@ -235,16 +165,12 @@ export async function pollDocStatus(
     if (opts?.signal?.aborted) {
       throw new ApiError(50101, "操作已取消");
     }
-    // 单次查询：真实态走代理；mock 态（若启用）3s 后即 READY（演练路径）
-    const fetchOne = async (): Promise<DocStatusResult> => {
-      if (MOCK_ENABLED) {
-        await delay(300);
-        return { docId, status: "READY", langbotFileId: "file-mock" };
-      }
-      return request<DocStatusResult>(
+    // 单次查询：真实态与演示态都走 request()（演示态由表给"第一跳即 READY"的演练路径，
+    // 轮询循环本身照跑——这才叫同一条管道）
+    const fetchOne = (): Promise<DocStatusResult> =>
+      request<DocStatusResult>(
         `/api/v1/spaces/${encodeURIComponent(spaceId)}/docs/${encodeURIComponent(docId)}/status`
       );
-    };
 
     const result = await fetchOne();
     if (result.status === "READY") return result;
