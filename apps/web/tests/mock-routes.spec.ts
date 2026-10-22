@@ -92,5 +92,40 @@ describe("统一 mock 拦截表", () => {
     expect(source).not.toContain("MOCK_ENABLED");
     expect(source).not.toContain("mockRequest(");
     expect(source).not.toContain("MOCK_ENGINES");
+    for (const file of ["auth.ts", "public-library.ts"]) {
+      const src = readFileSync(`lib/api/${file}`, "utf-8");
+      expect(src, file).not.toContain("MOCK_ENABLED");
+      expect(src, file).not.toContain("mockRequest(");
+    }
+  });
+
+  it("auth 域迁入后：未登录态在 mock 里也是 10001，且同样零 fetch", async () => {
+    const { authMe, authLogout } = await importApi();
+    await expect(authMe()).rejects.toMatchObject({ code: 10001 });
+    await expect(authLogout()).resolves.toBeUndefined();
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it("auth 域迁入后：登录标记与 /me 读的是同一把 key", async () => {
+    const { mockMarkLoggedIn } = await import("@/lib/api/mock-routes");
+    const { authMe } = await importApi();
+    mockMarkLoggedIn();
+    const me = await authMe();
+    expect(me.sub).toBe("mock-user-001");
+    expect(me.email).toBe("admin@bothot.local");
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it("public-library 域迁入后：解包管道照跑（表存的是 {items}，不是裸数组）", async () => {
+    const { listPublicSpaces } = await importApi();
+    const got = await listPublicSpaces();
+    expect(got.map((s) => s.id)).toEqual(["mock-public-ai-001"]);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it("auth 的整页跳转仍要判模式，但走唯一谓词口而不是自己算环境变量", async () => {
+    const src = readFileSync("lib/api/auth.ts", "utf-8");
+    expect(src).not.toContain("NEXT_PUBLIC_API_MOCK");
+    expect(src).toContain("isMockMode()");
   });
 });

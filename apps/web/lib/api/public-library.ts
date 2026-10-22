@@ -4,32 +4,15 @@
  * 契约：GET /api/v1/spaces/public（列表）、POST /api/v1/spaces/{id}/links（批量引入）。
  */
 
-import { MOCK_ENABLED, mockRequest, request } from "./http";
+import { request } from "./http";
 import type { LinkResult, PublicSpace } from "./types";
-
-/** mock 公共库样例（MOCK_ENABLED 时使用） */
-const MOCK_PUBLIC_SPACES: PublicSpace[] = [
-  {
-    id: "mock-public-ai-001",
-    name: "AI前沿库",
-    description: "AI前沿库（采自公众号，系统空间）",
-    docCount: 50,
-    engine: "builtin",
-    isPublic: true,
-    updatedAt: "2026-09-14T00:00:00",
-  },
-];
-
-const MOCK_LINK_RESULT: LinkResult = { copied: 50, skipped: 0, total: 50 };
 
 /**
  * GET /api/v1/spaces/public —— 公共库列表（AB-P004 P1）。
  * 登录保护 10001；返回 PublicSpace[]（已解包 items）。
+ * 演示态样例在 `mock-routes.ts`（那里存的是线上 `data` 形状 `{items}`，解包照跑）。
  */
 export async function listPublicSpaces(): Promise<PublicSpace[]> {
-  if (MOCK_ENABLED) {
-    return mockRequest(MOCK_PUBLIC_SPACES);
-  }
   return request<{ items: PublicSpace[] }>("/api/v1/spaces/public").then(
     (d) => d.items
   );
@@ -44,9 +27,6 @@ export async function linkPublicSpace(
   spaceId: string,
   publicSpaceId: string
 ): Promise<LinkResult> {
-  if (MOCK_ENABLED) {
-    return mockRequest(MOCK_LINK_RESULT);
-  }
   return request<LinkResult>(
     `/api/v1/spaces/${encodeURIComponent(spaceId)}/links`,
     {

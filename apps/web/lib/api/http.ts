@@ -6,7 +6,7 @@
  * delay / mockRequest —— 保持与拆分前「模块私有」等价的可见性。
  */
 
-import { ApiError, type Envelope } from "./types";
+import { ApiError, ERROR_MESSAGES, friendlyMessage, type Envelope } from "./types";
 import {
   UNREGISTERED_MOCK_MODE,
   buildMockContext,
@@ -31,38 +31,23 @@ export const MOCK_ENABLED: boolean = process.env.NEXT_PUBLIC_API_MOCK === "true"
 /** 供顶栏状态徽标等 UI 展示当前数据来源（mock 数据 / 真实后端） */
 export const MOCK_LABEL = MOCK_ENABLED ? "演示数据" : "真实后端";
 
-// ---------- 错误文案映射 ----------
+/**
+ * 数据来源谓词的**唯一读取口**：非 HTTP 的演示态行为（整页跳转登录、SSE 不建连、
+ * 伪流式分片）用它判断，而不是各自再写一次开关表达式。
+ * HTTP 形状的数据**不走这个谓词**——那些进 `mock-routes` 的表，由 `request()` 统一分发。
+ */
+export function isMockMode(): boolean {
+  return MOCK_ENABLED;
+}
 
-export const ERROR_MESSAGES: Record<number, string> = {
-  10001: "尚未登录或会话已过期",
-  10002: "登录状态校验失败，请重新登录",
-  10003: "授权码兑换失败，请重新登录",
-  10101: "登录状态已失效，请重新登录",
-  10102: "无权访问该资源",
-  10004: "权限不足",
-  10005: "请求参数不合法",
-  10006: "链接格式不正确",
-  20001: "非公众号文章，请检查链接",
-  20002: "网络异常，文章抓取失败",
-  20003: "内容质量不足，无法入库",
-  30001: "知识空间不存在或已删除",
-  30002: "机器人服务异常，请稍后重试",
-  30003: "入库失败，请稍后重试",
-  30004: "知识空间不存在或已删除",
-  30101: "知识空间不存在或已删除",
-  30102: "知识空间数量已达上限",
-  50002: "依赖服务暂不可用，请稍后重试",
-  50101: "服务暂不可用，请稍后重试",
-};
+// ---------- 错误文案映射 ----------
+// 表本体搬到 `types.ts`（`mock-routes` 要按同码同文抛错，又不能 import 本模块 ⇒ 见那里的注释）。
+// 这里只做转出，`auth/ask/ingest` 等既有 `from "./http"` 的 import 面一字不变。
+export { ERROR_MESSAGES, friendlyMessage } from "./types";
 
 /** 未登录类错误码：调用方据此回落未登录态 */
 export function isAuthError(code: number): boolean {
   return code === 10001 || code === 10101;
-}
-
-/** 错误码 → 可展示中文文案（未收录码回落原文案，再回落通用文案） */
-export function friendlyMessage(code: number, raw: string): string {
-  return ERROR_MESSAGES[code] ?? raw ?? "请求失败，请稍后重试";
 }
 
 // ---------- MOCK 延迟与样例请求 ----------

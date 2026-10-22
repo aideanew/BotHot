@@ -21,8 +21,9 @@
  * 而不是在这里手写一批新类型冒充契约。
  */
 
-import { ApiError } from "./types";
+import { ApiError, ERROR_MESSAGES } from "./types";
 import type { EngineItem } from "./engines";
+import type { LinkResult, MeData, PublicSpace } from "./types";
 
 /** 一次 mock 分发拿到的上下文——与真实那次 fetch 能拿到的信息同集。 */
 export interface MockContext {
@@ -200,5 +201,97 @@ registerMockRoutes(
       }
       return { engine, engineKbId: `mock-kb-${engine}`, spaceId: params.spaceId };
     },
+  }
+);
+
+// ── auth 域（第二个迁入的域）─────────────────────────────────────────
+
+/**
+ * 演示态的登录标记。**key 与读写只在这里有一份**：`authLogin` 写、`authMe` 读、`authLogout` 清，
+ * 三处若各自持有一个字符串，改名时就会出现"登录了但 /me 说没登录"这种最难读的现象。
+ */
+const MOCK_LOGIN_KEY = "bothot_mock_login";
+
+function loginStore(): Storage | null {
+  return typeof window === "undefined" ? null : window.localStorage;
+}
+
+export function mockMarkLoggedIn(): void {
+  loginStore()?.setItem(MOCK_LOGIN_KEY, "1");
+}
+
+export function mockClearLoggedIn(): void {
+  loginStore()?.removeItem(MOCK_LOGIN_KEY);
+}
+
+export function mockLoggedIn(): boolean {
+  return loginStore()?.getItem(MOCK_LOGIN_KEY) === "1";
+}
+
+/** 演示态 `/me`：扁平形态（`normalizeMeData` 两种形态都吃，见 types.ts 的注释） */
+const MOCK_ME: MeData = {
+  sub: "mock-user-001",
+  email: "admin@bothot.local",
+  nickname: "演示用户",
+  tier: "pro",
+  wallet: "¥128.50",
+  is_admin: false,
+  providerUnreachable: false,
+};
+
+registerMockRoutes(
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/auth\/me$/,
+    handle: () => {
+      // 未登录态必须与真后端同码同文（10001），否则 AuthContext 的回落分支在演示态永不执行
+      if (!mockLoggedIn()) {
+        throw new ApiError(10001, ERROR_MESSAGES[10001], `mock-${Date.now()}`);
+      }
+      return MOCK_ME;
+    },
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/auth\/logout$/,
+    handle: () => {
+      mockClearLoggedIn();
+      return null;
+    },
+  }
+);
+
+// ── public-library 域（第三个迁入的域）───────────────────────────────
+
+/**
+ * 注册顺序即匹配顺序（首个命中生效）：`GET /spaces/public` 必须写在将来那条
+ * `GET /spaces/{id}` 之前，否则 "public" 会被当成一个空间 id 吃掉——这条不是风格问题，
+ * 是这张表唯一会产生**错数据**的顺序陷阱，所以在这里写明并要求 spaces 迁入时遵守。
+ */
+const MOCK_PUBLIC_SPACES: PublicSpace[] = [
+  {
+    id: "mock-public-ai-001",
+    name: "AI前沿库",
+    description: "AI前沿库（采自公众号，系统空间）",
+    docCount: 50,
+    engine: "builtin",
+    isPublic: true,
+    updatedAt: "2026-09-14T00:00:00",
+  },
+];
+
+const MOCK_LINK_RESULT: LinkResult = { copied: 50, skipped: 0, total: 50 };
+
+registerMockRoutes(
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/spaces\/public$/,
+    handle: () => ({ items: MOCK_PUBLIC_SPACES }),
+  },
+  {
+    // 幂等 copy：演示态固定给"全部新增、零跳过"，与真后端的 {copied, skipped, total} 同形
+    method: "POST",
+    pattern: /^\/api\/v1\/spaces\/[^/]+\/links$/,
+    handle: () => MOCK_LINK_RESULT,
   }
 );
