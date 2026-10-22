@@ -152,6 +152,87 @@ export function getOpsLiveness(maxAgeSeconds?: number): Promise<OpsLiveness> {
   return request<OpsLiveness>(`/api/v1/admin/ops/liveness${q}`);
 }
 
+// ---------- 采集配置（分类清单 / 付费详情兜底）----------
+
+export interface CategoryItem {
+  name: string;
+  keywords: string[];
+  enabled: boolean;
+}
+
+export interface CategoryConfigView {
+  categories: CategoryItem[];
+  /** `env` = 回显的是代码默认清单（运营没配过）；`db` = 配过，库里那份在生效 */
+  source: string;
+  /** 兜底分类名（后端 `DEFAULT_CATEGORY`）。清单里必须留着它，缺了直接 10005 */
+  defaultCategory: string;
+}
+
+export function getCategories(): Promise<CategoryConfigView> {
+  return request<CategoryConfigView>("/api/v1/admin/categories");
+}
+
+/**
+ * PUT /api/v1/admin/categories —— **声明序即自动分类的优先级与筛选项顺序**，所以顺序是数据不是视图。
+ * operator 可写。200 回 `{categories, source:"db"}`；缺「其他」/ 删除仍被引用的分类 → 10005。
+ */
+export function putCategories(categories: CategoryItem[]): Promise<CategoryConfigView> {
+  return request<CategoryConfigView>("/api/v1/admin/categories", {
+    method: "PUT",
+    body: JSON.stringify({ categories }),
+  });
+}
+
+export interface ArticleFallbackEffective {
+  enabled: boolean;
+  trigger: string[];
+  /**
+   * `null` = 未加限制（凡凭据就绪的都可用，新配好 Key 的会自动进名单）；
+   * 数组 = 显式名单，**空数组等于一家都不打**（开着但永不花，也永不生效）。
+   */
+  providers: string[] | null;
+  dailyBudget: number | null;
+}
+
+export interface ArticleFallbackView {
+  source: string;
+  effective: ArticleFallbackEffective;
+  /** 只回答"配没配凭据"，永不回显值 */
+  platforms: Array<{ name: string; ready: boolean }>;
+  /** 能配哪些触发条件由后端说在响应里，不让人照卡面猜一个本仓没有检测面的值 */
+  wiredTriggers: string[];
+}
+
+export interface ArticleFallbackWriteResult {
+  source: string;
+  effective: ArticleFallbackEffective;
+}
+
+export function getArticleFallback(): Promise<ArticleFallbackView> {
+  return request<ArticleFallbackView>("/api/v1/admin/article-fallback");
+}
+
+/**
+ * PUT /api/v1/admin/article-fallback —— **仅 admin**（涉及花钱，D-V12-20），operator 读得到写不了。
+ * 开启必须同时给 `daily_budget`：后端明确拒绝"可无上限开启付费调用"。
+ */
+export function putArticleFallback(body: {
+  enabled: boolean;
+  trigger: string[];
+  providers: string[];
+  dailyBudget: number | null;
+}): Promise<ArticleFallbackWriteResult> {
+  return request<ArticleFallbackWriteResult>("/api/v1/admin/article-fallback", {
+    method: "PUT",
+    body: JSON.stringify({
+      enabled: body.enabled,
+      trigger: body.trigger,
+      providers: body.providers,
+      daily_budget: body.dailyBudget,
+    }),
+  });
+}
+
 // ---------- 推送触发与终态回执 ----------
 
 export interface AdminPushPayload {

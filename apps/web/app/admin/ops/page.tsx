@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * /admin/ops —— STEP-14b：管理端运维四屏（推送 / 进程存活 / 发现渠道 / 引擎密钥）。
+ * /admin/ops —— STEP-14b：管理端运维台（推送 / 进程存活 / 发现渠道 / 引擎密钥 / 采集配置）。
  *
  * D-V3-06 已签口径：这 5 组端点此前"有 API 无 UI"，判为**未做**；本屏补最小可用界面，
  * 沿用现有 admin 角色，不新增 RBAC、不接新权限模型。
@@ -18,6 +18,7 @@ import AuthGate from "@/components/AuthGate";
 import { useAuth } from "@/components/AuthContext";
 import { usePageTitle } from "@/components/usePageTitle";
 import DiscoveryChannelsPanel from "@/components/admin/DiscoveryChannelsPanel";
+import CollectionConfigPanel from "@/components/admin/CollectionConfigPanel";
 import AlertBanner from "@/components/admin/AlertBanner";
 import EngineKeysPanel from "@/components/admin/EngineKeysPanel";
 import LivenessPanel from "@/components/admin/LivenessPanel";
@@ -28,6 +29,7 @@ const SCREENS = [
   { key: "liveness", label: "进程存活", render: () => <LivenessPanel /> },
   { key: "channels", label: "发现渠道", render: () => <DiscoveryChannelsPanel /> },
   { key: "keys", label: "引擎密钥", render: () => <EngineKeysPanel /> },
+  { key: "collection", label: "采集配置", render: () => <CollectionConfigPanel /> },
 ] as const;
 
 function OpsConsole() {

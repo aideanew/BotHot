@@ -77,3 +77,12 @@ de78125b91434caa3ef711e5382d6e955d8557af:docs/06_validation/evidence/EVD-V2-00R/
 # ⇒ 依 D-12 逐指纹登记这一条。同轮另登记 **P-81**：本仓自有的敏感形门 `guards.secret_scan`
 # 对同一行文本两种口径都返回空集（抓不到 jwt 形状），所以这处命中只有烧一轮 CI 才看得见。
 c9cb2150207bde2543a336ae71694d4e1341de09:apps/api/tests/test_r19_sso_session.py:jwt:77
+
+# ── 10) d839eb7 一条：契约枚举名 key_missing 配 Tailwind 类名被当成凭据——误报，非凭据 ──────
+# `apps/web/app/engines/page.tsx:35` 的那一行是 `key_missing: "bg-neutral-300",`——
+# generic-api-key 规则看到的是「键名含 key + 一个引号里的 13 字符值」，值是状态点的样式类名。
+# 不整形：`key_missing` 是契约 `EngineReason` 的枚举名（engine.schema.json），改成拼接式写法能骗过扫描器，
+# 但代价是把唯一源的字段名在源码里变形（掩码不等于去形，见 P-81 同族教训）。
+# 依 D-12 逐指纹登记，并登记 P-92 请守卫 owning 卡把这类"枚举名 + 样式串"做成 allowlist 规则，
+# 否则今后任何 `key_*: "..."` 的前端映射表都会再红一次。
+d839eb741a464466b1096f4627eb10196b19ba03:apps/web/app/engines/page.tsx:generic-api-key:35

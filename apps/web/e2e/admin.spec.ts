@@ -134,7 +134,7 @@ test.describe.serial("管理端 e2e（演示态无条件执行 + 真后端档闸
       "需 E2E_REAL_BACKEND=1：演示态里 /api/v1/admin/* 与 /ready 都不造样例，且 mock 会话 is_admin 恒 false"
     );
 
-    test("⑤ 四屏切换：各屏渲染自己的标题，切屏重挂载取当下读数", async ({ page }) => {
+    test("⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数", async ({ page }) => {
       await page.goto("/admin/ops?screen=push");
       await expect(page.getByText("触发一次推送")).toBeVisible();
 
@@ -150,6 +150,12 @@ test.describe.serial("管理端 e2e（演示态无条件执行 + 真后端档闸
 
       await page.getByRole("button", { name: "引擎密钥" }).click();
       await expect(page.getByRole("button", { name: "登记" })).toBeVisible();
+
+      // 采集配置屏（STEP-14b 余项）：兜底默认关 ⇒ 保存按钮可用且没有拦截文案
+      await page.getByRole("button", { name: "采集配置" }).click();
+      await expect(page.getByText("分类清单")).toBeVisible();
+      await expect(page.getByText("付费详情兜底")).toBeVisible();
+      await expect(page.getByRole("button", { name: "保存分类清单" })).toBeVisible();
     });
 
     test("⑥ 告警状态条：/ready 的 alerting 读数必须被画出来", async ({ page }) => {

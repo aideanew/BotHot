@@ -89,5 +89,6 @@ operator 今天根本进不到这一屏。所以它是**纵深防御**——面�
 ## 6. 本批没做的
 
 - STEP-14b 增量句里的另一半「**采集配置页**」（`/admin/categories`、`/admin/article-fallback`
-  两组端点目前前端 0 消费）不在本批，随后一批做。渠道启停已在 `4b8c1ee`。
+  两组端点改前前端 0 消费）不在本批，在紧随其后的下一批做掉了 ⇒ 读数与判据见
+  `EVD-V13-14b/readings.md` §7。渠道启停已在 `4b8c1ee`。
 - `SKIP_BASELINE_WIN` 保持 **653**：本批零 `apps/api/**` 改动、零 pytest 新增。

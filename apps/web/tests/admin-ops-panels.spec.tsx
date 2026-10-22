@@ -23,6 +23,10 @@ vi.mock("@/lib/api/admin-ops", () => ({
   adminPush: vi.fn(),
   getReadyProbe: vi.fn(),
   putDiscoveryConfig: vi.fn(),
+  getCategories: vi.fn(),
+  putCategories: vi.fn(),
+  getArticleFallback: vi.fn(),
+  putArticleFallback: vi.fn(),
 }));
 
 /**
@@ -39,12 +43,17 @@ import DiscoveryChannelsPanel from "@/components/admin/DiscoveryChannelsPanel";
 import PushConsolePanel from "@/components/admin/PushConsolePanel";
 import EngineKeysPanel from "@/components/admin/EngineKeysPanel";
 import AlertBanner from "@/components/admin/AlertBanner";
+import CollectionConfigPanel from "@/components/admin/CollectionConfigPanel";
 import {
   getOpsLiveness,
+  getArticleFallback,
+  getCategories,
   listDiscoveryChannels,
   getReadyProbe,
   listEngineKeys,
   listPushChannels,
+  putArticleFallback,
+  putCategories,
   putDiscoveryConfig,
 } from "@/lib/api/admin-ops";
 import { ApiError } from "@/lib/api/types";
@@ -383,5 +392,95 @@ describe("引擎密钥面板的角色门（P-47）", () => {
     // 读面照常：状态丸与掩码句柄都要在（只读不等于看不见）
     expect(screen.getByText("有登记行")).toBeTruthy();
     expect(screen.getByText("k-ro…0001")).toBeTruthy();
+  });
+});
+
+describe("采集配置屏（STEP-14b 余项：分类清单 + 付费兜底）", () => {
+  const catsView = () => ({
+    categories: [
+      { name: "科技", keywords: ["AI", "芯片"], enabled: true },
+      { name: "其他", keywords: [], enabled: true },
+    ],
+    source: "env",
+    defaultCategory: "其他",
+  });
+  const fallbackView = () => ({
+    source: "env",
+    effective: { enabled: false, trigger: [], providers: null, dailyBudget: null },
+    platforms: [
+      { name: "tikhub", ready: true },
+      { name: "dajiala", ready: false },
+    ],
+    wiredTriggers: ["empty_content", "short_content"],
+  });
+
+  const mount = async () => {
+    vi.mocked(getCategories).mockResolvedValue(catsView() as never);
+    vi.mocked(getArticleFallback).mockResolvedValue(fallbackView() as never);
+    render(<CollectionConfigPanel />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存分类清单" })).toBeTruthy());
+  };
+
+  it("兜底分类「其他」不给停用也不给移除（缺它后端直接 10005）", async () => {
+    await mount();
+    const disableOther = screen.getByLabelText("启用分类 其他") as HTMLInputElement;
+    const removeOther = screen.getByLabelText("移除 其他") as HTMLInputElement;
+    expect(disableOther.disabled).toBe(true);
+    expect(removeOther.disabled).toBe(true);
+    // 普通分类两项都可操作，否则这条判据是在测整个界面都禁用
+    expect((screen.getByLabelText("启用分类 科技") as HTMLInputElement).disabled).toBe(false);
+    expect((screen.getByLabelText("移除 科技") as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it("上移改变的是**发出去的顺序**——顺序即自动分类的优先级", async () => {
+    await mount();
+    vi.mocked(putCategories).mockResolvedValue(catsView() as never);
+    fireEvent.click(screen.getByLabelText("上移 其他"));
+    fireEvent.click(screen.getByRole("button", { name: "保存分类清单" }));
+    await waitFor(() => expect(putCategories).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(putCategories).mock.calls[0][0];
+    expect(payload.map((c) => c.name)).toEqual(["其他", "科技"]);
+  });
+
+  it("开启付费兜底的两条硬约束在前端拦住：缺预算、空名单（空名单=开着但永远不打）", async () => {
+    await mount();
+    const save = screen.getByRole("button", { name: "保存兜底配置" }) as HTMLButtonElement;
+    fireEvent.click(screen.getByLabelText("开启付费详情兜底"));
+    expect(save.disabled).toBe(true);
+    expect(screen.getByText(/必须同时给日预算/)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("每日付费调用上限"), { target: { value: "5" } });
+    expect(save.disabled).toBe(true);
+    expect(screen.getByText(/一家供应商都没选/)).toBeTruthy();
+
+    vi.mocked(putArticleFallback).mockResolvedValue({
+      source: "db",
+      effective: { enabled: true, trigger: ["empty_content"], providers: ["tikhub"], dailyBudget: 5 },
+    });
+    fireEvent.click(screen.getByLabelText("供应商 tikhub"));
+    fireEvent.click(screen.getByLabelText("触发条件 empty_content"));
+    expect(save.disabled).toBe(false);
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(putArticleFallback).toHaveBeenCalledWith({
+        enabled: true,
+        trigger: ["empty_content"],
+        providers: ["tikhub"],
+        dailyBudget: 5,
+      })
+    );
+  });
+
+  it("operator：分类清单仍可保存，付费兜底收起写面（读侧 operator、写侧 admin）", async () => {
+    AUTH.isAdmin = false;
+    await mount();
+    expect(screen.getByRole("button", { name: "保存分类清单" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "保存兜底配置" })).toBeNull();
+    expect(screen.getByText(/本屏对 operator/)).toBeTruthy();
+  });
+
+  it("providers=null 与显式名单不同形：读侧必须说清现在是哪一种", async () => {
+    await mount();
+    expect(screen.getByText(/供应商名单：不限制/)).toBeTruthy();
   });
 });
