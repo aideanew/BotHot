@@ -104,8 +104,9 @@ export default function AdminOpsPage() {
         <div className="card mx-auto max-w-md p-10 text-center">
           <p className="text-title-lg font-semibold text-neutral-900">权限不足</p>
           <p className="mt-3 text-neutral-500">
-            运维台需要 operator 以上角色（后端 <code className="font-mono">require_roles(&quot;operator&quot;)</code>）。
-            当前账号未登记该角色，或尚未刷新过 <code className="font-mono">/auth/me</code>。
+            运维台按 D-V3-06 沿用 admin 角色（本页面门判的是 <code className="font-mono">me.is_admin</code>）。
+            后端各端点自身的最低要求是 operator，但入口不因此放宽——页面门比后端严是安全的一侧，
+            反过来才是洞。当前账号不具备该权限，或尚未刷新过 <code className="font-mono">/auth/me</code>。
           </p>
           <Link href="/" className="mt-6 inline-block rounded-input bg-neutral-900 px-4 py-2 text-sm text-white">
             回到首页

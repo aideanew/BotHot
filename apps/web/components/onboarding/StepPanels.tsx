@@ -1,4 +1,4 @@
-import type { EngineItem } from "@/lib/api";
+import { ENGINE_REASON_LABEL, ENGINE_REASON_TEXT, type EngineItem } from "@/lib/api";
 import type { OnboardingProgress, StepDef } from "./types";
 
 /**
@@ -76,9 +76,9 @@ export default function StepPanels({
               <button
                 key={e.engine}
                 type="button"
-                disabled={!e.available}
+                disabled={e.reason !== "ok"}
                 onClick={() => onEngineChange(e.engine)}
-                title={e.description}
+                title={e.reason === "ok" ? e.description : `${e.description}：${ENGINE_REASON_TEXT[e.reason]}`}
                 className={`rounded-input border px-4 py-2 text-base text-left ${
                   engine === e.engine
                     ? "border-brand-500 bg-brand-50"
@@ -86,7 +86,8 @@ export default function StepPanels({
                 } disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 {e.engine}
-                {e.available ? "" : "（未配置）"}
+                {/* 原因读契约的 reason（S15.V17.1）：三种不可用的处置人不同，不能都写成"未配置" */}
+                {e.reason === "ok" ? "" : `（${ENGINE_REASON_LABEL[e.reason]}）`}
               </button>
             ))}
           </div>

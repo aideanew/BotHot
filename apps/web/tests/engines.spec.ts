@@ -53,6 +53,7 @@ describe("P4 引擎 API（ADR-0004）", () => {
       configured: true,
       available: false,
       allowlisted: true,
+      reason: "not_implemented",
       keyEnv: "COZE_API_KEY",
       activeSource: "registered",
       decryptFailed: false,
@@ -69,6 +70,7 @@ describe("P4 引擎 API（ADR-0004）", () => {
       configured: true,
       available: true,
       allowlisted: true,
+      reason: "ok",
       keyEnv: "",
       description: "内置引擎（LangBot 系，默认）",
     };

@@ -12,7 +12,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
  *
  * 覆盖的不变式：
  * A. StepIndicator：已完成步 ✓、当前步高亮描边、未到达步置灰（文案层级同步）；
- * B. StepPanels 第 1 步：空名禁提交 / 错误行 / 引擎位空回落内置 / 未配置引擎禁用；
+ * B. StepPanels 第 1 步：空名禁提交 / 错误行 / 引擎位空回落内置 / 不可用引擎按 reason 标注并禁用；
  * C. StepPanels 第 2、3 步：进度摘要与两个去向按钮各自回调上抛；
  * D. 页面接线：断点恢复横幅取 STEPS 文案、越界 step 被拒绝回到第 1 步、
  *    建库成功写入 step 2、建库失败留在第 1 步可改名重试。
@@ -39,7 +39,7 @@ vi.mock("@/components/AuthContext", () => ({
   }),
 }));
 
-vi.mock("@/lib/api", () => {
+vi.mock("@/lib/api", async (importOriginal) => {
   class ApiError extends Error {
     code: number;
     requestId: string;
@@ -50,7 +50,10 @@ vi.mock("@/lib/api", () => {
       this.requestId = requestId;
     }
   }
-  return { ApiError, listEngines: h.listEngines, createSpace: h.createSpace };
+  // 展开真实模块：StepPanels 现在还要读 ENGINE_REASON_*（原因文案的唯一来源），
+  // 手写"最小可用面"的 mock 会在每次扩面时把组件打成 undefined。
+  const actual = await importOriginal<typeof import("@/lib/api")>();
+  return { ...actual, ApiError, listEngines: h.listEngines, createSpace: h.createSpace };
 });
 
 import { ApiError, type EngineItem } from "@/lib/api";
@@ -67,6 +70,7 @@ const ENGINES: EngineItem[] = [
     configured: true,
     available: true,
     allowlisted: true,
+    reason: "ok",
     keyEnv: "",
     description: "默认引擎，开箱可用",
   },
@@ -75,6 +79,7 @@ const ENGINES: EngineItem[] = [
     configured: false,
     available: false,
     allowlisted: false,
+    reason: "not_allowlisted",
     keyEnv: "LANGBOT_BASE_URL",
     description: "外部 LangBot 实例",
   },
@@ -194,7 +199,7 @@ describe("R0.6.2 StepPanels 第 1 步：起名与选引擎", () => {
     expect((fallback as HTMLElement).className).toContain("border-brand-500");
   });
 
-  it("未配置引擎禁用并标注（未配置）；已配置引擎可选且不带标注", () => {
+  it("不可用引擎禁用并标注（未开放）；可用引擎不带标注", () => {
     const onEngine = vi.fn();
     render(
       createElement(
@@ -203,7 +208,7 @@ describe("R0.6.2 StepPanels 第 1 步：起名与选引擎", () => {
       )
     );
 
-    const unavailable = screen.getByText(/langbot（未配置）/).closest("button")!;
+    const unavailable = screen.getByText(/langbot（未开放）/).closest("button")!;
     expect(unavailable.disabled).toBe(true);
 
     fireEvent.click(screen.getByText("builtin"));
@@ -297,7 +302,7 @@ describe("R0.6.2 页面接线：断点持久化", () => {
     expect(
       (screen.getByLabelText("知识库名称") as HTMLInputElement).value
     ).toBe("产品资料库");
-    const langbotBtn = screen.getByText(/langbot（未配置）/).closest("button")!;
+    const langbotBtn = screen.getByText(/langbot（未开放）/).closest("button")!;
     expect(langbotBtn.className).toContain("border-brand-500");
   });
 

@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useState } from "react";
 import ConfirmModal from "@/components/ConfirmModal";
 import LoadingErrorShell from "@/components/LoadingErrorShell";
+import { useAuth } from "@/components/AuthContext";
 import StatusPill from "./StatusPill";
 import {
   listEngineKeys,
@@ -41,6 +42,12 @@ export default function EngineKeysPanel() {
   const [confirmRegister, setConfirmRegister] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState<EngineKeyRow | null>(null);
   const [busy, setBusy] = useState("");
+  // P-47：登记/停用是 admin 权限（后端 POST/DELETE 走 require_roles("admin")），
+  // 而本面板的读面 operator 就能进。按钮按角色收，不是等点了才拿 10004。
+  // 今天 /admin/ops 的页面门本身就是 admin，所以这条是**纵深防御**而不是用户可见的修复：
+  // 面板一旦被嵌进别的门（或页面门按后端放宽到 operator），写面不会跟着漏。
+  const { me } = useAuth();
+  const canWrite = me?.is_admin === true;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -105,6 +112,13 @@ export default function EngineKeysPanel() {
           </p>
         </div>
       ) : null}
+      {data && !canWrite ? (
+        <p className="mb-3 rounded-input border border-neutral-200 bg-neutral-50 px-3 py-2 text-caption text-neutral-700">
+          本屏对 operator <strong>只读</strong>：登记与停用是 admin 权限（后端
+          <code className="font-mono"> require_roles(&quot;admin&quot;) </code>
+          ），状态列照常可读。需要开某个引擎位请联系管理员。
+        </p>
+      ) : null}
       {notice ? (
         <p className="mb-3 rounded-input border border-neutral-200 bg-neutral-50 px-3 py-2 text-caption text-neutral-700">
           {notice}
@@ -154,28 +168,34 @@ export default function EngineKeysPanel() {
                   <td className="px-4 py-2 font-mono text-caption text-neutral-600">{maskKeyId(row.keyId)}</td>
                   <td className="px-4 py-2">
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={!data.masterKeyConfigured || busy === row.engine}
-                        onClick={() => {
-                          setDraftEngine(row.engine);
-                          setDraftKey("");
-                          setConfirmRegister(true);
-                        }}
-                        className="rounded-input border border-neutral-300 px-2 py-1 text-caption hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {row.registered ? "轮换" : "登记"}
-                      </button>
-                      {row.registered ? (
-                        <button
-                          type="button"
-                          disabled={busy === row.engine}
-                          onClick={() => setConfirmRevoke(row)}
-                          className="rounded-input border border-red-300 px-2 py-1 text-caption text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          停用
-                        </button>
-                      ) : null}
+                      {canWrite ? (
+                        <>
+                          <button
+                            type="button"
+                            disabled={!data.masterKeyConfigured || busy === row.engine}
+                            onClick={() => {
+                              setDraftEngine(row.engine);
+                              setDraftKey("");
+                              setConfirmRegister(true);
+                            }}
+                            className="rounded-input border border-neutral-300 px-2 py-1 text-caption hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {row.registered ? "轮换" : "登记"}
+                          </button>
+                          {row.registered ? (
+                            <button
+                              type="button"
+                              disabled={busy === row.engine}
+                              onClick={() => setConfirmRevoke(row)}
+                              className="rounded-input border border-red-300 px-2 py-1 text-caption text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              停用
+                            </button>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span className="text-caption text-neutral-400">只读</span>
+                      )}
                     </div>
                   </td>
                 </tr>

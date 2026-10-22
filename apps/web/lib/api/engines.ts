@@ -12,12 +12,41 @@
 
 import { request } from "./http";
 
+/**
+ * 引擎位不可用的**首要**原因（STEP-13；`packages/contracts/schemas/engine.schema.json` 的 `EngineReason`）。
+ * 排序按"谁能解决"：开放名单 → 登记 Key → 开发排期。`available === (reason === "ok")` 是契约不变量，
+ * 由后端 `_engine_reason()` 单点产出，列表与切换拒绝读同一个函数。
+ *
+ * 联合以外不取值，也**不再由前端从三个布尔自己推顺序**：`app/engines/page.tsx` 原先先判
+ * `configured` 再判 `allowlisted`，于是一个"既没开名单也没配 Key"的引擎会提示"未配置 Key"，
+ * 把管理员指到一个解决不了的处置上。顺序只有一份，就在后端。
+ */
+export type EngineReason = "ok" | "not_allowlisted" | "key_missing" | "not_implemented";
+
+/** reason → 完整可读原因（S15.V17.1 口径：说清"谁能解决"，不复述内部字段名） */
+export const ENGINE_REASON_TEXT: Record<EngineReason, string> = {
+  ok: "",
+  not_allowlisted: "未开放，请联系管理员",
+  key_missing: "未登记 API Key",
+  not_implemented: "暂未接入",
+};
+
+/** reason → 短标签（卡片/列表里放不下一整句时用这个） */
+export const ENGINE_REASON_LABEL: Record<EngineReason, string> = {
+  ok: "可用",
+  not_allowlisted: "未开放",
+  key_missing: "未登记 Key",
+  not_implemented: "暂未接入",
+};
+
 /** GET /api/v1/engines → data.items（引擎位 + Key 可用性） */
 export interface EngineItem {
   engine: string;
   configured: boolean;
   available: boolean;
   allowlisted: boolean;
+  /** 契约 required：不可用时该画哪句原因，只看这一个字段 */
+  reason: EngineReason;
   keyEnv: string;
   /** 生效来源（T5.4）：登记覆盖 env 时显式回报，未配置为 null。旧后端不返回，故可选。 */
   activeSource?: "env" | "registered" | null;

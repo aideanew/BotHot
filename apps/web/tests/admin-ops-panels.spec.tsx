@@ -25,6 +25,15 @@ vi.mock("@/lib/api/admin-ops", () => ({
   putDiscoveryConfig: vi.fn(),
 }));
 
+/**
+ * 引擎密钥面板要按角色收写面（P-47），所以这里必须给一个可切换的 `useAuth`。
+ * 默认 admin——既有那批渲染契约锁的是 admin 态，不该被这条改动牵连。
+ */
+const AUTH = vi.hoisted(() => ({ isAdmin: true }));
+vi.mock("@/components/AuthContext", () => ({
+  useAuth: () => ({ status: "authed", me: { is_admin: AUTH.isAdmin } }),
+}));
+
 import LivenessPanel from "@/components/admin/LivenessPanel";
 import DiscoveryChannelsPanel from "@/components/admin/DiscoveryChannelsPanel";
 import PushConsolePanel from "@/components/admin/PushConsolePanel";
@@ -43,6 +52,7 @@ import { ApiError } from "@/lib/api/types";
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  AUTH.isAdmin = true;
 });
 
 describe("进程存活屏", () => {
@@ -318,5 +328,60 @@ describe("告警状态条（S14b.2.3）", () => {
     expect(getReadyProbe).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "重读" }));
     await waitFor(() => expect(getReadyProbe).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("引擎密钥面板的角色门（P-47）", () => {
+  /** 一行已登记（轮换 + 停用）、一行未登记（登记），两个角色看到的读面完全相同 */
+  const rows = () => ({
+    masterKeyConfigured: true,
+    items: [
+      {
+        engine: "dajiala",
+        registered: true,
+        configured: true,
+        activeSource: "registered",
+        envConfigured: false,
+        decryptFailed: false,
+        keyEnv: "DAJIALA_TOKEN",
+        keyId: "k-role-0001",
+        registeredBy: "u-1",
+        updatedAt: "2026-10-22T06:00:00Z",
+      },
+      {
+        engine: "tikhub",
+        registered: false,
+        configured: false,
+        activeSource: "none",
+        envConfigured: false,
+        decryptFailed: false,
+        keyEnv: "TIKHUB_TOKEN",
+        keyId: "",
+        registeredBy: "",
+        updatedAt: "",
+      },
+    ],
+  });
+
+  it("admin：登记 / 轮换 / 停用三个写入口都在", async () => {
+    vi.mocked(listEngineKeys).mockResolvedValue(rows());
+    render(<EngineKeysPanel />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "轮换" })).toBeTruthy());
+    expect(screen.getByRole("button", { name: "停用" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "登记" })).toBeTruthy();
+    expect(screen.queryByText(/只读/)).toBeNull();
+  });
+
+  it("operator：写面全部收起并说明「该找谁」，而不是等点了才拿 10004", async () => {
+    AUTH.isAdmin = false;
+    vi.mocked(listEngineKeys).mockResolvedValue(rows());
+    render(<EngineKeysPanel />);
+    await waitFor(() => expect(screen.getByText(/本屏对 operator/)).toBeTruthy());
+    expect(screen.queryByRole("button", { name: "登记" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "轮换" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "停用" })).toBeNull();
+    // 读面照常：状态丸与掩码句柄都要在（只读不等于看不见）
+    expect(screen.getByText("有登记行")).toBeTruthy();
+    expect(screen.getByText("k-ro…0001")).toBeTruthy();
   });
 });

@@ -3,7 +3,7 @@
 /**
  * EnginesPage —— T1.1.2 引擎设置页真实现（替换 36 行壳页；大纲 v1.1）。
  *
- * - 引擎全景卡：GET /engines 五引擎位（状态点：可用/未开放/未配置 Key）；
+ * - 引擎全景卡：GET /engines 五引擎位（状态点读契约 `reason`：可用 / 未开放 / 未登记 Key / 暂未接入）；
  * - 切换流程：选择目标空间 → 复用 EngineSwitcher（含切换确认模态）；
  * - 验收锚（大纲 T1.1.2）：引擎列表可点切换。
  */
@@ -14,13 +14,30 @@ import LoadingErrorShell from "@/components/LoadingErrorShell";
 import { usePageTitle } from "@/components/usePageTitle";
 import { useAuth } from "@/components/AuthContext";
 import AuthGate from "@/components/AuthGate";
-import { ApiError, listEngines, listSpaces, type EngineItem, type Space } from "@/lib/api";
+import {
+  ApiError,
+  ENGINE_REASON_LABEL,
+  listEngines,
+  listSpaces,
+  type EngineItem,
+  type EngineReason,
+  type Space,
+} from "@/lib/api";
+
+/**
+ * 状态点读契约的 `reason`（S15.V17.1）。原实现先判 `configured` 再判 `allowlisted`，
+ * 于是"既没开名单也没配 Key"的引擎会显示"未配置 Key"——把管理员指到一个解决不了的处置上。
+ * 排序现在只有后端那一份（开放名单 → 登记 Key → 开发排期）。
+ */
+const DOT_CLASS: Record<EngineReason, string> = {
+  ok: "bg-green-500",
+  not_allowlisted: "bg-amber-400",
+  key_missing: "bg-neutral-300",
+  not_implemented: "bg-neutral-300",
+};
 
 function statusDot(e: EngineItem): { cls: string; label: string } {
-  if (e.available) return { cls: "bg-green-500", label: "可用" };
-  if (!e.configured) return { cls: "bg-neutral-300", label: "未配置 Key" };
-  if (!e.allowlisted) return { cls: "bg-amber-400", label: "未开放" };
-  return { cls: "bg-neutral-300", label: "未实接" };
+  return { cls: DOT_CLASS[e.reason], label: ENGINE_REASON_LABEL[e.reason] };
 }
 
 export default function EnginesPage() {
@@ -69,7 +86,8 @@ export default function EnginesPage() {
         <h1 className="text-title-lg font-semibold text-neutral-900">知识引擎</h1>
         <p className="mt-2 text-base text-neutral-500">
           默认引擎 <span className="font-medium text-neutral-700">{defaultEngine}</span>
-          ；未配置 Key 的引擎由管理员在服务端配置（env）后开放。
+          ；不可用的原因按「谁能解决」分：未开放要管理员开名单，缺 Key 要管理员在运维台「引擎密钥」
+          登记（或在服务端配 env），暂未接入要等适配器开发。
         </p>
       </div>
 
