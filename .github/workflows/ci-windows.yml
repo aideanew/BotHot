@@ -88,6 +88,13 @@ jobs:
       #   本卡另改（不改计数）：test_rss_provider 两条既有取路判据的**样本链接**换到白名单域名——
       #   它们原判的是"抓取发生了、行能被消费端接住"与"条数封顶"，与域名名单无关，
       #   换的是喂进去的 feed 内容，断言一条没动。
+      # STEP-19（执行助手，2026-10-22）+12：test_r19_notification_paths 8（四条 web 投递入口逐条
+      #   数 notifications 行：cron 领取 / 事件 emit+派发 / run-now / test-push / 管理端直投 /
+      #   失败极性 / 行载荷同源）+ test_r19_hot_chain 4（聚簇→评分→Feed 回刷→日报降级，
+      #   全都要 HotTopic / HotTopicArticle / FeedItem 真表）。
+      #   本卡另加 11 条**不连库**：test_r19_ports 7（判 YAML 结构，离线可判）+
+      #   test_r19_sso_session 4（真 HTTP + 进程内伪 IdP，会话走 InMemorySessionStore）
+      #   ⇒ 641 + 12 = **653**。本机无 DSN 四文件合跑实测 `11 passed / 12 skipped`。
       # **测量值**（收紧依据就地可查，D-V6-02）：上一档 612 的锚是 CI-Windows
       # run 39592643124 @2ab19c2 = 1509 passed / 612 skipped / 0 failed（未知族 0）；
       # 632 的锚 = run 39617514919 @b814938（success：1527 passed / 632 skipped，未知族 0）；
@@ -97,7 +104,8 @@ jobs:
       # **本档 641 的锚** = run 39714496408 @22b9ede（success，未知族 0）——STEP-09 交付提交；
       # 同一提交的 Security 39714496311 attempt 1 红在 `pnpm audit` 的 registry socket timeout
       # （scanner 失败被汇总门禁判成 🔴，非漏洞），attempt 2 重跑转绿 ⇒ 登记 P-77。
-      SKIP_BASELINE_WIN: "641"
+      # 本档 653 待 STEP-19 交付提交回填。
+      SKIP_BASELINE_WIN: "653"
     defaults:
       run:
         shell: bash

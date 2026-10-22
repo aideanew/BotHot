@@ -170,3 +170,6 @@ reason: Socket timeout`，脚本把"三种已知 JSON 形状均不匹配"落成 
 `阻断 1 项 / 告警 3 项` 直接 `exit 1`。同一 run 里 pip-audit / trivy / gitleaks 三条全 OK，
 本卡 diff 不含任何 Node 依赖改动。重跑失败 job（`rerun-failed-jobs`，attempt 2）后同一提交转绿——
 "重跑就绿"正是这一档该叫 UNKNOWN 而不是 🔴 的理由，已登记 **P-77**（分档与自动重试的判据写在台账里）。
+
+收口提交 `8d3448d`（本文件 §8 的 P-77 台账行 + 记录第 23 行）同样三绿：
+CI 39716634061 / Security 39716634072 / CI-Windows 39716634262（均 attempt 1）。
