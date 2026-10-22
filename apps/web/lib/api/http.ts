@@ -7,6 +7,12 @@
  */
 
 import { ApiError, type Envelope } from "./types";
+import {
+  UNREGISTERED_MOCK_MODE,
+  buildMockContext,
+  matchMockRoute,
+  unregisteredMockRoute,
+} from "./mock-routes";
 
 // ---------- MOCK 开关 ----------
 
@@ -80,11 +86,48 @@ export async function mockRequest<T>(data: T, failRate = 0): Promise<T> {
 // ---------- 内部请求器 ----------
 
 /**
- * 真实请求：fetch + 信封解包。
+ * mock 分发：查 `mock-routes` 的表。
+ * 未命中时按 `UNREGISTERED_MOCK_MODE` 决定——迁移期交给真实 fetch（等价于"这个域还没有 mock 分支"
+ * 的迁移前行为），收尾期必须翻成抛 50101：一张表成为唯一来源之后，"漏登记"若静默返回
+ * `undefined`，页面会渲染成一份看起来正常的空态（与真实的"今天就是没有"同形），
+ * 那是本仓最贵的那一族缺陷。
+ */
+async function mockDispatch<T>(
+  path: string,
+  init?: RequestInit
+): Promise<{ handled: boolean; value?: T }> {
+  const [pure, search = ""] = path.split("?");
+  const method = (init?.method ?? "GET").toUpperCase();
+  const hit = matchMockRoute(method, pure);
+  if (!hit) {
+    if (UNREGISTERED_MOCK_MODE === "error") {
+      throw unregisteredMockRoute(method, pure);
+    }
+    return { handled: false };
+  }
+  await delay();
+  return {
+    handled: true,
+    value: hit.route.handle(
+      buildMockContext(method, pure, search, hit.params, init?.body)
+    ) as T,
+  };
+}
+
+/**
+ * 请求器：**mock 与真实共用同一条管道**（STEP-15b S15b.2.1）。
  * 非零 code → 抛 ApiError；HTTP 层异常 → 归一为 50101 语义。
  * 导出说明：SSO 回调页等需要原始信封语义（非域函数）的场景复用。
+ *
+ * `MOCK_ENABLED` 为真时不再各域自己造数，而是查 `mock-routes` 的表拿**线上 `data` 形状**的样例：
+ * 表命中即过 `delay()` 后返回，未命中**抛 50101**（不是回 undefined——
+ * 那会让"漏登记"长得像"今天就是没有数据"）。
  */
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (MOCK_ENABLED) {
+    const got = await mockDispatch<T>(path, init);
+    if (got.handled) return got.value as T;
+  }
   let res: Response;
   try {
     res = await fetch(path, {

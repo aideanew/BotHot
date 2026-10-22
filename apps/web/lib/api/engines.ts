@@ -10,8 +10,7 @@
  * （builtin 可用、其余未配 Key），与 notifications.ts 的 MOCK 门同一动机。
  */
 
-import { ApiError } from "./types";
-import { MOCK_ENABLED, mockRequest, request } from "./http";
+import { request } from "./http";
 
 /** GET /api/v1/engines → data.items（引擎位 + Key 可用性） */
 export interface EngineItem {
@@ -47,64 +46,11 @@ export function engineLabel(engine?: string | null): string {
   return !engine || engine === "builtin" ? "内置" : engine;
 }
 
-/** mock 样例：builtin 恒可用；其余引擎位未配 Key（置灰 + 提示找管理员），与真实后端「零 Key 部署」形态一致。 */
-const MOCK_ENGINES: EngineItem[] = [
-  {
-    engine: "builtin",
-    configured: true,
-    available: true,
-    allowlisted: true,
-    implemented: true,
-    keyEnv: "",
-    activeSource: "env",
-    description: "内置关键词检索引擎（演示数据）",
-  },
-  {
-    engine: "main-platform",
-    configured: false,
-    available: false,
-    allowlisted: true,
-    implemented: false,
-    keyEnv: "MAIN_PLATFORM_API_KEY",
-    description: "主平台知识引擎",
-  },
-  {
-    engine: "coze",
-    configured: false,
-    available: false,
-    allowlisted: true,
-    implemented: false,
-    keyEnv: "COZE_API_KEY",
-    description: "Coze 知识引擎",
-  },
-  {
-    engine: "dify",
-    configured: false,
-    available: false,
-    allowlisted: true,
-    implemented: false,
-    keyEnv: "DIFY_API_KEY",
-    description: "Dify 知识引擎",
-  },
-  {
-    engine: "fastgpt",
-    configured: false,
-    available: false,
-    allowlisted: true,
-    implemented: false,
-    keyEnv: "FASTGPT_API_KEY",
-    description: "FastGPT 知识引擎",
-  },
-];
-
-/** GET /api/v1/engines —— 5 引擎位 + Key 可用性（builtin 恒 available）。 */
+/** GET /api/v1/engines —— 5 引擎位 + Key 可用性（演示态样例见 `mock-routes.ts` 的 engines 段）。 */
 export async function listEngines(): Promise<{
   items: EngineItem[];
   defaultEngine: string;
 }> {
-  if (MOCK_ENABLED) {
-    return mockRequest({ items: MOCK_ENGINES, defaultEngine: "builtin" });
-  }
   return request<{ items: EngineItem[]; defaultEngine: string }>("/api/v1/engines");
 }
 
@@ -116,21 +62,6 @@ export async function patchSpaceEngine(
   spaceId: string,
   engine: string
 ): Promise<PatchEngineResult> {
-  if (MOCK_ENABLED) {
-    // 演示态：builtin 与样例中 available 的引擎放行，其余按未配 Key 拒（10004 语义）。
-    const target = MOCK_ENGINES.find((e) => e.engine === engine);
-    if (!target || !target.available) {
-      throw new ApiError(
-        10004,
-        "引擎未开放 / 未配置 Key / 尚未实接，请联系管理员"
-      );
-    }
-    return mockRequest<PatchEngineResult>({
-      engine,
-      engineKbId: `mock-kb-${engine}`,
-      spaceId,
-    });
-  }
   return request<PatchEngineResult>(
     `/api/v1/spaces/${encodeURIComponent(spaceId)}/engine`,
     {
