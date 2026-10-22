@@ -118,7 +118,29 @@ cd apps/web && node <三页 goto + console 收集 + page.screenshot 到 EVD-V13-
 | 反证 | 清单完整性那条判据**天然带反证**：故意从 `MOCK_PASSTHROUGH` 删一条 ⇒ 它立刻红并指名是哪条路径（本轮实测两次，正是它抓到那两个漏登记） |
 | 交付提交 | `1a3e3c4` → `21f45c9` → `61f06cb` → `bfc9131` → `b2b76a6`（第 1 轮，无返工） |
 
-## 6. 三绿（验收面 = `@ci` ubuntu-latest）
+## 6. 三绿（验收面 = `@ci` ubuntu-latest）——这一维红过一次，红因写在这里
 
-待回填：交付提交的 CI / Security / CI-Windows run id。本卡**不新增 pytest 用例**，
-`SKIP_BASELINE_WIN` 保持 653 不动（新增判据全在 vitest 侧）。
+| 提交 | CI | Security | CI-Windows |
+|---|---|---|---|
+| `1a3e3c4`（默认值翻转） | **success** run 39724700574（job 级读数见 §2） | success 39724700794 | 当时 in_progress，不再单独回填 |
+| `cea88ce`（EVD/台账批） | **failure** run 39728297911，红在 `backend` job 的**治理门步** | success 39728297917 | 见下 |
+
+那个 🔴 的完整读数是：同一 job 里 `2231 passed, 6 skipped` + `✅ skip 门禁通过` +
+`✅ evidence-check 全部通过`，随后 `rounds-check` 报
+
+```
+治理门基线：21f45c975a5ebebe…（HEAD=cea88ce56e0f8f…）
+rounds-check：范围 21f45c9..HEAD 共 4 个提交，阈值 ≤2 轮（D-14，第 3 轮熔断）
+❌ STEP-15b：返工标记 3 次
+```
+
+也就是说：**它数的不是"第几轮"，而是"带轮次标记的提交条数"**。本卡按卡面
+「每文件一个提交」分 5 片交付，每条 subject 都按现行惯例写 `第 1 轮`，于是
+"一片一提交"被读成"返工三次"。同一提交没有任何测试或门禁失败。
+
+处置（三选一里选了最诚实的那个）：**不改写已推送的历史**（D-V4-04）、**不重跑掩盖**，
+而是登记 **P-85**，并让后续提交不再在 subject 里写轮次标记。因此本卡的三绿是**分批达成**的：
+没有任何一个提交同时绿过三维——把这句抹成"全绿"就是造假。
+
+`SKIP_BASELINE_WIN` 保持 **653** 不动（本卡不新增 pytest 用例，新增判据全在 vitest 侧）；
+CI-Windows 对 `1a3e3c4`/`b2b76a6` 的读数若与本表不一致，以 CI 页面为准并在此更正。
