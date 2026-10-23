@@ -10,46 +10,20 @@
 
 ## [Unreleased]
 
-### Added
+_（空。v1.1.0 于 2026-10-23 发布时把这一段整体搬空——原有 6 条全部并入下一段，
+每条的来源短 hash 逐个 `git log -1` 复核过主语。）_
 
-- **AuthGate 统一未登录守卫（G1-G4，2026-10-10）**：`components/AuthGate.tsx` 三态渲染
-  （loading=骨架 / guest=统一提示卡"尚未登录或会话已过期"+登录按钮 / authed=children）；
-  `tests/auth-gate.spec.tsx` 4 用例（含 authed→guest 掉落自动切卡锁定）；
-  `e2e/auth-gate.spec.ts` 9 受保护页矩阵（原地渲染断言 + 404 不混淆用例）。
 
-### Changed
+## [v1.1.0] - 2026-10-23
 
-- **九页未登录形态收敛（G2）**：废除六形态散装（subscriptions/jobs 白屏 null、
-  engines/public/bots 无守卫裸调 API（guest 态发 401 请求）、spaces/chat/onboarding/
-  spaces/[id] 散装 `router.replace("/")`、admin loading-guest 不分致游客误见
-  "权限不足"卡）——全部统一为 AuthGate 原地卡片，保留 URL 上下文；
-  guest 态数据请求门补齐（engines/public/bots/onboarding 的 load effect 加 authed 门）。
-- **TopBar guest 态增强（G3.1）**：新增"登录"按钮（与首页引导卡同源 login()）；
-  未登录隐藏私有导航入口（订阅/任务/引擎/机器人；admin 既有 is_admin 门不变），
-  公共引流位（公共库/热点/空间/问答）保持可见。
-- **TopBar guest 私有项改锁形徽标（G3.4，二期登记项落地，2026-10-09）**：四私有导航项
-  guest 态从隐藏改为 🔒 徽标按钮（`title="登录后可见：X"`，点击触发 login()），
-  authed 恢复正常链接，loading 不渲染；admin 项维持 is_admin 门对游客隐藏。
-  `tests/topbar-guest-nav.spec.tsx` 3 用例锁定三形态。middleware cookie 预拦截
-  经双向论证裁定不实施（语义冲突/能力上限/双源漂移/收益边际，见 backlog AUTHGATE-002）。
-- **trunk.spec ① 断言同步**：散装跳首页废除后，改断言 AuthGate 锚点文案可见。
-
-### Fixed
-
-- **Security 工作流双红灯修复（CI run 37749240003 实证）**：
-  - trivy 版本钉正 `0.57.1`（不存在的版本，release 下载 404 → SCANNER_ERROR）→ `0.75.0`（API 证实资产命名一致）
-  - **Next 14.2.35 → 15.5.27 迁移**消 pnpm-audit 13 条 critical/high 阻断：next×11（修复线 15.5.24+）+ 传递依赖 postcss 8.4.31（next 钉死版，pnpm overrides 强制 ^8.5.23）+ source-map-js 1.2.1（同法 ^1.2.2）；
-    配套 React 18→19、@types/* 同步、eslint-config-next 15；`spaces/[id]` params Promise 化（`use()` 解包 + Suspense 边界）；6 测试文件 params 传 `Promise.resolve` + `await act` 包裹（React 19 act 语义）；TopBar/首页等 11 处内部导航 `<a>` → `<Link>`（next 15 将 no-html-link-for-pages 升为 Error）。pnpm audit --prod 归零
-  - **mock e2e ⑦ 空间详情红**（CI run 37749239965）：`EngineSwitcher` 挂载即拉 `listEngines`，engines 域原裁定"无 mock 分支"致请求穿透 MOCK 网关 → rewrite 代理 :3300 ECONNREFUSED → 500 → console 门禁红；推翻原裁定补 mock 分支（builtin 可用 + 4 引擎位未配 Key 样例，patchSpaceEngine 未配 Key 拒 10004）。hot 域穿透**保留**：hot.spec 无 console 门禁且该穿透构成"后端不可达降级路径"的真实 e2e 覆盖
-
-## [v1.1.0] — **未发布**（STEP-12 对账产物；发布与否由用户拍板）
-
-> 本节是**候选发布说明**，不是已发布事实：截至本批，`git tag -l` 只有 `v1.0.0`（落在 `c19fe87`，2026-10-08），
-> `main` 已领先该 tag **291 个提交**（`git rev-list --count v1.0.0..HEAD` 于 `9983c63` 现读）。
-> **上面的 `[Unreleased]` 段刻意没有搬空**——"把 Unreleased 落成 v1.1.0 + 打 tag + 推送 tag"这三步就是发布动作本身，
-> 归用户决定；STEP-12 的所有权只到"对账与证据"。
-> 读法：下面每条末尾的来源提交短 hash 都可 `git log --oneline` 对；能力级的判据与读数在
-> `docs/06_validation/evidence/EVD-V17-12/s12_readings.md`（含 99 个需求侧文件锚的逐条对账结果）。
+> 发布时现读：`v1.0.0` 是**注释标签**，标签对象 `8ecf322` 指向提交 `c19fe87`（2026-10-08，
+> "docs(release): v1.0.0 账本终稿"）；`git rev-list --count v1.0.0..HEAD` 于 `9544ef3`（STEP-33 收口批）
+> 现读 = **304 个提交**，本发布批自身再 +1 ⇒ tag 指向的提交上是 305。
+> 本节**不是**"把 `[Unreleased]` 换个标题"：发布前 `[Unreleased]` 只有 6 条而区间内有 304 个提交，
+> 所以这一版是重新对账的产物（该失真由 STEP-12 登记，见 `docs/06_validation/evidence/EVD-V17-12/s12_readings.md` §5.1）。
+> 读法：每条末尾的来源短 hash 都可 `git log -1` 对主语（STEP-39 发布时逐个复核，本段共 42 个短 hash，
+> 全部解析成功；其中一条此前挂在错提交上，已更正，见下条探针条目的来源注）；能力级的判据与读数在各卡 EVD 目录
+> （`docs/06_validation/evidence/`）。发布阻断两项 STEP-32 / STEP-33 由 STEP-39 并入。
 
 ### Added（用户可见的新能力）
 
@@ -71,6 +45,12 @@
 - **验收环境四入口**：`entry.py` / `make` 的 `testenv-up`、`testenv-down`、`verify-backend`、`verify-frontend`
   （一条命令出"真库全量 + skip 构成 + 覆盖率"与"前端 install→typecheck→vitest→build"）。来源 `9983c63`（STEP-00E）
 
+- **AuthGate 统一未登录守卫（G1-G4）**：`components/AuthGate.tsx` 三态渲染
+  （loading=骨架 / guest=统一提示卡"尚未登录或会话已过期"+登录按钮 / authed=children）；
+  `tests/auth-gate.spec.tsx` 4 用例（含 authed→guest 掉落自动切卡锁定）；
+  `e2e/auth-gate.spec.ts` 9 受保护页矩阵（原地渲染断言 + 404 不混淆用例）；
+  `trunk.spec` ① 的断言随散装跳首页的废除同步改为断言 AuthGate 锚点。来源 `793288e`
+
 ### Changed（行为口径变了，读旧文档的人要注意）
 
 - **正式验收面 = CI `ubuntu-latest`；Windows 侧独立成 `CI-Windows` 工作流作开发平台门**
@@ -80,15 +60,25 @@
   这是设计要求（重测构成后才抬阈值）。来源 `593dc5b`、`0c1815c`、`88381e2`（抬到测量值那一档）；
   阈值史 320→441→443→444→…写在 `cross-platform.md` §8
 - **健康/就绪探针有界化**：依赖不可达时 `degraded` 快速返回而不是挂住，`/ready` 与 schema 守卫分层。
-  来源 `a3ad07a`、`0c1815c`（STEP-00H 的 skip 基线与超时收紧；根因修正在同卡前两轮）
+  来源 `5e5ab17`（S00H.1.1-1.3 探针两层上界 + 端点预算——**发布时更正**：原候选段把这条挂在
+  `a3ad07a`/`0c1815c` 上，那两个提交的主语是 skip 基线与 `--timeout` 收紧，不是探针本体）
 - **角色门禁单参数化 + 推送任务归属服务端化**：`require_roles` 是"取最高档"的语义（写两个参数＝admin-only），
   运营写权按意图恢复；任务创建者归属只信服务端会话。来源 `7504ef8`（STEP-24 S24.1-3 + STEP-25 S25.1-3），
   第 2 轮更正 `392a635`
-- **健康/就绪探针有界化**：依赖不可达时 `degraded` 快速返回而不是挂住，`/ready` 与 schema 守卫分层。
-  来源 `a3ad07a`（STEP-00H）
 - **`next` / `eslint-config-next` 升到 15.5.28**（上游安全公告 GHSA-2464-fhr4-w9xw + CVE-2026-94482 的修复线）；
   同批把 pnpm-audit 与 trivy 的 BLOCK 清空。来源 `bf141d5`
 - **需求基线拆成 12 份可机检条目**（REQ-F-001…008 + NF×2 + C×2），主文档只留摘要与三向表。来源 `8de3a1a`（STEP-17）
+
+- **九页未登录形态收敛为一（G2）**：废除六形态散装（subscriptions/jobs 白屏 null、
+  engines/public/bots 无守卫裸调 API（guest 态发 401 请求）、spaces/chat/onboarding/spaces/[id]
+  散装 `router.replace("/")`、admin loading-guest 不分致游客误见"权限不足"卡）——
+  全部统一为 AuthGate 原地卡片，保留 URL 上下文；guest 态数据请求门补齐
+  （engines/public/bots/onboarding 的 load effect 加 authed 门）。来源 `793288e`
+- **TopBar 游客态两处口径**（G3.1 + G3.4）：新增"登录"按钮（与首页引导卡同源 `login()`），
+  未登录隐藏私有导航入口（订阅/任务/引擎/机器人；admin 既有 `is_admin` 门不变），公共引流位保持可见；
+  四私有项后改为 🔒 徽标按钮（`title="登录后可见：X"`，点击触发登录），authed 恢复正常链接、loading 不渲染。
+  middleware cookie 预拦截经双向论证**裁定不实施**（语义冲突/能力上限/双源漂移/收益边际，见 backlog AUTHGATE-002）。
+  `tests/topbar-guest-nav.spec.tsx` 3 用例锁定三形态。来源 `793288e`、`7cf145b`
 
 ### Fixed
 
@@ -107,6 +97,27 @@
   不再是"两支键空间对齐"），这条限定语必须一起读，读数在 `EVD-V17-06` §4。来源 `88381e2`（STEP-06 复跑）
 - **端到端采集链此前从未被整体跑过**（发现→清单→入列→入库→二轮 Diff 五段，历史用例最多覆盖三段）。
   来源 `88381e2`（STEP-06 六渠道 E2E，连跑三次同键集）
+
+- **Security 工作流双红灯**（CI run 37749240003 / 37749239965 实证，三条各有根因）：
+  trivy 钉的是**不存在的版本** `0.57.1`（release 下载 404 → SCANNER_ERROR）改 `0.75.0`；
+  `next` 14.2.35 → 15.5.27 消 pnpm-audit 13 条 critical/high（next×11 + 传递依赖 postcss 8.4.31、
+  source-map-js 1.2.1 用 pnpm overrides 强提），配套 React 18→19、`spaces/[id]` params Promise 化
+  （`use()` 解包 + Suspense 边界）、6 个测试文件按 React 19 的 act 语义改、11 处内部导航 `<a>` → `<Link>`；
+  mock e2e ⑦ 空间详情红的根因是 engines 域**没有 mock 分支**、请求穿透 MOCK 网关打到 :3300 变 500——
+  推翻原裁定补 mock 分支，而 hot 域的穿透**刻意保留**（hot.spec 无 console 门禁，它构成后端不可达降级路径的真实覆盖）。
+  来源 `d0b5760`；15.5.27 → 15.5.28 的后续补丁见上面 Changed 的 `bf141d5`
+- **公开 CI 日志里的密钥脱敏 + 时区库改为显式依赖**（P-107 / P-106，STEP-32）：
+  `compose-smoke` 现场生成的两把一次性主密钥此前**未掩码**就写进 `$GITHUB_ENV`，
+  而仓库是 public、后续步骤的 `env:` 块把值原文打进日志——改成"赋值给本步局部变量 → `::add-mask::` →
+  再写入"，并新增守卫 `guard-ci-secret-mask`（写入 `$GITHUB_ENV` 的本步生成值必须先掩码，
+  三处接线：`make guard`、`entry.py guard`、CI Governance 步；无可检面则 rc=3 不算通过）。
+  `Asia/Shanghai` 此前只靠 psycopg 的 win32 传递依赖拿到 tzdata，而它在**导入期**被构造——上游一剥就是进程起不来，
+  现改为 `pyproject.toml` 的无条件主依赖。判据与前后对照在 `EVD-V18-32`。来源 `da09dd1`
+- **422（10005）不再回显调用方提交的值**（P-62，STEP-33）：校验处理器此前把 pydantic 的错误字典
+  整片格式化进 message，而其中同时带着 `input`（原值）、`msg`（自定义校验器把原值内插进句子）与 `ctx`；
+  现在只报「字段路径 + 错误类型 + 固定原因」，`input`/`ctx` 一次都不读，未知错误类型走泛化句、
+  **不退回 msg**，连 `extra="forbid"` 那种"把凭据串当字段名"的绕过也被路径形状约束挡住。
+  判据打在三条真端点上（不连库，见 `EVD-V18-33` §1.2）。来源 `c9287a6`
 
 ## [v1.0.0] - 2026-10-08
 

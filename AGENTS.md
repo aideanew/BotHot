@@ -61,14 +61,18 @@ PLAN 规划 → SPEC 规格 → APPROVE 批准 → IMPLEMENT 实施 → VERIFY �
 
 ## 当前项目状态
 
-- **版本**：**v1.0.0**（X-12：原写 v0.6.5，落后一个大版本）。
-  证据：`git tag -l` → `v1.0.0`；tag 落在 `c19fe87`（2026-10-08，
-  "docs(release): v1.0.0 账本终稿"）；`CHANGELOG.md:45` 有 `## [v1.0.0] - 2026-10-08` 段。
-  当前 `main` 已领先 tag **291 个提交**（`git rev-list --count v1.0.0..HEAD`，2026-10-23 现读至 `9983c63`），
-  故"已发布 v1.0.0 + 主干继续前进"两者不矛盾；写版本号时以 tag 为准，不以 v0.x 叙事为准。
-  ⚠ STEP-12 的发布对账（2026-10-23）：候选发布说明已写在 `CHANGELOG.md` 的
-  `## [v1.1.0] — 未发布` 段，`[Unreleased]` **刻意没搬空**——搬空 + 打 tag + 推 tag 就是发布动作本身，
-  归用户拍板；就绪判据与未闭合清单见 `docs/06_validation/evidence/EVD-V17-12/s12_readings.md`。
+- **版本**：**v1.1.0**（STEP-39 于 2026-10-23 发布）。
+  证据：`CHANGELOG.md:17` 有 `## [v1.1.0] - 2026-10-23` 段，`:11` 的 `[Unreleased]` 已搬空；
+  tag `v1.1.0` 由 STEP-39 打在发布批上——**本行不抄它自己的 sha**（那是自指：写这段文字时提交还不存在），
+  权威读数一律现取：`git ls-remote --tags origin v1.1.0`（注释标签给出标签对象与 `^{}` 指向的提交两行）、
+  `git rev-parse v1.1.0^{commit}`；发布批的 run id 与三绿读数记在 `docs/06_validation/evidence/EVD-V18-39/`。
+  上一版 `v1.0.0` 是注释标签，标签对象 `8ecf322` 指向提交 `c19fe87`（2026-10-08，"docs(release): v1.0.0 账本终稿"），
+  `CHANGELOG.md:122` 有该段——注意 `git rev-parse v1.0.0` 给的是**标签对象**的 sha，不是被标提交，
+  要把两者抄混了就会得到"tag 落在 8ecf322"这种错读（本轮现读踩过，写成这条提醒）。
+  区间计数：`git rev-list --count v1.0.0..HEAD` 于 STEP-33 收口批 `9544ef3` = **304**，发布批自身 +1 ⇒ 305。
+  ⚠ 这一段此前长期写的是"v1.0.0 + 领先 291 个提交"（2026-10-23 早些时候的读数），
+  而 `[Unreleased]` 在发布前只有 6 条、区间内却有 304 个提交——**v1.1.0 段不是把 Unreleased 换个标题**，
+  是 STEP-12 重新对账 + STEP-39 定稿的产物（原始登记见 `docs/06_validation/evidence/EVD-V17-12/s12_readings.md` §5.1）。
 - **后端**：FastAPI + SQLAlchemy 2.0 + Alembic，9 个业务域
 - **前端**：**Next.js 15** App Router（X-02 更正），10 个功能域
   - 证据：`apps/web/package.json:27` `"next": "^15.5.28"`、`:28` `"react": "^19.0.0"`；

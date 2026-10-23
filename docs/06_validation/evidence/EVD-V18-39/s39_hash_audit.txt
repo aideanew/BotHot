@@ -1,0 +1,52 @@
+v1.1.0 发布段（行 17-121）里的短 hash 共 42 个，逐个复核主语：
+
+   8ecf322  tag        c19fe87 2026-10-08 docs(release): v1.0.0 账本终稿——测试数 974→1002（远端批并入复测）；CHANGELOG 补 RSS 渠道并入条目（标注前端依赖降级裁定 731558b）
+   c19fe87  commit     c19fe87 2026-10-08 docs(release): v1.0.0 账本终稿——测试数 974→1002（远端批并入复测）；CHANGELOG 补 RSS 渠道并入条目（标注前端依赖降级裁定 731558b）
+   9544ef3  commit     9544ef3 2026-10-23 docs(STEP-33 收口): 三绿与新旧文案对照入证，另登记"调用方值进日志"的两条旁路 P-112
+   05ff3ff  commit     05ff3ff 2026-10-21 feat(STEP-28 S28.1.2-S28.4.1 第 1 轮): 采集渠道与分类的运营可配置读写面
+   7c4bda8  commit     7c4bda8 2026-10-21 feat(STEP-28 S28.1.1 第 1 轮): 运营可配置项的存储底座——迁移 ab1006c4a + SystemSetting
+   848afb2  commit     848afb2 2026-10-22 feat(STEP-14b 余项): 采集配置屏（分类清单 + 付费详情兜底），两条卡面落后登记 P-91/P-92
+   22b9ede  commit     22b9ede 2026-10-22 feat(STEP-09 第 1 轮): RSS 成一等信息源——未知标识不发请求、外链不入库且可计数、10006 归永久失败，SKIP_BASELINE_WIN 641
+   bb4e3ac  commit     bb4e3ac 2026-10-21 feat(STEP-08 S8.1.1 第 1 轮): 一源多标识的存储底座——迁移 ab1006c2a + 回填 biz + ADR-0014
+   211533c  commit     211533c 2026-10-22 feat(STEP-08 S8.3.1+S8.3.2 第 1 轮): 清单端口升级就位——游标不许编造，末页只由服务层判，SKIP_BASELINE_WIN 634
+   df488f7  commit     df488f7 2026-10-22 feat(STEP-08 S8.4.1 第 1 轮): 按源标识选渠道——biz 不再冒充 ghid，降级只多试一家，SKIP_BASELINE_WIN 637
+   7ed167b  commit     7ed167b 2026-10-22 feat(STEP-08 S8.5.1 第 1 轮): TikHub 发现端点与现行 OpenAPI 不符——核实落到派发面，不是注释
+   1e5c462  commit     1e5c462 2026-10-20 feat(STEP-10 S10.V15.1 第 1 轮): 详情兜底接入 job_worker→kb.ingest_url，开关默认关
+   b60e1e9  commit     b60e1e9 2026-10-21 feat(STEP-10 S10.V15.2 第 1 轮): 付费详情兜底的触发条件/供应商/预算改成运营可配
+   d19b9ab  commit     d19b9ab 2026-10-21 feat(STEP-05 S5.1.1-S5.2.3 第 1 轮): 采集静默告警与可观测上线（四族指标 + 日幂等告警）
+   5a2e471  commit     5a2e471 2026-10-20 feat(STEP-31 S31.1-S31.4 第 1 轮): 三路由组写操作结构化审计 + 9 字段固定负载 + 请求体零泄露 + SKIP_BASELINE_WIN 571
+   f383f0d  commit     f383f0d 2026-10-20 fix(STEP-26 S26.1-S26.2.4 第 1 轮): 管理端 web 直投补写站内历史 + 三路径顺序统一
+   88381e2  commit     88381e2 2026-10-22 feat(STEP-06 S6.1~S6.3 第 1 轮): 六渠道采集 E2E 从零建起 + 两处夹具纠偏 + 模块覆盖率门进 CI
+   81205f1  commit     81205f1 2026-10-20 feat(STEP-13 S13.1-S13.3 第 1 轮 / D-V3-03): 引擎能力面 reason 四值（未开放→缺 Key→未实接，谁能解决排序）+ engine 契约冻结；列表、可用谓词、切换拒绝三处同源；REQ-F-003 实现度对齐、backlog TECH-003b——本机真库全
+   d839eb7  commit     d839eb7 2026-10-22 fix(STEP-15/15b 的 V0.17 增量补完): 引擎原因改读契约 reason + 密钥面板按角色收写面
+   fbb0409  commit     fbb0409 2026-10-22 feat(STEP-14a): 管理端分页目标壳 + P-18 重试接回清单四态，卡面前提现读推翻两处各登记一条
+   9983c63  commit     9983c63 2026-10-23 feat(STEP-00E 队列⑮ 末张): 验收环境四入口落地 + 单头断言五发极性 + 前端半边两次复跑
+   793288e  commit     793288e 2026-10-09 feat(web): AuthGate 统一未登录守卫——九页形态收敛 + TopBar guest 登录入口（G1-G4）
+   593dc5b  commit     593dc5b 2026-10-15 fix(STEP-00W): 启动期 schema 探测加两级超时 + windows 门拆成独立工作流（@win 栈闭合根因）
+   0c1815c  commit     0c1815c 2026-10-21 ci(STEP-00H S00H.2.3 第 1 轮): 多平台门收口，CI-Windows --timeout 300→120
+   5e5ab17  commit     5e5ab17 2026-10-17 feat(STEP-00H S00H.1.1-1.3): 探针两层上界 + 端点预算; 顺带修限流豁免集的两个死条目
+   a3ad07a  commit     a3ad07a 2026-10-17 chore(STEP-00H): skip 基线 443 → 444——门第二次按设计把我自己新增的连库用例抓出来，这次单独推送
+   7504ef8  commit     7504ef8 2026-10-19 fix(STEP-24 S24.1-3 + STEP-25 S25.1-3): 推送任务归属服务端化 + require_roles 单参数化，运营写权按 D-V12-12 落地；顺修 P-39（改渠道 extra_config 写明文）（两卡各第 1 轮，规划方自做）
+   392a635  commit     392a635 2026-10-19 fix(STEP-25 S25.3.1 第 2 轮): roles.py docstring 去掉会被卡面 grep 命中的多参数写法，EVD 更正 grep=0 的错误读数与全量计数（独立复查第 5 条 FAIL）
+   bf141d5  commit     bf141d5 2026-10-23 fix(security): next 15.5.27 → 15.5.28（上游公告命中，非本批 diff 引入；权属登记 P-99）
+   8de3a1a  commit     8de3a1a 2026-10-23 docs(STEP-17 S17.1~S17.2 第 1 轮): 需求基线拆成 12 份可机检条目 + 门面纠偏（Blocks STEP-12）
+   7cf145b  commit     7cf145b 2026-10-09 feat(web): TopBar guest 私有项改锁形徽标（G3.4 二期登记项落地）+ 纪律/裁定回填
+   1236d50  commit     1236d50 2026-10-17 feat(STEP-22 交付)+docs(STEP-04 复核尾巴): 推送域四支读接口落角色门、/tasks 路由前置; 登记 P-20/P-21
+   31a6667  commit     31a6667 2026-10-17 fix(STEP-22 返工): 第一轮独立验证判 FAIL——测试假面接错了授权入口，遮蔽守卫是硬编码
+   15470ee  commit     15470ee 2026-10-17 fix(STEP-22+00H @ci 复跑): 读门改最低秩、在途面两侧同轨解析; 顺手消掉我自己引入的一处明文 DSN 凭据
+   2a7195d  commit     2a7195d 2026-10-17 feat(STEP-20): 三家 provider 的时间锚、TikHub 的降级语义、WellByte 一行坏打挂整页——P-15/P-16/P-17 收口
+   f7a3a6b  commit     f7a3a6b 2026-10-17 fix(STEP-20 返工轮): 我写的两条"常驻守卫"里有一条恒真，而它盖住的是同族空值洞还在清单侧没修
+   25088c4  commit     25088c4 2026-10-20 feat(STEP-01 S1.3.2+S1.2.2 第 1 轮 / D-V8-05、D-V8-08 换路后): 契约语义真源换标准库 jsonschema（19 对形状探针等价 + 元校验 + 登记兜底）；api.envelope 第五域收编（根即形状、分页三壳提升为 definitions）——本
+   a6f54e1  commit     a6f54e1 2026-10-17 feat(STEP-02 S2.4): mid/idx 前导零规范化——同文两键的第三种形态收口
+   d044d2a  commit     d044d2a 2026-10-16 docs(STEP-03 S3.1-S3.3 收口): @ci 回读为 success，S3.4.1 覆盖率门如实留未达
+   d0b5760  commit     d0b5760 2026-10-08 fix(ci): Security 双红灯修复——trivy 0.57.1→0.75.0（幽灵版本 404）；Next 14→15.5.27 迁移消 pnpm-audit 13 条阻断（postcss/source-map-js 以 overrides 强提）；mock e2e ⑦ 红根因 engin
+   da09dd1  commit     da09dd1 2026-10-23 feat(STEP-32 第 1 轮): 公开 CI 日志的生成密钥先掩码，tzdata 升为无条件主依赖
+   c9287a6  commit     c9287a6 2026-10-23 feat(STEP-33 第 1 轮): 422 的 message 不再回显调用方提交的值，路径段也做形状约束
+
+解析失败：无
+
+区间计数与标签现状：
+   git rev-list --count v1.0.0..HEAD = 304
+   git tag -l = local-recovery-42a21f2 / local-recovery-6751185 / v1.0.0
+   v1.0.0 标签对象 = 8ecf3220ff823c405e6e4e61456688e79e5177a1，指向提交 = c19fe879e07a67efa2d482a0cd4ce340bd577a92
+   工作树：9544ef3（未提交改动数 = 4）
