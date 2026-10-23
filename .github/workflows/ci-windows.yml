@@ -128,7 +128,10 @@ jobs:
       # **本档 679 的锚** = STEP-36 S36.1 新增六渠道重开参数化用例（`tests/test_e2e_collection.py::
       # test_reopened_manifest_does_not_reenqueue`，6 条连库），PG-DSN-未设置 族 +6；
       # 先红阶段与修复分两批推送，阈值随用例数一步到位，不留余量。
-      SKIP_BASELINE_WIN: "679"
+      # **本档 683 的锚** = STEP-36 第 2 批新增连库用例（S36.3 两发：test_p2_subscription 的
+      # rss 形状/未知类型；S36.4 两发：test_channel_routing 的配置面开/关），族 +4；
+      # 照例不留余量。
+      SKIP_BASELINE_WIN: "683"
     defaults:
       run:
         shell: bash

@@ -118,6 +118,12 @@ DISCOVERY_PAGE_ALL_SKIPPED_TOTAL = Counter(
     "Pages where every row was dropped (skipped == rows > 0), by channel.",
     ["channel"],
 )
+
+RSS_FILTERED_OFFSITE_TOTAL = Counter(
+    "bothot_discovery_rss_filtered_offsite_total",
+    "Off-site links dropped at RSS discovery (not ingested, D-V2-03), by channel.",
+    ["channel"],
+)
 DISCOVERY_LAST_SUCCESS_TIMESTAMP = Gauge(
     "bothot_discovery_last_success_timestamp",
     "Unix seconds of the last successful discovery call, by channel.",
@@ -197,6 +203,13 @@ def record_manifest_rows(
 def record_discovery_page_all_skipped(channel: str) -> None:
     """整页全丢弃（skipped == rows > 0）：采集静默失败的形状，一步一计数。"""
     DISCOVERY_PAGE_ALL_SKIPPED_TOTAL.labels(channel=channel).inc()
+
+
+def record_rss_filtered_offsite(channel: str, count: int) -> None:
+    """S36.2（P-75）：RSS 发现层滤掉的外链数（只计数不入库）。跨轮/跨进程可读——
+    provider 实例上的累计属性读不到"这一轮滤掉多少"，这里才是出口。"""
+    if count:
+        RSS_FILTERED_OFFSITE_TOTAL.labels(channel=channel).inc(count)
 
 
 def record_event_payload_empty(name: str, field: str) -> None:

@@ -514,14 +514,45 @@ def test_preferred_channel_leads_only_when_it_is_eligible() -> None:
     assert only_ghid[0] == "dajiala", only_ghid
 
 
-def test_the_degradation_switch_has_no_config_field_yet() -> None:
-    """现状钉：`Settings` 里没有 `discovery_fallback_enabled` 这一项 ⇒ 开关在生产里结构性关着。
+def test_the_degradation_switch_is_a_real_config_field() -> None:
+    """S36.4（P-70）翻转钉：`Settings.discovery_fallback_enabled` 已存在，缺省 False。
 
-    这条刻意判"字段不存在"。有人加上那一行时它会红——红的是"机制终于能被运营打开了"，
-    那时要一起改的是 EVD-V17-08 §10 与 P-70 的处置，而不是顺手把断言删掉。
+    前身 `test_the_degradation_switch_has_no_config_field_yet` 判"字段不存在"（P-70 的
+    现状钉，设计上"有人加上那一行时它会红"）；本卡补上那一行并删掉 scheduler 的
+    getattr 兜底 ⇒ 按前身自己的约定翻转为判"字段存在且缺省 False"。
+    P-70 的另一条（getattr 静默兜底会伪装成"运营选了关"）由 scheduler.py 的删除收口。
     """
-    assert "discovery_fallback_enabled" not in Settings.model_fields
-    assert bool(getattr(Settings(), "discovery_fallback_enabled", False)) is False
+    assert "discovery_fallback_enabled" in Settings.model_fields
+    assert _settings().discovery_fallback_enabled is False
+
+
+async def test_degradation_switch_reads_the_settings_field_off(
+    db_session: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S36.4：不传 fallback_enabled（=读 Settings 字段）⇒ 默认 False ⇒ 只试一家。"""
+    calls: list[str] = []
+    _patch_factories(monkeypatch, calls, failing={"dajiala"})
+    sub, source_id = await _seed_subscription(db_session)
+    await _give_ghid(db_session, source_id)
+    runner = make_routed_sync_runner(_settings(), default_channel="dajiala", default_provider=None)
+    with pytest.raises(DiscoveryFailedError):
+        await runner(db_session, sub, "tok-cfg-off")
+    assert calls == ["dajiala"], f"默认关却调了 {calls}"
+
+
+async def test_degradation_switch_reads_the_settings_field_on(
+    db_session: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`Settings.discovery_fallback_enabled=True` ⇒ 降级真的发生（配置面能被运营打开了）。"""
+    calls: list[str] = []
+    _patch_factories(monkeypatch, calls, failing={"dajiala"})
+    sub, source_id = await _seed_subscription(db_session)
+    await _give_ghid(db_session, source_id)
+    runner = make_routed_sync_runner(
+        _settings(discovery_fallback_enabled=True), default_channel="dajiala", default_provider=None
+    )
+    await runner(db_session, sub, "tok-cfg-on")
+    assert calls == ["dajiala", "justoneapi"], calls
 
 
 class _RoutingProvider:

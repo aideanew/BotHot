@@ -1,6 +1,6 @@
 # STEP-36 RSS与降级开关收尾
 
-> 基线 main@f86811e｜状态：⚪ 未开始｜版本 V0.18.0
+> 基线 main@f86811e｜状态：🔶 第 1 轮已交付（2026-10-24，读数在 EVD-V18-36/；S36.1 先红由 @ci run 40024327123 实测）｜版本 V0.18.0
 
 | 字段 | 内容 |
 |---|---|
@@ -19,10 +19,10 @@
 | 16 规模 | ≈1.0 人日 |
 
 ## 三级任务
-1. [ ] **S36.1** P-97（D-V18-06 ①）：ready 键减改为按规范文章键跨 source 减除；先红：复用 STEP-06 的变异（把清单合法回退成 DISCOVERED）⇒ 改前 rss 报 `30005 INGESTED → ENQUEUED`，改后六渠道全绿；`asset_source_is_manifest_source` 判据按新语义更新并写明理由
-2. [ ] **S36.2** P-75：`filtered_offsite` 进 `core/metrics.py` 一族计数（按 channel 标签），不进 HTTP 契约；用例断言跑一轮 RSS 后计数增加
-3. [ ] **S36.3** P-76：源清单视图对 `type=rss` 返回 `feedUrl`（读 `source_identifiers` 的 `feed_url`），不再把摘要塞进 `biz`；`GET /sources?type=` 取值过 `SOURCE_TYPES` 校验，非法值 422 并在原因里列出可用值（文案遵守 D-V18-05）
-4. [ ] **S36.4** P-70：`config.py` 加 `discovery_fallback_enabled: bool = False`，删掉 `scheduler.py` 的 `getattr` 兜底；用例：默认关只试一家，设为真时多试一家
+1. [x] **S36.1** P-97（D-V18-06 ①）：ready 键减改为按规范文章键跨 source 减除；先红：复用 STEP-06 的变异（把清单合法回退成 DISCOVERED）⇒ 改前 rss 报 `30005 INGESTED → ENQUEUED`，改后六渠道全绿；`asset_source_is_manifest_source` 判据按新语义更新并写明理由
+2. [x] **S36.2** P-75：`filtered_offsite` 进 `core/metrics.py` 一族计数（按 channel 标签），不进 HTTP 契约；用例断言跑一轮 RSS 后计数增加
+3. [x] **S36.3** P-76：源清单视图对 `type=rss` 返回 `feedUrl`（读 `source_identifiers` 的 `feed_url`），不再把摘要塞进 `biz`；`GET /sources?type=` 取值过 `SOURCE_TYPES` 校验，非法值 422 并在原因里列出可用值（文案遵守 D-V18-05）
+4. [x] **S36.4** P-70：`config.py` 加 `discovery_fallback_enabled: bool = False`，删掉 `scheduler.py` 的 `getattr` 兜底；用例：默认关只试一家，设为真时多试一家
 
 ## 完成判据（全部机器可判）
 - 每项先红后绿读数

@@ -178,6 +178,9 @@ class Settings(BaseSettings):
     # 默认渠道名（须为已注册渠道名）：在可用集内即取之，否则回落注册序首个可用渠道。
     # 「只配置了 redfox、没配其他」时 redfox 即唯一且默认的渠道。
     discovery_default_channel: str = "redfox"
+    # S36.4（P-70）：降级开关的真身。此前只有测试参数注入 + scheduler 里的 getattr 兜底
+    # （"配置项不存在"被伪装成"运营选了关"）。默认 False=只试默认渠道一家，与卡面逐字一致。
+    discovery_fallback_enabled: bool = False
     # RSS 发现渠道：逗号分隔的 RSS feed URL 列表。
     # 格式：url1,url2,... 或 alias1:url1,alias2:url2
     # 留空则 RSS 渠道不可用（available=False）。

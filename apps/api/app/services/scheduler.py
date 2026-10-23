@@ -195,19 +195,15 @@ def make_routed_sync_runner(
     与"上游今天没发文"在日志里长得一模一样（P0-3/P-9 那一族静默失败）。
 
     `fallback_enabled=None` 时读配置项 `discovery_fallback_enabled`（缺省 False）。
-    ⚠️ 本卡不许动 `app/core/config.py`，而 `Settings` 今天**没有**这一项 ⇒ 实际读出来恒为 False，
-    开关在生产里结构性关着（机制已就位并有判据，能打开的那一步属规划方给配置面）。
-    这条不是"顺手兼容一下"：`getattr(..., False)` 静默兜底会把"配置项不存在"伪装成"运营选了关"，
-    所以读数与判据都写在 EVD-V17-08 §10，缺口登记为 P-70。
+    S36.4（P-70）收口：Settings 已有这一项（默认 False），getattr 兜底删除——运营把它
+    置 True 时降级真的会发生，`test_channel_routing.py` 的"字段不存在"钉子已随本卡翻转。
 
     资源边界：默认渠道的那一个 provider 是装配期建好的、跨轮共用，**不在这里关**；
     本轮按需装配的（降级换到的渠道）用完即 `aclose()`——不然每轮泄漏一个 HTTP 客户端。
     """
-    fallback = (
-        bool(getattr(settings, "discovery_fallback_enabled", False))
-        if fallback_enabled is None
-        else fallback_enabled
-    )
+    # S36.4（P-70）：开关在 Settings 里有真身了，getattr 兜底删除——
+    # "配置项不存在"从此是 AttributeError（立即可见），不再伪装成"运营选了关"。
+    fallback = bool(settings.discovery_fallback_enabled) if fallback_enabled is None else fallback_enabled
 
     async def _run(session: AsyncSession, sub: SourceSubscription, run_token: str) -> int:
         src = await session.get(Source, sub.source_id)

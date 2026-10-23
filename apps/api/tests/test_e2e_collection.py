@@ -12,16 +12,15 @@
 `b:` 支还是 `h:` 兜底支、RSS 还会在发现层就滤掉外链（D-V2-03）。分段用例各自验过自己那一段，
 但「发现层的产物能不能一路走到资产行」从来没有一个地方同时验过六次。
 
-本轮实测到的两个非对称（判据位置见 `test_e2e_round_trip` 的最后两条断言）：
-1. 五个微信渠道的资产落回**清单同一个 source 行**（`_ensure_source` 按页面 biz 命中预置源），
-   所以 Diff 的 ready 键减这一支对它们是真的在减；RSS 的清单挂在 `type=rss` 的源上、资产挂在
-   `type=wechat_oa` 的 biz 源上，两支 source 永不相同 ⇒ ready 键减对 RSS 结构性失明（登记 P-97）。
-2. 上面那条不是读码推论，是变异实测：把 `_compute_new_manifests` 的 `status == DISCOVERED` 谓词
-   摘掉后（`app/services/subscription.py`，EVD 记 run 时点），六个用例里**只有 rss 转红**，
-   报 `30005 manifest 非法流转: INGESTED → ENQUEUED`——五个微信渠道被 ready 键减挡住了，
-   RSS 没有那道守卫，于是真把已入库的篇重新入列了。正常态下二轮 Diff=0 对六个渠道都成立，
-   但 RSS 只由状态门守着：清单一旦被合法回退成 DISCOVERED（批次 6 的失败重试面），
-   RSS 会重复排队（入库本身仍走缓存命中，不会重复建资产，代价是一轮白跑）。
+历史非对称（S36.1 修后保留为**事实记录**，判据位置见 `test_e2e_round_trip` 的最后两条断言）：
+1. 五个微信渠道的资产落回**清单同一个 source 行**（`_ensure_source` 按页面 biz 命中预置源）；
+   RSS 的清单挂在 `type=rss` 的源上、资产挂在 `type=wechat_oa` 的 biz 源上，两支 source 仍不相同
+   ——这条**布局事实**没变。
+2. 变的（D-V18-06 ①）：Diff 的 ready 键减自 S36.1 起**跨 source 按规范文章键减**，布局差异
+   不再构成守卫缺口。修前的形状（P-97）：ready 减按 source 过滤 ⇒ 对 RSS 结构性失明，把清单
+   合法回退成 DISCOVERED 后 RSS 会重复入列已入库的篇（先红读数：重开轮 enqueued=2；STEP-06
+   的 status-谓词变异也只有 rss 转红报 30005）。如今这个守卫面由
+   `test_reopened_manifest_does_not_reenqueue` 六渠道常驻判据把守。
 """
 
 from __future__ import annotations

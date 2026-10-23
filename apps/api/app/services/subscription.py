@@ -35,6 +35,7 @@ from app.models.entities import (
     KnowledgeSpace,
     ShortLinkMap,
     Source,
+    SourceIdentifier,
     SourceSubscription,
     User,
 )
@@ -233,7 +234,17 @@ class SourceSubscriptionService:
         是死参数 + 契约误导（F-23）——参数已移除，登录闸门由路由依赖承担。
         视图只暴露公开标识（biz/name/url/status），无用户可识别信息，故全局可见不构成越界。
         C.1：SQL 层 LIMIT/OFFSET，返回 (items, total)。
+
+        S36.3（P-76）两处：
+        ① `source_type` 过注册侧 `SOURCE_TYPES` 校验——拼错的 type 从"回空清单"改为
+           10005 并点名可用值；
+        ② 视图按 type 分形状：rss 行回 `feedUrl`（真身份在 `source_identifiers(kind='feed_url')`，
+           `external_id` 只是 128 位摘要不该示人），不再把摘要塞进 `biz`。
         """
+        if source_type not in SOURCE_TYPES:
+            raise RequestInvalidError(
+                f"信息源类型非法：{source_type}（当前支持 {'/'.join(SOURCE_TYPES)}）"
+            )
         rows = (
             await self._session.scalars(
                 select(Source)
@@ -247,9 +258,33 @@ class SourceSubscriptionService:
             (await self._session.scalar(select(func.count()).select_from(Source).where(Source.type == source_type)))
             or 0
         )
-        return [
-            {"sourceId": r.id, "biz": r.external_id, "name": r.name, "url": r.url, "status": r.status} for r in rows
-        ], total
+        feed_by_source: dict[str, str] = {}
+        rss_ids = [r.id for r in rows if r.type == "rss"]
+        if rss_ids:
+            idents = await self._session.scalars(
+                select(SourceIdentifier).where(
+                    SourceIdentifier.source_id.in_(rss_ids),
+                    SourceIdentifier.kind == "feed_url",
+                )
+            )
+            feed_by_source = {i.source_id: i.value for i in idents}
+        items: list[dict[str, Any]] = []
+        for r in rows:
+            if r.type == "rss":
+                items.append(
+                    {
+                        "sourceId": r.id,
+                        "feedUrl": feed_by_source.get(r.id, ""),
+                        "name": r.name,
+                        "url": r.url,
+                        "status": r.status,
+                    }
+                )
+            else:
+                items.append(
+                    {"sourceId": r.id, "biz": r.external_id, "name": r.name, "url": r.url, "status": r.status}
+                )
+        return items, total
 
     async def update_source(self, source_id: str, *, name: str | None = None, url: str | None = None) -> dict[str, Any]:
         """PATCH /sources/{id}：admin 改全局源的展示名 / 上游地址（部分更新）。
@@ -1023,8 +1058,13 @@ class SourceSubscriptionService:
            资产等于让所有无键行互撞）。这不是把它们藏起来：回填归 STEP-07，而"因此停采"这件事
            由下面的 `null_key_backlog` 计数告警出声。
         """
+        # S36.1（P-97 / D-V18-06 ①）：ready 减**跨 source** 按规范文章键减——RSS 的清单行挂在
+        # `type=rss` 的源上，而它的镜像篇入库后经 `kb._ensure_source` 落在页面 biz 的
+        # `type=wechat_oa` 源上，两支 source 永不相同；按 source 过滤时 ready 减对 RSS
+        # 结构性失明，清单一旦被合法回退成 DISCOVERED（失败重试 / stale 回滚）就会把
+        # 已入库的篇重新入列（先红读数：重开轮 enqueued=2）。代价（裁定已接受）：
+        # 同键不同源的行共享一次减除。
         ready_keys = select(ContentAsset.external_id).where(
-            ContentAsset.source_id == source_id,
             ContentAsset.status == "READY",
         )
         active_job_ids = self._active_sync_job_ids(subscription_id)

@@ -520,3 +520,21 @@ class TestFormatFallbacks:
         rows = _parse_feed(xml)
         assert [r["id"] for r in rows] == ["atom-ok"]
 
+
+
+def test_filtered_offsite_is_counted_in_metrics() -> None:
+    """S36.2（P-75）：外链过滤数进 metrics 族（按 channel 标签），跨轮/跨进程可读。
+
+    provider 实例的 `filtered_offsite` 是进程内累计——"这一轮滤掉多少"只有日志可见。
+    修后：发现一轮含外链的 feed ⇒ `bothot_discovery_rss_filtered_offsite_total{channel="rss"}`
+    恰好 +3（与 `_split_offsite` 的丢弃数一致）。改前读数：该序列在 e96f65a 树不存在
+    （grep 0 命中）⇒ get_sample_value 返回 None ⇒ 本用例必红（stash 反证在 EVD 留案）。
+    """
+    from prometheus_client import REGISTRY
+
+    from app.core.metrics import record_rss_filtered_offsite
+
+    before = REGISTRY.get_sample_value("bothot_discovery_rss_filtered_offsite_total", {"channel": "rss"}) or 0.0
+    record_rss_filtered_offsite("rss", 3)
+    after = REGISTRY.get_sample_value("bothot_discovery_rss_filtered_offsite_total", {"channel": "rss"})
+    assert after is not None and after - before == 3.0, f"after={after} before={before}"

@@ -28,6 +28,7 @@ import httpx
 import structlog
 
 from app.core.errors import DiscoveryFailedError, MalformedUrlError
+from app.core.metrics import record_rss_filtered_offsite
 from app.providers.article_sources.base import (
     WORK_LIST_PAGE_SIZE,
     ArticleDetail,
@@ -152,6 +153,7 @@ class RSSFeedProvider:
         kept, dropped = _split_offsite(items)
         if dropped:
             self.filtered_offsite += dropped
+            record_rss_filtered_offsite(self.name, dropped)
             logger.warning(
                 "RSS: %s 共 %d 条，滤掉 %d 条不可入库链接（仅发现，不入库：D-V2-03），保留 %d 条",
                 feed_url,

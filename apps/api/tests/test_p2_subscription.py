@@ -404,3 +404,26 @@ async def test_p2_update_source_missing_id_is_404_shape(db_session) -> None:  # 
     svc = SourceSubscriptionService(db_session)
     with pytest.raises(ResourceNotFoundError):
         await svc.update_source("00000000-0000-0000-0000-000000000000")
+
+
+# ── S36.3（P-76）：源清单视图按 type 分形状 + 取值过 SOURCE_TYPES 校验 ─────────────
+
+
+async def test_p2_list_sources_rss_shape_returns_feed_url(db_session) -> None:  # type: ignore[no-untyped-def]
+    """rss 行回 `feedUrl`（真身份在 source_identifiers），不再把 128 位摘要塞进 biz。"""
+    svc = SourceSubscriptionService(db_session)
+    rss = await svc.register_source("u-no-echo", name="S36.3 RSS", source_type="rss", feed_url="https://rsshub.example.com/s363.xml")
+    await db_session.commit()
+    rows, total = await svc.list_sources("rss")
+    assert total >= 1
+    mine = next(r for r in rows if r["sourceId"] == rss["sourceId"])
+    assert mine["feedUrl"] == "https://rsshub.example.com/s363.xml", mine
+    assert "biz" not in mine, f"rss 行不许再带 biz 摘要：{mine}"
+
+
+async def test_p2_list_sources_rejects_unknown_type(db_session) -> None:  # type: ignore[no-untyped-def]
+    """拼错的 type 从"回空清单"改为 10005 并点名可用值（P-76 的第二个缺口）。"""
+    svc = SourceSubscriptionService(db_session)
+    with pytest.raises(RequestInvalidError) as ei:
+        await svc.list_sources("bogus")
+    assert "wechat_oa" in str(ei.value) and "rss" in str(ei.value), str(ei.value)
