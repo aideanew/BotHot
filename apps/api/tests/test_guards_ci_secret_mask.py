@@ -1,4 +1,5 @@
-"""STEP-32 S32.2 守卫用例：写进 `$GITHUB_ENV` 的生成值必须在同一步内先 `::add-mask::`。
+"""STEP-32 S32.2 + STEP-34 S34.7 守卫用例：写入 `$GITHUB_ENV`/`$GITHUB_OUTPUT` 的生成值，
+必须在本 job 内先 `::add-mask::`。
 
 为什么要有这道门（P-107）：`ci.yml` 的 `compose-smoke` job 用 `$(python3 -c ...)` 现场生成
 两把一次性主密钥，然后**直接**写进 `$GITHUB_ENV`。GitHub 只掩码它见过的值，而 `>> $GITHUB_ENV`
@@ -6,11 +7,13 @@
 且仓是 public、日志对外可读。修法只有"先赋值 → mask → 再写"这一种顺序是对的。
 
 判据的分寸（写在这里免得后来人以为门管得不够宽）：
-- 只管 `$GITHUB_ENV`，不管 `$GITHUB_OUTPUT`——卡面就是这么划的（D-V18-03），扩大范围要另开卡。
+- S34.7（D-V19-05）起 `$GITHUB_OUTPUT` 与 `$GITHUB_ENV` 同等对待——两者都是"值不经回显
+  就出步"的通道；"已生成/已掩码"两个集合的粒度从**每步**改为**每 job**（掩码在
+  GitHub Actions 里本就跨步生效，job 级才是正确口径，P-109）。
 - 生成值追两层：`x=$(...)` 与 `y=$x`。第三层以上（`z=$(echo "$y")`）不在门内，因为它已经
   不是"把命令替换写进环境"的形状，而是普通字符串拼接。
-- 掩码必须在写之前。生成的值若在**另一步**才写进 `$GITHUB_ENV`，本门按"同一步"口径放行
-  （卡面原文如此）；已知的召回缺口登记在台账，不在此擅自扩判据。
+- 掩码必须在写之前（按 job 内先后的行序判）。跨步写入被 job 级集合覆盖：
+  "上一步 mask、本步写"绿（合法形状）；"上一步生成、全程没掩、下一步才写"红（P-109 缺口）。
 """
 
 from __future__ import annotations
@@ -52,11 +55,11 @@ def _wf(body: list[str], *, extra_steps: list[list[str]] | None = None) -> str:
 # ─── 判据本体：合成输入的四极性 ────────────────────────────────────────────────
 
 def test_inline_command_substitution_into_env_is_red() -> None:
-    """P-107 的真实形状：`KEY=$(...)` 直接写 `$GITHUB_ENV` ⇒ 违规，且点名步骤与行号。"""
+    """P-107 的真实形状：`KEY=$(...)` 直接写 `$GITHUB_ENV` ⇒ 违规，且点名 job/步骤与行号。"""
     text = _wf(['echo "K=$(python3 -c \'print(1)\')" >> "$GITHUB_ENV"'])
     v = guards.ci_mask_violations(text, "ci.yml")
     assert len(v) == 1, v
-    assert v[0]["step"] == "step1"
+    assert v[0]["step"] == "t/step1", v
     assert "GITHUB_ENV" in str(v[0]["why"])
 
 
@@ -136,6 +139,70 @@ def test_braced_mask_form_is_accepted() -> None:
                 'echo "::add-mask::${x}"',
                 'echo "K=${x}" >> "$GITHUB_ENV"'])
     assert guards.ci_mask_violations(text, "ci.yml") == []
+
+
+# ─── S34.7（D-V19-05）：job 级集合 + $GITHUB_OUTPUT 同等对待 ────────────────────
+
+
+def test_cross_step_generated_value_without_mask_is_red() -> None:
+    """P-109 的召回缺口：上一步生成、全程没掩、下一步才写 ⇒ 旧口径放行，job 级口径必须红。"""
+    text = _wf(["x=$(python3 -c 'print(1)')"],
+               extra_steps=[['echo "K=$x" >> "$GITHUB_ENV"']])
+    v = guards.ci_mask_violations(text, "ci.yml")
+    assert len(v) == 1, v
+    assert v[0]["step"] == "t/step2", v
+    assert "x" in str(v[0]["why"])
+
+
+def test_cross_step_masked_value_is_green() -> None:
+    """job 级口径的合法形状（掩码跨步生效）不许被误红——
+    `test_mask_in_an_earlier_step_of_the_same_job_covers_the_write` 在新口径下必须仍然绿。"""
+    text = _wf(["x=$(python3 -c 'print(1)')", 'echo "::add-mask::$x"'],
+               extra_steps=[['echo "K=$x" >> "$GITHUB_ENV"']])
+    assert guards.ci_mask_violations(text, "ci.yml") == []
+
+
+def test_github_output_write_of_generated_value_is_red_and_masked_is_green() -> None:
+    """`$GITHUB_OUTPUT` 与 `$GITHUB_ENV` 同等对待：未掩 ⇒ 红，掩过 ⇒ 绿。
+
+    点名的是**被写的值变量**（`x`），不是输出键名（`result` 只是键，不是秘密）。
+    """
+    unmasked = _wf(["x=$(python3 -c 'print(1)')"],
+                   extra_steps=[['echo "result=$x" >> "$GITHUB_OUTPUT"']])
+    v = guards.ci_mask_violations(unmasked, "ci.yml")
+    assert len(v) == 1 and "x" in str(v[0]["why"]), v
+    masked = _wf(["x=$(python3 -c 'print(1)')", 'echo "::add-mask::$x"',
+                  'echo "result=$x" >> "$GITHUB_OUTPUT"'])
+    assert guards.ci_mask_violations(masked, "ci.yml") == []
+
+
+def test_static_output_writes_stay_green() -> None:
+    """假阳控制面搬到 OUTPUT 通道：常量与 `${{ }}` 上下文都不是"生成的值"。"""
+    text = _wf(['echo "MODE=ci" >> "$GITHUB_OUTPUT"',
+                'echo "SHA=${{ github.sha }}" >> "$GITHUB_OUTPUT"'])
+    assert guards.ci_mask_violations(text, "ci.yml") == []
+
+
+def test_generated_sets_do_not_leak_across_jobs() -> None:
+    """集合按 job 归零的极性：job A 生成的值，job B 去写**不该**被 job A 的集合牵连。
+
+    反过来这也是"job 级"的证明——若实现把整个文件当一个集合，这条会误红；
+    若实现退回每步归零（旧口径），上一条 cross-step 用例会假绿。两条一起把粒度钉死。
+    """
+    text = "\n".join([
+        "jobs:",
+        "  a:",
+        "    steps:",
+        "      - name: gen",
+        "        run: |",
+        "          x=$(python3 -c 'print(1)')",
+        "  b:",
+        "    steps:",
+        "      - name: write",
+        "        run: |",
+        '          echo "K=$x" >> "$GITHUB_ENV"',
+    ]) + "\n"
+    assert guards.ci_mask_violations(text, "wf.yml") == []
 
 
 # ─── 真仓库面：门必须真的在看现文件，而不是只看合成输入 ──────────────────────────
