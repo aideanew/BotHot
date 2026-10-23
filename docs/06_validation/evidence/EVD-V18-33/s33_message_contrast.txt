@@ -1,0 +1,36 @@
+STEP-33 对照读数（head 见 git，探针在仓外 Temp）
+标记 = 运行时随机值（secrets.token_urlsafe），源码与本文件都不含任何真实凭据
+两行读法不同，别当成同一个 errors 对象：
+  · 改后文案 = 真实 HTTP 响应里的 message（经 FastAPI，loc 多一层 body 前缀）
+  · 旧写法 = 对**同一份 payload** 直接跑该端点的请求模型拿到 errors，再按旧写法 f"…: {errors[:1]}" 格式化
+    （所以 loc 少一层 body——那是 FastAPI 加的；泄漏的是 input，与层数无关）
+  · 生产代码已不再走旧写法，这里留它只为留下改前形状
+
+PUT   /api/v1/admin/discovery/config           http=422 code=10005  （模型 app.api.v1.admin.DiscoveryConfigRequest）
+   改后文案：请求参数校验失败：body.enabled（list_type）：应为列表
+   标记出现在改后文案：False
+   旧写法产出（同一标记已遮蔽）：请求参数校验失败: [{'type': 'list_type', 'loc': ('enabled',), 'msg': 'Input should be a valid list', 'input': '<MARKER>', 'url': 'https://errors.pydantic.dev/2.14/v/list_type'}]
+   标记出现在旧写法：True
+
+PUT   /api/v1/admin/categories                 http=422 code=10005  （模型 app.api.v1.admin.CategoryConfigRequest）
+   改后文案：请求参数校验失败：body.categories（list_type）：应为列表
+   标记出现在改后文案：False
+   旧写法产出（同一标记已遮蔽）：请求参数校验失败: [{'type': 'list_type', 'loc': ('categories',), 'msg': 'Input should be a valid list', 'input': '<MARKER>', 'url': 'https://errors.pydantic.dev/2.14/v/list_type'}]
+   标记出现在旧写法：True
+
+POST  /api/v1/extract                          http=422 code=10005  （模型 app.api.v1.extract.ExtractRequest）
+   改后文案：请求参数校验失败：body.url（string_too_long）：长度超过上限
+   标记出现在改后文案：False
+   旧写法产出（同一标记已遮蔽）：请求参数校验失败: [{'type': 'string_too_long', 'loc': ('url',), 'msg': 'String should have at most 512 characters', 'input': '<MARKER>zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+   标记出现在旧写法：True
+
+PUT   /api/v1/admin/discovery/config           http=422 code=10005  （模型 app.api.v1.admin.DiscoveryConfigRequest）
+   改后文案：请求参数校验失败：body.enabled（missing）：缺少必填字段；另有 2 处不合法
+   标记出现在改后文案：False
+   旧写法产出（同一标记已遮蔽）：请求参数校验失败: [{'type': 'missing', 'loc': ('enabled',), 'msg': 'Field required', 'input': {'<MARKER>': 1}, 'url': 'https://errors.pydantic.dev/2.14/v/missing'}]
+   标记出现在旧写法：True
+
+未认证对照（认证先于体校验，所以泄漏面不可达；这就是 P-111 的实测）：
+   PUT   /api/v1/admin/discovery/config           http=401 code=10001 值在响应体=False message=缺少会话凭据
+   PUT   /api/v1/admin/categories                 http=401 code=10001 值在响应体=False message=缺少会话凭据
+   POST  /api/v1/extract                          http=401 code=10001 值在响应体=False message=缺少会话凭据

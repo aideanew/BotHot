@@ -104,7 +104,7 @@
   双主密钥未配置等），不走本次改动的处理器。
 - 前端 `apps/web/tests/**` 里出现的 10005 都是**自造 mock 文案**（如「请求参数不合法」），
   与后端文本无耦合 ⇒ 不破。
-- 全量本地/CI 读数：见 §5（跑完回填）。
+- 全量读数：本地 1631/666/0 failed、@ci 2291/6/4、@win 1631/666 —— 全部记在 §5 与 §6。
 
 ## 5. 门禁读数
 
@@ -114,32 +114,84 @@
 | `mypy app` | Success: no issues found in **120** source files（新模块进了口径；第一版因形参写窄了报一处 arg-type，已把入参放宽成序列） |
 | `pytest tests/test_validation_no_echo.py -q` | 改前 **8 failed / 5 passed** ⇒ 改后 **13 passed**（56.2s / 56.1s） |
 | 本地全量 `pytest tests/ -q -x --timeout=600` | **1631 passed / 666 skipped / 4 deselected / 0 failed**，1140.23s（19:00），rc=0 |
-| 三绿 | 待回填 |
+| 三绿（同一 head `c9287a6`、attempt 1） | CI 39923572062 success（backend 20/20、frontend、workflow-lint、compose、compose-smoke 全成）；CI-Windows 39923572072 success；Security 39923572102 success |
 
 ### 5.1 本地全量这一发为什么重要（它顺手验了 CI-Windows 的零余量门）
 本机是 Windows、无 PG 监听（`AIDEANBOT_TEST_PG_DSN` 未设置）⇒ 与 `@win` job 同一形状。
-读数 **666 skipped** 与 `@win` 在 `da09dd1` 上的 skip 基线**完全相等**，
-而 passed 从 1618 涨到 **1631**，差额正好是本卡的 13 条用例：
+这个推断后来被 `@win` 自己证了（run 39923572072，同一 head）：
 
 ```
-1618（@win @da09dd1）+ 13（本卡新增，全部不连库）= 1631（本机全量）
-666 = 666（skip 一条没多）
+本地全量           1631 passed / 666 skipped / 4 deselected        （1140.23s）
+@win @c9287a6      1631 passed / 666 skipped / 4 deselected        （win:650，1117.63s）
+@win 门禁           failed=0 total_skipped=666 baseline=666        （win:720）
+@win @da09dd1      1618 passed / 666 skipped                        → +13 正好是本卡用例
 ```
 
-⇒ 本卡**不需要**抬 `SKIP_BASELINE_WIN`（那道门是零余量记账，新增一条连库 skip 就会红）。
-这正是 §1.2 选择"桩会话而不是连库夹具"的直接后果，写在这里是为了让后来人知道
+⇒ 三处读数两两相等，本卡**没有新增任何 skip**，`SKIP_BASELINE_WIN` 不必抬（那道门零余量，
+多一条连库 skip 就会红）。这正是 §1.2 选择"桩会话而不是连库夹具"的直接后果，写在这里是为了让后来人知道
 这个选择不是风格问题，是判据面问题（D-V10-11）。
 
 ### 5.2 一条本机全量的读法提醒
 `--timeout=600` 那一发跑到 19 分钟，中途 stdout 是空的（管道里的 `tail` 会把整段缓冲到最后）⇒
 "没有输出"不等于"卡住"，也不等于"通过"；判据取的是最后一行的计数与 rc=0，两者都记在上面。
 
-## 6. 登记
+## 6. @ci 内的两条直接证据
 
-- **P-111**：卡面 S33.1 要求"对三个真实端点提交非法请求"，现读证明**未认证时该面不可达**
+- **计数**（run 39923572062，`0_backend.txt`）：`ci:918` =
+  `2291 passed, 6 skipped, 4 deselected, 2 warnings in 220.90s`，`ci:910` = `Total coverage: 88.05%`，
+  `ci:919-920` = `skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0` ⇒ 通过。
+  2291 = 上一 head 的 2278 + 本卡 13 条，**逐条对得上**；覆盖率仍是 P-104 那条抖动带里的数
+  （88.01/87.95/88.00/87.96/88.02/88.05 六个点），只用来过 79 线，不当精确判据。
+- **上一卡那道门仍在 CI 里跑**（与本卡无关但同一屏可读）：`ci:1145-1148`
+  `guard-ci-secret-mask rc=0`。
+- 静态门：`ci:510` ruff `All checks passed!`、`ci:511-512` `mypy app`（无 error 行 ⇒ 通过，
+  job 结论 success 是终判）。
+
+## 7. 收口判定（D-V18-15 的覆盖面）
+
+| 判据 | 读数 | 结论 |
+|---|---|---|
+| S33.1 先红（三条真端点 + caplog） | 8 failed / 5 passed ⇒ 13 passed | ✅ |
+| S33.2 处理器只拼 loc + type + 原因，不读 input/ctx | `validation_message.py` 全文没有 `input`/`ctx` 的取值点；未知类型走泛化句 | ✅ |
+| S33.3 全量回归 + 改期望用例清单 | 本地 1631/666/0 failed；@ci 2291/6/4；@win 1631/666；清单=**空集**（§4 的 0 引用依据 + 9 处 message 断言逐条查） | ✅ |
+| `grep -n "exc.errors()" main.py` 不再把整份字典格式化进 message | 常驻用例 `test_no_error_dict_is_stringified_into_the_handler_source` 做源码级判 | ✅ |
+| 全量 0 failed + 三绿 | §5 表 | ✅ |
+| 卡面 §12「现有断言 10005 文案的用例只许改期望、不许删」 | 本批**未删也未改任何既有用例**（因为 0 条断言这段文案） | ✅（空面，如实记） |
+| 继承增量表 | `STEP-继承卡增量-V0.18.md` 无 STEP-33 行 ⇒ 零项 | ✅（空面） |
+| 卡面自身增量 | STEP-33 无卡面增量节 ⇒ 零项 | ✅（空面） |
+
+## 8. 登记
+
+- **P-111**（本批已进台账）：卡面 S33.1 要求"对三个真实端点提交非法请求"，现读证明**未认证时该面不可达**
   （认证依赖先于请求体校验，5 个端点实测全部 401/10001）⇒ 判据只在已认证路径上有意义。
   本卡用桩会话（覆盖 `get_db` 的 `scalar` + `get_current_user_id`）在不连库的前提下打到真端点，
   这样既不抬 CI-Windows 的零余量 skip 基线，也能在本机复现先红。
   要不要把"未认证也不得泄漏"单独做成一条判据（例如给 10001 的文案也加同形约束），交规划方裁定。
+- **P-112**（收口批新登记）：**调用方可控文本进日志还有两条本卡没管的路**——
+  ① `app/core/audit.py:83` 把 `path_params=dict(scope["path_params"])` **原样**写进审计日志，
+  路径段是调用方控制的（`/spaces/{space_id}/links` 里塞什么就记什么）；
+  ② structlog/httpx 的访问行记完整 URL，query string 也在其中（本卡探针里就能看到整行 URL）。
+  两者都不在"422 不回显"这一条判据的面上，但它们是 P-62 的同一族：**调用方的值进日志**。
 - 附属一条（不另开 P 号）：`app/api/v1/admin.py:461` 的注释仍在引用旧文案，
   该文件不在 STEP-33 允许面 ⇒ 未改。
+
+## 9. 原始件 `s33_message_contrast.txt` 的读法（3.0 KB）
+同一条 payload 的两行对照：**改后文案**取真实 HTTP 响应，**旧写法**由探针把该端点请求模型
+直接 `model_validate` 得到 errors 再按旧写法格式化——两行的 `loc` 差一层 `body` 前缀（那是
+FastAPI 加的），泄漏与否看的是 `input`，与层数无关。四行结果：
+
+| 输入形状 | 改后文案 | 标记出现在改后 / 旧写法 |
+|---|---|---|
+| `enabled` 给成字符串 | 请求参数校验失败：body.enabled（list_type）：应为列表 | False / True |
+| `categories` 给成字符串 | …：body.categories（list_type）：应为列表 | False / True |
+| `url` 超长（600+ 字符） | …：body.url（string_too_long）：长度超过上限 | False / True |
+| 键名就是那个随机值 | …：body.enabled（missing）：缺少必填字段；另有 2 处不合法 | False / True |
+
+顺带三条现读事实（本卡不管，写给 STEP-34/37 的读者）：
+- pydantic 2.14 的 errors 字典里还多一个 `url` 键（值形如 `errors.pydantic.dev/2.14/v/list_type`），
+  旧写法把它也一并端进响应 ⇒ 旧文案动辄 200-300 字符；新文案与 pydantic 版本无关。
+- 最后那行的旧写法里 `input` 是**整个 body 字典**（形如 `{'<随机值>': 1}`），
+  所以"把凭据串当键名"这种绕过方式也一样被抄出去——这正是 §3 第 3 条要给路径段加形状约束的原因。
+- **本节第一版是被 shell 引号吃掉后写进文件的**：反引号里的术语全变成空白，句子却照样通、
+  表格照样齐。记在这里是因为这类失真不报错——凡带反引号或 CJK 的文档写入一律用编辑工具，
+  不用 `python -c "…"` 拼字符串。
