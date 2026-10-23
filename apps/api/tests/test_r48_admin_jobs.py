@@ -488,8 +488,12 @@ async def test_list_sources_is_global_registry_not_user_scoped(db_session) -> No
     # 视图只暴露公开标识，无用户可识别信息
     assert set(item) == {"sourceId", "biz", "name", "url", "status"}
 
-    # 类型过滤走取值语义（未知取值 → 空列表，读路径不设校验闸门）
-    assert _app(db_session, rows["owner"]).get("/api/v1/sources?type=web").json()["data"]["items"] == []
+    # S36.3（P-76）：未知取值从"回空清单"改为 10005 并点名可用值——读路径与注册侧
+    # SOURCE_TYPES 联动（"web" 本就是登记过的占位类型词，不在 SOURCE_TYPES 里）。
+    resp_bad = _app(db_session, rows["owner"]).get("/api/v1/sources?type=web")
+    assert resp_bad.status_code == 422, resp_bad.text
+    assert resp_bad.json()["code"] == 10005
+    assert "wechat_oa" in resp_bad.json()["message"] and "rss" in resp_bad.json()["message"]
 
     status, code = _hit(_unauth_client(db_session), "get", "/api/v1/sources")
     assert (status, code) == (401, 10001)
