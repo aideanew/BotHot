@@ -55,6 +55,25 @@
   预期 ≥363/412 不降）。
 - SKIP_BASELINE_WIN：+6（S36.1 六渠道重开用例）+4（S36.3 两发、S36.4 两发）= 679 → **683**，随批抬起。
 
-## @ci（推送后回填）
+## @ci（推送后回填，2026-10-24 16:4x @win，Asia/Shanghai）
+
+**交付 head `52e8e0a`（第 2 轮分片）三绿，attempt 1**：
+
+| 工作流 | run id | 结论 |
+|---|---|---|
+| CI | 40027812758 | success |
+| CI-Windows | 40027812624 | success（skip 门禁 683/683 过） |
+| Security | 40027812754 | success |
+
+全量：**2367 passed / 6 skipped** / 4 deselected。模块门：全部达标，subscription.py **375/424（88.44%）**
+——S36.3 给 list_sources 加了视图分支（424 总行）且新用例覆盖之，**门不降**（修前 363/412=88.11%）、
+余量 14 行；manifest 219/230 稳定；TOTAL 88.63%。gen_contracts --check rc=0（本机+@ci 双侧）。
+
+过程账（如实）：第 1 轮批 `2db2f99` 的 CI 40026406416 **failure** —— r48 的 F-23 用例把"未知 type 回
+空清单"钉成了现状（恰是 P-76 点名的第二个缺口），与 S36.3 的新语义冲突 ⇒ 第 2 轮分片 `52e8e0a`
+按新语义更新该用例（10005 + 点名可用值）后三绿。
+
+完成判据对照：每项先红后绿读数 ✅（S36.1 由 @ci run 40024327123 实测 rss enqueued=2；S36.2/S36.3/S36.4
+stash 反证）；gen_contracts rc=0 ✅；模块覆盖率门不降 ✅；三绿 ✅。
 
 _（占位：交付 head 三绿 run id；先红 run 40024327123 的红读数原文（rss enqueued=2）；模块门九行读数。）_
