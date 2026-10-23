@@ -51,6 +51,9 @@ env:
   PIP_AUDIT_VERSION: "2.10.1"
   TRIVY_VERSION: "0.75.0"
   GITLEAKS_VERSION: "8.21.2"
+  # uv 与上面三个工具同口径钉版本：① 的扫描输入由 `uv export` 从 uv.lock 导出（P-55 / D-V18-12），
+  # 工具的版本漂移会改变导出的形状，所以它也是"扫描器"的一部分，不交给环境碰运气。
+  UV_VERSION: "0.13.5"
 
   # 已接受的风险基线：pip-audit `--ignore-vuln` 的漏洞 ID（逗号分隔，如
   # "GHSA-xxxx-yyyy-zzzz,CVE-2024-12345"）。**空 = 零容忍**。
@@ -140,14 +143,16 @@ jobs:
         run: mkdir -p "$VERDICT_DIR"
 
       # ══════════════════════════════════════════════════════════════════════════
-      # ① pip-audit —— Python 依赖漏洞
+      # ① pip-audit —— Python 依赖漏洞（输入 = uv.lock 导出的固定清单）
       # ══════════════════════════════════════════════════════════════════════════
-      # 审计的是**实际解析出来的运行环境**，而不是依赖声明文本：
-      # backend 没有 requirements.txt（依赖声明在 pyproject.toml 的
-      # [project.dependencies] / [project.optional-dependencies]），
-      # 若只解析声明文本，传递依赖整段不可见——而传递依赖恰是漏洞的主要来源
-      # （你自己声明的包通常维护活跃，被拖进来的孙子包才是长期没人管的）。
-      # 故 `pip install -e ".[dev]"` 把真实环境装出来再审计。
+      # P-55 / D-V18-12：锁文件是唯一依赖真相 ⇒ 扫描器的输入必须是锁文件或由锁文件导出。
+      # 旧做法是 `pip install -e ".[dev]"` 再审计**当场解析出来的环境**：pyproject 的约束全是区间
+      # （`fastapi>=0.115.0` 等），同一提交在两台机器、两个时间点会装出不同版本，扫描结论跟着漂
+      # ——而"漂移"对安全门是最坏的性质：红与绿都不代表任何可复现的事实。
+      # 现在由 `uv export --frozen` 从 uv.lock 导出**全量闭包**（含 dev extra，逐条 == 钉版），
+      # pip-audit 用 `-r … --no-deps` 只读这份清单：闭包已经在锁里，不再自行解析。
+      # 代价（如实写）：`--no-deps` 会收到 pip-audit 关于"未钉 hash"的 WARNING——那是提示不是错误；
+      # 锁里的平台标记（如 `; python_full_version < '3.11.3'`）会被一并审计，属**多扫不漏扫**。
       - name: "① pip-audit — Python 依赖漏洞"
         id: pip_audit
         # 关键：四步必须**都跑完**，裁决留给末尾的汇总门禁。
@@ -161,15 +166,20 @@ jobs:
           verdict="$VERDICT_DIR/verdict-pip-audit"
           echo "SCANNER_ERROR" > "$verdict"   # 先写最坏结果，任一步骤中断都不会留下"假绿"
 
-          if ! pip install -e ".[dev]" > install.log 2>&1; then
-            echo "❌ 依赖安装失败（见 apps/api/install.log 尾部）"
-            tail -30 install.log
+          if ! pip install "uv==${UV_VERSION}" "pip-audit==${PIP_AUDIT_VERSION}" > tools-install.log 2>&1; then
+            echo "❌ 扫描工具安装失败（uv ${UV_VERSION} / pip-audit ${PIP_AUDIT_VERSION}，见 apps/api/tools-install.log 尾部）"
+            tail -30 tools-install.log
             exit 0
           fi
-          if ! pip install "pip-audit==${PIP_AUDIT_VERSION}" > /dev/null 2>&1; then
-            echo "❌ pip-audit 安装失败（版本 ${PIP_AUDIT_VERSION}）"
+
+          # 导出失败 ≠ 没有漏洞：这一步过不去就把 verdict 停在 SCANNER_ERROR，不进扫描。
+          if ! uv export --frozen --extra dev --no-hashes --no-annotate --no-emit-project \
+              -o requirements-from-lock.txt > export.log 2>&1; then
+            echo "❌ uv export --frozen 失败（见 apps/api/export.log 尾部）——扫描输入无从谈起"
+            tail -20 export.log
             exit 0
           fi
+          echo "扫描输入 requirements-from-lock.txt：$(grep -c '^[A-Za-z0-9]' requirements-from-lock.txt) 个钉版条目（由 uv.lock 导出）"
 
           # 接受基线展开为重复的 --ignore-vuln 参数（数组展开，避免空参数变成位置参数）
           ignore_args=()
@@ -182,11 +192,17 @@ jobs:
             echo "接受基线（${#ignore_args[@]} 项）已加载"
           fi
 
-          # `|| true`：pip-audit 检出漏洞时退出码非 0，这不是"扫描失败"，
-          # 而是"扫描成功且发现漏洞"——两者必须区分，否则无法把
-          # SCANNER_ERROR（工具坏了）与 BLOCK（真有漏洞）分开上报。
-          pip-audit --format json --output pip-audit.json \
-            --progress-spinner off "${ignore_args[@]}" > pip-audit-console.log 2>&1 || true
+          # P-77：交给 security_scan.py 跑——它每轮开始前删掉上一轮的报告，
+          # 没产出就重试一次，两次都没有才判"扫描器未运行"（本步 exit 0，裁决仍归末尾门禁）。
+          # 检出漏洞时 pip-audit 退出码非 0，那是"扫描成功且发现问题"，不是工具坏——
+          # 这条区分由"报告在不在"承担，不靠 rc。
+          if ! python "$GITHUB_WORKSPACE/scripts/security_scan.py" --name pip-audit \
+              --report pip-audit.json --status-file pip-audit-status.json --cwd . -- \
+              pip-audit -r requirements-from-lock.txt --no-deps \
+              --format json --output pip-audit.json \
+              --progress-spinner off "${ignore_args[@]}" > pip-audit-console.log 2>&1; then
+            exit 0
+          fi
 
           python - <<'PY'
           import json
@@ -249,9 +265,14 @@ jobs:
             exit 0
           fi
 
-          # pnpm audit 检出漏洞时退出码非 0 —— 与 ① 同理，用 `|| true` 把
-          # "发现漏洞" 与 "工具失败" 分开。
-          pnpm audit --prod --json > audit.json 2> audit-console.log || true
+          # pnpm audit 检出漏洞时退出码非 0 —— 与 ① 同理，"发现漏洞" 与 "工具失败" 必须分开。
+          # 分开的方式从"接 || true 看 rc"改成"看报告在不在"（P-77）：报告由被包命令自己重定向，
+          # 所以重定向写在 bash -c 里面——helper 会 capture，替不了它落盘。
+          if ! python "$GITHUB_WORKSPACE/scripts/security_scan.py" --name pnpm-audit \
+              --report audit.json --status-file pnpm-audit-status.json --cwd . -- \
+              bash -c 'pnpm audit --prod --json > audit.json 2> audit-console.log; exit 0'; then
+            exit 0
+          fi
 
           python - <<'PY'
           import json
@@ -342,10 +363,14 @@ jobs:
           tar -xzf /tmp/trivy.tgz -C /tmp trivy
 
           mkdir -p /tmp/trivy-cache
+          # P-77：一次重试 + "扫描器未运行"判定。参数一字未动（阈值与豁免面是 §13 禁止面）：
           # --exit-code 0：不让 trivy 自己决定流水线命运，裁决权收归本工作流的统一策略。
           # --skip-dirs 见文件头 SCAN_EXCLUDES 的说明。
-          # `> log 2>&1`（不接管道）：管道会把退出码换成 tail 的，且缓冲会让日志假死。
-          if ! /tmp/trivy fs \
+          # 报告由 trivy 的 --output 自己落盘，所以 helper 只看 trivy.json 在不在；
+          # `> log 2>&1`（不接管道）的旧纪律保留——管道会把退出码换成 tail 的。
+          if ! python "$GITHUB_WORKSPACE/scripts/security_scan.py" --name trivy \
+              --report trivy.json --status-file trivy-status.json --cwd . -- \
+              /tmp/trivy fs \
               --cache-dir /tmp/trivy-cache \
               --scanners vuln,misconfig,secret \
               --format json \
@@ -354,8 +379,6 @@ jobs:
               --no-progress \
               --skip-dirs "$SCAN_EXCLUDES" \
               . > trivy-console.log 2>&1; then
-            echo "❌ trivy 扫描失败（见 trivy-console.log 尾部）"
-            tail -30 trivy-console.log
             exit 0
           fi
 
@@ -438,32 +461,49 @@ jobs:
 
           set +e
           # 配置文件缺失 = 扫描域未知 = 不能当作"没扫出问题"：显式前置校验，
-          # 让它落到 rc!=0/1 的 SCANNER_ERROR 分支（fail-closed），而不是假绿。
+          # 让它落到 SCANNER_ERROR 分支（fail-closed），而不是假绿。
           if [ ! -f .gitleaks.toml ]; then
             echo "❌ .gitleaks.toml 不存在：扫描域（规则 + 白名单）失去单一来源"
+            set -e
             exit 0
           fi
-          # --redact：CI 日志与 JSON 报告中的密钥一律打码。这不只是好看——
-          # 报告会作为 artifact 长期留存，未打码等于把密钥又复制了一份。
-          # --exit-code 1：检出即 1（其余非 0 码留给"工具自身故障"，两者必须可分）。
-          /tmp/gitleaks detect \
-            --source . \
-            --config .gitleaks.toml \
-            --report-format json \
-            --report-path gitleaks.json \
-            --exit-code 1 \
-            --no-banner \
-            --redact > gitleaks-console.log 2>&1
-          rc=$?
           set -e
+          # P-77 + 两条既有纪律一起保留：
+          #   --redact：CI 日志与 JSON 报告中的密钥一律打码（报告会作为 artifact 长期留存，
+          #             未打码等于把密钥又复制了一份）；
+          #   --exit-code 1：检出即 1，其余非 0 码留给"工具自身故障"——两者必须可分。
+          # 包一层重试之后这条区分仍然成立：helper 把"最后一轮 rc"经 status 文件交回来，
+          # 报告在不在只决定"这一维有没有终判"。
+          if ! python "$GITHUB_WORKSPACE/scripts/security_scan.py" --name gitleaks \
+              --report gitleaks.json --status-file gitleaks-status.json --cwd . -- \
+              /tmp/gitleaks detect \
+              --source . \
+              --config .gitleaks.toml \
+              --report-format json \
+              --report-path gitleaks.json \
+              --exit-code 1 \
+              --no-banner \
+              --redact > gitleaks-console.log 2>&1; then
+            exit 0
+          fi
 
-          VERDICT_DIR="$VERDICT_DIR" GITLEAKS_RC="$rc" python - <<'PY'
+          VERDICT_DIR="$VERDICT_DIR" python - <<'PY'
           import json
           import os
           import pathlib
 
           verdict = pathlib.Path(os.environ["VERDICT_DIR"], "verdict-gitleaks")
-          rc = int(os.environ["GITLEAKS_RC"])
+          status_path = pathlib.Path("gitleaks-status.json")
+          if not status_path.is_file():
+              print("❌ gitleaks 没有交出 status 文件（helper 未跑成 ≡ 工具未运行）")
+              verdict.write_text("SCANNER_ERROR")
+              raise SystemExit(0)
+          status = json.loads(status_path.read_text(encoding="utf-8") or "{}")
+          if status.get("status") != "ran":
+              print(f"❌ {status.get('reason') or 'gitleaks 未运行'}")
+              verdict.write_text("SCANNER_ERROR")
+              raise SystemExit(0)
+          rc = int(status.get("last_rc"))
 
           findings = []
           report = pathlib.Path("gitleaks.json")
@@ -540,11 +580,16 @@ jobs:
           name: security-reports
           if-no-files-found: ignore
           path: |
+            apps/api/requirements-from-lock.txt
+            apps/api/pip-audit-status.json
             apps/api/pip-audit.json
             apps/api/pip-audit-console.log
             apps/web/audit.json
             apps/web/audit-console.log
+            apps/web/pnpm-audit-status.json
             trivy.json
             trivy-console.log
+            trivy-status.json
             gitleaks.json
             gitleaks-console.log
+            gitleaks-status.json
