@@ -61,18 +61,25 @@ PLAN 规划 → SPEC 规格 → APPROVE 批准 → IMPLEMENT 实施 → VERIFY �
 
 ## 当前项目状态
 
-- **版本**：**v1.1.0**（STEP-39 于 2026-10-23 发布）。
-  证据：`CHANGELOG.md:17` 有 `## [v1.1.0] - 2026-10-23` 段，`:11` 的 `[Unreleased]` 已搬空；
-  tag `v1.1.0` 由 STEP-39 打在发布批上——**本行不抄它自己的 sha**（那是自指：写这段文字时提交还不存在），
-  权威读数一律现取：`git ls-remote --tags origin v1.1.0`（注释标签给出标签对象与 `^{}` 指向的提交两行）、
-  `git rev-parse v1.1.0^{commit}`；发布批的 run id 与三绿读数记在 `docs/06_validation/evidence/EVD-V18-39/`。
-  上一版 `v1.0.0` 是注释标签，标签对象 `8ecf322` 指向提交 `c19fe87`（2026-10-08，"docs(release): v1.0.0 账本终稿"），
-  `CHANGELOG.md:122` 有该段——注意 `git rev-parse v1.0.0` 给的是**标签对象**的 sha，不是被标提交，
-  要把两者抄混了就会得到"tag 落在 8ecf322"这种错读（本轮现读踩过，写成这条提醒）。
-  区间计数：`git rev-list --count v1.0.0..HEAD` 于 STEP-33 收口批 `9544ef3` = **304**，发布批自身 +1 ⇒ 305。
-  ⚠ 这一段此前长期写的是"v1.0.0 + 领先 291 个提交"（2026-10-23 早些时候的读数），
-  而 `[Unreleased]` 在发布前只有 6 条、区间内却有 304 个提交——**v1.1.0 段不是把 Unreleased 换个标题**，
-  是 STEP-12 重新对账 + STEP-39 定稿的产物（原始登记见 `docs/06_validation/evidence/EVD-V17-12/s12_readings.md` §5.1）。
+- **版本**：**v1.1.1**（STEP-42 于 2026-10-23 发布，补丁版：安全修复）。
+  证据：`CHANGELOG.md:17` 有 `## [v1.1.1] - 2026-10-23` 段（发布前 `[Unreleased]` 本就是空，
+  条目按 `git log v1.1.0..HEAD` 区间重新对账写入）；
+  tag `v1.1.1` 由 STEP-42 打在发布批上——**本行不抄它自己的 sha**（自指：写这段文字时提交还不存在），
+  权威读数一律现取：`git ls-remote --tags origin v1.1.1`（注释标签给出标签对象与 `^{}` 指向的提交两行）、
+  `git rev-parse v1.1.1^{commit}`；发布批的三绿 run id、独立复查与两个 Release 页读数记在
+  `docs/06_validation/evidence/EVD-V19-42/` 与 `EVD-V19-40/`（S42.1 独立复查结论 PASS）。
+  本版要点：**P-113 日志凭据泄漏已修**——日志唯一出口渲染后整行遮蔽（出站 URL 的 query/片段整段省略、
+  绝对 URL 中令牌形路径段遮蔽、主机名保留），审计路径参数只留 UUID 与 ≤15 位短标识符（STEP-40，来源 `1acd123`）；
+  安全门扫描输入改为锁文件导出并区分"扫描器未运行"（STEP-38，来源 `e88f35a`）。
+  本版新登记 **P-114**（执行助手 S42.1 复查发现：开发机 venv 多装 rich 时 console 异常栈会把栈帧
+  局部变量打进日志，在遮蔽面之外；锁文件环境不可达，待规划方裁定归属）。
+  上一版 `v1.1.0` 是注释标签，标签对象 `db9205d` 指向提交 `49c3bed`（2026-10-23，"docs(STEP-39 发布批)"）；
+  更早的 `v1.0.0` 标签对象 `8ecf322` 指向 `c19fe87`（2026-10-08）——注意 `git rev-parse v1.x.0` 给的是
+  **标签对象**的 sha，不是被标提交，把两者抄混就会得到"tag 落在标签对象上"的错读（v1.1.0 发布时踩过，提醒保留）。
+  区间计数：`git rev-list --count v1.1.0..HEAD` 于 STEP-40 收口批 `076a49d` = **8**，发布批自身 +1 ⇒
+  tag 指向的提交上是 9（自指提交不抄 sha，以现取为准）。
+  ⚠ 失真教训仍有效：`[Unreleased]` 的条数 ≠ 区间提交数，发布段必须按区间重新对账
+  （v1.1.0 的原始登记见 `docs/06_validation/evidence/EVD-V17-12/s12_readings.md` §5.1）。
 - **后端**：FastAPI + SQLAlchemy 2.0 + Alembic，9 个业务域
 - **前端**：**Next.js 15** App Router（X-02 更正），10 个功能域
   - 证据：`apps/web/package.json:27` `"next": "^15.5.28"`、`:28` `"react": "^19.0.0"`；
