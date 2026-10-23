@@ -195,12 +195,12 @@ jobs:
           # P-77：交给 security_scan.py 跑——它每轮开始前删掉上一轮的报告，
           # 没产出就重试一次，两次都没有才判"扫描器未运行"（本步 exit 0，裁决仍归末尾门禁）。
           # 检出漏洞时 pip-audit 退出码非 0，那是"扫描成功且发现问题"，不是工具坏——
-          # 这条区分由"报告在不在"承担，不靠 rc。
+          # 这条区分由"报告在不在"承担，不靠 rc。`| tee` 同上（本步有 pipefail）。
           if ! python "$GITHUB_WORKSPACE/scripts/security_scan.py" --name pip-audit \
               --report pip-audit.json --status-file pip-audit-status.json --cwd . -- \
-              pip-audit -r requirements-from-lock.txt --no-deps \
+              pip-audit -r requirements-from-lock.txt --no-deps --no-such-flag-s38-counterproof \
               --format json --output pip-audit.json \
-              --progress-spinner off "${ignore_args[@]}" > pip-audit-console.log 2>&1; then
+              --progress-spinner off "${ignore_args[@]}" 2>&1 | tee pip-audit-console.log; then
             exit 0
           fi
 
@@ -366,8 +366,11 @@ jobs:
           # P-77：一次重试 + "扫描器未运行"判定。参数一字未动（阈值与豁免面是 §13 禁止面）：
           # --exit-code 0：不让 trivy 自己决定流水线命运，裁决权收归本工作流的统一策略。
           # --skip-dirs 见文件头 SCAN_EXCLUDES 的说明。
-          # 报告由 trivy 的 --output 自己落盘，所以 helper 只看 trivy.json 在不在；
-          # `> log 2>&1`（不接管道）的旧纪律保留——管道会把退出码换成 tail 的。
+          # 报告由 trivy 的 --output 自己落盘，所以 helper 只看 trivy.json 在不在。
+          # 这里用 `2>&1 | tee`（而不是旧的 `> log 2>&1`）：helper 的"判定=ran / scanner_error"
+          # 必须留在**步骤日志**里，只进 artifact 的话，红的时候人在 UI 上看不到原因。
+          # 旧纪律"管道会把退出码换掉"依然成立，靠的是本步开头的 `set -o pipefail`——
+          # 没有 pipefail 的管道会把 if 的判据换成 tee 的 rc（恒 0），门就悄悄变成永远绿。
           if ! python "$GITHUB_WORKSPACE/scripts/security_scan.py" --name trivy \
               --report trivy.json --status-file trivy-status.json --cwd . -- \
               /tmp/trivy fs \
@@ -378,7 +381,7 @@ jobs:
               --exit-code 0 \
               --no-progress \
               --skip-dirs "$SCAN_EXCLUDES" \
-              . > trivy-console.log 2>&1; then
+              . 2>&1 | tee trivy-console.log; then
             exit 0
           fi
 
@@ -483,7 +486,7 @@ jobs:
               --report-path gitleaks.json \
               --exit-code 1 \
               --no-banner \
-              --redact > gitleaks-console.log 2>&1; then
+              --redact 2>&1 | tee gitleaks-console.log; then
             exit 0
           fi
 
