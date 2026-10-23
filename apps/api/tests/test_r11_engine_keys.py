@@ -320,7 +320,7 @@ async def test_revoke_deletes_and_absent_revoke_is_404(db_session, monkeypatch) 
     assert res == {"engine": "coze", "revoked": True}
     assert (await svc.load()).rows == []
 
-    with pytest.raises(ResourceNotFoundError, match="无登记 Key"):
+    with pytest.raises(ResourceNotFoundError, match="资源不存在或无权限"):  # S37.5：文案固定
         await svc.revoke(op, "coze")
 
 
