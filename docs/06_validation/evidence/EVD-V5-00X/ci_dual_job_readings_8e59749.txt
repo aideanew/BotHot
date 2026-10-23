@@ -1,0 +1,54 @@
+# S00X.4.2 双 job 验收读数（D-V6-02：run id + conclusion + head_sha，原始面）
+
+采集：`@win`，2026-10-23 11:1x（Asia/Shanghai）。
+取数面：GitHub Actions **run 级日志 zip**（本机无 `gh` ⇒ 按 D-V4-04 不安装）+ REST 原始响应 `ci_runs_8e59749.json`。
+被验收的提交：`head_sha=8e59749181d8822ce060e4ee26330819305077fd`（`main`，STEP-17 收口批；
+本卡是纯文档批，所以用它当"双 job 都 success"这一判据的锚，比再造一个空提交诚实）。
+下面每一行都是日志原文（只剥掉 GitHub Actions 的时间戳前缀）。
+
+## 1. `CI`（ubuntu-latest，**正式验收面**）—— run 39891503640 `completed/success`
+
+5 个 job 逐个 `success`：`workflow-lint` / `frontend` / `compose` / `backend` / `compose-smoke`
+（逐个的 conclusion、runner、起止时刻见 `ci_runs_8e59749.json`）。
+
+```
+backend job：
+  2258 passed, 6 skipped, 4 deselected, 2 warnings in 220.46s (0:03:40)
+  Required test coverage of 75% reached. Total coverage: 88.01%
+  skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+  ✅ skip 门禁通过：连库用例真实执行，skip 数在基线内
+  ✅ 全部模块与全局达标                       ← STEP-06 那道模块覆盖率门，跑在 pytest 之后
+frontend job：
+  Run pnpm run build
+   ✓ Compiled successfully in 9.7s
+     Linting and checking validity of types ...
+   ✓ Generating static pages (18/18)
+  （同一 job 里 build 跑两档，两档都是 18/18；这是 S00X.3.1.1 读数 B，也是 Done 判据第 5 条的 Linux 侧）
+```
+
+## 2. `CI-Windows`（windows-latest，**开发平台门**）—— run 39891503516 `completed/success`
+
+```
+  1598 passed, 666 skipped, 4 deselected, 2 warnings in 1057.83s (0:17:37)
+  windows 门禁：failed=0 total_skipped=666 baseline=666
+  Test Files  49 passed (49)
+       Tests  415 passed (415)
+   ✓ Compiled successfully in 9.4s
+   ✓ Generating static pages (18/18)
+  head_sha=8e59749181d8822ce060e4ee26330819305077fd  conclusion=success  job=windows-dev
+```
+
+> `4 deselected` = STEP-11 的 perf 标记被 `pyproject.toml` 的 `addopts = ["-m","not perf"]` 摘掉，
+> 摘掉而不是 skip——因为这道门是零余量的按原因族计数的 skip 门（D-V10-11）。
+> `666` 与 STEP-06 那轮测量的基线同值，本批没加连库用例，所以不必重算。
+
+## 3. `Security` —— run 39891503530 `completed/success`
+
+四道扫描（gitleaks / pip-audit / pnpm-audit / trivy）无 BLOCK。
+（`next` 升到 15.5.28 之后 pnpm-audit 与 trivy 清空，见 §4 P-99 的处置。）
+
+## 4. 这条读数把补记 3 §5.1 的那个未证项关掉了
+
+补记 3 当时写：「CI 的 Windows 前端两步在这两次 run 里是 `skipped`（因为后端门禁先红），
+要看它们绿得等下一批 CI」。本轮它们**真跑了**：`Test Files 49 passed (49)` / `Tests 415 passed (415)`，
+`build` 编译成功并生成 18/18 静态页 ⇒ 该未证项由 `CI-Windows` 侧补齐，不需要 `@win` 再复跑一遍前端。

@@ -323,3 +323,180 @@ skip 数还从 422 涨到 441，所以这不是"用例变少了"。机制方向�
 3. 门禁的两处盲区原样留着（写在 EVD-V13-00H §7.5 残余风险）：冒充已知族原文的无条件 skip
    仍放行；skip 总数**下降**不设闸（模块级 skip 把 60 条折成 1 条时门反而更绿）。
    后者要抓就得再加一个 collected 常数，而那会让每张新增用例的卡都必须改 CI 文件——本批选择不加。
+
+---
+
+## 补记 4（2026-10-23，V0.17.0 队列⑮ 收口轮 · 判据复算 + 00X 余项两项落地）
+
+执行机标签：除 §2/§7 外全部 `@win`（Win10.0.19045 / Git Bash / `apps/api/.venv` = Python 3.12.10）。
+基线 `main@8e59749`。本轮只做 00X 卡面上仍开的两项（S00X.3.1.1、S00X.4.2），外加一件 00X 该做而没做的事：
+**把卡面 7 条 Done 判据里那些"落地时跑过一次、此后八张卡再没重取过"的数字重新量一遍**——
+这是 `conventions.md` §4.3 第③条（验收环境每台机器每轮重取，不得引用上一版的工具链状态）对本卡自己的要求。
+
+### 0. 环境变更声明（本轮现取，不引用补记 3 那份清单）
+
+| 探测项 | 本轮读数 | 与 2026-10-17（补记 3）相比 |
+|---|---|---|
+| `node --version` | v24.21.0 | 同 |
+| `pnpm --version` | 9.15.9 | 同 |
+| gitleaks | 8.21.2（`%LOCALAPPDATA%\Programs\tools\gitleaks\gitleaks.exe`） | 同 |
+| venv Python / ruff / mypy | 3.12.10 / 0.12.12 / 2.3.1 | 同（与 `pyproject` 钉版一致） |
+| `make --version` | GNU Make 4.4.1 (Windows32) | 同 |
+| `git --version` | 2.55.0.windows.5 | 同 |
+| docker / WSL 发行版 | **都没有** | 同——00X 落地时就没有，这条从未变过 |
+| PG 可达性 | `entry.py migrate` → `SKIP(service unavailable) PostgreSQL localhost:5433`（rc=3）；`entry.py docker-ps` → `SKIP(tool missing) docker`（rc=3） | **变了**：10-22 深夜本机还有一个隔离 PG@5547，10-23 起连库面整体消失 |
+
+⇒ 本轮**没有任何连库读数**，连库面一律由 `@ci`（ubuntu-latest）出（D-V4-01）。
+凡本轮判不了的判据，写在 §3 的"未测"列里并给出为什么，不写成通过、也不写成本卡已过。
+
+### 1. S00X.3.1.1 前端 import 大小写与真实文件名逐一对齐 —— 两条独立读数
+
+原件：`case_alignment_probe.txt`（同目录）。
+
+**读数 A（`@win`，探针本体）**：语料 = `apps/web` 下 188 个 `.ts/.tsx/.js/.jsx/.mjs/.json/.css` 源文件；
+抽出的 import 说明符里 **391 处是仓内解析**（`@/` 别名与 `@bothot/contracts` 共 320 处、相对路径 71 处），
+其余 197 处（15 种包名）是外部包，交给 tsc/bundler，本探针不判。
+391 处**全部解析到真实文件**：`断链 = 0`、`大小写与磁盘真名不符 = 0`。
+
+**读数 B（`@ci ubuntu`，卡面原判据）**：`frontend` job（含 `pnpm build`）在 `8de3a1a` 与 `8e59749` 上
+均 `success` —— 见 §2 的原始面。Linux runner 区分大小写，`build` 绿即"没有任何一处是靠 Windows
+大小写不敏感蒙过去的"。
+
+两条各强一半：A 能**点名到路径段**（B 只给一个 job 结论），B 是**真实 Linux 解析**（A 是本机字节比对）。
+所以两条都留、不互相替代，这也正是卡面那句"判据是在 `@ci ubuntu` 上 `pnpm build` 绿，而不是本地能跑"的保留原因。
+
+探针有牙齿（四发极性变异自测，`selftest` rc=0）：
+
+| 输入 | 期望 | 实测 |
+|---|---|---|
+| 磁盘真名 `Mod.ts`，查找 `sub/mod.ts` | 判红并给出真名 | `第 2 段 'mod.ts' 磁盘真名是 'Mod.ts'（大小写不同）` |
+| 查找 `sub/nope.ts` | 判红 | `'nope.ts' 在 …\sub 下不存在` |
+| 查找 `sub/Mod.ts`（逐字节一致） | 放行 | `ok=True` |
+| 查找 `sub`（目录，无 `index.*`） | 拒收 | `ok=True` 但 `is_file=False` ⇒ 解析层不收目录 |
+
+一处**探针差点自洗**的写法必须记下来，因为它是本仓反复踩的那类：
+第一版用 `Path.resolve()` 取规范路径再比对，看起来更"严谨"，但 `resolve()` 在 Windows 上会把
+路径**规范化成磁盘真实大小写**——错的大小写被探针自己改对，判据于是恒真。改成只用 `os.scandir`
+逐段做字节精确匹配后，①那发变异才会红。源码有意不入库（S00T.V14.3 / F-14 裁定证据脚本不再以可执行件
+形态进仓库），复建规格写在原件 §4。
+
+### 2. S00X.4.2 双 job 验收读数（D-V6-02：只抄 run 号不算）
+
+原件两份：`ci_runs_8e59749.json`（REST 原始响应，`runs?head_sha=` + 每个 run 的 `/jobs`，
+只留身份与结论字段）与 `ci_dual_job_readings_8e59749.txt`（run 级日志原文）。锚定提交
+`8e59749181d8822ce060e4ee26330819305077fd`（`main`）。
+
+| 工作流 | run id | 结论 | 关键读数 |
+|---|---|---|---|
+| `CI`（ubuntu-latest，正式验收面） | **39891503640** | `completed/success`，5 个 job 逐个 success | `2258 passed, 6 skipped, 4 deselected in 220.46s`；`Total coverage: 88.01%`；`skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0`；`✅ 全部模块与全局达标`；`frontend` job 的 `pnpm run build` → `✓ Compiled successfully in 9.7s` + `✓ Generating static pages (18/18)`（两档构建都过） |
+| `CI-Windows`（windows-latest，开发平台门） | **39891503516** | `completed/success` | `1598 passed, 666 skipped, 4 deselected in 1057.83s`；`windows 门禁：failed=0 total_skipped=666 baseline=666`；`Test Files 49 passed (49)` / `Tests 415 passed (415)`；`build` → `✓ Compiled successfully in 9.4s` + `18/18`；取证行原文 `head_sha=8e597491…077fd  conclusion=success  job=windows-dev` |
+| `Security` | **39891503530** | `completed/success` | 四道扫描无 BLOCK（`next`→15.5.28 之后 pnpm-audit 与 trivy 清空，见台账 §4 P-99） |
+
+⇒ **卡面 Done 判据第 1 条到此才成立**：补记 3 结束时它仍是"部分确认"，因为当时的 Windows 那一格
+红在一条自己标着"保守上界，不是测量值"的 stale 阈值上。现在两格同绿，且绿色是**同一 head_sha** 上的，
+不是把两个提交的读数拼起来。
+
+顺带关掉补记 3 §5.1 留的那条未证项：**CI 的 Windows 前端两步**当时因后端门禁先红而被 skip，
+本轮真跑了（vitest 49 files/415 tests、build 18/18 静态页）⇒ 不必再等下一批，也不必 `@win` 复跑前端。
+
+### 3. 卡面 7 条 Done 判据逐条判定（本轮现读）
+
+| # | 卡面判据（原文压缩） | 本轮判定 | 依据 |
+|---|---|---|---|
+| 1 | `@ci` windows 与 ubuntu 两个 job 均 success（run id/conclusion/head_sha 存证） | **达成**（`8e59749`） | §2 + `ci_runs_8e59749.json` |
+| 2 | `@win` 干净机按 README 从零：install→起 PG/Redis→migrate→起前后端→lint→单测→build 全绿 | **未测**（不是"不通过"） | 本机不是干净机（工具链是本卡 10-15 那轮自装的），且**现在连 docker 都没有** ⇒ "起依赖服务"那一步在本机不可达。README §6 的顺序本轮只能照抄到 `migrate` 的 `SKIP(rc=3)` 为止，那既不是绿也不是红，是**没跑**。补记 3 §5.2 同一条仍是原样 |
+| 3 | `make <task>` 与 `entry.py <task>` **零/非零一致**，至少 6 任务、**两平台各一次** | **半达成**：`@win` 6 任务本轮复算通过；**`@linux` 半边没有执行者** | §4.2 表；ubuntu job 从不调用 `make`（本卡实测并写在卡的执行记录里），而卡面又禁止改 ubuntu job 语义 ⇒ 这条判据在现编排下永远只能半绿 ⇒ 登记 **P-101** 请规划方裁定（要么给 Linux 侧一个执行者，要么把判据改成 `@win` 单侧 + CI 双平台 build 绿） |
+| 4 | `@win` 缺工具场景退出码非 0，至少 2 个任务有读数 | **达成** | 本轮复算：`docker-ps`→3、`migrate`→3（两条都打印 `SKIP(...)` 且明写"不是通过"） |
+| 5 | `@linux` `.gitattributes` 收敛后 `pnpm build` 仍绿 | **达成** | §2 的 `frontend` job success。**标签纪律**：这条原文写 `@linux`，实际执行者是 CI 的 ubuntu runner（Linux 且区分大小写），按 D-V6-01 必须写明等价关系，否则等于给了一条没有机位的读数 |
+| 6 | `@win` "只降不升"判据 `grep -rn "open(" scripts \| grep -v encoding=` 前后两数在案 | **达成，但判据本身是假阳形** | §4.3：落地时记 0→0，本轮复算**字面 2**，两处命中都是函数名 `_enclosing_open(`（`guards.py:731/772`），不是文件打开调用 ⇒ 语义计数仍 0→0 ⇒ 登记 **P-100** |
+| 7 | 仅上线脚本在 `cross-platform.md` 明确标「仅 Linux」，且**清单逐条可核** | **达成**（本轮补全） | 原文只有一句「`rotate_keys.sh` 等」——那不是清单。本轮把 `git ls-files '*.sh' \| grep -v '^\.project/'` 实测出的 **6 个自有脚本**逐条列进 `cross-platform.md` §7（4 个仅 Linux/CI、`preflight.sh` 跨平台可用、EVD-V2-00C 的采集器标"历史取证件，不再执行"），vendored 14 个不计 |
+
+### 4. 复算出的三件事（数字，不是印象）
+
+#### 4.1 行尾收敛至今零文本回退
+
+| 命令（都在 `8e59749` 上现跑） | 读数 |
+|---|---|
+| `git grep -l $'\r' HEAD`（含二进制） | **205** 个 blob |
+| `git grep -I -l $'\r' HEAD`（按属性跳过 binary/`-text`） | **0** |
+| `git ls-files --eol` 分布 | `i/lf` 5520、`i/-text` 205、`i/none`（空文件）160、**`i/crlf` 0、`i/mixed` 0** |
+| 205 个的构成 | 197 个在 vendored 子树（firecrawl 74 / wandao 46 / MediaCrawler 40 / LangBot 35 / reclip 2）+ 8 个自有二进制（4 张 EVD-V13-14b 的 png、`.docs` 的 2 个 xlsx 与 1 个 docx、`apps/web/app/favicon.ico`） |
+
+卡面与 `cross-platform.md` §3 原写"含 CR 的 blob 只有 3 个"，那是 10-15 在 `17c5d28` 上的读数；
+数字当然会随仓库长大而变（新加的 png/xlsx 都带 CR），**结论反而更强了**：文本侧一个都没有。
+文档已按本轮读数改写，并把"3 个"降级为历史时点值。这条复算的意义不在于刷新数字，
+而在于证明 `* text=auto eol=lf` 撑过了其后八张卡——共享工作树里并发会话多次大批量写文件，
+没有任何一次把 CRLF 带回文本 blob。
+
+#### 4.2 `make` 与 `entry.py` 的零/非零一致（本轮 6 任务复算，`@win`）
+
+| 任务 | `make X` | `entry.py X` | 同为 0/非 0 |
+|---|---|---|---|
+| dev | 0 | 0 | ✅ |
+| lint-backend | 0 | 0 | ✅ |
+| guard-ports | 0 | 0 | ✅ |
+| fmt-check-backend | 2 | 1 | ✅ |
+| docker-ps | 2 | 3 | ✅（3 = 工具缺失，经 make 被折成 2） |
+| migrate | 2 | 3 | ✅ |
+
+与补记 1 §4.2 那张表的差别：`guard-ports` 那一行当时是"2 / 3→0（搬进 guards.py 后）"，
+本轮是 **0 / 0**——守卫实体已在 `scripts/guards.py`，两侧同义。
+`python scripts/check_entry_parity.py` 同一轮 rc=0：Makefile 33 个目标全部解析到实体且 recipe 已转调，
+entry.py 独有 4 个（`scan-secrets`/`typecheck-backend`/`typecheck-frontend`/`venv-backend`，不算违规）。
+
+#### 4.3 S00X.2.2.1 那条"只降不升"判据被自己的措辞打红（假阳）
+
+判据原文：`grep -rn "open(" scripts | grep -vc encoding=`，落地时记 **0→0**。
+本轮复算字面命中 **2**：`scripts/guards.py:731` 的 `def _enclosing_open(text: str, pos: int)` 与
+`:772` 的调用点。两处都是**标识符**，不是文件打开。语义计数仍是 **0→0**。
+
+⇒ 这条判据抓不到它想抓的东西，而且会随任何一次把 `open` 写进函数名的重构自红；
+本卡不改 `guards.py`（那属后续守卫卡的实体面），只登记 **P-100**：
+建议改成"`scripts/**` 里带 `open(` 且**不是**函数定义/调用的行数为 0"，或直接换成
+`grep -rnE "^\s*(with )?open\(" scripts --include=*.py | grep -v encoding=` 这类锚定调用形的写法。
+
+### 5. 本卡上一轮的两处 ✅ 被本轮现读更正
+
+1. **S00X.1.2 的"任务表"里有 2 个名字从未存在**。卡面列了 8 个任务名
+   （`install / dev / test / lint / build / migrate / verify-backend / verify-frontend`），
+   上一轮的记录写「✅ 34 个任务」就把这两条一起蒙进了分母。本轮 `entry.py help` 现读 **37 个任务**，
+   其中**没有** `verify-backend`/`verify-frontend`；`grep -rn "verify\|testenv" scripts/entry.py Makefile README.md`
+   → **0 命中**（本轮实测）。⇒ 更正为 **6/8 落地 + 2 移交**：这两个名字连同 `testenv-up`/`testenv-down`
+   是 STEP-00E 的 S00E.1.3/S00E.2.1 的交付物，本卡不代做（也不假装做了）。00E 就在下一张。
+2. **S00X.4.1 卡面写"在 `ci.yml` 新增 windows-latest job"，实体今天不在那里**。
+   `windows-dev` job 现居 `.github/workflows/ci-windows.yml`（该文件第 3 行自报"STEP-00W S00W.2.1：
+   windows-dev 从 ci.yml 拆成独立工作流"）。拆分依据是 **D-V7-01**：两 job 同居一个工作流时，
+   徽章读的是工作流级结论，于是"正式验收面明明绿、显示出来是灰的"。
+   ⇒ 这不是漂移而是被裁决追认；本卡的读数因此**按工作流取**（`CI` 与 `CI-Windows` 两条），
+   `cross-platform.md` §0 已记着这条分工。
+
+### 6. 所有权声明（本批改动的面）
+
+卡面允许面：`scripts/entry.py`、`scripts/dev-env.ps1`、`Makefile`、`README.md`、`.gitattributes`、
+`.gitignore`、`docs/04_engineering/cross-platform.md`、`conventions.md`、`project-map.md`、
+`.github/workflows/ci.yml`（仅新增 windows job）、`docker/compose.test.yml`、`EVD-V5-00X`。
+
+本批实际只动了允许面内的四处，**零代码改动**：
+
+| 路径 | 动作 | 为什么在本卡内 |
+|---|---|---|
+| `docs/04_engineering/cross-platform.md` | §1 版本锚改按字段定位、§2 守卫实体宿主更正、§3 CR 读数刷新、§4 增加大小写双读数、§5 `compose.test.yml` 不存在的现读更正、§7 六个自有 `.sh` 逐条清单 | 全部是本卡 S00X.2/S00X.3/S00X.1.1.1 的执行面文档 |
+| `docs/06_validation/evidence/EVD-V5-00X/case_alignment_probe.txt` | 新增（探针原始 stdout + 复建规格） | S00X.3.1.1 的读数 |
+| `docs/06_validation/evidence/EVD-V5-00X/ci_runs_8e59749.json` | 新增（REST 原始面） | S00X.4.2 / D-V6-02 |
+| 本文件 | 追加补记 4 | S00X 收口 |
+
+未动、且**故意**不动的：`scripts/guards.py`（§4.3 的假阳形不改代码，走 P-100）、
+`docker/compose.test.yml`（本卡允许但不属本卡的原子任务，00E S00E.1.2 才要它）、
+`README.md`（§3 第 2 条判据未测，不该为它编造"照抄即可"的新话术）。
+
+### 7. 三绿（本批验收锚）
+
+本批是**纯文档批**（零代码、零配置改动，见 §6 的四面清单），所以验收锚取 `8e59749`：
+`CI` 39891503640 / `CI-Windows` 39891503516 / `Security` 39891503530 三条 attempt 1 全 `success`（§2）。
+这条锚的选取理由与局限都写在这里，不假装它是"本批自己的运行"：
+
+- 理由：文档批不改变任何被检面，而 D-V6-02 要的是"某个 head_sha 上两个 job 都 success"这一**可核对事实**；
+  把空提交当验收锚只会多占一次 CI 往返，并把"绿"的来源搞混。
+- 局限：本批提交自己的三条运行**在推进 STEP-00E 之前读取**（队列纪律：三绿才许前进）。
+  若那一格里出现红（文档批最可能的红源是台账 §4 P-99 那一类上游公告），红点归因与处置写在 00E 的收口行里，
+  不在这里预先主张它一定绿。

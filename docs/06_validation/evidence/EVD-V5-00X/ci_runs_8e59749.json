@@ -1,0 +1,127 @@
+{
+ "_provenance": {
+  "ruling": "D-V6-02（只抄 run 号不算 ⇒ 存原始响应）",
+  "endpoint": "GET /repos/aideanew/BotHot/actions/runs?head_sha=... 与 /actions/runs/{id}/jobs",
+  "fetched_at_utc": "2026-10-23T03:10:49Z",
+  "note": "本机无 gh ⇒ 按 D-V4-04 不安装，改走 REST。字段已裁剪到身份与结论，不含 URL 之外的凭据面。"
+ },
+ "runs": [
+  {
+   "workflow_run": {
+    "id": 39891503530,
+    "name": "Security",
+    "run_number": 266,
+    "event": "push",
+    "status": "completed",
+    "conclusion": "success",
+    "head_branch": "main",
+    "head_sha": "8e59749181d8822ce060e4ee26330819305077fd",
+    "created_at": "2026-10-23T02:47:37Z",
+    "updated_at": "2026-10-23T02:48:45Z",
+    "run_started_at": "2026-10-23T02:47:37Z",
+    "html_url": "https://github.com/aideanew/BotHot/actions/runs/39891503530"
+   },
+   "jobs": [
+    {
+     "name": "安全扫描（① pip-audit / ② pnpm audit / ③ trivy / ④ gitleaks）",
+     "status": "completed",
+     "conclusion": "success",
+     "runner_name": "GitHub Actions 1000002351",
+     "started_at": "2026-10-23T02:47:40Z",
+     "completed_at": "2026-10-23T02:48:44Z",
+     "html_url": "https://github.com/aideanew/BotHot/actions/runs/39891503530/job/120212097396"
+    }
+   ]
+  },
+  {
+   "workflow_run": {
+    "id": 39891503516,
+    "name": "CI-Windows",
+    "run_number": 173,
+    "event": "push",
+    "status": "completed",
+    "conclusion": "success",
+    "head_branch": "main",
+    "head_sha": "8e59749181d8822ce060e4ee26330819305077fd",
+    "created_at": "2026-10-23T02:47:37Z",
+    "updated_at": "2026-10-23T03:07:51Z",
+    "run_started_at": "2026-10-23T02:47:37Z",
+    "html_url": "https://github.com/aideanew/BotHot/actions/runs/39891503516"
+   },
+   "jobs": [
+    {
+     "name": "windows-dev",
+     "status": "completed",
+     "conclusion": "success",
+     "runner_name": "GitHub Actions 1000002346",
+     "started_at": "2026-10-23T02:47:39Z",
+     "completed_at": "2026-10-23T03:07:51Z",
+     "html_url": "https://github.com/aideanew/BotHot/actions/runs/39891503516/job/120212096821"
+    }
+   ]
+  },
+  {
+   "workflow_run": {
+    "id": 39891503640,
+    "name": "CI",
+    "run_number": 271,
+    "event": "push",
+    "status": "completed",
+    "conclusion": "success",
+    "head_branch": "main",
+    "head_sha": "8e59749181d8822ce060e4ee26330819305077fd",
+    "created_at": "2026-10-23T02:47:37Z",
+    "updated_at": "2026-10-23T03:08:01Z",
+    "run_started_at": "2026-10-23T02:47:37Z",
+    "html_url": "https://github.com/aideanew/BotHot/actions/runs/39891503640"
+   },
+   "jobs": [
+    {
+     "name": "workflow-lint",
+     "status": "completed",
+     "conclusion": "success",
+     "runner_name": "GitHub Actions 1000002345",
+     "started_at": "2026-10-23T02:47:39Z",
+     "completed_at": "2026-10-23T02:47:47Z",
+     "html_url": "https://github.com/aideanew/BotHot/actions/runs/39891503640/job/120212097004"
+    },
+    {
+     "name": "compose-smoke",
+     "status": "completed",
+     "conclusion": "success",
+     "runner_name": "GitHub Actions 1000002348",
+     "started_at": "2026-10-23T02:47:39Z",
+     "completed_at": "2026-10-23T03:08:00Z",
+     "html_url": "https://github.com/aideanew/BotHot/actions/runs/39891503640/job/120212097204"
+    },
+    {
+     "name": "backend",
+     "status": "completed",
+     "conclusion": "success",
+     "runner_name": "GitHub Actions 1000002347",
+     "started_at": "2026-10-23T02:47:39Z",
+     "completed_at": "2026-10-23T02:52:33Z",
+     "html_url": "https://github.com/aideanew/BotHot/actions/runs/39891503640/job/120212097228"
+    },
+    {
+     "name": "frontend",
+     "status": "completed",
+     "conclusion": "success",
+     "runner_name": "GitHub Actions 1000002350",
+     "started_at": "2026-10-23T02:47:39Z",
+     "completed_at": "2026-10-23T02:51:08Z",
+     "html_url": "https://github.com/aideanew/BotHot/actions/runs/39891503640/job/120212097265"
+    },
+    {
+     "name": "compose",
+     "status": "completed",
+     "conclusion": "success",
+     "runner_name": "GitHub Actions 1000002349",
+     "started_at": "2026-10-23T02:47:39Z",
+     "completed_at": "2026-10-23T02:47:46Z",
+     "html_url": "https://github.com/aideanew/BotHot/actions/runs/39891503640/job/120212097286"
+    }
+   ]
+  }
+ ]
+}

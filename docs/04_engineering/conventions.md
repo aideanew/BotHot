@@ -147,9 +147,12 @@ docs(architecture): 更新系统架构设计文档
   `scripts/guards.py`。平台分支全仓只允许两处——`entry.py` 的 `dispatch()` 与 Makefile 变量块的
   `ifeq ($(OS),Windows_NT)`。新增第三处要先改本条。
 - 一致性由 `scripts/check_entry_parity.py` 机检（Makefile 每个目标都能解析到实体、且 recipe 已转调）；
-  CI 的 `windows-dev` job 会跑它。
+  执行者是 **`CI-Windows` 工作流**里名为 `entry.py 与 Makefile 目标面一致性` 的那一步——原文把它写成
+  "CI 的一个 job 会跑它"，而自 D-V7-01 起那半个门已独立成 `ci-windows.yml`（不再属于 `CI` 工作流），
+  ⇒ §4 P-1 就地收口；逐字核对方式：`grep -n "entry.py 与 Makefile 目标面一致性" .github/workflows/ci-windows.yml`。
 - **更正 §5.1**：本条原写"包管理：uv（pyproject.toml + uv.lock）"，但 CI 的 backend job 实际执行的是
-  `pip install -e ".[dev]" pytest-cov`（`ci.yml:59`），`uv.lock` 只被 security job 的依赖审计读取。
+  `pip install -e ".[dev]" pytest-cov`（按步内容定位；原记 `ci.yml:59` 已被后续插步顶偏到 `:64`，
+  而 `:59` 现在指的是 `python-version: "3.12"`），`uv.lock` 只被 security job 的依赖审计读取。
   两者并存是现状：装依赖以 **pip + pyproject** 为准，锁文件仍必须提交。跨平台脚本一律按 pip 口径实现。
 - Windows 侧两条硬提醒（都实测过，详见 `cross-platform.md`）：`python3` 是 Microsoft Store 空壳（什么都不做还返回 0）；
   无 PG 时 `alembic upgrade head` **挂住不返回**，所以 `entry.py migrate` 先探端口，不可达即 `SKIP` + rc=3。

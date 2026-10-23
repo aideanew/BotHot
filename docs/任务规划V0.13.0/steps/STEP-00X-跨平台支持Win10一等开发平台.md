@@ -47,6 +47,14 @@
 ### S00X.3 路径、大小写与依赖服务
 6. [ ] 🛠 **S00X.3.1** 脚本内路径一律 `pathlib`，禁止硬编码 `\` 或裸字符串拼接；`os.path.sep` 拼接同样禁止
    - S00X.3.1.1 前端 import 的大小写与真实文件名逐一对齐（Windows 大小写不敏感会掩盖 Linux CI 上的断链）：判据是在 `@ci ubuntu` 上 `pnpm build` 绿，而不是本地能跑
+     — **已交付（2026-10-23，队列⑮ 收口轮）**，而且是**两条独立读数**：
+     ① 卡面那条原判据成立——`@ci ubuntu` 的 `frontend` job（含 `pnpm build`）在 `8e59749` 上 success，
+     日志原文 `✓ Compiled successfully in 9.7s` + `✓ Generating static pages (18/18)`（两档构建都过）；
+     ② 另在 `@win` 补了一支能**点名到路径段**的探针：`apps/web` 的 188 个源文件里 391 处仓内 import 说明符
+     （别名 320 + 相对 71）全部逐字节解析到真实文件，**断链 0、大小写不符 0**，
+     并带四发极性变异自测（写错的 `sub/mod.ts` 必须红并给出磁盘真名）。
+     探针刻意不用 `Path.resolve()`——它会把路径规范化成磁盘真实大小写，判据会被探针自己修好。
+     原件 `EVD-V5-00X/case_alignment_probe.txt`（含复建规格，源码有意不入库：F-14 / S00T.V14.3）。
 7. [ ] 📄 **S00X.3.2** `cross-platform.md` + README 写死 Win10 依赖服务方案：Docker Desktop 或 WSL2 起 PostgreSQL 16 / Redis 7，**版本与生产、CI 对齐**，端口沿用 5433/6380（AGENTS.md 端口表：3000 禁用、3200 前端宿主、3300 后端）
    - S00X.3.2.1 端口被占用时报错并点名占用者，**不得**静默换端口（换端口会让 `AIDEANBOT_TEST_PG_DSN` 与读分数叉——STEP-00E 同条纪律）
 
@@ -55,25 +63,52 @@
    - S00X.4.1.1 `ubuntu-latest` job 一行不改（正式验收面语义必须稳定）；windows job **不**跑 alembic upgrade/downgrade 往返（那是 @ci ubuntu 的出门判据，见 STEP-04）
    - S00X.4.1.2 windows job 的 `SKIP_BASELINE` 与 ubuntu 分开设定，否则"平台差异"会伪装成"回归"
 9. [x] ✅ **S00X.4.2** 验收读数 `@ci`：push 后取 ubuntu-latest 与 windows-latest 两个 job 的 **run id + conclusion + head_sha**，按 D-V6-02 存成证据文件（`gh` 或 GitHub REST 原始响应均可，只抄 run 号不算）
-   — **已确认**（REST 原始响应取数，D-V4-04：本机没有 `gh` 且不装）：
-   同 `head_sha=10c1019` 三连 `CI=success`(39030366256) / `Security=success`(39030366246) /
-   `CI-Windows=failure`(39030366312)，而 Windows 这一次红的**不是平台性断裂**而是
-   `SKIP_BASELINE_WIN=320` 这条被注释自己标为"保守上界，不是测量值"的 stale 阈值。
-   读数与构成记在 `EVD-V5-00X/win_dev_platform_readings.md` 补记 3；收紧动作（320→441 +
-   按原因族记账 + 常驻反证用例）在同一批。**Windows job 的 success 仍待下一轮 `@ci`**，
-   所以本卡的 Done 判据「两个 job 均 success」此刻是**部分确认**，不是已交付。
+   — **已确认（2026-10-23 队列⑮ 收口轮，同一 head_sha `8e59749`）**：
+   `CI` run **39891503640** = completed/**success**（5 个 job 逐个 success，含 `pnpm build` 的 `frontend`），
+   `CI-Windows` run **39891503516** = completed/**success**（`windows-dev`，`failed=0 total_skipped=666 baseline=666`），
+   `Security` run **39891503530** = success。原始面存成 `EVD-V5-00X/ci_runs_8e59749.json`
+   （REST `runs?head_sha=` + 每 run 的 `/jobs`，只留身份与结论字段）+ `ci_dual_job_readings_8e59749.txt`（日志原文）。
+   — **上一轮（2026-10-17）这段的原话保留如下，不抹平**：当时同 `head_sha=10c1019` 三连
+   `CI=success`(39030366256) / `Security=success`(39030366246) / `CI-Windows=failure`(39030366312)，
+   而 Windows 那一格红的不是平台性断裂，是 `SKIP_BASELINE_WIN=320` 这条被注释自己标为
+   "保守上界，不是测量值"的 stale 阈值；收紧动作（320→441 + 按原因族记账 + 常驻反证用例）在同一批，
+   所以当时本卡的 Done 判据「两个 job 均 success」只是**部分确认**。
+   现在两格同绿，且是同一提交上的绿——不是把两个提交的读数拼起来。
+   ⚠ 一点必须让下游知道的编排事实（不是本卡改的）：`windows-dev` 今天**不在 `ci.yml` 里**，
+   STEP-00W S00W.2.1 按 **D-V7-01** 把它拆成独立工作流 `ci-windows.yml`。所以"两个 job 都 success"
+   这句在本卡的实体形态是"**两个工作流**都 success"；`cross-platform.md` §0 记着这条分工。
 
 ## 验收标准（Done 判据，全部标机器）
-- [ ] `@ci` `windows-latest` 与 `ubuntu-latest` 两个 job 均 success（run id/conclusion/head_sha 存证）
+> 2026-10-23 队列⑮ 收口轮逐条判定过一遍（读数与"为什么那两条勾不上"全在
+> `EVD-V5-00X/win_dev_platform_readings.md` 补记 4 §3），下面的勾就是那一节的结论落在这张卡上的样子。
+- [x] `@ci` `windows-latest` 与 `ubuntu-latest` 两个 job 均 success（run id/conclusion/head_sha 存证）
+      —— 同一 `head_sha=8e59749`：`CI` 39891503640 / `CI-Windows` 39891503516 双 success（实体是两个工作流，见 S00X.4.2 的 ⚠）
 - [ ] `@win` 干净机按 README 从零：`install → 起 PG/Redis → migrate → 起前后端 → lint → 单测 → build` 全绿，逐条命令与输出入 EVD（**开发烟测**，不替代 Ubuntu 验收）
+      —— **未测，且本机判不了**：本机不是干净机（工具链是本卡 10-15 那轮自装的），且现在连 docker 都没有
+      ⇒ "起 PG/Redis"那一步在本机不可达，照抄 README 只能走到 `migrate` 的 `SKIP(rc=3)`。
+      不写成通过，也不写成失败——那是"没跑"。要关这条得有一台带 Docker Desktop/WSL2 的机器（属 00E 的题）。
 - [ ] `@win`+`@linux` `make <task>` 与 `python scripts/entry.py <task>` **零/非零一致**（至少 6 个任务，两平台各一次）。
       **判据按实测修正过一次**（S00X.1.3 执行时验出）：GNU make（4.4.1 Windows 实测，Linux 同语义）把 recipe 的任何失败折成 **2**，
       所以 `entry.py docker-ps` 的 rc=3 经 `make docker-ps` 变成 2 —— 要求"退出码逐值相等"是错的判据；
       正确判据是 **同为 0 或同为非 0**，且三态（0 通过 / 1 失败 / 3 没跑）只在 entry.py 层保留。做不到的那一类必须显式记为缺陷，不许把 2 当成 3
-- [ ] `@win` 缺工具场景退出码非 0（不得伪装通过）—— 至少 2 个任务有该读数
-- [ ] `@linux` `.gitattributes` 收敛后 `pnpm build` 仍绿（证明大小写/换行没有掩盖断链）
-- [ ] `@win` 判据"只降不升"：`grep -rn "open(" scripts | grep -vc encoding=` 前后两数记录在案
-- [ ] 仅上线用的脚本在 `cross-platform.md` 明确标「仅 Linux」，且其清单逐条可核
+      —— **半达成**：`@win` 半边 2026-10-23 复算 6 个任务全零/非零一致（dev 0/0、lint-backend 0/0、guard-ports 0/0、
+      fmt-check 2/1、docker-ps 2/3、migrate 2/3）；**`@linux` 半边在现编排里没有执行者**——ubuntu 五个 job 从不调用 `make`
+      （本卡落地时实测，正因如此改 Makefile 才零 CI 风险），而卡面与 D-11 又禁止为过判据去动 ubuntu job。
+      ⇒ 登记台账 §4 **P-101** 请规划方三选一（降级判据 / 给 Linux 侧加一步对照 / 接受半绿）。
+- [x] `@win` 缺工具场景退出码非 0（不得伪装通过）—— 至少 2 个任务有该读数
+      —— 本轮复算两条：`docker-ps`→3（`SKIP(tool missing) docker`）、`migrate`→3（`SKIP(service unavailable) PostgreSQL localhost:5433`）
+- [x] `@linux` `.gitattributes` 收敛后 `pnpm build` 仍绿（证明大小写/换行没有掩盖断链）
+      —— `@ci ubuntu` 的 `frontend` job success（`✓ Compiled successfully in 9.7s`、`18/18` 静态页）。
+      标签纪律：这条原文写 `@linux`，实际机位是 CI 的 ubuntu runner（Linux、区分大小写）——等价关系写在补记 4 §3 第 5 行。
+      另附一条更强的复算：**行尾收敛至今零文本回退**（`git grep -I -l $'\r' HEAD` = 0；`i/crlf`/`i/mixed` 各 0；
+      含 CR 的 205 个 blob 全是 git 按属性跳过的二进制）
+- [x] `@win` 判据"只降不升"：`grep -rn "open(" scripts | grep -vc encoding=` 前后两数记录在案
+      —— 记的是 0→0；但本轮复算**字面命中 2**，两处都是函数名 `_enclosing_open(`（`guards.py:731/772`），不是文件打开。
+      ⇒ 语义计数仍 0→0，判据本身是**字符串形自红**，登记台账 §4 **P-100**（本卡不改 `guards.py`）
+- [x] 仅上线用的脚本在 `cross-platform.md` 明确标「仅 Linux」，且其清单逐条可核
+      —— 原写一句「`rotate_keys.sh` 等」不算清单。本轮把 `git ls-files '*.sh'` 去掉 vendored 后实测的
+      **6 个自有脚本**逐条列进 `cross-platform.md` §7：4 个仅 Linux/CI、`preflight.sh` 标注"经 Git Bash 跨平台可用"、
+      `EVD-V2-00C/collect_ruff_shapes.sh` 标注"历史取证件，不再执行"（F-14 / S00T.V14.3）
 
 ## 验证命令
 ```bash
@@ -143,3 +178,30 @@ V0.9.0 的 F-10 与 V0.10.0 的 F-08 是**同一件事在两台机器上的两�
 但标签只解决"说清在哪跑的"，不解决"Windows 上跑不了"。Ubuntu 是生产平台、Win10 是一等开发平台——
 这个目标此前从未有任何一张卡负责，所以每个版本的执行者都退回到"我这台能跑"的私有定义，
 再把它写成"本机"。本卡把这件事变成有 CI 双 job 兜底的公共判据。
+
+## 执行记录（V0.17.0 队列⑮ 收口轮 · 2026-10-23 · @win 现读 + @ci 原始面）
+
+读数全在 `docs/06_validation/evidence/EVD-V5-00X/`（`win_dev_platform_readings.md` 补记 4 +
+`case_alignment_probe.txt` + `ci_dual_job_readings_8e59749.txt` + `ci_runs_8e59749.json`）。
+本轮**零代码改动**，动的四面全在本卡允许面内。
+
+| 三级任务 | 状态 | 本轮事实 |
+|---|---|---|
+| S00X.3.1.1 前端 import 大小写 | ✅ | 双读数：`@ci ubuntu` `frontend` job（`pnpm build` 绿，18/18 静态页）+ `@win` 探针 391 处仓内说明符逐字节比对，断链 0、大小写不符 0，四发极性变异自测全对 |
+| S00X.4.2 双 job D-V6-02 存证 | ✅ | `8e59749` 上 `CI` 39891503640 / `CI-Windows` 39891503516 / `Security` 39891503530 三条 attempt 1 全 success；原始响应入库 |
+| S00X.2.1 行尾收敛（复算） | ✅ 更强 | 文本侧含 CR 的 blob = **0**（`git grep -I -l`），`i/crlf`/`i/mixed` 各 0；205 个含 CR 的全是按属性跳过的二进制 ⇒ 收敛撑过了其后八张卡 |
+| S00X.1.3 一致性（复算） | ✅ `@win` 半边 | 6 任务零/非零一致；`check_entry_parity` rc=0（Makefile 33 目标 / entry.py 37 任务）。Linux 半边**无执行者** ⇒ 台账 §4 P-101 |
+| S00X.1.2.2 缺工具非零退出（复算） | ✅ | `docker-ps`→3、`migrate`→3，两条都打印 `SKIP(...)` 且明写"不是通过" |
+| S00X.2.2.1 "只降不升"（复算） | ✅ 但判据是假阳形 | 字面 0→2，两处都是函数名 `_enclosing_open(`；语义 0→0 ⇒ 台账 §4 P-100 |
+| S00X.1.1.1 仅上线清单 | ✅ 补全 | `cross-platform.md` §7 把 6 个自有 `.sh` 逐条列表化（原来只有一句"…等"） |
+
+### 本轮把上一轮的两处 ✅ 更正过来
+
+1. **S00X.1.2 那句「✅ 34 个任务」把两个从未存在的名字蒙进了分母**。卡面列的 8 个任务名里
+   `verify-backend` / `verify-frontend` 今天仍然不存在：`entry.py help` 现读 37 个任务，
+   且 `grep -rn "verify\|testenv" scripts/entry.py Makefile README.md` **0 命中**。
+   ⇒ 按 **6/8 落地 + 2 移交** 记；这两个名字（连同 `testenv-up`/`testenv-down`）是 STEP-00E
+   S00E.1.3 / S00E.2.1 的交付物，本卡不代做。00E 就是下一张。
+2. **S00X.4.1 卡面写"在 `ci.yml` 新增 windows-latest job"**，实体今天住在 `.github/workflows/ci-windows.yml`
+   （STEP-00W S00W.2.1 按 D-V7-01 拆的）。本卡不改写卡面历史，只在 S00X.4.2 下面标了"两个 job"
+   在现编排里的实体形态是"两个工作流"。

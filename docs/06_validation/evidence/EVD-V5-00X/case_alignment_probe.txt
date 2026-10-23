@@ -1,0 +1,31 @@
+# S00X.3.1.1 前端 import 大小写与真实文件名逐一对齐 —— @win 现跑（探针在仓库外：D:/tmp/probe_case_align.py，本文件是它的原始 stdout）
+# 采集机 @win（Windows 10.0.19045 / Git Bash / Python 3.12.10 venv），head_sha=8e59749，时间 2026-10-23T03:02:07Z
+
+## 1. 主探针（判据本体）
+锚点自检 apps/web 字节真名 = D:\Code\AideanBotHot\apps\web（相同=True）
+扫描源文件数=188
+内部/别名 import 说明符解析次数=391
+外部包说明符（交 bundler/tsc 判，本探针不判）=15 种
+解析不到真实文件 或 大小写与磁盘真名不符=0
+probe_rc=0
+
+## 2. 四发极性变异自测（证明上面那个 0 不是恒真）
+  ① 大小写不同应判红: lookup('sub/mod.ts') -> ok=False | 第 2 段 'mod.ts' 磁盘真名是 'Mod.ts'（大小写不同）→ D:\tmp\case_probe_fixture\sub  OK
+  ② 目标不存在应判红: lookup('sub/nope.ts') -> ok=False | 'nope.ts' 在 D:\tmp\case_probe_fixture\sub 下不存在  OK
+  ③ 逐字节相同应放行: lookup('sub/Mod.ts') -> ok=True | D:\tmp\case_probe_fixture\sub\Mod.ts  OK
+  ④ 目录段命中应放行但非文件: lookup('sub') -> ok=True | D:\tmp\case_probe_fixture\sub is_file=False（try_spec 依赖它拒收目录）  OK
+fixture 已清理=True
+selftest_rc=0
+
+## 3. 说明
+探针只用 os.scandir 逐段字节比对，绝不用 Path.resolve()/realpath()：后者在 Windows 上会把路径规范化成磁盘真实大小写，判据会被探针自己修好。
+外部包说明符（197 处、15 种）不判，交给 tsc/bundler；@/ 与相对路径共 391 处全部解析。
+
+## 4. 复建规格（探针源码有意不进仓库：S00T.V14.3 / F-14 已裁定「证据脚本不再以可执行件形态入库」）
+按下面六步重写即可得到同一判据，无需读本机的 .py：
+1) 语料 = apps/web 下 os.walk 到的 .ts/.tsx/.js/.jsx/.mjs/.json/.css，跳过 node_modules/.next/test-results/vitest-report/.turbo/dist 与点开头目录；
+2) 抽取 = 正则 (?:from|import|require\(|import\()\s*["']([^"']+)["']，取说明符；
+3) 分类 = `@/x` → apps/web/x；`@bothot/contracts` → packages/contracts/src/index；`./x`、`../x` → 相对该文件目录；其余=外部包，不判；
+4) 候选 = 原样、+每种扩展名、+`/index.{ts,tsx,js}`；
+5) 比对 = 从锚点目录起，对每一段做 os.scandir 集合的**字节精确**匹配；精确失败但大小写折叠命中 ⇒ 判「大小写不同」并打印磁盘真名；
+6) 收口 = 命中项必须是文件（目录不算），全部候选都不中才判断链。退出码 0=零断链零大小写不符，1=有，2=锚点自检失败。

@@ -25,7 +25,7 @@ CI 的读数还要 run id + head_sha + conclusion（D-V6-02），否则只能记
 
 | 工具 | 锚点在哪 | Win10 安装方式 | 实测本机 |
 |---|---|---|---|
-| Python | `ci.yml:56` = 3.12 | `winget install -e --id Python.Python.3.12` | **3.12.10**（`%LOCALAPPDATA%\Programs\Python\Python312\python.exe`；系统里另存 3.11.9，entry.py 不用它建 venv） |
+| Python | `ci.yml` backend job 的 `python-version: "3.12"`（按字段定位，不按行号——该文件自 00X 落地后已被 STEP-04 往返步与 STEP-06 覆盖率门插过两轮） | `winget install -e --id Python.Python.3.12` | **3.12.10**（`%LOCALAPPDATA%\Programs\Python\Python312\python.exe`；系统里另存 3.11.9，entry.py 不用它建 venv） |
 | Node | `apps/web/.nvmrc` = 24.21.0 | nvm-windows 或官方 msi | **v24.21.0** ✓ |
 | pnpm | `apps/web/package.json` `packageManager` = pnpm@9.15.9 | `npm i -g pnpm@9.15.9`（装进 `%APPDATA%\npm`，不碰 Program Files） | **9.15.9** ✓ |
 | gitleaks | `security.yml:53` `GITLEAKS_VERSION: "8.21.2"` | 官方 zip 解到 `%LOCALAPPDATA%\Programs\tools\gitleaks\`（**不进 PATH 也可以**，entry.py 会探测该位置） | **8.21.2** ✓ |
@@ -34,9 +34,15 @@ CI 的读数还要 run id + head_sha + conclusion（D-V6-02），否则只能记
 
 ## 2. 入口：`python scripts/entry.py <task>` ≈ `make <task>`
 
-命令实体只在 `scripts/entry.py` 一份；Makefile 的 26 个开发类目标改成薄转调，
-守卫类（`guard-ports`/`guard-versions`/`guard-structure`/`evidence-check`）与 `help` 的实体仍留在 Makefile，
-由 entry.py 反向调用 `make`（没有 make 就 SKIP，不复制一份近似实现）。
+命令实体只有两份：`scripts/entry.py`（开发类任务）与 `scripts/guards.py`（守卫类）。
+Makefile 的目标（2026-10-23 实测 **33 个**，entry.py **37 个任务**）全部是薄转调，
+`scripts/check_entry_parity.py` 常驻判「每个 Makefile 目标都能解析到 entry/guards 里的实体且 recipe 已转调」，
+唯一允许保留内联的是 `help`（目录页）。
+
+> 本节原写「守卫类与 `help` 的实体仍留在 Makefile，由 entry.py 反向调用 make」——**已被实测推翻并改正**：
+> GNU make 4.4.1 for Windows 跑不了守卫目标里那些多行 `; \` 续行 recipe（`unexpected EOF while looking
+> for matching '"'`），改 LF 也无效；实体因此搬进 `scripts/guards.py`，Makefile 与 entry.py 双双转调它。
+> 这是本卡「卡面被实测推翻的两条」之二，读数见 `EVD-V5-00X/win_dev_platform_readings.md`。
 
 **平台分支只有两处**（这是刻意的上限，别再增加）：
 1. `entry.py` 的 `dispatch()`：venv 内部布局（`Scripts\python.exe` vs `bin/python`）、`.cmd/.bat` shim 需要 `cmd /c` 包装。
@@ -54,9 +60,17 @@ CI 的读数还要 run id + head_sha + conclusion（D-V6-02），否则只能记
 - 全仓文本一律 **UTF-8 + LF**。`.gitattributes` 从原来只有 `*.sh text eol=lf` 扩为
   `* text=auto eol=lf` + 关键后缀逐条钉死 + 二进制 `-text/binary`，并把 **vendored 的 `.project/**` 排除在行尾收敛之外**
   （那 14 个 `.sh` 不是 BotHot 的执行面；不排除的话一次跨平台改动会变成上千文件的噪音）。
-- 收敛前实测：`git grep -I -c $'\r' HEAD` → **只有 3 个 blob 含 CR**，且全是二进制/vendored
+- 收敛前实测（2026-10-15，`17c5d28`）：`git grep -I -c $'\r' HEAD` → **只有 3 个 blob 含 CR**，且全是二进制/vendored
   （`.project/LangBot/src/langbot/pkg/platform/sources/dingtalk.svg`、同目录 `discord.svg`、
   `.project/firecrawl/apps/test-site/public/example-long.pdf`）。
+- **2026-10-23 在 `8e59749` 上复算（同一个判据，八张卡之后）**：
+  `git grep -l $'\r' HEAD`（含二进制）= **205 个 blob**；`git grep -I -l $'\r' HEAD`（按属性跳过 binary/`-text`）= **0**；
+  `git ls-files --eol` 分布 = `i/lf` 5520 / `i/-text` 205 / `i/none`（空文件）160，**`i/crlf` 与 `i/mixed` 各 0**。
+  205 的构成：**197 个在 vendored 子树**（firecrawl 74、wandao 46、MediaCrawler 40、LangBot 35、reclip 2）
+  + **8 个自有二进制**（4 张 EVD-V13-14b 的 png、2 个 `.docs/采集渠道` 的 xlsx、1 个 `.docs/09_archive` 的 docx、
+  `apps/web/app/favicon.ico`）——
+  全是 git 按 `binary`/`-text` 属性跳过的对象。⇒ 结论从「不需要 renormalize」升级成
+  **「收敛至今零文本 blob 回退」**（文本侧 0→0，不是只"当初很干净"）。
   ⇒ 已跟踪内容本来就是 LF，**不需要也不应该在共享工作树里跑 `git add --renormalize`**
   （那条命令会把并发会话的在途改动一起 stage，属硬规则禁止动作）。
 - Windows 控制台/管道默认 cp936：**`PYTHONUTF8=1` 是硬要求**（entry.py 自己注入，也写进 README）。
@@ -68,6 +82,14 @@ CI 的读数还要 run id + head_sha + conclusion（D-V6-02），否则只能记
 - 脚本层只允许 `pathlib`，禁止硬编码 `\`、禁止 `os.path.sep` 拼接（`entry.py` 全文如此）。
 - 前端 import 的大小写必须与真实文件名一致：Windows 大小写不敏感会**掩盖**断链，
   判据是在 `@ci ubuntu` 上 `pnpm build` 绿，不是本地能跑（这条留在 00X 的 CI 半边）。
+- **S00X.3.1.1 现在有两条独立读数**（2026-10-23，`EVD-V5-00X/case_alignment_probe.txt`）：
+  ① `@ci ubuntu` 的 `frontend` job（含 `pnpm build`）在 `8de3a1a` / `8e59749` 上 success；
+  ② `@win` 上一支逐段 `os.scandir` 字节比对的探针把 `apps/web` 的 **391 个内部/别名 import 说明符**
+  （`@/` 320 + 相对 71，另有 15 种外部包不判）全部解析到真实文件，**大小写不符 = 0、断链 = 0**。
+  ②比①强的地方是它点名到段；①强的地方是它是 Linux 真实解析。两侧都留，不互相替代。
+  探针自带四发极性变异自测（`mod.ts`→判红并给出磁盘真名 `Mod.ts`、`nope.ts`→判红、`Mod.ts`→放行、
+  指向目录→拒收），所以"0"不是恒真的产物。它**刻意不用 `Path.resolve()`**——那个调用在 Windows 上
+  会把路径规范化成磁盘真实大小写，判据因此会被探针自己修好。
 
 ## 5. 依赖服务（本机不可达时的正确行为）
 
@@ -81,8 +103,12 @@ CI 的读数还要 run id + head_sha + conclusion（D-V6-02），否则只能记
   （psycopg 没设 `connect_timeout`，Windows 对未监听端口不立即 RST），150s 被 timeout 打断才停。
   挂住比失败更危险——执行者会以为"在跑"。
 - `pytest` 的连库用例在无 PG 时会 skip；**skip 数不等于通过**（AGENTS/D-V6 口径，00R 与 RV 卡盯着这条）。
-- 要本机跑真库：Docker Desktop（或 WSL2 里装 PG16/Redis7）起 `docker/compose.test.yml`，
-  端口**保持 5433/6380**（AGENTS.md 端口表）。端口被占用时报错并点名占用者，**不得**静默换端口——
+- 要本机跑真库：Docker Desktop（或 WSL2 里装 PG16/Redis7）。**现读更正（2026-10-23）**：
+  `docker/compose.test.yml` **至今不存在**（`ls docker/` 只有 `compose.yml` 与 `compose.ci.yml`），
+  它是 STEP-00E S00E.1.2 的交付物；本卡原写"起 compose.test.yml"是一句前置引用，不是既成事实。
+  今天可用的最小依赖面是 `compose.ci.yml` 里的 `postgres:  image: postgres:16-alpine` 与
+  `redis:  image: redis:7-alpine` 两个服务段。端口**保持 5433/6380**（AGENTS.md 端口表）。
+  端口被占用时报错并点名占用者，**不得**静默换端口——
   换端口会让 `AIDEANBOT_TEST_PG_DSN` 与读分数叉（STEP-00E 同条纪律）。
 
 ## 6. Win10 从零可照抄的顺序
@@ -118,7 +144,17 @@ gitleaks（00S 用）：`python scripts\entry.py scan-secrets`。
     （2026-10-17 之前这两条口径只有单头断言有执行者，往返步与其三层判据是 S4.2 验证轮补上的。）
 - Playwright e2e（需 `pnpm exec playwright install --with-deps chromium`；Windows runner 上 `--with-deps` 无 sudo 语义）
 - compose 栈（read_only/tmpfs/cap_drop）与 `/ready` 探针
-- `rotate_keys.sh` 等**仅上线用**脚本：标「仅 Linux」，不做跨平台改造
+- **自有 `.sh` 六个的逐条归属**（2026-10-23 `git ls-files '*.sh' | grep -v '^\.project/'` 实测 = 6，
+  vendored 另有 14 个、不参与跨平台化）——Done 判据要求"清单逐条可核"，所以这里一条不落：
+
+  | 脚本 | 归属 | 依据（读它自己的头部说明即可核对） |
+  |---|---|---|
+  | `scripts/rotate_keys.sh` | **仅 Linux/上线** | 密钥轮换，配套 `docs/07_release/key-rotation-sop.md`，要在能连生产库的机器上跑 |
+  | `scripts/smoke.sh` | **仅 Linux/上线** | 用法即 `docker compose up -d → 探活 → 心跳`，本机无 docker ⇒ 跑不了 |
+  | `scripts/test-env.sh` | **仅 Linux** | 起隔离测试 PG/Redis，内部 `FORBIDDEN_PORTS` 守卫（D-12）；本机无 docker ⇒ 只能读不能跑 |
+  | `apps/web/scripts/ci-repro-frontend.sh` | **仅 Linux/CI** | 前端 CI 等价复现，CI 侧执行；本机用 `entry.py` 的对应任务替代 |
+  | `scripts/preflight.sh` | **跨平台可用**（经 Git Bash） | 00X §2 实测：Windows 上 `bash scripts/preflight.sh` rc=1 但**脚本本身跑起来了**并逐条报出缺什么，属"能跑、报得准" |
+  | `docs/06_validation/evidence/EVD-V2-00C/collect_ruff_shapes.sh` | **历史取证件，不再执行** | 只采集不判定；F-14（S00T.V14.3）已把证据脚本 pytest 化并下线，此件按证据不可改写原则原样保留 |
 
 ## 8. 新增连库用例时，`CI-Windows` 的第二步（每张卡都要做，不是"CI 坏了"）
 
