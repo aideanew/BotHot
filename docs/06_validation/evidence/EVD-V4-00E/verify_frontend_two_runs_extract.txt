@@ -1,0 +1,38 @@
+# S00E.2.1 / S00E.3.2 —— verify-frontend 连跑两次的判定关键行（@win，head_sha=878876f，期间工作树零改动）
+# 完整 stdout 各约 1179 行（vitest 逐用例行占绝大多数），不入库；本文件只收判定用的行，ANSI 色码已剥。
+# 复跑命令：python scripts/entry.py verify-frontend
+#   步骤顺序：F-10 读数 → pnpm install --frozen-lockfile → F-10 读数 → tsc --noEmit → vitest → NEXT_PUBLIC_API_MOCK=false build
+
+================ 第 1 次（run1，整链 rc=0）================
+=== verify-frontend · 验收面一条命令：node_modules 读数 → frozen install → typecheck → vitest → 生产口径 build ===
+F-10 读数[装前] apps/web/node_modules 存在=True，顶层条目=30
+Lockfile is up to date, resolution step is skipped        ← frozen 口径成立（锁文件与 package.json 不漂移）
+F-10 读数[装后] apps/web/node_modules 存在=True，顶层条目=30
+ Test Files  49 passed (49)
+      Tests  415 passed (415)
+   Duration  40.46s (environment 57%, tests 23%, import 17%, transform 4%, worker 1%)
+ ✓ Compiled successfully in 11.0s
+ ✓ Generating static pages (18/18)
++ First Load JS shared by all             103 kB
+ƒ Middleware                             34.2 kB
+（本份 AggregateError 块 = 39，全部是 vitest 期间的 ECONNREFUSED ::1:3000 / 127.0.0.1:3000，
+ 被吞掉、不影响 rc ⇒ 见 EVD §3.5 与台账 §4 P-105）
+
+================ 第 2 次（run2，整链 rc=0）================
+=== verify-frontend · 同上 ===
+F-10 读数[装前] apps/web/node_modules 存在=True，顶层条目=30
+Lockfile is up to date, resolution step is skipped
+F-10 读数[装后] apps/web/node_modules 存在=True，顶层条目=30
+ Test Files  49 passed (49)
+      Tests  415 passed (415)
+   Duration  38.02s (environment 56%, tests 23%, import 17%, transform 3%, worker 1%)
+ ✓ Compiled successfully in 7.8s
+ ✓ Generating static pages (18/18)
++ First Load JS shared by all             103 kB
+ƒ Middleware                             34.2 kB
+（本份 AggregateError 块 = 39，同形同数）
+
+================ 判定 =================
+两次之间**只有耗时抖动**（vitest 40.46s vs 38.02s、build 11.0s vs 7.8s）；
+用例数、文件数、静态页数、F-10 读数、AggregateError 计数**逐项相等**
+⇒ S00E.3.2 的前端半边成立（没有状态泄漏的证据）。

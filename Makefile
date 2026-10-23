@@ -92,6 +92,22 @@ test: test-backend test-frontend-unit ## 运行全部测试（不含 e2e）
 test-all: test-backend test-frontend-unit test-frontend-e2e ## 运行全部测试（含 e2e）
 	@:  # 由前置目标转调，本体不重复执行
 
+.PHONY: testenv-up
+testenv-up: ## 起隔离测试依赖（转调 scripts/test-env.sh：PG16@5547 / Redis7@6390；无 docker 即 SKIP）
+	@$(ENTRY) testenv-up
+
+.PHONY: testenv-down
+testenv-down: ## 停止并删除隔离测试依赖（同上 down）
+	@$(ENTRY) testenv-down
+
+.PHONY: verify-backend
+verify-backend: ## 后端验收一条命令：探 PG → 单头断言 → upgrade head → pytest -rs 全量 + 覆盖率
+	@$(ENTRY) verify-backend
+
+.PHONY: verify-frontend
+verify-frontend: ## 前端验收一条命令：node_modules 读数 → frozen install → typecheck → vitest → 生产口径 build
+	@$(ENTRY) verify-frontend
+
 .PHONY: coverage-gate
 coverage-gate: ## 模块覆盖率门（读 apps/api/coverage.json；阈值表在 scripts/check_module_coverage.py）
 	@$(ENTRY) coverage-gate

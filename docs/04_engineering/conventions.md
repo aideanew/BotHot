@@ -128,6 +128,31 @@ docs(architecture): 更新系统架构设计文档
    docker 从来没有）。引用旧读数的后果是把"判不了"写成"已通过"。
    每轮开工第一步 = 现跑上面三条探测，并把输出贴进当批 EVD。
 
+### 4.4 验收环境：一条命令出读数（STEP-00E S00E.1.3 / S00E.2.1 增，2026-10-23）
+
+四个入口，实体只在 `scripts/entry.py` 一份，Makefile 是薄转调，一致性由 `check_entry_parity.py` 常驻判：
+
+| 入口 | 顺序（步骤在 entry.py 里是列表，任一步非 0 立即短路） | 为什么要这个顺序 |
+|---|---|---|
+| `entry.py testenv-up` / `testenv-down` | 探 `docker`/`podman` → 转调 `scripts/test-env.sh up\|down` | 该脚本是 D-12 的守卫：测试端口命中**部署端口**（5433/5435/6379/6380）即 exit 2 拒绝启动；起完还带 `pg_isready` 60s / `redis-cli ping` 30s 的健康等待 |
+| `entry.py verify-backend` | ①探 PG 端口 → ②alembic 单头断言 → ③`upgrade head` → ④`pytest tests/ -q -rs --junitxml=pytest-report.xml --cov=app --cov-report=term-missing` | ①必须在最前：无 PG 时第④步会交出一份**400+ 条 skip 的"0 failed"**，看上去像验收过，实际连库面一条没跑（§4.3 第 2 条就是这个坑）。②在③之前：多头时 `upgrade head` 的报错形状像"环境问题"，而它其实是治理事故 |
+| `entry.py verify-frontend` | ①打印 `node_modules` 存在性 → ②`pnpm install --frozen-lockfile` → ③再打印一次 → ④`tsc --noEmit` → ⑤`vitest run`（`pnpm run test:unit`）→ ⑥`NEXT_PUBLIC_API_MOCK=false` 的 `build` | ①③是 **F-10 的要求**：这个仓库历史上出现过"上一版说 node_modules 存在、这一版说没有"——两边都对，差别只在机器。存在性必须**作为读数打出来**，不能假设；⑥是生产守卫（不设这个变量 build 自己会 rc=1） |
+
+三条纪律：
+
+1. **单头断言在本地也判，且它有四发极性读数**：一行 `(head)` 放行、两行拦、零行拦、
+   命令自身失败拦（并明写"没跑成"）、`alembic` 没装则 `SKIP` + rc=3。后四发用桩跑出（不连库，
+   `EVD-V4-00E/verify_targets_readings.md`）；本机没有可达 PG 时，`verify-backend` 会在①就停下，
+   这正是想要的行为——**门没跑与门过了必须一眼可分**。
+2. **`SKIP` 不是通过**：这三个入口在非依赖机上都会以 rc=3 收场（`docker-ps` 那类是 3，
+   `migrate`/`verify-backend` 无 PG 也是 3）。GNU make 把任何失败折成 2，所以 `make X` 与
+   `entry.py X` 的判据是**同为 0 或同为非 0**，不是逐值相等（00X 按实测改正过）。
+3. **`docker/compose.yml` 起不到依赖库**：现读它的 services 段只有
+   `langbot_plugin_runtime / langbot / backend / migrate / scheduler / worker / frontend`，
+   **没有** postgres/redis 服务。所以 `entry.py` 的不可达提示已从"起 compose.yml"更正为
+   "`entry.py testenv-up`（隔离栈 5547/6390，需 docker）"；AGENTS.md 端口表里的 5433/6380
+   是**部署形态**端口，由平台侧供给，不由本仓 compose.yml 供给（这条差异登记在台账 §4 P-102）。
+
 ## 5. 依赖管理
 
 ### 5.1 后端

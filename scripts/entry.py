@@ -276,14 +276,20 @@ def check_services():
 
     实测动机：@win 无 PG 时 `alembic upgrade head` 不是快速失败，而是一直挂到被外部 kill
     （psycopg 无 connect_timeout + Windows 对未监听端口不立即 RST），150s timeout 才打断。
+    挂住比失败更危险——执行者会以为"在跑"。
+
+    修复指引（STEP-00E 更正过一次）：原文只说"起 `compose.yml`"，但现读该文件的 services 段
+    **没有 PG/Redis 服务**（只有 langbot*/backend/migrate/scheduler/worker/frontend），
+    照那句做仍然连不上库。真正能给隔离库的是 `entry.py testenv-up`（5547/6390，需要 docker）。
     """
     for name, host, port in dependency_endpoints():
         if name != "PostgreSQL":
             continue        # 迁移只需要 PG；Redis 不可达不该挡 alembic
         if not service_reachable(host, port):
-            print(f"SKIP(service unavailable) {name} {host}:{port} 不可达 —— "
-                  f"先起依赖服务（docker compose -f {COMPOSE_FILE.name} up -d，端口按 AGENTS.md 固定，"
-                  f"不得静默改端口）；本步**未执行**，不是通过")
+            print(f"SKIP(service unavailable) {name} {host}:{port} 不可达 —— 先起依赖服务："
+                  f"`entry.py testenv-up`（隔离测试栈 PG16@5547 / Redis7@6390，需要 docker；"
+                  f"注意 docker/compose.yml 里没有 PG/Redis 服务段，起它得不到库），"
+                  f"端口按 AGENTS.md 固定、不得静默改端口；本步**未执行**，不是通过")
             return RC_TOOL_MISSING
     return RC_OK
 
@@ -294,6 +300,69 @@ def with_service_check(inner):
         if gate != RC_OK:
             return gate
         return inner()
+
+    return run
+
+
+def alembic_cli() -> str | None:
+    return venv_script("alembic")
+
+
+def assert_single_head() -> int:
+    """S00E.1.3 要求「alembic 单头断言保留」：`heads` 里带 `(head)` 的行必须恰好一行。
+
+    放在 pytest 之前是有理由的：多头时 `upgrade head` 直接报错，但那条错的形状像"环境问题"，
+    而多头是治理事故（CI 的 workflow-lint/backend 也各判一次，这里保证 `verify-backend`
+    单独跑也不放过）。
+    """
+    cli = alembic_cli()
+    if cli is None:
+        return tool_missing("alembic", "（先跑 entry.py install-backend）")
+    out = subprocess.run([cli, "heads"], cwd=str(API), capture_output=True, text=True,
+                         encoding="utf-8", errors="replace",
+                         env={**os.environ, "PYTHONUTF8": "1"})
+    if out.returncode != 0:
+        print(f"❌ `alembic heads` 本身失败（rc={out.returncode}）⇒ 单头断言**没跑成**，不能当通过")
+        print((out.stdout + out.stderr).strip())
+        return RC_FAIL
+    heads = [line for line in out.stdout.splitlines() if "(head)" in line]
+    print(f"单头断言：`alembic heads` 里带 (head) 的行数 = {len(heads)}（应为 1）")
+    for line in heads:
+        print(f"  {line.strip()}")
+    if len(heads) != 1:
+        print("❌ 迁移多头或零头 ⇒ verify-backend 停在这里，不放行 pytest")
+        return RC_FAIL
+    return RC_OK
+
+
+def report_node_modules(face: str):
+    """F-10 的口径：`node_modules` 的**存在性**必须作为读数打出来，不能假设。
+
+    存在理由是 V0.9.0 与 V0.10.0 两台机器各报了一个相反的事实（一台说没有、一台说有），
+    而两边都对——差别只在机器。所以这里连同顶层条目数一起打，装前装后各一次。
+    """
+    def run() -> int:
+        nm = WEB / "node_modules"
+        if nm.is_dir():
+            top = sum(1 for p in nm.iterdir() if not p.name.startswith("."))
+            print(f"F-10 读数[{face}] apps/web/node_modules 存在=True，顶层条目={top}")
+        else:
+            print(f"F-10 读数[{face}] apps/web/node_modules 存在=False")
+        return RC_OK
+
+    return run
+
+
+def run_test_env(role: str):
+    """`test-env.sh` 的入口（D-12：测试端口命中部署端口即拒绝启动）。"""
+    def run() -> int:
+        if find_tool("docker") is None and find_tool("podman") is None:
+            return tool_missing("docker", "（testenv-up/down 转调 scripts/test-env.sh，"
+                                          "它需要 docker 或 podman；本机两者都无 ⇒ 本步未执行）")
+        b = find_tool("bash")
+        if b is None:
+            return tool_missing("bash", "（testenv-* 走 scripts/test-env.sh，Windows 需要 Git for Windows）")
+        return spawn([b, "scripts/test-env.sh", role], ROOT, None)
 
     return run
 
@@ -386,6 +455,26 @@ add("guard", "全部架构/证据/治理门", composite=("guard-ports", "guard-s
 # 没有那次运行就没有输入——放进聚合门只会让每次都多一个 rc=2，反而把"缺输入"这件事喊废。
 add("coverage-gate", "模块覆盖率门（先跑 `--cov=app --cov-report=json`；实体在 check_module_coverage.py）",
     [coverage_gate()])
+# ─── STEP-00E：验收环境供给与固定（一条命令出全量读数）───────────────────────────
+# 这四条原本是 S00X.1.2 任务表里列过、却从未落地的两个名字（verify-backend/verify-frontend），
+# 加上 testenv 两条。归属 00E（S00E.1.2/1.3/2.1），落地时把 00X 那句「34 个任务含 verify-*」的
+# 误记更正为 6/8 落地 + 2 移交——见 docs/任务规划V0.13.0/steps/STEP-00X-*.md 的执行记录。
+add("testenv-up", "起隔离测试 PG16/Redis7（转调 scripts/test-env.sh，端口 5547/6390）",
+    [run_test_env("up")])
+add("testenv-down", "停并删除隔离测试容器与卷（同上，down）", [run_test_env("down")])
+add("verify-backend", "验收面一条命令：探 PG → 单头断言 → upgrade head → pytest 全量（含 -rs 与覆盖率）",
+    [check_services, assert_single_head,
+     tool_run("alembic", "alembic", ["upgrade", "head"], API),
+     tool_run("pytest", "pytest",
+              ["tests/", "-q", "-rs", "--junitxml=pytest-report.xml",
+               "--cov=app", "--cov-report=term-missing"], API)])
+add("verify-frontend", "验收面一条命令：node_modules 读数 → frozen install → typecheck → vitest → 生产口径 build",
+    [report_node_modules("装前"),
+     exe("pnpm", ["install", "--frozen-lockfile"], WEB),
+     report_node_modules("装后"),
+     exe("pnpm", ["exec", "tsc", "--noEmit"], WEB),
+     exe("pnpm", ["run", "test:unit"], WEB),
+     exe("pnpm", ["run", "build"], WEB, {"NEXT_PUBLIC_API_MOCK": "false"})])
 
 BY_NAME = {name: (desc, steps, composite) for name, desc, steps, composite in TASKS}
 
