@@ -5,13 +5,23 @@ title: BotHot 功能需求基线
 status: active
 owner: product
 created: 2026-09-29
-updated: 2026-09-29
-version: 1.0
+updated: 2026-10-23
+version: 2.0
 ---
 
 # BotHot 功能需求基线
 
-> 本文件描述当前有效的正式需求基线。历史需求通过 features/ 目录保留。
+> 本文件描述当前有效的正式需求基线。**自 STEP-17（2026-10-23）起，12 条需求的详文与
+> 实现度判据在子目录里逐条一份**，本文件只留摘要、链接与「需求 ↔ STEP ↔ 测试锚」三向表：
+>
+> - `features/REQ-F-001…008-*.md`、`non-functional/REQ-NF-001…002-*.md`、
+>   `constraints/REQ-C-001…002-*.md`
+>
+> 每条头部三字段：`实现度`（已实现 / 部分 / 骨架 / 未实现 / **证据不足**）、
+> `验收锚`（具名测试文件，或「无」）、`最后核验 commit`。
+> **单一详源纪律**：详文只写在子文件里；本文件若复制其内容就成了第二份真相
+> （`scripts/check_docs_consistency.py` 会红在路径与行号上，人眼不会）。
+> 历史需求通过 `inbox/` 与 `docs/任务规划V0.1.0/**` 等历史版本保留，不改写。
 
 ---
 
@@ -50,126 +60,61 @@ BotHot 后端识别出 **9 个业务域**，前端识别出 **10 个功能域**�
 
 ---
 
-## 二、功能需求清单
+## 二、功能需求清单（摘要；详文与判据见链接）
 
-### REQ-F-001：多渠道机器人推送
-- **实现状态**：✅ 六种渠道 Provider 已实现真实投递（飞书/钉钉/企微/Webhook/站内通知已通，微信 ClawBot 需部署服务）；PushScheduler 在 backend 进程内 60s 调度；**事件触发已实现**（X-10 更正：原写"事件触发待实现"，与代码不符）
-  - 生产侧证据（outbox 落库）：`apps/api/app/services/feed_service.py:140/:158/:174`
-    在 article 入库 / 热点聚簇 / 日报生成三个落点各自调用
-    `emit_event(session, EVENT_*, {...})`，常量 `:43-45` = `new_article`/`hot_topic_update`/`daily_report`，
-    与 `apps/api/app/services/push_events.py:26` `VALID_EVENT_TYPES` 完全一致；
-    `push_events.py:75` 以 `PushEvent(...)` 与业务**同事务**落库（payload 由 `_hydrate_payload`
-    查库补齐模板变量快照，消费侧渲染零额外查询）。
-  - 消费侧证据：`apps/api/app/services/push_scheduler.py:85` 每轮 `_claim_and_dispatch_events(now)`
-    → `:131-141` `claim_pending_events` 领取 → `:143-155` 按
-    `trigger_type == "event" AND trigger_event == event.event_type` 匹配任务并投递。
-  - 与规范同源：`AGENTS.md`「事件触发已实现且 payload 自足」与本更正一致（此前只有本文档落后）。
-  - ⚠ **本需求未闭环的一处（2026-10-12 实证，暂无任务认领）**：站内通知落库函数
-    `persist_web_notification` 全仓**只有一个调用点** —— `push_scheduler.py:222`（调度器投递路径）。
-    两条**直投** API 绕过它：`bots.py:341`（`POST /{channel_id}/test` 一键测试，路由 `:315`）与
-    `bots.py:624`（`POST /tasks/{task_id}/run` 手动立即触发，路由 `:598`），二者只调
-    `provider.push()` 并记 `PushLog`，**不写 `notifications` 表**。
-    ⇒ 同一渠道走"Cron/事件"会进离线补投历史、走"手动/测试"则**永久不进历史**，
-    而"手动"正是本需求「触发方式」明列的第三种。修复属代码改动，本文档只登记不一致，不改实现。
-- **渠道**：飞书、钉钉、企业微信、微信 ClawBot、通用 Webhook、站内通知
-- **触发方式**：定时（Cron）、事件触发（新文章/热点更新/日报）、手动
-- **管理**：渠道 CRUD、推送任务 CRUD、推送日志查询、一键测试
-- **验收**：各渠道 Webhook 推送可成功送达，定时任务按 Cron 准时触发
+| 需求 | 一句话范围 | 实现度（判据出处见子文件） | 详文 |
+|---|---|---|---|
+| REQ-F-001 多渠道机器人推送 | 6 渠道 × 3 触发方式 + 渠道/任务/日志管理 | 已实现（外部前置：微信 ClawBot 需部署服务） | [features/REQ-F-001-multi-channel-push.md](features/REQ-F-001-multi-channel-push.md) |
+| REQ-F-002 热点聚簇与日报 | 聚簇 / 48h 加权评分 / Feed / LLM 日报 | 已实现（聚簇升级嵌入向量属显式排除项 HOT-005） | [features/REQ-F-002-hot-cluster-daily-report.md](features/REQ-F-002-hot-cluster-daily-report.md) |
+| REQ-F-003 知识库与可插拔引擎 | 多空间隔离 + 公共库 + 5 引擎位 | **部分**：builtin 已实现，main/coze/dify/fastgpt 为骨架（D-V3-03 显式不做） | [features/REQ-F-003-knowledge-base-engines.md](features/REQ-F-003-knowledge-base-engines.md) |
+| REQ-F-004 公众号链接入库 | 解析 / 标准化 / 评分分类 / 短链映射 | **证据不足**：判据锚有具名用例满足，但规划侧从未给过实现度判词 | [features/REQ-F-004-article-ingest.md](features/REQ-F-004-article-ingest.md) |
+| REQ-F-005 RAG 知识问答 | SSE 流式 + 多空间会话 + 可选重排 | 部分：后端在案，前端流式证据未执行过 | [features/REQ-F-005-rag-chat.md](features/REQ-F-005-rag-chat.md) |
+| REQ-F-006 整号订阅与增量同步 | 订阅整号 + Manifest Diff 水位 + 锚定/滑动 + 空轮询退避 | 已实现（V0.13.0 那句「行为层未做」已过期） | [features/REQ-F-006-subscription-sync.md](features/REQ-F-006-subscription-sync.md) |
+| REQ-F-007 SSO 统一认证 | OIDC + `users.sub` 锚 + HttpOnly/Lax Cookie + 角色门禁 + Backchannel Logout | 已实现（命题范围；与主平台的真实握手需白名单配合） | [features/REQ-F-007-sso.md](features/REQ-F-007-sso.md) |
+| REQ-F-008 管理后台 | 空间/文档/订阅/引擎 + 渠道/任务 + 热点/日报 + Onboarding | 部分：四屏在 mock 档结构上不可达（P-88），真后端档无读数 | [features/REQ-F-008-admin-console.md](features/REQ-F-008-admin-console.md) |
 
-### REQ-F-002：热点聚簇与日报
-- **聚簇**：多篇文章按主题聚簇为热点事件
-- **评分**：48h 独立来源数加权，24h 减半时间衰减
-- **Feed**：信息流首页，类型/分类筛选，热度排序
-- **日报**：TOP 10 热点 + LLM 生成摘要，Markdown 格式
-- **验收**：聚簇结果合理，日报可自动/手动生成
-
-### REQ-F-003：知识库管理
-- 多空间隔离（用户级 + 公共库）
-- LangBot RAG 1:1 映射
-- 可插拔引擎：5 个引擎位 builtin / main（RAGFlow 拓展系）/ coze / dify / fastgpt（`engine_port.py` 的 `ENGINE_ORDER`）
-- 公共库共享与发布（allowlist）
-- **验收**：空间 CRUD 正常，引擎切换可用
-
-#### REQ-F-003 实现度（STEP-13，2026-10-20 与代码对齐）
-- **可用**：仅 builtin（LangBot 系）。它是回退通道，恒可用、恒可切回。
-- **骨架**：main（`RagflowAdapter` 六方法）与 coze / dify / fastgpt（`SaaSKnowledgeAdapter` 六方法）都只有接口、未实接，
-  `engine_port.py` 里 `NotImplementedError` 共 16 处（只降不升）；`ENGINE_IMPLEMENTED` 只有 builtin 为真。
-  依 D-V3-03（签 A），本轮不实接（缺凭据与预算），实接排期见 backlog TECH-003b。
-- **怎么看出来**：`GET /api/v1/engines` 每个引擎位带 `reason`，取值 `ok` / `not_allowlisted` / `key_missing` / `not_implemented`
-  （契约 `docs/任务规划V0.12.0/contracts/engine.schema.json`），只报最先该处理的一个：先看是否开放，再看是否登记 Key，最后看是否实接。
-- **切换被拒**：`PATCH /api/v1/spaces/{space_id}/engine` 对不可用引擎一律 403（10004），文案与该引擎位的 `reason` 一一对应，不会 500。
-
-### REQ-F-004：公众号链接入库
-- 链接解析（RedFox + Wandao）
-- 内容标准化（Markdown + 元数据）
-- 质量评分与分类标签
-- 短链映射（0 重复请求）
-- **验收**：公众号文章可入库为 ContentAsset
-
-### REQ-F-005：RAG 知识问答
-- SSE 流式问答
-- 多空间会话路由
-- 检索重排（Reranker 可选）
-- **验收**：问答流式响应正常，命中知识库
-
-### REQ-F-006：整号订阅与增量同步
-- 订阅一个公众号的全部文章
-- Manifest Diff 水位机制
-- 固定时点锚 / 滑动窗口
-- 空轮询退避
-- **验收**：增量同步只拉新文章，水位正确推进
-
-### REQ-F-007：SSO 统一认证
-- OIDC 接入主平台
-- 身份锚点 = users.sub
-- 会话 Cookie（HttpOnly + SameSite=Lax）
-- 角色门禁（admin / operator / user）
-- Backchannel Logout
-- **验收**：SSO 登录/登出正常，角色门禁生效
-
-### REQ-F-008：管理后台
-- 知识空间 / 文档 / 订阅 / 引擎管理
-- Bot 渠道 / 推送任务管理
-- 热点中心 / 日报管理
-- Onboarding 引导
-- **验收**：管理端各功能 CRUD 正常
+> 本表**不重复**验收句：验收句在各子文件里，避免同一句话两处版本漂移。
 
 ---
 
-## 三、非功能需求
+## 三、非功能需求（摘要）
 
-### REQ-NF-001：性能
-- API 响应 < 500ms（非 LLM 调用）
-- RAG 问答首 Token < 3s
-- 文章入库单篇 < 30s
-- Feed 分页查询 < 100ms
-
-### REQ-NF-002：安全
-- SSO Cookie HttpOnly + SameSite=Lax
-- 渠道密钥 AES-256-GCM 加密落库
-- 生产环境 OIDC iss/aud 校验
-- CORS 白名单
-- SQL 注入防护（ORM 参数化）
+| 需求 | 内容 | 实现度 | 详文 |
+|---|---|---|---|
+| REQ-NF-001 性能 | API<500ms、首 Token<3s、入库<30s、Feed<100ms | **部分**：四条里只有「单篇入库」拿到服务层读数，其余三条无测量值（承接卡 STEP-18） | [non-functional/REQ-NF-001-performance.md](non-functional/REQ-NF-001-performance.md) |
+| REQ-NF-002 安全 | Cookie / 密钥加密 / OIDC 校验 / ~~CORS 白名单~~ / SQL 注入防护 | 部分：加密与生产守卫有锚；**CORS 一条按实况改写为「经 `next.config.mjs` 同源 rewrites 达成，无 CORS 中间件」**（C-3：不重新立项）；SQL 注入与 SameSite 无机检用例 → backlog SEC-006 | [non-functional/REQ-NF-002-security.md](non-functional/REQ-NF-002-security.md) |
 
 ---
 
-## 四、约束需求
+## 四、约束需求（摘要）
 
-### REQ-C-001：技术栈
-- 后端：Python 3.12 + FastAPI + SQLAlchemy 2.0 + Alembic
-- 前端：Next.js **15** + React 19 + TypeScript + Tailwind CSS + pnpm
-  （X-02 更正：版本号一律以实跑代码为准，不沿用文档旧值。证据 `apps/web/package.json:27`
-  `"next": "^15.5.24"`、`:28` `"react": "^19.0.0"`；Node 锚 `.nvmrc` = `24.21.0` +
-  `package.json:7` `engines.node >= 24.0.0`）
-- 数据库：PostgreSQL 16
-- 缓存：Redis 7
-- 知识引擎：LangBot
-- 容器：Docker Compose
+| 需求 | 内容 | 实现度 | 详文 |
+|---|---|---|---|
+| REQ-C-001 技术栈 | Python 3.12 + FastAPI + SQLAlchemy 2.0 + Alembic / Next.js 15 + React 19 / PG16 / Redis 7 / LangBot / Docker Compose | 部分：实值与门面今天一致，但一致性本身无机检（backlog STACK-001）。**本次改掉两处失效引用**：`next` 的 spec 已由 `^15.5.24` 升到 `^15.5.28`（依赖安全补丁批，见台账 P-99） | [constraints/REQ-C-001-tech-stack.md](constraints/REQ-C-001-tech-stack.md) |
+| REQ-C-002 端口分配 | 3000 禁占 / 3200 前端 / 3300 后端 / 5300 LangBot / 5433 PG / 6380 Redis | 部分：常驻用例 `test_r19_ports.py` 七条双向；端口表两行与实际不符待裁（P-78） | [constraints/REQ-C-002-port-allocation.md](constraints/REQ-C-002-port-allocation.md) |
 
-### REQ-C-002：端口分配
-- 3000 = 主平台专用（禁止占用）
-- 3200 = BotHot 前端宿主端口
-- 3300 = BotHot 后端端口
-- 5300 = LangBot
-- 5433 = PostgreSQL
-- 6380 = Redis
+---
+
+## 五、需求 ↔ STEP ↔ 测试锚 三向表
+
+内容与 `docs/任务规划V0.7.0/04-剩余可执行大纲体系.md` §4.3「需求覆盖矩阵」**同源**。
+两处必须同改（改一处就是下一次漂移的种子），一致性目前靠人核对——这张表本身就是
+判据 ② 「每条需求能回答有没有测试锚」的落点。
+
+| 需求 | 承接 STEP | 判据锚（可验证的一句话） | 测试锚（具名文件；「无」者已进 backlog） |
+|---|---|---|---|
+| REQ-F-001 多渠道推送 | 19 + 05（+ 23/26 补直投） | 手动/事件/定时三路径均有 `notifications` 行；6 渠道投递回执可查 | `apps/api/tests/test_r19_notification_paths.py`、`apps/api/tests/test_direct_push_persists_notification.py`、`apps/api/tests/test_admin_push_persists_notification.py`、`apps/api/tests/test_push_providers.py` |
+| REQ-F-002 热点与日报 | 19 + 15 | 评分回填后 Feed 分数与 `HotTopic.hot_score` 一致；日报 LLM 失败走降级 | `apps/api/tests/test_r19_hot_chain.py`、`apps/api/tests/test_hot_scorer_batch.py`、`apps/api/tests/test_w2_report.py` |
+| REQ-F-003 知识库/引擎 | 13 + 19 | 未实接引擎显示的原因与「未配置 Key」可区分；builtin 端到端可用 | `apps/api/tests/test_engines_capability.py`、`apps/api/tests/test_engine_delete.py`、`apps/web/tests/engine-switcher-states.spec.tsx` |
+| REQ-F-004 链接入库 | R0、02、06 | 短链二次入库 `fetch_count == 1 ∧ hitCache == True`；长链同号两篇 0 重复 | `apps/api/tests/test_d04_short_link.py`、`apps/api/tests/test_p0_asset_cache.py`、`apps/api/tests/test_kb_longlink_ingest.py`、`apps/api/tests/test_e2e_collection.py` |
+| REQ-F-005 RAG 问答 | 19 + 15 | `/chat` 流式中断保留已渲染内容；SSE 断连可重连；无「假成功」 | `apps/api/tests/test_chat_sse.py`、`apps/web/tests/ask-sse.spec.ts`；`apps/web/e2e/r19-chat-stream.spec.ts` **零执行** |
+| REQ-F-006 整号订阅 | 03、04、06 | READY 资产存在时 Diff=0；清单四态可回写且非法边被拒 | `apps/api/tests/test_manifest_asset_alignment.py`、`apps/api/tests/test_manifest_state_machine.py`、`apps/api/tests/test_scheduler.py` |
+| REQ-F-007 SSO | 19 + 17 | backchannel-logout 有消费面或被显式 MUST NOT；登出后服务端会话失效可测 | `apps/api/tests/test_backchannel_logout.py`、`apps/api/tests/test_r19_sso_session.py`、`apps/api/tests/test_auth.py` |
+| REQ-F-008 管理后台 | 14（+ 14a/14b/15） | 6 组「有 API 无 UI」端点各自有界面或显式豁免记录 | `apps/api/tests/test_admin_contract.py`、`apps/web/tests/admin-ops-panels.spec.tsx`、`apps/web/e2e/admin.spec.ts` |
+| REQ-NF-001 性能 SLA | 18 + 11 | 四条 SLA 均有首次测量值；无基线不得立优化卡 | 采集切片：`apps/api/tests/perf/test_collection_perf.py`（默认 deselect，手动跑）；API / 首 Token / Feed：**无** → 待 STEP-18 |
+| REQ-NF-002 安全 | 17 + 16 + 00C | CORS 条目达成方式回写需求文本；告警默认姿态明确；密钥扫描零新增命中 | `apps/api/tests/test_extra_config_crypto.py`、`apps/api/tests/test_secret_shape_gate.py`；SQL 注入面与 SameSite 断言：**无** → backlog SEC-006 |
+| REQ-C-001 技术栈 | 17 | 门面文本版本与 `package.json`/`pyproject` 实值一致 | **无**（本次已把两处失效引用改回）→ backlog STACK-001 |
+| REQ-C-002 端口 | 17 + 19 | 全仓无 BotHot 服务占 3000；宿主端口与 AGENTS 表一致 | `apps/api/tests/test_r19_ports.py` |
+
+**无锚需求数 = 2**（REQ-C-001 整条、REQ-NF-001 的三条 SLA 子项），均已在
+`docs/04_engineering/backlog.md` 立项，不留静默空白（卡面验收标准第 2 条）。

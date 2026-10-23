@@ -202,5 +202,19 @@ Security 在这一批判红，但红得与本卡无关：findings 全部命中 `
 诊断与处置记在 `docs/任务规划V0.17.0/07-执行过程记录.md` 第 33 行与台账 **P-99**。
 本卡的三绿锚点因此落到紧随其后的补丁提交上——这一条不粉饰。
 
+### 7.2 @win 实测（run 39885880055 @3491054，attempt 1 success）
+
+```
+1598 passed, 666 skipped, 4 deselected, 2 warnings in 1066.30s (0:17:46)
+windows 门禁：failed=0 total_skipped=666 baseline=666
+✅ windows 门：无失败；skip 全部落在已知环境族且在阈值内（连库结论仍以 ubuntu job 为准）
+```
+
+这补上了 §7.1 里那句"预期仍是 666"的债：**deselect 确实不进 skip 账**（`4 deselected` 与
+`total_skipped=666` 同屏出现），所以 STEP-11 不牵动 `SKIP_BASELINE_WIN`。
+补丁批 `bf141d5` 自身：CI 39887049558 success、Security 39887049562 success
+（next 升 15.5.28 后两条 BLOCK 清空）；CI-Windows 39887049522 在写这一段时仍在跑，
+其结论由后续记录批回填——不预写读数。
+
 
 

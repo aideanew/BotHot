@@ -201,8 +201,10 @@ updated: 2026-10-08
   - 推送域：`test_push_providers.py`(20) / `test_r11_push.py`(11) / `test_w1_push_domain.py`(28) / `test_w3_push_scheduler.py`(10)
   - 调度与心跳：`test_scheduler.py`(22) / `test_process_heartbeat.py`(17)
   - 热点域：`test_w2_cluster.py`(3) / `test_w2_scorer.py`(7)
-- **缺口**：① 聚簇/评分用例偏薄（3 + 7 例），无「千篇量级」性能用例；
-  ② outbox 消费侧无端到端用例（入队→扫描→投递→消费标记）
+- **缺口**：① 聚簇/评分用例偏薄（3 + 7 例）；「无『千篇量级』性能用例」这半句已闭合——
+  `apps/api/tests/perf/test_collection_perf.py`（STEP-11）有 10k 清单 / 1k Job 的 Diff
+  计划用例与 n=50 的入库分位数用例，但**默认被 `addopts` 摘除**（`-m perf` 才跑），
+  所以它们是"可复跑的读数"而不是"门禁"；② outbox 消费侧无端到端用例（入队→扫描→投递→消费标记）
 - **CI 侧**：连库用例此前被**静默 skip**（`ci.yml` 无 postgres service），W5 已修复并加 skip 门禁；
   WD 复核实测 `796 passed, 4 skipped`，其中 PG 不可达类 skip = 0
 
@@ -220,6 +222,24 @@ updated: 2026-10-08
 - **现状**：TF-IDF 字 bigram（日增百~千篇量级下够用）
 - **升级路径**：`ContentAsset` 加 embedding 列 + pgvector；`embedding.py` 目前**生产零调用方**（仅测试引用）
 - **定位**：**显式排除项**（非遗漏），单独立项，不阻塞当前阶段
+
+### SEC-006：SQL 注入面与 Cookie SameSite 无机检 ⬜（STEP-17 S17.1 拆分时立项）
+- **现状（2026-10-23 现读）**：`REQ-NF-002` 的两条子项在代码里成立、在测试里没有——
+  - SQL 注入防护：全链走 SQLAlchemy 参数化，`apps/api/app` 内无字符串拼 SQL 的入口，
+    但**没有任何一条用例断言这件事**（无 `text(` 拼接负例、无参数化回归）；
+  - Cookie `SameSite=Lax`：设定在 `apps/api/app/api/v1/auth.py`，而
+    `apps/api/tests/test_auth.py` 只断 `HttpOnly`（现读该断言在 `:273`）。
+- **该做什么**：各补一条断言（SameSite 一条 + 参数化面一条），不新增行为。
+- **为什么不是"已实现"**：卡面验收标准要求「无锚的需求必须立项，不允许静默留空」。
+
+### STACK-001：门面版本声明与实值一致性无机检 ⬜（STEP-17 S17.1 拆分时立项）
+- **现状**：`REQ-C-001` 的判据是「门面文本版本与 `apps/web/package.json`/`apps/api/pyproject.toml`
+  实值一致」，靠人读维持。本批就抓到两处失效引用（`next` 的 spec 由 `^15.5.24` 升到
+  `^15.5.28` 后，需求基线与 `AGENTS.md` 还写着旧值）。
+- **该做什么**：做一道与 `scripts/check_docs_consistency.py` 同族的门——从门面文档里抽出
+  `` "key": "^x.y.z" `` 形态的声明，与实际文件里的同键值比对；不一致即红。
+- **顺带**：`pyproject.toml` 的 `requires-python = ">=3.11,<4.0"` 与 CI 钉的 3.12
+  是"允许更宽"关系，门不要把它判成漂移。
 
 ### TECH-003：RagflowAdapter 实接 ⬜
 - **现状**：`apps/api/app/providers/engine_port.py` 中 RagflowAdapter 六方法抛 `NotImplementedError`

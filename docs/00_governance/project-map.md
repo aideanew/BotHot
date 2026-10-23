@@ -35,7 +35,10 @@ version: 1.2
 
 | 文档 | 说明 | 状态 |
 |---|---|---|
-| [product-requirements.md](../02_requirements/product-requirements.md) | 功能需求基线（9 域 + 10 前端域） | active |
+| [product-requirements.md](../02_requirements/product-requirements.md) | 功能需求基线（9 域 + 10 前端域 + 「需求↔STEP↔测试锚」三向表）；STEP-17 起只留摘要与链接 | active |
+| [features/](../02_requirements/features/) | REQ-F-001…008 逐条详文，头部三字段：实现度 / 验收锚 / 最后核验 commit | active |
+| [non-functional/](../02_requirements/non-functional/) | REQ-NF-001…002 逐条详文（含 NF-002 的 CORS 达成方式更正） | active |
+| [constraints/](../02_requirements/constraints/) | REQ-C-001…002 逐条详文（技术栈实值锚、端口表与常驻用例） | active |
 | [inbox/](../02_requirements/inbox/) | 新需求收件箱 | — |
 
 ## 03_solution/ — 解决方案
