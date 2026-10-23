@@ -1,6 +1,6 @@
 # STEP-42 发布 v1.1.1
 
-> 基线 main@9c66add｜状态：⚪ 队列第一｜版本 V0.19.0
+> 基线 main@9c66add｜状态：✅ 已收口（2026-10-23，tag v1.1.1 → 75b212b，三绿 attempt 1，两个 Release 页 200）｜版本 V0.19.0
 
 | 字段 | 内容 |
 |---|---|
@@ -19,10 +19,10 @@
 | 16 规模 | ≈0.3 人日 |
 
 ## 三级任务
-1. [ ] **S42.1** 独立复查 STEP-40：只看 diff 与运行结果，输出 PASS / FAIL / UNKNOWN 与不超过 10 行理由。FAIL ⇒ 停卡交回规划方，不发版
-2. [ ] **S42.2** `CHANGELOG.md`：`[Unreleased]` 并入 `## [v1.1.1] — <发布日>`，写一条大白话的"安全修复：推送渠道凭据与采集令牌不再写进日志"；保留空的 `[Unreleased]`；hash 逐个 `git log -1` 复核
-3. [ ] **S42.3** `AGENTS.md` 版本块改指 v1.1.1；提交推送 → 等同 head 三绿 → 打注释 tag `v1.1.1` → 推 tag
-4. [ ] **S42.4** 建两个 Release 页（正文取各自 tag 注释），证据记两个 Release 的网址与 tag 指向的 sha
+1. [x] **S42.1** 独立复查 STEP-40：只看 diff 与运行结果，输出 PASS / FAIL / UNKNOWN 与不超过 10 行理由。FAIL ⇒ 停卡交回规划方，不发版（结论 PASS：`EVD-V19-40/s40_review.md`；新发现 P-114）
+2. [x] **S42.2** `CHANGELOG.md`：`[Unreleased]` 并入 `## [v1.1.1] — <发布日>`，写一条大白话的"安全修复：推送渠道凭据与采集令牌不再写进日志"；保留空的 `[Unreleased]`；hash 逐个 `git log -1` 复核（`[Unreleased]` 发布前本就是空 ⇒ 新段按 v1.1.0..HEAD 区间 8 提交对账写入，Fixed 1 条 + Changed 1 条）
+3. [x] **S42.3** `AGENTS.md` 版本块改指 v1.1.1；提交推送 → 等同 head 三绿 → 打注释 tag `v1.1.1` → 推 tag（发布批 `75b212b` 三绿 attempt 1：CI 39980043574 / CI-Windows 39980043704 / Security 39980043818；tag `3eace88` → `75b212b`）
+4. [x] **S42.4** 建两个 Release 页（正文取各自 tag 注释），证据记两个 Release 的网址与 tag 指向的 sha（REST 创建 201，GET 双 200；读数在 `EVD-V19-42/s42_readings.md` §5）
 
 ## 完成判据
 - `git ls-remote --tags origin v1.1.1` 指向三绿的提交；`v1.1.0` 仍指向 `49c3bed`

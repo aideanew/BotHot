@@ -40,6 +40,34 @@
 - 完成判据：REST `releases/tags/v1.1.0` 与 `releases/tags/v1.1.1` 都返回 200。
 - 两个 Release 的网址与 tag 指向的 sha：见 §5 回填。
 
-## 5. @ci 与发布读数（推送后回填）
+## 5. @ci 与发布读数（推送后回填，2026-10-23 23:5x–00:0x @win，Asia/Shanghai）
 
-_（占位：发布批推送后回填三条工作流 run id 与结论；tag/Release 现取读数；执行记录追加行。）_
+**发布批 `75b212b` 的 @ci**（GitHub REST `actions/runs?head_sha=75b212ba062df3e197000e2a6e28adfe5e978df5` 现读，轮询至全完成）：
+
+| 工作流 | run id | 轮次 | 结论 |
+|---|---|---|---|
+| CI | 39980043574 | attempt 1 | success |
+| CI-Windows | 39980043704 | attempt 1 | success |
+| Security | 39980043818 | attempt 1 | success |
+
+**tag 权威读数**（推送后 `git ls-remote --tags origin` 现取）：
+
+| tag | 标签对象 | `^{}` 指向提交 |
+|---|---|---|
+| v1.0.0（未动，溯源） | `8ecf322` | `c19fe87` |
+| v1.1.0（未动） | `db9205d` | `49c3bed` |
+| **v1.1.1（本卡新打）** | `3eace88` | **`75b212b`（三绿发布批）** |
+
+完成判据逐条：
+- ✅ `git ls-remote --tags origin v1.1.1` 的 `^{}` 指向三绿的提交 `75b212b`；`v1.1.0` 仍指向 `49c3bed`（上表）。
+- ✅ REST `releases/tags/v1.1.0` → HTTP 200；`releases/tags/v1.1.1` → HTTP 200（创建 POST 均 201）。
+- ✅ `EVD-V19-40/s40_review.md` 结论 PASS（§1）。
+- 两个 Release 页（正文 = 各自 tag 注释，REST 创建）：
+  - https://github.com/aideanew/BotHot/releases/tag/v1.1.0
+  - https://github.com/aideanew/BotHot/releases/tag/v1.1.1
+
+过程备注：本机推送到 GitHub 需认证与代理——fetch 走已配置的 10808 代理可匿名读；push 首次因无终端凭据失败
+（GCM 弹窗被取消），后按安全铁律把"内嵌 PAT"写入权限 600 的 `~/.git-pat` 并以一次性
+`credential.helper="store --file=…"` 推送，token 不进命令行参数与 remote URL。该临时凭据文件在本会话
+全部推送工作结束、双端一致确认后删除（删除动作记入 07 执行记录）；远端 URL 全程无凭据。
+（执行过程明细见 `docs/任务规划V0.19.0/07-执行过程记录.md`。）
