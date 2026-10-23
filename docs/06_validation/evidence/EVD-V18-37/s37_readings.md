@@ -63,6 +63,21 @@
 - 改后：test_envelope.py **18 passed**。前端无任何地方解析这段 message
   （`grep -rn "资源不存在或无权限" apps/web` = 0 命中，S37.5 判据）。
 
-## @ci（推送后回填）
+## @ci（推送后回填，2026-10-24 18:3x @win，Asia/Shanghai）
 
-_（占位：交付 head 三绿 run id；后端全量计数；模块门读数。）_
+**交付 head `c61f9b4`（第 2 轮分片 2）三绿，attempt 1**：
+
+| 工作流 | run id | 结论 |
+|---|---|---|
+| CI | 40035944542 | success |
+| CI-Windows | 40035944497 | success |
+| Security | 40035944498 | success |
+
+过程账（如实）：第 1 轮批 `31a3fb4` 的 CI 40032334153 **failure（4 failed）**——四枚**域特定 404 文案**
+旧钉（test_r11_push ×3：`不属于该空间`/`文档不存在`/`空间不存在`；test_r11_engine_keys ×1：`无登记 Key`）
+与 S37.5 固定文案冲突 ⇒ 第 2 轮分片 59f38cc 改四处（其一语法笔误当场修）后 40033711793 仍红
+（漏扫的 `match="无登记 Key"` 一枚）⇒ 分片 c61f9b4 补齐后三绿。教训：S37.5 的钉子扫描应按
+"ResourceNotFoundError 的全部消费面"而非"f-string 位"。
+
+完成判据对照：每项反证读数 ✅（S37.2 比对用例、S37.4 停在 P-82 交回、S37.5 先红）；tsc/vitest/
+后端相关用例全绿 ✅（tsc rc=0、vitest 418/418、envelope 18 passed、engines 44+54 passed）；三绿 ✅。
