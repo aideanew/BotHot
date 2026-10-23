@@ -33,3 +33,9 @@
 
 ## 熔断
 连续 2 轮验收 FAIL ⇒ 停卡交回规划方（rounds-check 机器执行，口径见 D-V18-16）。前提与现读不符 ⇒ 先登记 P 号再停，不自改卡面。
+
+## 卡面增量（2026-10-23 14:15，规划方，回应执行方开工读数）
+1. **接线不算越界，允许面补三处（各限一处）**：`scripts/entry.py` 用 `add(...)` 注册新守卫任务并把它加进 `guard` 复合目标的元组；`Makefile` 增同名薄转调目标（否则 `check_entry_parity` 必红）；`.github/workflows/ci.yml` 的 Governance 步 `run` 内加一行调用新守卫。三处都只许"加"，不许改已有行的语义。
+2. **uv 怎么办**：允许把 uv 装在仓库外（版本号写进证据）。重锁必须用 uv 生成，**禁止手改 `uv.lock`**；重锁时索引保持与现锁一致（现锁 1483 处地址全是清华镜像、0 处 pypi.org），否则整份锁文件地址会被换掉。判据补一条：`git diff --stat apps/api/uv.lock` 只涉及 tzdata 条目与引用它的那几行，其余包版本零变化（把 diff 摘要入证据）。装不上 uv ⇒ 只改 `pyproject.toml`，`uv.lock` 那半标"未测"交回，不许手改凑数。
+3. **如实写清 S32.3 的效力来源**：现读 CI（`ci.yml:64`、`ci-windows.yml:174`）、Security 与 `apps/api/Dockerfile:32` 全部是 `pip install` 读 `pyproject.toml`，**没有任何一处消费 `uv.lock`**。所以本卡真正生效的是 `pyproject.toml` 加依赖；`uv.lock` 只是保持一致。"锁文件不被任何运行面消费"属 P-55，由 STEP-38（D-V18-12）处理，本卡不越界。
+4. 队列理解正确：32 → 33 → 同一提交三绿 → 39。
