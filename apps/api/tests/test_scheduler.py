@@ -38,12 +38,15 @@ from app.models.entities import (
     ContentAsset,
     Job,
     JobItem,
+    KnowledgeDocument,
     KnowledgeSpace,
     Source,
     SourceSubscription,
+    User,
 )
 from app.repositories.space import SpaceRepository
 from app.repositories.user import SqlAlchemyUserStore
+from app.services import scheduler as scheduler_module
 from app.services.article_identity import canonical_article_key
 from app.services.scheduler import IncrementalScheduler
 from app.services.state_machine import validate_transition
@@ -770,5 +773,135 @@ async def test_doc_reconcile_failure_does_not_block_subscriptions() -> None:
         sched._reconcile = _StubReconciler(raise_exc=True)
         assert await sched.run_once() == 1
         assert runner.calls == ["t24-recon-sub"]
+    finally:
+        await engine.dispose()
+
+
+# ── S35.6 / 三连跑收口：scheduler.py 的墙钟分支确定覆盖 ─────────────────────────
+#
+# `_maybe_enqueue_daily_jobs` 用的是**不可注入的** `datetime.now(self._tz)`（scheduler.py:409）
+# ——CI 几点跑决定 06:30/06:35 两个门开不开；reconcile 的默认实现体内有无待推进文档取决于
+# 同批其它用例留下的 DB 状态。run 40010753485 三次 attempt 的 TOTAL 88.26/88.34/88.37，
+# 逐模块差分唯一漂移模块就是 scheduler.py（missing 75↔67）。源码不在本卡允许面
+# ⇒ 测试侧冻结模块级 datetime（monkeypatch，源码零改动）+ 种一份非终态文档把
+# reconcile 路径钉成确定覆盖。
+
+
+class _FrozenDatetime(datetime):
+    """子类只重写 now()：模块内其它 datetime 用法（构造/strptime）全部继承真类。"""
+
+    _frozen: datetime = datetime(2026, 10, 24, 7, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+
+    @classmethod
+    def now(cls, tz=None):  # noqa: ANN001
+        base = cls._frozen
+        return base if tz is None else base.astimezone(tz)
+
+
+async def test_daily_jobs_enqueue_after_0630_with_frozen_clock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """上海 07:00（两个门都开）⇒ daily_report 与 hot_cluster 各入队一条，幂等戳按日期。"""
+    monkeypatch.setattr(scheduler_module, "datetime", _FrozenDatetime)
+    engine, factory = _factory()
+    try:
+        async with factory() as session:
+            session.add(
+                User(
+                    id="u-s35-daily",
+                    sub="sub-s35-daily",
+                    email="s35daily@test.local",
+                    role="admin",
+                )
+            )
+            await session.commit()
+        sched = _scheduler(factory, _Clock(datetime(2026, 9, 22, 12, 0, tzinfo=UTC)), _StubRunner())
+        await sched._maybe_enqueue_daily_jobs()
+        assert sched._last_daily_date == "2026-10-24"
+        assert sched._last_cluster_date == "2026-10-24"
+        async with factory() as session:
+            keys = set(
+                (
+                    await session.scalars(
+                        select(Job.idempotency_key).where(Job.type.in_(["daily_report", "hot_cluster"]))
+                    )
+                ).all()
+            )
+        assert "daily_report:2026-10-23" in keys, f"daily_report 幂等戳缺失：{sorted(keys)}"
+        assert "hot_cluster:2026-10-24:1" in keys, f"hot_cluster 幂等戳缺失：{sorted(keys)}"
+    finally:
+        await engine.dispose()
+
+
+async def test_daily_jobs_skip_before_0630_with_frozen_clock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """上海 03:00（两个门都关）⇒ 不入队、幂等戳不动——这是"门关"一侧的确定覆盖。"""
+
+    class _EarlyDatetime(_FrozenDatetime):
+        _frozen = datetime(2026, 10, 24, 3, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+
+    monkeypatch.setattr(scheduler_module, "datetime", _EarlyDatetime)
+    engine, factory = _factory()
+    try:
+        sched = _scheduler(factory, _Clock(datetime(2026, 9, 22, 12, 0, tzinfo=UTC)), _StubRunner())
+        await sched._maybe_enqueue_daily_jobs()
+        assert sched._last_daily_date is None and sched._last_cluster_date is None
+        async with factory() as session:
+            keys = set(
+                (
+                    await session.scalars(
+                        select(Job.idempotency_key).where(Job.type.in_(["daily_report", "hot_cluster"]))
+                    )
+                ).all()
+            )
+        leaked = [k for k in keys if k.startswith(("daily_report:", "hot_cluster:"))]
+        assert not leaked, f"门关侧不得入队：{leaked}"
+    finally:
+        await engine.dispose()
+
+
+async def test_default_doc_reconciler_covers_pending_docs_deterministically() -> None:
+    """种一份 FETCHED+file_id 的非终态文档 ⇒ 默认 reconcile 的主体行确定被走到。
+
+    LangBot 在 CI 不可达 ⇒ `get_doc_ingest_status` 抛错 ⇒ except-continue 分支确定；
+    「无待推进文档」的早退分支由"无文档"的另一侧确定。两态都钉死后，
+    reconcile 主体行的覆盖不再取决于同批其它用例留下的 DB 状态。"""
+    engine, factory = _factory()
+    try:
+        _user, space, source = await _seed_sub(
+            factory, sub_id="t35-rec", next_run_at=datetime(2026, 9, 22, 12, 0, tzinfo=UTC)
+        )
+        async with factory() as session:
+            asset = ContentAsset(
+                source_id=source,
+                external_id="s35-rec-asset",
+                url="https://mp.weixin.qq.com/s/s35-rec",
+                title="S35 reconcile 种子",
+                content_hash="h-s35-rec",
+                content_markdown="# s35",
+                category="其他",
+            )
+            session.add(asset)
+            await session.flush()
+            session.add(
+                KnowledgeDocument(
+                    asset_id=asset.id,
+                    space_id=space,
+                    langbot_file_id="file-s35-rec",
+                    status="FETCHED",
+                )
+            )
+            await session.commit()
+        sched = _scheduler(factory, _Clock(datetime(2026, 9, 22, 12, 0, tzinfo=UTC)), _StubRunner())
+        advanced = await sched._reconcile_docs()
+        assert advanced == 0, "LangBot 不可达 ⇒ 推进数必为 0（单篇失败不中断）"
+        # 早退分支：空库（无待推进文档）⇒ 0
+        engine2, factory2 = _factory()
+        try:
+            sched2 = _scheduler(factory2, _Clock(datetime(2026, 9, 22, 12, 0, tzinfo=UTC)), _StubRunner())
+            assert await sched2._reconcile_docs() == 0
+        finally:
+            await engine2.dispose()
     finally:
         await engine.dispose()

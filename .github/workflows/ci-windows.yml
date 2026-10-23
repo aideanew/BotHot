@@ -118,7 +118,11 @@ jobs:
       # ⚠ 这一档提交前是**按新增用例数算出来的预测值**（本机 PG 可达，这 8 条在本地是执行不是 skip，
       # 无法在本机测到 @win 的 skip 数）；推送后实测与之逐字相符 ⇒ 预测与测量在此对齐，不是巧合：
       # 每加一条连库用例就是 +1 条「PG 不可达 / DSN 未设置」族，加了多少条可从 diff 数出来。
-      SKIP_BASELINE_WIN: "666"
+      # **本档 669 的锚** = run 40010753538 @83a2606：门禁读数 `failed=0 total_skipped=669 baseline=666`
+      # （未知族 0）。+3 全部是 STEP-35 新增的连库用例（`tests/test_p2_subscription.py` 的
+      # list_sources/update_source 三发，PG-DSN-未设置 族 557→560；同卡的调度器并行用例是改写
+      # 非新增，不进账）。实测于本 run 的门禁输出，按 D-V10-11 抬到测量值，不留余量。
+      SKIP_BASELINE_WIN: "669"
     defaults:
       run:
         shell: bash

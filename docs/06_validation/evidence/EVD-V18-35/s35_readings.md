@@ -92,6 +92,24 @@
 
 连库面（S35.2 三发、S35.3 调度器一发）本机未跑（无 PG）——以 @ci 为准。本机不连库全量 + 上述各文件单项读数见各节。
 
+## 第 2 轮（@ci 抓出的两件事）
+
+1. **CI-Windows 40010753538 = failure**：`windows-dev` 的 Windows skip 门禁
+   `failed=0 total_skipped=669 baseline=666`——本卡新增的 3 条 subscription 连库用例
+   在 @win 以「PG-DSN-未设置」族 skip（族内 557→560），我漏抬 `SKIP_BASELINE_WIN`
+   （提示词 §5 的既有纪律）。修法：抬到**测量值 669**（零余量），构成注释重算入注
+   （调度器并行用例是改写非新增，不进账）。
+2. **S35.1 三连跑对照的剩余抖动**：同 run 40010753485 三次 attempt（同一棵树）
+   TOTAL 88.26% / 88.34% / 88.37%——八行跟踪模块已逐字相同（manifest 稳在 219/230、
+   subscription 稳在 363/412），逐模块差分（attempt1 vs 2 的全量 term-missing 表）
+   唯一漂移模块 = **`app/services/scheduler.py`**（missing 75↔67）：
+   `_maybe_enqueue_daily_jobs` 用不可注入的 `datetime.now(self._tz)`（:409），
+   06:30/06:35 两个门随 CI 跑的时刻开合；reconcile 默认实现体随同批遗留 DB 状态漂。
+   修法（测试侧，源码零改动）：冻结模块级 datetime 三发 + reconcile 两态一发
+   （`test_scheduler.py` 新增 4 条连库用例，会随第 2 轮推送在 @ci 复算）。
+   三连跑九行对照原文：`s35_1_threerun.txt`（attempt 2/3 九行已逐字相同——
+   这两 attempt 恰好都落在门关侧；attempt 1 在另一时刻 ⇒ 暴露出 scheduler 漂移）。
+
 ## @ci（推送后回填）
 
 _（占位：交付 head 三绿 run id；subscription.py 模块门行（余量行数）；S35.1 的三次派发跑九行对照；S35.3 调度器用例与 S35.2 三发 @ci 实跑读数。）_
