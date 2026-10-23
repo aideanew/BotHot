@@ -69,13 +69,15 @@
 
 | 判据 | 读数 |
 |---|---|
-| 语料 | 15 份（`docs/02_requirements/**` 的 12 份条目 + 主文档 + `AGENTS.md`） |
+| 语料 | **15 份** = `docs/02_requirements/` 下 14 份（12 份 REQ 条目 + 主文档 `product-requirements.md` + `inbox/README.md`）+ `AGENTS.md`。
+      ⚠ 这句在初稿里被我自己写歪过一次（写成"12 + 主文档 + AGENTS = 15"，实际 12+1+1+1 = 15 需要把 `inbox/README.md` 也算进去），
+      按 `find docs/02_requirements -name '*.md' | wc -l` = **14** 改正。 |
 | 仓内文件锚（去重，按 HEAD blob 判存在） | **99**，其中**不存在 = 0** |
 | `::` 符号锚 | **4**（= 语料里全部这种写法），**对不上 = 0** |
 | 写法不齐（裸 `tests/x.py` 而非 `apps/api/tests/x.py`） | **0** |
 | 探针四发极性自测 | ①真实符号在 ②编造符号不在 ③真实文件存在 ④编造文件不存在 —— 全对，`rc=0` |
 
-REQ-F-004 的 11 个锚、REQ-F-006 的 12 个锚（含前端 `r024-subscription-lifecycle.spec.tsx`）全部命中真实文件；
+REQ-F-004 的 **14 个锚**、REQ-F-006 的 **12 个锚**（含前端 `r024-subscription-lifecycle.spec.tsx`）全部命中真实文件；
 来源卡当年要求"增验收锚（test_kb_longlink_ingest / test_manifest_asset_alignment / test_e2e_collection）"
 这三条现在都在列表里（分别由 STEP-04/06 补的判据面）。
 
