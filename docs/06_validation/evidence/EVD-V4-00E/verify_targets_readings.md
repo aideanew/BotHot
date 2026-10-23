@@ -189,6 +189,12 @@ S00E.3.2 的后端复跑、以及"端口被占时点名占用者"那条子句的
   取数时刻分别为：本卡开工时 CI/Security 已绿而 Windows in_progress，收口前复读到 Windows success。
 - 本批（00E）自己的三条运行在 push 后读取，写在 `docs/任务规划V0.17.0/07-执行过程记录.md` 行 38 末尾；
   推进 STEP-12（队列⑯，发布对账）之前必须三绿（队列纪律）。
+  **【队列⑯ 补录，已量到】**：`9983c63` 三条 attempt 1 全 success —
+  `CI` **39896802610**（`2258 passed, 6 skipped, 4 deselected in 194.68s`、`Total coverage: 88.00%`、
+  `skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0`、`✅ 全部模块与全局达标`）、
+  `CI-Windows` **39896802631**（`1598 passed, 666 skipped, 4 deselected in 1058.67s`、
+  `windows 门禁：failed=0 total_skipped=666 baseline=666`、`Test Files 49 passed (49)`）、
+  `Security` **39896802667** ⇒ 队列纪律**满足**，且下一条那笔账（666 不动）也被实测证实。
 - ⚠ 一张本批**不会变红但要看懂**的账：00E 只动 `scripts/entry.py` + `Makefile` + 文档，
   **没有新增连库用例** ⇒ `SKIP_BASELINE_WIN` 不该动（仍 666）。如果 CI-Windows 因为这条变红，
   那说明有别的批把用例带进来了，得按 `cross-platform.md` §8 重测构成再抬，而不是顺手加数。

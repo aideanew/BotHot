@@ -107,7 +107,7 @@
       ⇒ 语义计数仍 0→0，判据本身是**字符串形自红**，登记台账 §4 **P-100**（本卡不改 `guards.py`）
 - [x] 仅上线用的脚本在 `cross-platform.md` 明确标「仅 Linux」，且其清单逐条可核
       —— 原写一句「`rotate_keys.sh` 等」不算清单。本轮把 `git ls-files '*.sh'` 去掉 vendored 后实测的
-      **6 个自有脚本**逐条列进 `cross-platform.md` §7：4 个仅 Linux/CI、`preflight.sh` 标注"经 Git Bash 跨平台可用"、
+      **6 个自有脚本**逐条列进 `cross-platform.md` §7：3 个仅 Linux（rotate_keys / smoke 上线用，test-env 是测试依赖）、1 个 Linux/CI 为主（ci-repro-frontend，本卡未实跑所以不写"仅"）、`preflight.sh` 经 Git Bash 可用、
       `EVD-V2-00C/collect_ruff_shapes.sh` 标注"历史取证件，不再执行"（F-14 / S00T.V14.3）
 
 ## 验证命令

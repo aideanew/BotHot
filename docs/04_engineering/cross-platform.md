@@ -152,7 +152,7 @@ gitleaks（00S 用）：`python scripts\entry.py scan-secrets`。
   | `scripts/rotate_keys.sh` | **仅 Linux/上线** | 密钥轮换，配套 `docs/07_release/key-rotation-sop.md`，要在能连生产库的机器上跑 |
   | `scripts/smoke.sh` | **仅 Linux/上线** | 用法即 `docker compose up -d → 探活 → 心跳`，本机无 docker ⇒ 跑不了 |
   | `scripts/test-env.sh` | **仅 Linux** | 起隔离测试 PG/Redis，内部 `FORBIDDEN_PORTS` 守卫（D-12）；本机无 docker ⇒ 只能读不能跑 |
-  | `apps/web/scripts/ci-repro-frontend.sh` | **仅 Linux/CI** | 前端 CI 等价复现，CI 侧执行；本机用 `entry.py` 的对应任务替代 |
+  | `apps/web/scripts/ci-repro-frontend.sh` | **Linux/CI 为主** | 前端 CI 等价复现脚本；Git Bash 理论上能跑，但**本卡未实跑过它**，所以只标"为主"不标"仅"——没有读数的归属不许写成绝对 |
   | `scripts/preflight.sh` | **跨平台可用**（经 Git Bash） | 00X §2 实测：Windows 上 `bash scripts/preflight.sh` rc=1 但**脚本本身跑起来了**并逐条报出缺什么，属"能跑、报得准" |
   | `docs/06_validation/evidence/EVD-V2-00C/collect_ruff_shapes.sh` | **历史取证件，不再执行** | 只采集不判定；F-14（S00T.V14.3）已把证据脚本 pytest 化并下线，此件按证据不可改写原则原样保留 |
 

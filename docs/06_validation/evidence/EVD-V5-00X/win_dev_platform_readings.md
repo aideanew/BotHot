@@ -409,7 +409,7 @@ skip 数还从 422 涨到 441，所以这不是"用例变少了"。机制方向�
 | 4 | `@win` 缺工具场景退出码非 0，至少 2 个任务有读数 | **达成** | 本轮复算：`docker-ps`→3、`migrate`→3（两条都打印 `SKIP(...)` 且明写"不是通过"） |
 | 5 | `@linux` `.gitattributes` 收敛后 `pnpm build` 仍绿 | **达成** | §2 的 `frontend` job success。**标签纪律**：这条原文写 `@linux`，实际执行者是 CI 的 ubuntu runner（Linux 且区分大小写），按 D-V6-01 必须写明等价关系，否则等于给了一条没有机位的读数 |
 | 6 | `@win` "只降不升"判据 `grep -rn "open(" scripts \| grep -v encoding=` 前后两数在案 | **达成，但判据本身是假阳形** | §4.3：落地时记 0→0，本轮复算**字面 2**，两处命中都是函数名 `_enclosing_open(`（`guards.py:731/772`），不是文件打开调用 ⇒ 语义计数仍 0→0 ⇒ 登记 **P-100** |
-| 7 | 仅上线脚本在 `cross-platform.md` 明确标「仅 Linux」，且**清单逐条可核** | **达成**（本轮补全） | 原文只有一句「`rotate_keys.sh` 等」——那不是清单。本轮把 `git ls-files '*.sh' \| grep -v '^\.project/'` 实测出的 **6 个自有脚本**逐条列进 `cross-platform.md` §7（4 个仅 Linux/CI、`preflight.sh` 跨平台可用、EVD-V2-00C 的采集器标"历史取证件，不再执行"），vendored 14 个不计 |
+| 7 | 仅上线脚本在 `cross-platform.md` 明确标「仅 Linux」，且**清单逐条可核** | **达成**（本轮补全） | 原文只有一句「`rotate_keys.sh` 等」——那不是清单。本轮把 `git ls-files '*.sh' \| grep -v '^\.project/'` 实测出的 **6 个自有脚本**逐条列进 `cross-platform.md` §7（3 个仅 Linux + 1 个 Linux/CI 为主（`ci-repro-frontend.sh` 本卡未实跑，故不写「仅」）、`preflight.sh` 跨平台可用、EVD-V2-00C 的采集器标"历史取证件，不再执行"），vendored 14 个不计 |
 
 ### 4. 复算出的三件事（数字，不是印象）
 
