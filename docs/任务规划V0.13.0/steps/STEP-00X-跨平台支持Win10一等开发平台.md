@@ -200,6 +200,9 @@ V0.9.0 的 F-10 与 V0.10.0 的 F-08 是**同一件事在两台机器上的两�
 1. **S00X.1.2 那句「✅ 34 个任务」把两个从未存在的名字蒙进了分母**。卡面列的 8 个任务名里
    `verify-backend` / `verify-frontend` 今天仍然不存在：`entry.py help` 现读 37 个任务，
    且 `grep -rn "verify\|testenv" scripts/entry.py Makefile README.md` **0 命中**。
+   【失效边界】该读数锚在 `8e59749`，只对那一批成立：**同一队列的下一张卡 STEP-00E（`9983c63`）就把这四个名字
+   建进了 `entry.py`/`Makefile`**，所以现在复跑同一条 grep **会得到命中**。跨批引用数字的锚定规则见
+   `docs/06_validation/evidence/EVD-V17-12/s12_readings.md` §0.1。
    ⇒ 按 **6/8 落地 + 2 移交** 记；这两个名字（连同 `testenv-up`/`testenv-down`）是 STEP-00E
    S00E.1.3 / S00E.2.1 的交付物，本卡不代做。00E 就是下一张。
 2. **S00X.4.1 卡面写"在 `ci.yml` 新增 windows-latest job"**，实体今天住在 `.github/workflows/ci-windows.yml`

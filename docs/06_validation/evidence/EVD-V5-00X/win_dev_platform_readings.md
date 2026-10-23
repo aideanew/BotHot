@@ -461,7 +461,9 @@ entry.py 独有 4 个（`scan-secrets`/`typecheck-backend`/`typecheck-frontend`/
    （`install / dev / test / lint / build / migrate / verify-backend / verify-frontend`），
    上一轮的记录写「✅ 34 个任务」就把这两条一起蒙进了分母。本轮 `entry.py help` 现读 **37 个任务**，
    其中**没有** `verify-backend`/`verify-frontend`；`grep -rn "verify\|testenv" scripts/entry.py Makefile README.md`
-   → **0 命中**（本轮实测）。⇒ 更正为 **6/8 落地 + 2 移交**：这两个名字连同 `testenv-up`/`testenv-down`
+   → **0 命中**（本轮实测，**锚在 `8e59749`**）。【失效边界】下一张卡 STEP-00E（`9983c63`）就把这四个名字
+   建进了 `entry.py`/`Makefile`——现在复跑同一条 grep 会得到命中，不是这条读数错了，是它只对那一批成立。
+   ⇒ 更正为 **6/8 落地 + 2 移交**：这两个名字连同 `testenv-up`/`testenv-down`
    是 STEP-00E 的 S00E.1.3/S00E.2.1 的交付物，本卡不代做（也不假装做了）。00E 就在下一张。
 2. **S00X.4.1 卡面写"在 `ci.yml` 新增 windows-latest job"，实体今天不在那里**。
    `windows-dev` job 现居 `.github/workflows/ci-windows.yml`（该文件第 3 行自报"STEP-00W S00W.2.1：
