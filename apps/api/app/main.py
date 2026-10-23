@@ -38,6 +38,7 @@ from app.core.logging import configure_logging
 from app.core.metrics import MetricsMiddleware, metrics_router
 from app.core.middleware import ErrorEnvelopeMiddleware, RequestIdMiddleware
 from app.core.response import failure
+from app.core.validation_message import build_validation_message
 from app.db import get_session_factory
 from app.services.push_scheduler import start_push_scheduler, stop_push_scheduler
 
@@ -124,7 +125,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
     async def _handle_validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
         # 请求参数不合法：客户端错误 → 10005/422（裁决 2026-09-07）
-        body = failure(10005, f"请求参数校验失败: {exc.errors()[:1]}")
+        # P-62 / D-V18-05：文案只报字段路径 + 错误类型 + 固定原因。旧写法
+        # `f"…: {exc.errors()[:1]}"` 会把 `input`（调用方提交的原值）与 `ctx` 一起格式化进去，
+        # 而响应体与访问日志都是暴露面。构造逻辑在 `app/core/validation_message.py`。
+        body = failure(10005, build_validation_message(exc.errors()))
         return JSONResponse(status_code=422, content=body.model_dump())
 
     @app.exception_handler(HTTPException)
