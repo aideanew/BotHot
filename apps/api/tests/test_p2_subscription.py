@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy import select
 from test_repositories import _make_user  # noqa: F401  (复用用户锚夹具)
 
-from app.core.errors import RequestInvalidError
+from app.core.errors import RequestInvalidError, ResourceNotFoundError
 from app.models.entities import ArticleManifest, Job, JobItem, Source, SourceSubscription
 from app.repositories.space import SpaceRepository
 from app.services.article_identity import canonical_article_key
@@ -363,3 +363,44 @@ async def test_p2_subscription_visibility_fields(db_session) -> None:  # type: i
     assert s["lastSuccessAt"] == ""
     assert s["consecutiveEmptySyncs"] == 0
     await db_session.commit()
+
+
+# ── S35.2（P-98 余量）：source 管理面此前零覆盖——list_sources 的 total 分支
+# （subscription.py:246-252）与 update_source 方法体（:254-269）让 CI 余量只剩 2 行
+# （353/412），P-116 那类 ±1 行抖再落一次就是主干红。这三发把余量抬到 ≥5（353+22）。
+
+
+async def test_p2_list_sources_returns_rows_and_total(db_session) -> None:  # type: ignore[no-untyped-def]
+    """list_sources（GET /sources 的服务层）：total 的 count 分支与 (items, total) 形状。
+
+    视图只透出公开五键（sourceId/biz/name/url/status）——多透一个字段都是契约漂移，
+    少一个就是前端读空。"""
+    _user, _space, src = await _seed(db_session)
+    svc = SourceSubscriptionService(db_session)
+    rows, total = await svc.list_sources("wechat_oa")
+    assert total >= 1, f"至少应数到刚种下的那一个源：total={total}"
+    mine = next(r for r in rows if r["sourceId"] == src["sourceId"])
+    assert mine["biz"] == BIZ_TEST
+    assert set(mine) == {"sourceId", "biz", "name", "url", "status"}, f"视图键漂移：{set(mine)}"
+
+
+async def test_p2_update_source_renames_and_reurls(db_session) -> None:  # type: ignore[no-untyped-def]
+    """update_source（PATCH /sources/{id} 的服务层）：改名/改址 + 部分更新语义。
+
+    `type` 与 `external_id` 是 `uq_source_type_external` 去重锚——改名不许牵动 biz。"""
+    _user, _space, src = await _seed(db_session)
+    svc = SourceSubscriptionService(db_session)
+    out = await svc.update_source(src["sourceId"], name="S35.2 改名", url="https://mp.weixin.qq.com/profile?biz=x")
+    assert out["name"] == "S35.2 改名"
+    assert out["url"] == "https://mp.weixin.qq.com/profile?biz=x"
+    assert out["biz"] == BIZ_TEST, "biz 是去重锚，update 不许牵动它"
+    kept = await svc.update_source(src["sourceId"], name="S35.2 再改名")
+    assert kept["name"] == "S35.2 再改名" and kept["url"] == out["url"], "只传 name 时 url 必须保持原值"
+
+
+async def test_p2_update_source_missing_id_is_404_shape(db_session) -> None:  # type: ignore[no-untyped-def]
+    """update_source 对不存在的 id ⇒ ResourceNotFoundError（10004 形状），不许静默成功。"""
+    _user, _space, _src = await _seed(db_session)
+    svc = SourceSubscriptionService(db_session)
+    with pytest.raises(ResourceNotFoundError):
+        await svc.update_source("00000000-0000-0000-0000-000000000000")

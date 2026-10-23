@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import secrets
@@ -23,6 +24,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ValidationError, field_validator
+from structlog.testing import capture_logs
 
 from app.api.deps import get_current_user_id, get_db
 from app.api.v1.admin import CategoryConfigRequest, DiscoveryConfigRequest
@@ -263,3 +265,30 @@ def test_no_error_dict_is_stringified_into_the_handler_source() -> None:
     handler = rest[: rest.index("@app.exception_handler", 5)]
     assert "build_validation_message" in handler, "校验处理器没有改走新的文案构造器"
     assert not re.search(r"exc\.errors\(\)[^\n]*\{", handler), "校验处理器又把整份 errors 格式化进文案"
+
+
+# ── S35.5（P-111② / D-V19-08）：未认证面也要有常驻判据 ────────────────────────────
+#
+# 这一发**绿是因为鉴权在校验之前**（现读 EVD-V18-33 §1：FastAPI 先解依赖后校体，
+# 无会话 ⇒ 401/10001，请求体根本不会被解析）——它不是"422 判据在起作用"。
+# 把它钉成常驻的目的：哪天有人把体校验挪到鉴权之前，这发会拿到 422 且随机值
+# 出现在响应/日志里 ⇒ 红。打的是真实依赖链（create_app 不覆盖任何依赖）与
+# 三个真端点；值仍是运行时随机生成，类型故意错、随机值藏在 input 里——
+ # 那正是旧 422 文案会照抄的泄漏向量。
+
+
+def test_unauthenticated_invalid_body_is_401_and_never_echoes() -> None:
+    client = TestClient(create_app())
+    marker = _marker()
+    probes = (
+        ("put", f"{ADMIN}/discovery/config", {"enabled": marker, "default": marker}),
+        ("put", f"{ADMIN}/categories", {"categories": marker}),
+        ("post", "/api/v1/extract", {"url": {"nested": marker}}),
+    )
+    for method, path, payload in probes:
+        with capture_logs() as logs:
+            response = getattr(client, method)(path, json=payload)
+        assert response.status_code == 401, f"{path}：{response.status_code} {response.text[:120]}"
+        assert response.json().get("code") == 10001, f"{path}：{response.text[:160]}"
+        flat = response.text + json.dumps(logs, ensure_ascii=False, default=str)
+        assert marker not in flat, f"{path}：随机值经响应或日志泄漏（鉴权顺序被改动了？）"

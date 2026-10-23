@@ -1,6 +1,6 @@
 # STEP-35 测试确定性与网络密封
 
-> 基线 main@f86811e｜状态：⚪ 未开始｜版本 V0.18.0
+> 基线 main@f86811e｜状态：🔶 第 1 轮已交付（2026-10-24，含 S35.5/S35.6 加项，读数在 `EVD-V18-35/`）｜版本 V0.18.0
 
 | 字段 | 内容 |
 |---|---|
@@ -19,10 +19,10 @@
 | 16 规模 | ≈1.2 人日 |
 
 ## 三级任务
-1. [ ] **S35.1** P-104：定位 `manifest.py` 覆盖抖动的那一行（对比两次覆盖报告的 missing 行），改成确定覆盖；判据：同树连跑 3 次，模块门九行读数逐字相同
-2. [ ] **S35.2** P-98：`subscription.py` 补用例，CI 余量 ≥ 5 行（记下 covered/total）
-3. [ ] **S35.3** P-52/P-71 并发用例改为事件序判据（用 asyncio.Event 记录开始/结束交叠），不用墙钟；P-53/P-63：structlog 全局配置改由 fixture 设置并在 teardown 还原，`capture_logs` 用例在窗内首次取 logger
-4. [ ] **S35.4** P-105（D-V18-08）：`vitest.config.ts` 钉 `environmentOptions.happyDOM.url = 'http://localhost:3200/'`；setup 把未桩的 `fetch` 换成直接抛错；跑一遍，原 39 处 `AggregateError` 对应的用例逐条补桩；反证：删一条桩该用例必须红
+1. [x] **S35.1** P-104：抖动行 = `manifest.py:169`（同树两份 CI missing 集合现读差集）；已用确定输入的 RFC822 无时区用例钉死；三连跑对照见证据 §@ci
+2. [x] **S35.2** P-98：补 list_sources/update_source 三发（此前 :246-269 零覆盖）；基线 353/412 余量 2 行，预期 375/412（@ci 回填）
+3. [x] **S35.3** P-52/P-71：并行判据改 asyncio.Event 会合点（wait_for 显式超时判红）；P-53/P-63：`clean_logging` teardown 改还回应用配置（先红 2 failed 复现 → 修后双序 33 passed）
+4. [x] **S35.4** P-105（D-V18-08）：基址钉 3200 + 未桩 fetch 抛错 setup + 三发常驻反证；415 passed、AggregateError 39→0；删桩变异 1 红/还原 3 绿
 
 ## 完成判据（全部机器可判）
 - 连跑 3 次模块门读数相等（三份原文入证据）

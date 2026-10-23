@@ -24,6 +24,16 @@ export default defineConfig({
   test: {
     include: ["tests/**/*.spec.ts", "tests/**/*.spec.tsx"],
     environment: "happy-dom",
+    // S35.4（P-105 / D-V18-08）：happy-dom 的文档基址默认落在
+    // http://localhost:3000——那是主平台专用端口（AGENTS.md 明令 BotHot 不得碰），
+    // 未桩的相对路径 fetch 会真的拨过去。钉到 3200（BotHot 前端宿主端口），
+    // 让"拨通主平台端口"这件事在结构上不可能；未桩的 fetch 由 setup 直接抛错。
+    environmentOptions: {
+      happyDOM: {
+        url: "http://localhost:3200/",
+      },
+    },
+    setupFiles: ["./tests/setup-fetch-guard.ts"],
     // CI runner 是 UTC，本机多为 UTC+8；断言「今天 10:00」这类本地时区文案时，
     // 只 vi.setSystemTime 钉时刻而不钉时区，同一时刻在 UTC 下会渲染成 02:00 → 仅 CI 红。
     // 统一按产品目标时区 Asia/Shanghai 运行。

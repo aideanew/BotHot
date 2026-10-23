@@ -30,10 +30,19 @@ from app.main import app
 # --------------------------------------------------------------------------- #
 @pytest.fixture
 def clean_logging(monkeypatch: pytest.MonkeyPatch):
-    """隔离全局日志装配：进出各存/恢复 root handler，避免污染其它用例。"""
+    """隔离全局日志装配：进出各存/恢复 root handler 与 structlog **全局配置**。
+
+    S35.3（P-53）：teardown 只 `reset_defaults()` 会把 structlog 留在**库默认**——
+    PrintLogger 直打 stdout、不经 stdlib 路由，排在后面的 caplog 用例全部失明
+    （实测：observability→discovery 顺序 2 failed、反向 33 passed）。修法是 setup
+    存下 `structlog.get_config()`、teardown 原样还回（`configure(**saved)` 保住
+    同一个 processors 列表对象——capture_logs 是就地改当前列表，换对象会让窗外
+    已缓存的 logger 对后续用例失明，P-63 同族）。
+    """
     root = logging.getLogger()
     saved_handlers = root.handlers[:]
     saved_level = root.level
+    saved_config = structlog.get_config()
     structlog.reset_defaults()
     blog.reset_logging()
     monkeypatch.delenv("LOG_FORMAT", raising=False)
@@ -41,7 +50,7 @@ def clean_logging(monkeypatch: pytest.MonkeyPatch):
     yield
     root.handlers[:] = saved_handlers
     root.setLevel(saved_level)
-    structlog.reset_defaults()
+    structlog.configure(**saved_config)
     blog.reset_logging()
 
 

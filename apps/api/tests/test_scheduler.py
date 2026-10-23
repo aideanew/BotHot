@@ -23,7 +23,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
-import time
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
@@ -412,19 +411,30 @@ async def test_anchored_watermark_stays_on_anchor_after_empty_sync() -> None:
 async def test_run_once_runs_due_subscriptions_in_parallel() -> None:
     """并发执行度：两条到期订阅在一个 run_once 内**并行**跑完（非串行排队）。
 
-    判据用重叠而非墙钟阈值：runner 内各记 start/end 时刻，若串行则第二个的 start
-    ≥ 第一个的 end，并行则两个区间必然重叠——不受测试机负载影响，不会飘。
+    判据用**会合点**而非墙钟窗（S35.3，P-52/P-71）：每个 runner 进入时置位自己的
+    Event、再等对方的——真并行 ⇒ 双方都能越过会合点；串行 ⇒ 先到的永远等不到
+    后者，`wait_for` 显式超时判红。旧判据"两段 50ms sleep 的区间是否重叠"仍是
+    50 毫秒的墙钟窗：满负载下第二个任务的起步被建连/认领拖过第一个的 end，
+    好调度器被读成串行（P-52 两次全量首跑实测、P-71 拆解了机理）。会合点判据
+    与机器负载无关：慢只会让用例更久，不会把并行读成串行。
     """
     engine, factory = _factory()
     try:
         clock = _Clock(datetime(2026, 9, 22, 12, 0, tzinfo=UTC))
-        spans: list[tuple[float, float]] = []
 
-        class _SpanRunner:
+        class _RendezvousRunner:
+            """第 i 个进场的任务置位自己的 Event，再等对方的——会合即证并行。"""
+
+            def __init__(self) -> None:
+                self.arrived = [asyncio.Event(), asyncio.Event()]
+                self._entered = 0
+
             async def __call__(self, session, sub, run_token):  # noqa: ANN001,ARG002
-                a = time.perf_counter()
-                await asyncio.sleep(0.05)
-                spans.append((a, time.perf_counter()))
+                i = self._entered
+                self._entered += 1
+                mine, other = self.arrived[i], self.arrived[1 - i]
+                mine.set()
+                await asyncio.wait_for(other.wait(), timeout=30)
                 return 0
 
         for i in range(2):
@@ -434,12 +444,11 @@ async def test_run_once_runs_due_subscriptions_in_parallel() -> None:
                 next_run_at=clock.now - timedelta(minutes=1),
                 biz=f"T24PAR{i}",
             )
-        sched = _scheduler(factory, clock, _SpanRunner())
+        runner = _RendezvousRunner()
+        sched = _scheduler(factory, clock, runner)
         sched._concurrency = 2
-        assert await sched.run_once() == 2
-
-        (a0, b0), (a1, b1) = sorted(spans, key=lambda p: p[0])
-        assert a1 < b0, f"两次同步未重叠（串行）：{spans}"
+        assert await sched.run_once() == 2, "两条都必须跑完（任一会合超时都会让它 <2）"
+        assert all(e.is_set() for e in runner.arrived), "两个 runner 都必须真实进场"
     finally:
         await engine.dispose()
 

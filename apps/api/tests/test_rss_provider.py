@@ -322,6 +322,18 @@ class TestPublishTimeRfc822:
         assert mapped["publish_time"] is None
         assert mapped["external_id"] == "guid-rfc", "身份来自 guid，不该被时间失败牵连"
 
+    def test_rfc822_without_timezone_reads_as_gmt(self) -> None:
+        """无时区的 RFC 822 日期按规范默认读成 GMT（`_parse_rfc822` 的 naive 分支）。
+
+        S35.1（P-104）：三个既有用例全是**带时区**形态，`dt.replace(tzinfo=UTC)` 那一行
+        只有别的路径恰好喂到无时区串才被覆盖——同树两次 CI 读数差的正是这一行
+        （run 39891503640 缺 169 / 39894271073 不缺）。用一发确定输入把它钉成确定覆盖：
+        模块门九行读数不再随运行时序漂。
+        """
+        mapped = _map_row(_parse_feed(_one_item_feed("Wed, 02 Oct 2024 07:30:00"))[0])
+        assert mapped is not None
+        assert mapped["publish_time"] == datetime(2024, 10, 2, 7, 30, tzinfo=UTC), mapped["publish_time"]
+
 
 # ── 抓取路径与解析兜底（S3.4.1 / P-14：rss 是覆盖率报告里的第五个模块）──────
 #
