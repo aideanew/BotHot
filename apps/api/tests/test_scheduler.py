@@ -29,7 +29,7 @@ from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
 import pytest
-from sqlalchemy import create_engine, func, select, text
+from sqlalchemy import create_engine, delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import Settings
@@ -829,6 +829,17 @@ async def test_daily_jobs_enqueue_after_0630_with_frozen_clock(
             )
         assert "daily_report:2026-10-23" in keys, f"daily_report 幂等戳缺失：{sorted(keys)}"
         assert "hot_cluster:2026-10-24:1" in keys, f"hot_cluster 幂等戳缺失：{sorted(keys)}"
+        # 本仓全量共用同一份 PG：这两条 Job 若留在表里，会漏进后面按队列取件的用例
+        # （run 40017598228 实测：w2_worker 的 run_once 吃走了 daily_report，自己的
+        # hot_cluster 原地 QUEUED）。断言完即清场，把共享 DB 还原成"没有这两条"。
+        async with factory() as session:
+            jobs = (await session.scalars(select(Job).where(Job.type.in_(["daily_report", "hot_cluster"])))).all()
+            ids = [j.id for j in jobs]
+            if ids:
+                await session.execute(delete(JobItem).where(JobItem.job_id.in_(ids)))
+                for j in jobs:
+                    await session.delete(j)
+                await session.commit()
     finally:
         await engine.dispose()
 
