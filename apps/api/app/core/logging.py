@@ -37,6 +37,8 @@ from typing import Any
 
 import structlog
 
+from app.core.log_redaction import redact_rendered
+
 _configured = False
 
 # 挂在 root 上、由本模块安装的唯一 handler 的识别标记，用于幂等重装时先摘旧的。
@@ -127,7 +129,9 @@ def configure_logging(force: bool = False) -> None:
 
     formatter = structlog.stdlib.ProcessorFormatter(
         foreign_pre_chain=shared,
-        processors=[structlog.stdlib.ProcessorFormatter.remove_processors_meta, renderer],
+        # 遮蔽放在渲染器**之后**：此时入参已是整行字符串（含展开的异常栈），
+        # 原生日志、第三方 stdlib 日志、traceback 全部经过同一处（STEP-40，P-113）。
+        processors=[structlog.stdlib.ProcessorFormatter.remove_processors_meta, renderer, redact_rendered],
     )
 
     handler = logging.StreamHandler(_resolve_stream())

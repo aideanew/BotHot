@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 
 import structlog
@@ -25,6 +26,23 @@ AUDIT_PREFIXES: tuple[str, ...] = ("/api/v1/bots", "/api/v1/admin", "/api/v1/sou
 AUDIT_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # 信封远小于此；上限只防非常规大响应把内存拖住，超限时 code 退化为 null。
 _MAX_CAPTURED_BODY = 64 * 1024
+
+
+# 路径参数的值由调用方决定（STEP-40，P-112①）。资源 id 是 UUID，审计要它；
+# 其余只保留短的标识符形值（引擎名、测试桩值），长串或非标识符形一律遮蔽——
+# 往路径段里塞一段凭据形值，不能借审计日志落盘。
+_UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+_SHORT_IDENT_RE = re.compile(r"^[A-Za-z0-9_.-]{1,15}$")
+PATH_PARAM_PLACEHOLDER = "‹已遮蔽›"
+
+
+def _safe_path_params(params: dict[str, object]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for name, value in params.items():
+        text = str(value)
+        keep = _UUID_RE.match(text) or _SHORT_IDENT_RE.match(text)
+        out[str(name)] = text if keep else PATH_PARAM_PLACEHOLDER
+    return out
 
 
 def is_audited_path(path: str) -> bool:
@@ -80,7 +98,7 @@ def _write_audit(scope: Scope, status: int, body: bytes) -> None:
         actor_role=actor["role"],
         method=scope["method"],
         route=route_path,
-        path_params=dict(scope.get("path_params") or {}),
+        path_params=_safe_path_params(scope.get("path_params") or {}),
         status=status,
         code=_envelope_code(body),
         request_id=get_request_id() or "",
