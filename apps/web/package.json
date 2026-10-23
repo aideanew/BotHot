@@ -24,7 +24,7 @@
     "ci:repro": "bash scripts/ci-repro-frontend.sh"
   },
   "dependencies": {
-    "next": "^15.5.24",
+    "next": "^15.5.28",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0"
@@ -38,7 +38,7 @@
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.0",
     "eslint": "^8.57.1",
-    "eslint-config-next": "^15.5.24",
+    "eslint-config-next": "^15.5.28",
     "happy-dom": "^15.11.7",
     "postcss": "^8.5.23",
     "tailwindcss": "^3.4.0",

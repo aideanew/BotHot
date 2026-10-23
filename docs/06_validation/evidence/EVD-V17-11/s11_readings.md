@@ -183,4 +183,24 @@ $ tasklist /FI "IMAGENAME eq postgres.exe" → 无进程
   这与 STEP-06 被独立验证者点名的那条偏差同形，因此在这里显式标注：
   **卡面 §8 的「run id 入 EVD」在交付提交的时刻尚未成立**，由紧随的记录批补齐并写明提交号。
 
+### 7.1 CI 面读数（run 39885880010，`@ci` ubuntu-latest，attempt 1 success）
+
+```
+2258 passed, 6 skipped, 4 deselected, 2 warnings in 213.92s (0:03:33)
+skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+✅ skip 门禁通过：连库用例真实执行，skip 数在基线内
+```
+
+这一行同时是三件事的实测证据：① perf 四条在 CI 里是 **deselected**（不是 skip，也不是一起跑），
+`4 deselected` 就写在 pytest 的汇总行里；② 默认面的数 `2258 + 6 = 2264` 与本机
+`--co -m "not perf"` 的 `2264/2268 collected` 逐字对齐；③ skip 账没被本卡动过（仍 6，PG 不可达类 0）。
+既然 deselect 不进 skip 账，`SKIP_BASELINE_WIN` 预期仍是 666，等 @win 那一步的读数落地后在
+本节末追一条实测行确认（不拿"预期"当读数）。覆盖率门那一步（`backend/15_Module coverage gate`）照常执行。
+
+Security 在这一批判红，但红得与本卡无关：findings 全部命中 `next`，而该公告出现在
+上一条 Security（`0eff7bc`，10-22 23:49 success）与本条（10-23 09:50）之间；
+诊断与处置记在 `docs/任务规划V0.17.0/07-执行过程记录.md` 第 33 行与台账 **P-99**。
+本卡的三绿锚点因此落到紧随其后的补丁提交上——这一条不粉饰。
+
+
 
