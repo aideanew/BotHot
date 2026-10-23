@@ -72,15 +72,42 @@ CHANGELOG 里把这条更正**写在条目自身来源注里**（不静默改写
 | CHANGELOG/AGENTS 的表格与行完整性 | 逐行脚本核验：`## [v1.0.0]` 起 **305 行历史内容逐行等值**未动；候选段既有条目按 10 个探针串核验全部在位；文件 415 行 → 426 行 |
 
 > 写入方式是"预写守卫"脚本（边界行必须逐字且唯一命中、行号落在预期窗口、组装后校验历史段逐行等值、
-> 行数增量在窗口内，任一不符就不落盘）。原因写在 §6.1。
+> 行数增量在窗口内，任一不符就不落盘）。原因写在 §7.1。
 
-## 5. S39.3 / S39.4 发布读数（推送并三绿后回填）
-- 发布批提交：待回填
-- 三条 run（CI / CI-Windows / Security，同一 head、attempt 1）：待回填
-- tag 创建与推送：待回填（`git ls-remote --tags origin v1.1.0` 的两行输出）
-- compose-smoke 的 PASS 行（该 head）：待回填
+## 5. S39.3 / S39.4 发布读数（原始件 `s39_release_readings.txt`）
 
-## 6. 过程中的两条自我记录
+| 项 | 读数 |
+|---|---|
+| 发布批提交 | `49c3bed64307696fc65981c5eea516e70102f20f`（`docs(STEP-39 发布批): v1.1.0 定稿…`），push `9544ef3..49c3bed` |
+| 三绿（同一 head、attempt 1、event=push） | CI **39929536898** success / Security **39929536900** success / CI-Windows **39929536974** success |
+| tag | 注释标签 `v1.1.0`：标签对象 `db9205df7fc7a55bf5653e33e368b6cb8e128d75` → 被标提交 `49c3bed…`；`git push origin v1.1.0` 输出 `* [new tag] v1.1.0 -> v1.1.0` |
+| 远端核验 | `git ls-remote --tags origin` 里 `refs/tags/v1.1.0` 与 `refs/tags/v1.1.0^{}` 两行齐备，后者正是三绿的 `49c3bed`；`v1.0.0` 两行原样未动 |
+| tag 是否另触发 CI | **没有**（三个 workflow 都只在分支 push 上跑）⇒ 按卡面"tag 触发**或同 head**"读同 head 那三条 |
+| S39.4 冒烟（run 39929536898 的 `compose-smoke`） | `smoke:1134` backend 存活、`smoke:1138/1139` scheduler/worker 心跳 age=2s、`smoke:1141` **结果：PASS=3 FAIL=0** |
+| 区间计数复核 | `git rev-list --count v1.0.0..HEAD` 在发布批上现读 = **305**（与 CHANGELOG 引言一致） |
+| 迁移面复核（写进 tag message 的那句"三次迁移均为新增"） | `git diff --name-status v1.0.0..HEAD -- apps/api/alembic/versions` = 3 个文件、状态全是 `A`（`ab1006c1a`、`ab1006c2a`、`ab1006c4a`）⇒ 无删除无改名 |
+
+### 5.1 没有做的事（判据要求"不得出现"的几项）
+- 没有强推：两次都是 fast-forward（`9544ef3..49c3bed`、tag 新建）。
+- 没有移动或删除任何既有 tag：`v1.0.0` 的两行在推送前后逐字相同。
+- 本地遗留的 `local-recovery-42a21f2` / `local-recovery-6751185` **未推、未删**（指向 2026-10-21 的
+  docs 提交，是别的事后恢复点，不属本卡所有权；动它们要单独经用户确认）。
+- 没有碰任何代码文件（本批只有 `CHANGELOG.md`、`AGENTS.md` 与证据目录）。
+
+## 6. 判据对照（卡面「完成判据」逐条）
+
+| 判据 | 读数 | 结论 |
+|---|---|---|
+| `git ls-remote --tags origin v1.1.0` 有且指向三绿的提交 | `refs/tags/v1.1.0^{}` = `49c3bed…`，即三条 success 的同一 head | ✅ |
+| CHANGELOG 里 `[Unreleased]` 为空段、v1.1.0 段有日期 | `:11` 空段（只留一行搬空说明）；`:17` = `## [v1.1.0] - 2026-10-23` | ✅ |
+| 不得出现强推或移动 tag | §5.1 | ✅ |
+| S39.1 合并 + 去重 + 补 32/33 + 每个 hash 复核 | §2 表 + `s39_hash_audit.txt`（42 个全解析，0 失败；含一条挂错已更正） | ✅ |
+| S39.2 版本行改 v1.1.0、"领先 N"归零并带锚 | AGENTS.md 版本块；不抄自指 sha 的理由见 §3 | ✅ |
+| S39.3 提交→推送→同 head 三绿→打注释 tag→推 tag，证据记 sha 与三条 run id | §5 表 | ✅ |
+| S39.4 发布后冒烟读 PASS 行 | `smoke:1141 结果：PASS=3 FAIL=0` | ✅ |
+| D-V18-15 收口覆盖面 | 卡面 4 条三级任务 + 继承增量表（**无** STEP-39 行 ⇒ 零项）+ 卡面自身无增量节 ⇒ 全判 | ✅ |
+
+## 7. 过程中的两条自我记录
 1. 本卡的 CHANGELOG 手术是用脚本做的（34 行整段搬移不适合逐条手工替换）。
    第一版脚本有一个**会吃掉别的条目**的错：它按"第一条到第二条之间"做区间替换，
    而两条重复条目之间还夹着「角色门禁单参数化」那条——照旧执行会静默删掉一条发布说明。

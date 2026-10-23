@@ -1,0 +1,21 @@
+# STEP-39 发布读数（head 49c3bed / tag v1.1.0）
+# 探针在仓外 Temp；≥32 位连续串一律替换成 <REDACTED:lenN>
+
+===== ① 远端 tag 的两行（标签对象与被标提交）=====
+8ecf3220ff823c405e6e4e61456688e79e5177a1	refs/tags/v1.0.0
+c19fe879e07a67efa2d482a0cd4ce340bd577a92	refs/tags/v1.0.0^{}
+db9205df7fc7a55bf5653e33e368b6cb8e128d75	refs/tags/v1.1.0
+49c3bed64307696fc65981c5eea516e70102f20f	refs/tags/v1.1.0^{}
+
+===== ② 三绿（同 head、attempt 1；tag 未另触发 run）=====
+CI           completed  success  id=39929536898  attempt=1 event=push sha=49c3bed64307696fc65981c5eea516e70102f20f
+Security     completed  success  id=39929536900  attempt=1 event=push sha=49c3bed64307696fc65981c5eea516e70102f20f
+CI-Windows   completed  success  id=39929536974  attempt=1 event=push sha=49c3bed64307696fc65981c5eea516e70102f20f
+
+===== ③ compose-smoke 的冒烟判据行（S39.4）=====
+  smoke:1113  bothot-postgres-1          postgres:16-alpine        "docker-entrypoint.s…"   postgres                 9 seconds ago   Up 8 seconds (healthy)                     5432/tcp
+  smoke:1134  ✅ PASS  backend 存活（信封 code==0）
+  smoke:1136  [2/2] 检查 scheduler / worker 心跳（process_heartbeats，max-age=300s）
+  smoke:1138  ✅ PASS  scheduler 心跳新鲜（age=2s）
+  smoke:1139  ✅ PASS  worker 心跳新鲜（age=2s）
+  smoke:1141  结果：PASS=3 FAIL=0
