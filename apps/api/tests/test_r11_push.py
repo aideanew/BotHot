@@ -85,9 +85,9 @@ async def test_content_validation_rejects_bad_inputs() -> None:
 
 async def test_target_validation_requires_existing_refs(db_session) -> None:  # type: ignore[no-untyped-def]
     svc = _svc(db_session)
-    with pytest.raises(Exception, match="空间不存在"):  # type: ignore[misc]
+    with pytest.raises(Exception, match="资源不存在或无权限"):  # type: ignore[misc]  # S37.5：404 文案固定
         await svc.push("web", external_user_id="wx-1", space_id=SPACE_ID_MISSING)
-    with pytest.raises(Exception, match="文档不存在"):  # type: ignore[misc]
+    with pytest.raises(Exception, match="资源不存在或无权限"):  # type: ignore[misc]  # S37.5：404 文案固定
         await svc.push("web", external_user_id="wx-1", doc_id=DOC_ID_MISSING)
     with pytest.raises(Exception, match="过长"):  # type: ignore[misc]
         await svc.push("web", external_user_id="wx-1", space_id="s" * 40)
@@ -97,7 +97,7 @@ async def test_doc_must_belong_to_given_space(db_session) -> None:  # type: igno
     """doc 不属于所给 space → 30004。"""
     rows = await _seed(db_session)
     svc = _svc(db_session)
-    with pytest.raises(Exception, match="不属于该空间"):  # type: ignore[misc]
+    with pytest.raises(Exception, match="资源不存在或无权限"):  # type: ignore[misc]  # S37.5：404 文案固定
         await svc.push("web", external_user_id="wx-1", space_id=rows["space"], doc_id=rows["doc_b"])
 
 
@@ -108,9 +108,9 @@ async def test_validation_failure_has_zero_side_effects(db_session, monkeypatch:
     monkeypatch.setattr(push_pkg, "_PROVIDERS", {"web": provider})
 
     svc = _svc(db_session)
-    with pytest.raises(Exception, match="不属于该空间"):  # type: ignore[misc]
+    with pytest.raises(Exception, match="资源不存在或无权限"):  # type: ignore[misc]  # S37.5：404 文案固定
         await svc.push("web", external_user_id="wx-1", space_id=rows["space"], doc_id=rows["doc_b"])
-    with pytest.raises(Exception, match="文档不存在"):  # type: ignore[misc]
+    with pytest.raises(Exception, match="资源不存在或无权限"):  # type: ignore[misc]  # S37.5：404 文案固定
         await svc.push("web", external_user_id="wx-1", doc_id=DOC_ID_MISSING)
     with pytest.raises(Exception, match="控制字符"):  # type: ignore[misc]
         await svc.push("web", external_user_id="wx-1", message="a\nb")
