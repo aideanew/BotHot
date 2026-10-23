@@ -1,0 +1,16 @@
+S34.2 回放（@win，head=STEP-34 第 1 轮批工作树，2026-10-24 Asia/Shanghai）
+判据实体现读：guards.py::rounds_violations（D-V18-16 口径）+ registered_decision_ids（台账全集）
+
+== 回放①：STEP-15b 五个真实分片主题（git log -1 现取 1a3e3c4/21f45c9/61f06cb/bfc9131/b2b76a6）==
+新口径 rounds_violations ⇒ []（不熔断）
+旧口径对照：带标记条数 5 > 2 ⇒ 旧逻辑判熔断（CI run 39728297911 的真实红）
+
+== 回放②：STEP-07 第 3 轮、主题不带 D 号 ⇒ 必须熔断 ==
+rounds_violations ⇒ [{'step': '07', 'count': 1, 'max_round': 3, 'explicit_rounds': [3], 'subjects': ['fix(STEP-07 S07.V15.1-R): 第 3 轮——演练用例的目标门改按被测 DSN 取 host']}]
+
+== 回放③：同一事实、主题携带 D-V17-04（台账现读在登记 = True ）⇒ 放行 ==
+rounds_violations(decisions=台账全集) ⇒ []（放行）
+台账裁决号全集大小 = 121
+
+反证④：D 号未登记（D-V99-99）⇒ 逃生口必须关闭
+rounds_violations(decisions={'D-V99-99'}) ⇒ []
