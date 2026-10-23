@@ -1,0 +1,48 @@
+聚合成员：0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt（47917 字节）
+  sec:22  ##[group]GITHUB_TOKEN Permissions
+  sec:298  [36;1mecho "SCANNER_ERROR" > "$verdict"   # 先写最坏结果，任一步骤中断都不会留下"假绿"[0m
+  sec:306  [36;1m# 导出失败 ≠ 没有漏洞：这一步过不去就把 verdict 停在 SCANNER_ERROR，不进扫描。[0m
+  sec:313  [36;1mecho "扫描输入 requirements-from-lock.txt：$(grep -c '^[A-Za-z0-9]' requirements-from-lock.txt) 个钉版条目（由 uv.lock 导出）"[0m
+  sec:315  [36;1m# 接受基线展开为重复的 --ignore-vuln 参数（数组展开，避免空参数变成位置参数）[0m
+  sec:323  [36;1m  echo "接受基线（${#ignore_args[@]} 项）已加载"[0m
+  sec:348  [36;1m    verdict.write_text("SCANNER_ERROR")[0m
+  sec:368  [36;1mprint(f"pip-audit：🔴 阻断 {len(blocking)} 条（有修复版本） / 🟡 告警 {len(warn)} 条（无修复版本）")[0m
+  sec:374  [36;1mverdict.write_text("BLOCK" if blocking else "OK")[0m
+  sec:394  扫描输入 requirements-from-lock.txt：65 个钉版条目（由 uv.lock 导出）
+  sec:395  pip-audit：🔴 阻断 0 条（有修复版本） / 🟡 告警 0 条（无修复版本）
+  sec:399  [36;1mecho "SCANNER_ERROR" > "$verdict"[0m
+  sec:434  [36;1m    verdict.write_text("SCANNER_ERROR")[0m
+  sec:469  [36;1m        verdict.write_text("SCANNER_ERROR")[0m
+  sec:472  [36;1mprint(f"pnpm audit：🔴 阻断 {len(blocking)} 条（critical/high） / 🟡 告警 {len(warn)} 条（moderate/low/info）")[0m
+  sec:478  [36;1mverdict.write_text("BLOCK" if blocking else "OK")[0m
+  sec:498  [pnpm-audit] 第 1/2 次：rc=0 报告字节=310
+  sec:499  [pnpm-audit] 判定=ran
+  sec:501  pnpm audit：🔴 阻断 0 条（critical/high） / 🟡 告警 0 条（moderate/low/info）
+  sec:505  [36;1mecho "SCANNER_ERROR" > "$verdict"[0m
+  sec:542  [36;1m    verdict.write_text("SCANNER_ERROR")[0m
+  sec:571  [36;1mprint(f"trivy：🔴 阻断 {len(blocking)} 条 / 🟡 告警 {len(warn)} 条")[0m
+  sec:577  [36;1mverdict.write_text("BLOCK" if blocking else "OK")[0m
+  sec:597  trivy：🔴 阻断 0 条 / 🟡 告警 0 条
+  sec:601  [36;1mecho "SCANNER_ERROR" > "$verdict"[0m
+  sec:611  [36;1m# 让它落到 SCANNER_ERROR 分支（fail-closed），而不是假绿。[0m
+  sec:646  [36;1m    verdict.write_text("SCANNER_ERROR")[0m
+  sec:651  [36;1m    verdict.write_text("SCANNER_ERROR")[0m
+  sec:665  [36;1m    print("gitleaks：✅ 未检出明文密钥")[0m
+  sec:666  [36;1m    verdict.write_text("OK")[0m
+  sec:668  [36;1m    print(f"gitleaks：🔴 检出 {len(findings)} 处明文密钥")[0m
+  sec:676  [36;1m    verdict.write_text("BLOCK")[0m
+  sec:680  [36;1m    verdict.write_text("SCANNER_ERROR")[0m
+  sec:700  gitleaks：✅ 未检出明文密钥
+  sec:703  [36;1mecho "── 四扫描器裁决 ──────────────────────"[0m
+  sec:708  [36;1m  if [ -f "$f" ]; then v="$(tr -d '[:space:]' < "$f")"; else v="SCANNER_ERROR"; fi[0m
+  sec:711  [36;1m    BLOCK)        hard=$((hard + 1)) ;;[0m
+  sec:712  [36;1m    SCANNER_ERROR) hard=$((hard + 1)) ;;   # fail-closed：工具坏了也算红灯[0m
+  sec:713  [36;1m    OK|WARN)      soft=$((soft + 1)) ;;[0m
+  sec:724  [36;1m  echo "❌ 安全门禁未通过：存在 ${hard} 个 🔴 阻断项——修完再合并"[0m
+  sec:727  [36;1mecho "✅ 安全门禁通过：无 🔴 阻断项"[0m
+  sec:746  ── 四扫描器裁决 ──────────────────────
+  sec:747  pip-audit    OK
+  sec:748  pnpm-audit   OK
+  sec:749  trivy        OK
+  sec:750  gitleaks     OK
+  sec:753  ✅ 安全门禁通过：无 🔴 阻断项

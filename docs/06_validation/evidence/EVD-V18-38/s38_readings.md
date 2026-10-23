@@ -86,7 +86,58 @@ CI 侧同一对反证见 §5（推送读数）。
 引用了旧命令**，于是永远红。改成逐行剥注释再判。这条留在这里，是因为它属于"判据被自己的
 解释文字绊倒"那一族：判据文本与被判对象必须分层。
 
-## 5. CI 读数（待回填：交付批 / 反证批 / 还原批）
-- 交付批 head：待回填（Security 四步日志里的 `第 1/2 次 … 判定=ran` 与 `扫描输入 requirements-from-lock.txt：N 个钉版条目`）
-- 反证批：待回填（Security 必须红，且原因行含「扫描器未运行」；CI / CI-Windows 仍绿）
-- 还原批：待回填（三绿）
+## 5. CI 读数（三批发完后的最终值）
+
+### 5.1 交付批 `e88f35a` —— 同一 head、attempt 1 三绿
+| workflow | run id | 结论 |
+|---|---|---|
+| CI | 39935977604 | success |
+| CI-Windows | 39935977663 | success（`win:634 1644 passed / 666 skipped / 4 deselected`，门禁 `failed=0 total_skipped=666 baseline=666` ⇒ 本卡零新增 skip） |
+| Security | 39935977593 | success（原始行见 `s38_ci_log_extract.txt`） |
+
+Security 侧的关键行：`扫描输入 requirements-from-lock.txt：65 个钉版条目（由 uv.lock 导出）`、
+`pip-audit：🔴 阻断 0 条 / 🟡 告警 0 条`、`[pnpm-audit] 第 1/2 次：rc=0 报告字节=310 ⇒ 判定=ran`、
+`trivy：🔴 0 / 🟡 0`、`gitleaks：✅ 未检出明文密钥`、汇总四行全 OK。
+
+### 5.2 反证批 `6ecceb6` —— **预期红**（`s38_counterproof_ci.txt`）
+Security 39937537058 **failure**，逐行正是判据要的形状：
+```
+[pip-audit] 第 1/2 次：rc=2 报告字节=0（无报告 ⇒ 这一轮没跑出结论）
+[pip-audit] 第 2/2 次：rc=2 报告字节=0（无报告 ⇒ 这一轮没跑出结论）
+[pip-audit] 判定=scanner_error ⇒ 扫描器未运行：pip-audit 连试 2 次都没有产出报告文件（最后一轮 rc=2），
+                                本维没有终判——既不是「发现漏洞」也不是「没有漏洞」
+── 四扫描器裁决 ──  pip-audit SCANNER_ERROR / pnpm-audit OK / trivy OK / gitleaks OK
+阻断 1 项 ⇒ ❌ 安全门禁未通过
+```
+同屏另外三把都"第 1 次就跑成"：报告字节 310 / 102534 / **3**。
+那个 3 字节是 gitleaks 零检出时写的 `[]`——本机与 CI 两侧同值 ⇒
+"报告存在与否"这条判据不会把"干净"误读成"没跑"，整套判定正是站在这个前提上（旧版只在注释里断言它）。
+
+### 5.3 还原批 `9b41bb1` —— 同一 head、attempt 1 三绿（`s38_restore_ci.txt`）
+Security 39938686668 success / CI 39938686645 success / CI-Windows 39938686722 success
+（`1644 passed / 666 skipped / 4 deselected`）。Security 日志里四把全部
+`第 1/2 次 … ⇒ 判定=ran`、`阻断 0 项 / 告警 4 项`、`✅ 安全门禁通过`。
+
+### 5.4 tee 那一处改动的效果（同一批顺带验的）
+helper 的 `判定=` 行与工具自己的 stderr（`WARNING:pip_audit._cli:--no-deps …`、trivy 的 vulndb 行、
+gitleaks 的 `377 commits scanned`）现在都出现在**步骤日志**里（`sec:392`、`sec:603`、`sec:731`）。
+改造前它们只进 artifact ——红的时候人在 UI 上看不到原因，这正是要修的。
+
+## 6. 收口判定（D-V18-15 的覆盖面）
+
+| 判据 | 读数 | 结论 |
+|---|---|---|
+| S38.1 Python 侧扫描输入 = 锁文件导出 | §2 表 + CI `sec:394` 的 65 条 + 常驻用例 11 | ✅ |
+| S38.1 前端侧确认扫描锁 | `pnpm install --frozen-lockfile` + `pnpm audit --prod`，输入表已写明来源是 `pnpm-lock.yaml` | ✅（现读已满足，未改造） |
+| S38.1 四道门输入表入证据 | §2 | ✅ |
+| S38.2 一次重试 + "扫描器未运行" | §5.2（CI）与 §3.1（本机）两对读数 | ✅ |
+| S38.2 反证一次、还原后三绿 | §5.2 → §5.3 | ✅ |
+| §13 阈值与豁免清单未动 | 常驻用例 12 钉住 + diff 复核（只动执行方式与注释） | ✅ |
+| 全量 0 failed / 三绿（交付 head） | §5.1 | ✅ |
+| 继承增量表 | 无 STEP-38 行 ⇒ 零项；卡面自身无增量节 ⇒ 零项 | ✅（空面，如实记） |
+
+## 7. 一条读法纪律（本卡自己踩的）
+读 CI 日志必须在 run **收敛之后**读。§5.1 那组数最终是 `1644 passed`；
+而作业仍在跑的时候同一条聚合日志里读到的是 `1631 passed`（行号也整体前移）——
+不是 job 变了，是**日志还在流式追加**。据此下"新用例没被收集"的结论会是错的，
+而它看起来完全像一份实测读数。

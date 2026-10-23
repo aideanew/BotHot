@@ -1,0 +1,20 @@
+# STEP-38 反证批（run 39937537058，head 6ecceb6）Security 关键行
+# 该行号是聚合日志内的行号；长 base64 串由探针替换为 <REDACTED:lenN>
+  sec:327  [36;1m# 没产出就重试一次，两次都没有才判"扫描器未运行"（本步 exit 0，裁决仍归末尾门禁）。[0m
+  sec:394  扫描输入 requirements-from-lock.txt：65 个钉版条目（由 uv.lock 导出）
+  sec:406  [pip-audit] 第 1/2 次：rc=2 报告字节=0（无报告 ⇒ 这一轮没跑出结论）
+  sec:419  [pip-audit] 第 2/2 次：rc=2 报告字节=0（无报告 ⇒ 这一轮没跑出结论）
+  sec:420  [pip-audit] 判定=scanner_error ⇒ 扫描器未运行：pip-audit 连试 2 次都没有产出报告文件（最后一轮 rc=2），本维**没有终判**——既不是「发现漏洞」也不是「没有漏洞」
+  sec:523  [pnpm-audit] 第 1/2 次：rc=0 报告字节=310
+  sec:524  [pnpm-audit] 判定=ran
+  sec:526  pnpm audit：🔴 阻断 0 条（critical/high） / 🟡 告警 0 条（moderate/low/info）
+  sec:539  [36;1m# P-77：一次重试 + "扫描器未运行"判定。参数一字未动（阈值与豁免面是 §13 禁止面）：[0m
+  sec:543  [36;1m# 这里用 `2>&1 | tee`（而不是旧的 `> log 2>&1`）：helper 的"判定=ran / scanner_error"[0m
+  sec:648  [trivy] 第 1/2 次：rc=0 报告字节=102534
+  sec:649  [trivy] 判定=ran
+  sec:650  trivy：🔴 阻断 0 条 / 🟡 告警 0 条
+  sec:757  [gitleaks] 第 1/2 次：rc=0 报告字节=3
+  sec:758  [gitleaks] 判定=ran
+  sec:805  ── 四扫描器裁决 ──────────────────────
+  sec:811  阻断 1 项 / 告警 3 项（详细清单见上方各步骤输出与 security-reports artifact）
+  sec:812  ❌ 安全门禁未通过：存在 1 个 🔴 阻断项——修完再合并

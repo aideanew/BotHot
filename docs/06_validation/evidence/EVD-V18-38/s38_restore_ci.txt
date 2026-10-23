@@ -1,0 +1,20 @@
+# STEP-38 还原批（run 39938686668，head 9b41bb1）Security 关键行
+  sec:391  扫描输入 requirements-from-lock.txt：65 个钉版条目（由 uv.lock 导出）
+  sec:392  [pip-audit] stderr（末 4000 字）：WARNING:pip_audit._cli:--no-deps is supported, but users are encouraged to fully hash their pinned dependencies
+  sec:396  [pip-audit] 第 1/2 次：rc=0 报告字节=3512
+  sec:397  [pip-audit] 判定=ran
+  sec:398  pip-audit：🔴 阻断 0 条（有修复版本） / 🟡 告警 0 条（无修复版本）
+  sec:501  [pnpm-audit] 第 1/2 次：rc=0 报告字节=310
+  sec:502  [pnpm-audit] 判定=ran
+  sec:504  pnpm audit：🔴 阻断 0 条（critical/high） / 🟡 告警 0 条（moderate/low/info）
+  sec:603  [trivy] stderr（末 4000 字）：2026-10-23T10:23:29Z	INFO	[vulndb] Need to update DB
+  sec:626  [trivy] 第 1/2 次：rc=0 报告字节=101802
+  sec:627  [trivy] 判定=ran
+  sec:628  trivy：🔴 阻断 0 条 / 🟡 告警 0 条
+  sec:731  [gitleaks] stderr（末 4000 字）：[90m10:23AM[0m [32mINF[0m 377 commits scanned.
+  sec:735  [gitleaks] 第 1/2 次：rc=0 报告字节=3
+  sec:736  [gitleaks] 判定=ran
+  sec:737  gitleaks：✅ 未检出明文密钥
+  sec:783  ── 四扫描器裁决 ──────────────────────
+  sec:789  阻断 0 项 / 告警 4 项（详细清单见上方各步骤输出与 security-reports artifact）
+  sec:790  ✅ 安全门禁通过：无 🔴 阻断项
