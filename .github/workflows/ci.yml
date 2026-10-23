@@ -149,9 +149,13 @@ jobs:
         run: |
           set -u
           parity_fail=0
+          # 第 2 轮修正（S34.5）：GitHub 的多行 run 用 `bash -e` 执行——`cmd; rc=$?` 会在
+          # 第一个非零任务上直接杀掉整个 shell（实测 CI run 40002594857 死在 fmt-check-backend）。
+          # `cmd || rc=$?` 在 || 列表里挂起 errexit，才能把"非零"当数据而不是当事故。
           for task in dev lint-backend guard-ports fmt-check-backend docker-ps migrate; do
-            make "$task" >/dev/null 2>&1; make_rc=$?
-            python scripts/entry.py "$task" >/dev/null 2>&1; entry_rc=$?
+            make_rc=0; entry_rc=0
+            make "$task" >/dev/null 2>&1 || make_rc=$?
+            python scripts/entry.py "$task" >/dev/null 2>&1 || entry_rc=$?
             if { [ "$make_rc" -eq 0 ] && [ "$entry_rc" -ne 0 ]; } || { [ "$make_rc" -ne 0 ] && [ "$entry_rc" -eq 0 ]; }; then
               echo "❌ $task：make=$make_rc entry=$entry_rc（零/非零不一致 ⇒ 转调绑定断了）"
               parity_fail=1

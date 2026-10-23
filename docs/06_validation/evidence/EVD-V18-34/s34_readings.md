@@ -44,6 +44,7 @@
 - 本机 @win 复算（同一循环，修完 entry 接线后）：dev 0/0、lint-backend 0/0、guard-ports 0/0、fmt-check-backend 2/1、docker-ps 2/3、migrate 2/3——六发全一致，循环 rc=0。
 - 过程抓到并修正一个真接线 bug：entry 的 scripts 工具步路径写成 `../scripts`（从 apps/api 出发不存在）⇒ lint-backend 1/2；改 `../../scripts` 并注明 cwd 必须留在 apps/api（ruff 的行宽 120 配置在那里，从仓库根跑会退回默认 88 ⇒ 假红）。
 - 常驻面：`tests/test_workflow_gate_wiring.py`（步存在、任务表 6 个齐全、零/非零比较逻辑、entry 实跑 rc=0）。
+- **第 2 轮（CI 抓出来的真 bug）**：CI run 40002594857 @a78ac81 的 backend job 死在 parity 步——GitHub 多行 `run:` 用 **`bash -e`** 执行，`make "$task" >/dev/null 2>&1; make_rc=$?` 在第一个非零任务（fmt-check-backend）上直接终止整个 shell（日志：✅×3 后 `##[error]Process completed with exit code 2`）。修法：`make_rc=0; make … || make_rc=$?`（`||` 列表挂起 errexit，把非零当数据）；本地以 `bash -e -c` 同款循环复验六发全过。教训：本机 bash 会话没开 errexit ⇒ 与 CI 不同温，这正是 cross-platform.md 强调"判据必须在目标环境跑"的原因。
 
 ## S34.6 faulthandler 转栈值 < 杀值（P-54）
 
