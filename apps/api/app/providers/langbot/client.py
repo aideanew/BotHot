@@ -87,7 +87,7 @@ class LangBotClient:
                 continue
             break
         if resp.status_code == 404:
-            raise ResourceNotFoundError(f"LangBot 资源不存在: {path}")
+            raise ResourceNotFoundError("资源不存在或无权限")
         if resp.status_code >= 500:
             raise DependencyUnavailableError(f"LangBot 5xx: {resp.status_code}")
         if resp.status_code >= 400:

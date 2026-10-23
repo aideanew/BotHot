@@ -120,10 +120,10 @@ def test_30004_single_class_and_readable_bare_id_message() -> None:
 
     err = errors_mod.ResourceNotFoundError("0f0e9d8c7b6a49388a7b6c5d4e3f2a1b")
     assert err.code == 30004 and err.http_status == 404
-    assert err.message == "资源不存在或无权限: 0f0e9d8c7b6a49388a7b6c5d4e3f2a1b"
-    # 非裸 id（可读文案）不回填前缀
+    # S37.5（D-V19-07）：message 固定文案，调用方的 id 不回显（原"裸 id 回填"机制已删）
+    assert err.message == "资源不存在或无权限"
     plain = errors_mod.ResourceNotFoundError("空间名称已存在")
-    assert plain.message == "空间名称已存在"
+    assert plain.message == "资源不存在或无权限"
 
 
 def test_validation_error_returns_envelope() -> None:
@@ -203,3 +203,23 @@ def test_wrong_method_returns_405_envelope() -> None:
     body = resp.json()
     assert body["code"] == 10005 and "detail" not in body
     assert body["requestId"] == resp.headers[REQUEST_ID_HEADER]
+
+
+def test_resource_not_found_message_never_echoes_the_caller_value() -> None:
+    """S37.5（P-111① / D-V19-07）：404 的 message 固定为可读文案，调用方给的值一律不回显。
+
+    先红口径：修前 `_BARE_ID_PATTERN` 把裸 id 回填成 `资源不存在或无权限: <id>`——
+    调用方塞进路径的任意值经此进响应与日志（与 P-62 同族）。修后：类内固定文案，
+    入参只留兼容签名、不参与 message。与 P-62/P-111① 的"值不回显"同一条纪律。
+    """
+    import secrets
+
+    import app.core.errors as errors_mod
+
+    marker = "s375" + secrets.token_hex(12)
+    err = errors_mod.ResourceNotFoundError(marker)
+    assert err.message == "资源不存在或无权限", err.message
+    assert marker not in err.message, "404 文案不得回显调用方的值"
+    # 可读文案形态同样收敛到固定文案（旧"非裸 id 不回填前缀"分支随机制一起删）
+    plain = errors_mod.ResourceNotFoundError("空间名称已存在")
+    assert plain.message == "资源不存在或无权限", plain.message

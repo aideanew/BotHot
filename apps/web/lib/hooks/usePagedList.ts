@@ -1,12 +1,15 @@
 /**
  * usePagedList —— 通用分页状态 hook（W9 D.4）
  *
- * 兼容双形状：
- * - bot/hot 域：{ items, total, page, page_size }（PageResult，page 从 1 起）
- * - 知识库/任务域：{ items, total, limit, offset }（SpaceDocsPage/JobsPage，offset 从 0 起）
+ * 响应形状（S37.3，P-96 收口）：只有**一种**——D-V3-02 目标壳
+ * `{items, total, limit, offset, page, pageSize, hasMore}`，与
+ * `apps/api/app/schemas/pagination.py` 的 `Page` 模型逐键对齐。旧两壳联合
+ * （page/page_size 与 limit/offset 两种响应）与 `isPageShape` 分支删除；
+ * hook 消费 `hasMore`（P-96 原话：此前它自己算 totalPages、目标壳新键零消费）。
  *
- * 入参 shape 决定请求参数形状（page+page_size 或 limit+offset），
- * 返回统一 page/pageSize/total/items 供 Pagination.tsx 消费。
+ * 入参 shape 决定**请求**参数形状（page+page_size 或 limit+offset——两支请求参数
+ * 是后端两类端点的现行入口契约，与响应壳是两回事），
+ * 返回统一 page/pageSize/total/items/hasMore 供 Pagination.tsx 消费。
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -21,13 +24,17 @@ export interface OffsetShape {
   offset?: number;
 }
 
-export type PagedResponse<T> =
-  | { items: T[]; total: number; page: number; page_size: number }
-  | { items: T[]; total: number; limit: number; offset: number };
+export type PageTargetUnified<T> = {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+};
 
-function isPageShape<T>(res: PagedResponse<T>): res is { items: T[]; total: number; page: number; page_size: number } {
-  return "page" in res && "page_size" in res;
-}
+export type PagedResponse<T> = PageTargetUnified<T>;
 
 export interface UsePagedListOptions<T, P> {
   /** 数据拉取函数，接收分页参数 + 额外过滤参数，返回分页响应 */
@@ -48,6 +55,8 @@ export interface UsePagedListReturn<T> {
   page: number;
   pageSize: number;
   totalPages: number;
+  /** 后端目标壳的 hasMore（D-V3-02）：还有下一页。P-96 收口后由 hook 消费。 */
+  hasMore: boolean;
   loading: boolean;
   error: string;
   setPage: (p: number) => void;
@@ -62,6 +71,7 @@ export function usePagedList<T, P extends Record<string, unknown> = Record<strin
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<T[]>([]);
   const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [tick, setTick] = useState(0);
@@ -79,7 +89,10 @@ export function usePagedList<T, P extends Record<string, unknown> = Record<strin
       const res = await opts.fetcher({ ...opts.filters, ...pagination } as P & (PageShape | OffsetShape));
       setItems(res.items ?? []);
       setTotal(res.total ?? 0);
-      if (isPageShape(res) && res.page !== page && res.page > 0) {
+      // S37.3：hasMore 由响应消费（P-96：目标壳新键此前零消费）。Boolean() 是对
+      // 尚未迁移到目标壳的旧端点的运行时兜底，类型层已是必填。
+      setHasMore(Boolean(res.hasMore));
+      if (res.page !== page && res.page > 0) {
         setPage(res.page);
       }
     } catch (e: unknown) {
@@ -108,5 +121,5 @@ export function usePagedList<T, P extends Record<string, unknown> = Record<strin
     setTick((t) => t + 1);
   }, []);
 
-  return { items, total, page, pageSize, totalPages, loading, error, setPage: goToPage, refresh };
+  return { items, total, page, pageSize, totalPages, hasMore, loading, error, setPage: goToPage, refresh };
 }

@@ -290,7 +290,7 @@ async def create_push_task(
     # 验证渠道存在
     ch = (await db.execute(select(BotChannel).where(BotChannel.id == payload.bot_channel_id))).scalar_one_or_none()
     if ch is None:
-        raise ResourceNotFoundError(f"渠道不存在: {payload.bot_channel_id}")
+        raise ResourceNotFoundError("资源不存在或无权限")
 
     # trigger_type=cron：cron_expr 必填且可解析
     next_run_at: datetime | None = None
@@ -382,7 +382,7 @@ async def update_push_task(
     """
     task = (await db.execute(select(PushTask).where(PushTask.id == task_id))).scalar_one_or_none()
     if task is None:
-        raise ResourceNotFoundError(f"推送任务不存在: {task_id}")
+        raise ResourceNotFoundError("资源不存在或无权限")
 
     need_recalc_next_run = False
 
@@ -451,7 +451,7 @@ async def delete_push_task(
     """删除推送任务（软删除：status → deleted）。"""
     task = (await db.execute(select(PushTask).where(PushTask.id == task_id))).scalar_one_or_none()
     if task is None:
-        raise ResourceNotFoundError(f"推送任务不存在: {task_id}")
+        raise ResourceNotFoundError("资源不存在或无权限")
 
     task.status = "deleted"
     task.next_run_at = None
@@ -468,7 +468,7 @@ async def run_push_task_now(
     """手动触发推送任务。"""
     task = (await db.execute(select(PushTask).where(PushTask.id == task_id))).scalar_one_or_none()
     if task is None:
-        raise ResourceNotFoundError(f"推送任务不存在: {task_id}")
+        raise ResourceNotFoundError("资源不存在或无权限")
 
     ch = (await db.execute(select(BotChannel).where(BotChannel.id == task.bot_channel_id))).scalar_one_or_none()
     if ch is None:
@@ -544,7 +544,7 @@ async def get_channel(
     """查询单个渠道详情。"""
     ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
     if ch is None:
-        raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
+        raise ResourceNotFoundError("资源不存在或无权限")
     return success(_serialize_channel(ch))
 
 
@@ -566,7 +566,7 @@ async def update_channel(
         raise ForbiddenError("修改渠道凭据（webhook_url / secret / extra_config）仅限管理员")
     ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
     if ch is None:
-        raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
+        raise ResourceNotFoundError("资源不存在或无权限")
 
     if payload.name is not None:
         name = payload.name.strip()
@@ -604,7 +604,7 @@ async def delete_channel(
     """删除渠道（软删除：status → deleted）。"""
     ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
     if ch is None:
-        raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
+        raise ResourceNotFoundError("资源不存在或无权限")
 
     ch.status = "deleted"
     await db.commit()
@@ -625,7 +625,7 @@ async def test_push(
     """向指定渠道发送测试消息。"""
     ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
     if ch is None:
-        raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
+        raise ResourceNotFoundError("资源不存在或无权限")
     if ch.status != "active":
         raise RequestInvalidError(f"渠道已禁用: {channel_id}")
 
@@ -675,9 +675,11 @@ async def test_push(
     # STEP-23（REQ-F-001 的未闭环项）：web 渠道投递成功 → 补写站内通知历史。
     # 复用调度器同一个落库函数，不在这里自己构造通知行：广播/定向判定
     # （`external_user_id` 有无）与 id 口径必须只有一处实现，否则两条路径会漂移。
-    # 放在 commit 之前 ⇒ 与 PushLog/计数同事务。⚠️ 不要读成"落库失败只回滚通知行"：
-    # `db.add(log)` 已在上面发生，`persist_web_notification` 内部的 savepoint 回滚会把**尚未 flush
-    # 的 PushLog 一并撤销**，再由 commit 重新插入 ⇒ 最终行都在，但那是"整体延后重插"不是"局部回滚"。
+    # 放在 commit 之前 ⇒ 与 PushLog/计数同事务。S37.1（P-51）按 D-V17-03 的 SQL 事件探针
+    # 实证改正旧注释：`persist_web_notification` 内部的 `begin_nested()` 在 flush 待写对象
+    # **之后**才开 savepoint ⇒ PushLog 落在 savepoint 之外，通知行回滚**不会**撤销它
+    # （EVD-V14-26 §6：SAVEPOINT 事件序）。旧文案"把尚未 flush 的 PushLog 一并撤销、
+    # 再由 commit 重新插入"与探针结果相反，据此删除。
     if ch.channel_type == "web" and result.delivered:
         await persist_web_notification(db, push_msg)
 
@@ -707,7 +709,7 @@ async def list_push_logs(
     """查询某渠道的推送日志（R3.1：分页既有，补 status 过滤）。"""
     ch = (await db.execute(select(BotChannel).where(BotChannel.id == channel_id))).scalar_one_or_none()
     if ch is None:
-        raise ResourceNotFoundError(f"渠道不存在: {channel_id}")
+        raise ResourceNotFoundError("资源不存在或无权限")
 
     q = select(PushLog).where(PushLog.bot_channel_id == channel_id)
     if status is not None:

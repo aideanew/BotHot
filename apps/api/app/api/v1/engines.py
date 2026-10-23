@@ -57,11 +57,14 @@ _DESCRIPTIONS: dict[str, str] = {
 }
 
 
-#: 切换被拒时文案里的标记词，与 `EngineReason` 一一对应（STEP-13）。前端/运维靠它和列表的 reason 对上。
+#: 切换被拒时文案里的标记词，与 `EngineReason` 一一对应（STEP-13）。
+#: S37.2（P-90）：措辞与前端 `apps/web/lib/api/engines.ts` 的 `ENGINE_REASON_TEXT`
+#: 逐值一致（同一原因在列表与切换拒绝处是同一句话），逐值比对见
+#: `tests/test_engines_capability.py::test_refusal_markers_match_the_frontend_wording`。
 REFUSAL_MARKERS: dict[EngineReason, str] = {
-    EngineReason.not_allowlisted: "未开放",
-    EngineReason.key_missing: "未配置 API Key",
-    EngineReason.not_implemented: "尚未实接",
+    EngineReason.not_allowlisted: "未开放，请联系管理员",
+    EngineReason.key_missing: "未登记 API Key",
+    EngineReason.not_implemented: "暂未接入",
 }
 
 
@@ -142,7 +145,7 @@ def assert_engine_switchable(
     reason = EngineReason(st["reason"])
     if reason is EngineReason.not_allowlisted:
         raise ForbiddenError(
-            f"引擎 {engine} {REFUSAL_MARKERS[reason]}（allowlist={_engine_allowlist(settings)}），请联系管理员"
+            f"引擎 {engine} {REFUSAL_MARKERS[reason]}（allowlist={_engine_allowlist(settings)}）"
         )
     if reason is EngineReason.key_missing:
         raise ForbiddenError(

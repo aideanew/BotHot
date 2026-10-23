@@ -109,7 +109,7 @@ async def get_hot_topic(topic_id: str, db=Depends(get_db)):
     """查询单个热点详情（含关联文章）。"""
     t = (await db.execute(select(HotTopic).where(HotTopic.id == topic_id))).scalar_one_or_none()
     if t is None:
-        raise ResourceNotFoundError(f"热点不存在: {topic_id}")
+        raise ResourceNotFoundError("资源不存在或无权限")
 
     # 查关联文章
     arts = (
@@ -250,7 +250,7 @@ async def get_daily_report(report_date: str, db=Depends(get_db)):
     """查询指定日期的日报详情。"""
     r = (await db.execute(select(DailyReport).where(DailyReport.report_date == report_date))).scalar_one_or_none()
     if r is None:
-        raise ResourceNotFoundError(f"日报不存在: {report_date}")
+        raise ResourceNotFoundError("资源不存在或无权限")
 
     return success(
         {

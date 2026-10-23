@@ -247,7 +247,7 @@ def test_r031_skeleton_engine_with_key_now_rejected_as_unimplemented() -> None:
     settings = _fully_configured_settings()
     with pytest.raises(ForbiddenError) as exc:
         assert_engine_switchable("coze", settings=settings)
-    assert "尚未实接" in str(exc.value)
+    assert "暂未接入" in str(exc.value)  # S37.2（P-90）：与前端 ENGINE_REASON_TEXT 同词
 
 
 def test_r031_rejection_reasons_layered_in_order() -> None:
@@ -261,7 +261,7 @@ def test_r031_rejection_reasons_layered_in_order() -> None:
     # 已开放但未配 Key
     with pytest.raises(ForbiddenError) as exc:
         assert_engine_switchable("dify", settings=_fully_configured_settings())
-    assert "未配置 API Key" in str(exc.value)
+    assert "未登记 API Key" in str(exc.value)  # S37.2（P-90）：同上
     # 未知引擎位（notion 按 CMS 对待，非引擎位——ADR-0004 §二）
     with pytest.raises(RequestInvalidError) as exc:
         assert_engine_switchable("notion", settings=_FakeSettings())

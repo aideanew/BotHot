@@ -129,3 +129,31 @@ def test_skeleton_surface_only_shrinks() -> None:
     """S13.1.3：骨架位 `NotImplementedError` 基线 16，只降不升（实接一家就该往下走）。"""
     src = Path(engine_port.__file__).read_text("utf-8")
     assert src.count("NotImplementedError") <= 16
+
+
+def test_refusal_markers_match_the_frontend_wording() -> None:
+    """S37.2（P-90）：后端切换拒绝的标记词与前端 `ENGINE_REASON_TEXT` 逐值一致。
+
+    同一个 `EngineReason` 在列表（前端文案表）与切换拒绝（后端标记词）里必须是同一句话。
+    前端表从 `apps/web/lib/api/engines.ts` 原文逐行解析（不复制一份到测试里——
+    复制就是第二份真相）。反证：改一侧任一词 ⇒ 本用例红。
+    """
+    import re
+    from pathlib import Path
+
+    engines_ts = (
+        Path(__file__).resolve().parents[3] / "apps" / "web" / "lib" / "api" / "engines.ts"
+    )
+    text = engines_ts.read_text(encoding="utf-8")
+    block = re.search(r"export const ENGINE_REASON_TEXT[^{]*\{(.*?)\};", text, re.DOTALL)
+    assert block, "engines.ts 里找不到 ENGINE_REASON_TEXT ⇒ 前端单一文案表被挪走了"
+    frontend: dict[str, str] = dict(re.findall(r"(\w+):\s*\"([^\"]+)\"", block.group(1)))
+    for reason in EngineReason:
+        if reason is EngineReason.ok:
+            continue
+        expected = frontend.get(reason.value)
+        assert expected, f"前端文案表缺 {reason.value}：{frontend}"
+        assert engines_api.REFUSAL_MARKERS[reason] == expected, (
+            f"{reason.value}：后端 {engines_api.REFUSAL_MARKERS[reason]!r} ≠ 前端 {expected!r}"
+            "（P-90：同一原因两套词）"
+        )

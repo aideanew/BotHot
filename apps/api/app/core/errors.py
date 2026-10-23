@@ -4,7 +4,6 @@
   1xxxx 用户/认证 | 2xxxx 采集/信息源 | 3xxxx 知识库/机器人 | 5xxxx 系统
 """
 
-import re
 
 ERROR_CODES: dict[int, str] = {
     # 1xxxx 用户/认证
@@ -186,22 +185,18 @@ class ResourceNotFoundError(AppError):
     登记名 RESOURCE_NOT_FOUND（B-T9R 起，对齐台账 v0.3c 裁决）：空间详情/任务等
     各域资源不存在统一复用本码。
 
-    message 契约（v0.4a，A 打回项）：必须可读文案、禁止裸 id——调用点若直接传
-    space_id/doc_id 等裸标识，此处统一回填"资源不存在或无权限: <id>"（code 不变，
-    仅 message 可读化，不泄露内部栈）。
+    message 契约（S37.5，D-V19-07）：**固定文案**"资源不存在或无权限"——调用方塞进
+    路径/参数的值一律不回显（P-62/P-111① 的"值不回显"纪律）。v0.4a 时代的
+    "裸 id 回填可读文案"机制（`_BARE_ID_PATTERN`）删除：回填的就是调用方的值本身。
+    入参保留只为调用点兼容，不参与 message。
     """
 
     code = 30004
     http_status = 404
 
     def __init__(self, message: str | None = None) -> None:
-        if message and _BARE_ID_PATTERN.match(message):
-            message = f"资源不存在或无权限: {message}"
-        super().__init__(message or "资源不存在或无权限")
+        super().__init__("资源不存在或无权限")
 
-
-# 裸标识形态（UUID / 纯 ASCII id 串，无空格无中文）：识别后回填可读文案
-_BARE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 
 
 class SpaceNameConflictError(AppError):

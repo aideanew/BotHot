@@ -19,8 +19,11 @@ describe("usePagedList", () => {
     const fetcher = vi.fn().mockResolvedValue({
       items: [{ id: "1" }],
       total: 30,
+      limit: 20,
+      offset: 0,
       page: 1,
-      page_size: 20,
+      pageSize: 20,
+      hasMore: true,
     });
     const { renderHook, act } = await import("@testing-library/react");
     const { result } = renderHook(() =>
@@ -30,6 +33,8 @@ describe("usePagedList", () => {
     expect(fetcher).toHaveBeenCalledWith(expect.objectContaining({ page: 1, page_size: 20 }));
     expect(result.current.items).toEqual([{ id: "1" }]);
     expect(result.current.total).toBe(30);
+    // S37.3（P-96 收口）：目标壳的 hasMore 由 hook 消费并透出，不再是零消费新键。
+    expect(result.current.hasMore).toBe(true);
   }, 20000);
 
   it("offset 形状：传 limit + offset", async () => {
@@ -39,6 +44,9 @@ describe("usePagedList", () => {
       total: 50,
       limit: 20,
       offset: 0,
+      page: 1,
+      pageSize: 20,
+      hasMore: false,
     });
     const { renderHook, act } = await import("@testing-library/react");
     const { result } = renderHook(() =>

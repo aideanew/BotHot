@@ -431,7 +431,7 @@ async def ask(
     space = await SpaceRepository(session).get_by_id(payload.spaceId)
     if space is None or space.user_id != _user_id:
         # 30004：无效 id/越权同语义（v0.4a 契约：message 必须可读文案，非裸 id）
-        raise ResourceNotFoundError(f"知识空间不存在或无权限: {payload.spaceId}")
+        raise ResourceNotFoundError("资源不存在或无权限")
     engine = str(getattr(space, "engine", "builtin") or "builtin")
     router = EngineRouter(get_settings(), langbot)
     # BE-02：引擎不可用（Key 未配/未开放）→ 403 流前信封；builtin 恒可用
