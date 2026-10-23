@@ -198,7 +198,7 @@ jobs:
           # 这条区分由"报告在不在"承担，不靠 rc。`| tee` 同上（本步有 pipefail）。
           if ! python "$GITHUB_WORKSPACE/scripts/security_scan.py" --name pip-audit \
               --report pip-audit.json --status-file pip-audit-status.json --cwd . -- \
-              pip-audit -r requirements-from-lock.txt --no-deps --no-such-flag-s38-counterproof \
+              pip-audit -r requirements-from-lock.txt --no-deps \
               --format json --output pip-audit.json \
               --progress-spinner off "${ignore_args[@]}" 2>&1 | tee pip-audit-console.log; then
             exit 0
