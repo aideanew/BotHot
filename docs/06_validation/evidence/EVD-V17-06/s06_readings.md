@@ -291,6 +291,11 @@ ProactorEventLoop 下 psycopg 直接拒（`InterfaceError: Psycopg cannot use th
 这是本队列既有的"先交付、后回填"做法，但它在 `88381e2` 这个时刻确实让卡面 §8 的
 「run id 入 EVD」不成立，独立验证者据此点了名；回填批（本提交）之后才成立。
 
+回填批自己的三绿（`0eff7bc`，含 `--set` 只许调高的加固与第 11 条判据）：
+CI 39808521965 / CI-Windows 39808522030 / Security 39808522490，三条 attempt 1 全部 success，
+@win 读数 `1598 passed / 666 skipped`、`failed=0 total_skipped=666 baseline=666`
+⇒ 新增的那条判据不连库（passed +1、skipped 不变），基线仍然是零余量的等号。
+
 ## 8. 独立验证者结论与它触发的两处改动
 
 验证者与执行者分离（卡面字段 2），只给 diff 与读数、不给意图。五项判定：

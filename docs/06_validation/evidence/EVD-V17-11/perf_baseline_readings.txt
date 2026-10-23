@@ -1,0 +1,61 @@
+# STEP-11 采集性能基线原始读数（本机 · 隔离 PG16@5547 · 2026-10-22）
+# 命令：AIDEANBOT_TEST_PG_DSN=<隔离PG> pytest -m perf tests/perf/ -q -s
+# 只剥掉 httpx/structlog 的行（它们是桩调用记录，与三个基线数字无关）；
+# PERF-* 三行与 EXPLAIN 计划全文逐字保留，未做任何四舍五入。
+
+PERF-SQL backlog=0 rows=20 calls=1 total=43 {'SAVEPOINT': 1, 'SELECT': 21, 'INSERT': 20, 'RELEASE': 1}
+.2026-10-22 23:56:04 [info     ] Manifest 同步 source=61f58825-a03b-408d-a51e-9279f495586f biz=PERFBIZ672fbb295c calls=1 gap_planned=1 pages=1 local=2000 total=1000 new=20 upd=0 same=0 skip=0 id_fallback=0
+PERF-SQL backlog=2000 rows=20 calls=1 total=43 {'SAVEPOINT': 1, 'SELECT': 21, 'INSERT': 20, 'RELEASE': 1}
+.PERF-DIFF 清单=10000 jobs=1000 命中=10000 耗时=304.9ms
+PERF-DIFF SQL: SELECT article_manifests.id, article_manifests.source_id, article_manifests.external_id, article_manifests.article_key, article_manifests.url, article_manifests.title, article_manifests.publish_time, article_manifests.content_hash, article_manifests.status, article_manifests.created_at, article_manifests.updated_at FROM article_manifests WHERE article_manifests.source_id = %(source_id_1)s::VARCHAR AND article_manifests.status = %(status_1)s::VARCHAR AND article_manifests.article_key IS NOT NULL AND (article_manifests.article_key NOT IN (SELECT content_assets.external_id FROM content_assets WHERE content_assets.source_id = %(source_id_2)s::VARCHAR AND content_assets.status = %(status_2)s::VARCHAR)) AND (article_manifests.article_key NOT IN (SELECT DISTINCT article_manifests.article_key FROM article_manifests JOIN job_items ON job_items.manifest_id = article_manifests.id WHERE job_items.job_id IN (SELECT jobs.id FROM jobs WHERE jobs.type = %(type_1)s::VARCHAR AND jobs.idempotency_key LIKE %(idempotency_key_1)s::VARCHAR AND jobs.status IN (%(status_3_1)s::VARCHAR, %(status_3_2)s::VARCHAR)) AND article_manifests.article_key IS NOT NULL)) ORDER BY article_manifests.created_at, article_manifests.id
+PERF-DIFF PLAN:
+Sort  (cost=65.41..65.42 rows=1 width=1980) (actual time=13.424..14.447 rows=10000 loops=1)
+  Sort Key: article_manifests.created_at, article_manifests.id
+  Sort Method: quicksort  Memory: 3058kB
+  Buffers: shared hit=422
+  ->  Bitmap Heap Scan on article_manifests  (cost=33.10..65.40 rows=1 width=1980) (actual time=0.699..3.724 rows=10000 loops=1)
+        Recheck Cond: ((source_id)::text = 'a37d9c56-b122-4985-adec-429ea095eea8'::text)
+        Filter: ((article_key IS NOT NULL) AND (NOT (hashed SubPlan 1)) AND (NOT (hashed SubPlan 2)) AND ((status)::text = 'DISCOVERED'::text))
+        Heap Blocks: exact=371
+        Buffers: shared hit=422
+        ->  Bitmap Index Scan on ix_article_manifests_source_id  (cost=0.00..4.34 rows=9 width=0) (actual time=0.204..0.205 rows=10000 loops=1)
+              Index Cond: ((source_id)::text = 'a37d9c56-b122-4985-adec-429ea095eea8'::text)
+              Buffers: shared hit=9
+        SubPlan 1
+          ->  Seq Scan on content_assets  (cost=0.00..0.00 rows=1 width=11) (actual time=0.006..0.007 rows=0 loops=1)
+                Filter: (((source_id)::text = 'a37d9c56-b122-4985-adec-429ea095eea8'::text) AND ((status)::text = 'READY'::text))
+        SubPlan 2
+          ->  Unique  (cost=28.74..28.75 rows=1 width=274) (actual time=0.446..0.452 rows=0 loops=1)
+                Buffers: shared hit=42
+                ->  Sort  (cost=28.74..28.75 rows=1 width=274) (actual time=0.445..0.451 rows=0 loops=1)
+                      Sort Key: article_manifests_1.article_key
+                      Sort Method: quicksort  Memory: 25kB
+                      Buffers: shared hit=42
+                      ->  Nested Loop  (cost=4.44..28.73 rows=1 width=274) (actual time=0.440..0.444 rows=0 loops=1)
+                            Buffers: shared hit=42
+                            ->  Nested Loop  (cost=4.16..12.42 rows=1 width=90) (actual time=0.439..0.442 rows=0 loops=1)
+                                  Join Filter: ((job_items.job_id)::text = (jobs.id)::text)
+                                  Buffers: shared hit=42
+                                  ->  Bitmap Heap Scan on jobs  (cost=4.16..10.86 rows=1 width=90) (actual time=0.029..0.433 rows=1 loops=1)
+                                        Recheck Cond: ((type)::text = 'sync_account'::text)
+                                        Filter: (((idempotency_key)::text ~~ 'sync_account:perf-7f1f30b07d%'::text) AND ((status)::text = ANY ('{QUEUED,RUNNING}'::text[])))
+                                        Rows Removed by Filter: 999
+                                        Heap Blocks: exact=40
+                                        Buffers: shared hit=41
+                                        ->  Bitmap Index Scan on ix_jobs_type  (cost=0.00..4.16 rows=2 width=0) (actual time=0.020..0.022 rows=1000 loops=1)
+                                              Index Cond: ((type)::text = 'sync_account'::text)
+                                              Buffers: shared hit=1
+                                  ->  Seq Scan on job_items  (cost=0.00..1.25 rows=25 width=127) (actual time=0.007..0.007 rows=0 loops=1)
+                                        Buffers: shared hit=1
+                            ->  Index Scan using article_manifests_pkey on article_manifests article_manifests_1  (cost=0.28..8.29 rows=1 width=364) (never executed)
+                                  Index Cond: ((id)::text = (job_items.manifest_id)::text)
+                                  Filter: (article_key IS NOT NULL)
+Planning Time: 0.466 ms
+Execution Time: 15.310 ms
+.2026-10-22T23:56:06.985119 [info     ] HTTP Request: GET https://mp.weixin.qq.com/s?__biz=MjM5MjgwNTQ1MQ==&mid=2651000000&idx=1&sn=perf0000 "HTTP/1.1 200 OK" [httpx]
+PERF-INGEST n=50 p50=17.7ms p95=21.1ms max=85.5ms fetches=50 预算=30000ms
+.
+============================== warnings summary ===============================
+  D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+4 passed, 1 warning in 4.93s

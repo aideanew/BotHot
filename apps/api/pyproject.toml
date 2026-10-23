@@ -60,8 +60,14 @@ ignore = ["B008"]  # FastAPI Depends 习惯
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# STEP-11：性能基线用例默认摘掉（卡面 §5「perf 标记用例，CI 不默认跑」）。
+# 为什么用 addopts 的 deselect 而不是用例内的 skip：CI-Windows 的 skip 门禁是**零余量按原因族
+# 记账**的，把"默认不跑"做成 skip 会直接多挂几条未知族红在那道门上；deselect 不进任何计数，
+# 而 `-m perf` 显式请求时才回来——命令行在 addopts 之后解析，故后者的 -m 覆盖前者（实测）。
+addopts = ["-m", "not perf"]
 markers = [
     "langbot_real: 连真实 LangBot 冒烟（需 env 凭据 LANGBOT_ADMIN_PASSWORD/EMBEDDING_API_KEY）",
+    "perf: 采集性能基线（STEP-11；默认被上面的 addopts 摘掉，跑法见 tests/perf/test_collection_perf.py 文件头）",
 ]
 
 [tool.mypy]
