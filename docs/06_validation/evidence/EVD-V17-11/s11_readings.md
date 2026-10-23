@@ -179,9 +179,8 @@ $ tasklist /FI "IMAGENAME eq postgres.exe" → 无进程
 - `entry.py evidence-check` → rc=0（含 gitleaks 全历史 `no leaks found`）。
 - 上一小节第 5 条那个 rc=3 是**同一命令在未暂存状态下的读数**，两条都留在这里：
   它们一起说明"索引为空 ⇒ 无可检面 ⇒ 不是通过"这条判据真的在起作用。
-- 三条 run id（CI / CI-Windows / Security）只能在推送后取得 ⇒ 本批交付提交内本节到此为止。
-  这与 STEP-06 被独立验证者点名的那条偏差同形，因此在这里显式标注：
-  **卡面 §8 的「run id 入 EVD」在交付提交的时刻尚未成立**，由紧随的记录批补齐并写明提交号。
+- 三条 run id 只能在推送后取得 ⇒ 交付提交 `3491054` 那一刻本节是空的（与 STEP-06 被独立
+  验证者点名的那条偏差同形，当时就显式标注过）。10-23 10:2x 复核后的实测状态见 §7.1/§7.2。
 
 ### 7.1 CI 面读数（run 39885880010，`@ci` ubuntu-latest，attempt 1 success）
 
@@ -212,9 +211,12 @@ windows 门禁：failed=0 total_skipped=666 baseline=666
 
 这补上了 §7.1 里那句"预期仍是 666"的债：**deselect 确实不进 skip 账**（`4 deselected` 与
 `total_skipped=666` 同屏出现），所以 STEP-11 不牵动 `SKIP_BASELINE_WIN`。
-补丁批 `bf141d5` 自身：CI 39887049558 success、Security 39887049562 success
-（next 升 15.5.28 后两条 BLOCK 清空）；CI-Windows 39887049522 在写这一段时仍在跑，
-其结论由后续记录批回填——不预写读数。
+补丁批 `bf141d5`（含本卡全部产物）三条全绿：CI 39887049558 success、
+Security 39887049562 success（next 升 15.5.28 后两条 BLOCK 清空）、
+CI-Windows 39887049522 success，其 `1598 passed / 666 skipped / 4 deselected` 与
+`failed=0 total_skipped=666 baseline=666` 在 10-23 10:2x 已取到原文。
+⇒ **本卡的三绿锚点是 `bf141d5`**；交付提交 `3491054` 自身缺一格绿（Security 红在 `next` 公告上），
+这一条如实记在这里，不改锚、不重跑掩盖。
 
 
 
