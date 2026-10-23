@@ -77,6 +77,27 @@
 
 本批开发期间规划方推入了三个提交（STEP-43 修 P-114 + 新登记 P-115「生产 JSON 日志无栈」、STEP-45 冻结时钟修覆盖率门红、V0.20.0 规划）。本批 rebase 到 `e862b3a` 之后全量复验：守卫相关 6 个测试文件 **103 passed**（含规划方新用例共存）、`ruff check app tests ../../scripts` 与 `mypy app ../../scripts`（132 文件）、docs 一致性、rounds-check、guard-ci-secret-mask 全绿。编号收敛：本批文档初稿曾把覆盖率门红登记为 P-115（与规划方撞号），最终以 **P-116** 为准（见 P 表与 07 记录第 7 行）。§本机全量 里那条 console 用例失败读数是 rebase 前的历史读数——规划方 STEP-43 已把 console 栈固定为纯文本不展示局部变量，rebase 后该用例在本机（rich 在场）也绿。
 
-## @ci（推送后回填）
+## @ci（推送后回填，2026-10-24 10:4x @win，Asia/Shanghai）
 
-_（占位：交付 head 三条工作流 run id 与结论、attempt 号；CI 日志里 S34.5 parity 步的 6 行输出。）_
+交付 head `1ae5633`（第 2 轮）三绿，attempt 1：
+
+| 工作流 | run id | 结论 |
+|---|---|---|
+| CI | 40004227226 | success |
+| CI-Windows | 40004227288 | success |
+| Security | 40004227468 | success |
+
+第 1 轮 head `a78ac81` 的 CI 40002594857 = **failure**（backend job 120582261529 死在 S34.5 parity 步——bash -e 问题，见 §S34.5 第 2 轮；同 run 的 CI-Windows/Security 与其余 job 均绿；该 head 未作判定基准）。
+
+**S34.5 parity 步 CI 实跑输出**（ubuntu backend job，第 1 次真实执行 make/entry 对等的 Linux 半边；全文 `s34_5_ci_parity.txt`）：
+
+```
+✅ dev：make=0 entry=0（一致）
+✅ lint-backend：make=0 entry=0（一致）
+✅ guard-ports：make=0 entry=0（一致）
+✅ fmt-check-backend：make=2 entry=1（一致）
+✅ docker-ps：make=2 entry=1（一致）
+✅ migrate：make=0 entry=0（一致）
+```
+
+完成判据对照：每条子项"改前红/假阳 → 改后正确"读数 ✅（各节）；三绿 ✅（上表）；CI 日志里 S34.5 新步与其输出 ✅（上引）；rounds-check 回放表入证 ✅（`s34_2_replay.txt`）。

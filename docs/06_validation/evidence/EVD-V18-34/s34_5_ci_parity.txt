@@ -1,0 +1,6 @@
+✅ dev：make=0 entry=0（一致）
+✅ lint-backend：make=0 entry=0（一致）
+✅ guard-ports：make=0 entry=0（一致）
+✅ fmt-check-backend：make=2 entry=1（一致）
+✅ docker-ps：make=2 entry=1（一致）
+✅ migrate：make=0 entry=0（一致）
