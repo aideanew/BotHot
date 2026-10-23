@@ -1,0 +1,44 @@
+== attempt 1（交付 push 触发）九行 ==
+  达标  100.00%  ≥ 80.0%  122/122 行  app/providers/article_sources/dajiala.py
+  达标   99.39%  ≥ 80.0%  163/164 行  app/providers/article_sources/justoneapi.py
+  达标  100.00%  ≥ 80.0%  140/140 行  app/providers/article_sources/tikhub.py
+  达标   99.42%  ≥ 80.0%  171/172 行  app/providers/article_sources/wellbyte.py
+  达标  100.00%  ≥100.0%  63/63 行  app/services/article_identity.py
+  达标   87.90%  ≥ 85.0%  305/347 行  app/services/kb.py
+  达标   95.22%  ≥ 85.0%  219/230 行  app/services/manifest.py
+  达标   88.11%  ≥ 85.0%  363/412 行  app/services/subscription.py
+  达标   88.56%  ≥ 79.0%  TOTAL
+✅ 全部模块与全局达标
+== attempt 2（rerun）九行 ==
+  达标  100.00%  ≥ 80.0%  122/122 行  app/providers/article_sources/dajiala.py
+  达标   99.39%  ≥ 80.0%  163/164 行  app/providers/article_sources/justoneapi.py
+  达标  100.00%  ≥ 80.0%  140/140 行  app/providers/article_sources/tikhub.py
+  达标   99.42%  ≥ 80.0%  171/172 行  app/providers/article_sources/wellbyte.py
+  达标  100.00%  ≥100.0%  63/63 行  app/services/article_identity.py
+  达标   87.90%  ≥ 85.0%  305/347 行  app/services/kb.py
+  达标   95.22%  ≥ 85.0%  219/230 行  app/services/manifest.py
+  达标   88.11%  ≥ 85.0%  363/412 行  app/services/subscription.py
+  达标   88.58%  ≥ 79.0%  TOTAL
+✅ 全部模块与全局达标
+== attempt 3（rerun）九行 ==
+  达标  100.00%  ≥ 80.0%  122/122 行  app/providers/article_sources/dajiala.py
+  达标   99.39%  ≥ 80.0%  163/164 行  app/providers/article_sources/justoneapi.py
+  达标  100.00%  ≥ 80.0%  140/140 行  app/providers/article_sources/tikhub.py
+  达标   99.42%  ≥ 80.0%  171/172 行  app/providers/article_sources/wellbyte.py
+  达标  100.00%  ≥100.0%  63/63 行  app/services/article_identity.py
+  达标   87.90%  ≥ 85.0%  305/347 行  app/services/kb.py
+  达标   95.22%  ≥ 85.0%  219/230 行  app/services/manifest.py
+  达标   88.11%  ≥ 85.0%  363/412 行  app/services/subscription.py
+  达标   88.59%  ≥ 79.0%  TOTAL
+✅ 全部模块与全局达标
+
+== 三份逐字对照（diff attempt1 vs attempt2 vs attempt3）==
+!! 三份存在差异：
+9c9
+<   达标   88.56%  ≥ 79.0%  TOTAL
+---
+>   达标   88.58%  ≥ 79.0%  TOTAL
+9c9
+<   达标   88.58%  ≥ 79.0%  TOTAL
+---
+>   达标   88.59%  ≥ 79.0%  TOTAL

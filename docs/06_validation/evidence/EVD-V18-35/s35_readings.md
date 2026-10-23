@@ -110,6 +110,39 @@
    三连跑九行对照原文：`s35_1_threerun.txt`（attempt 2/3 九行已逐字相同——
    这两 attempt 恰好都落在门关侧；attempt 1 在另一时刻 ⇒ 暴露出 scheduler 漂移）。
 
-## @ci（推送后回填）
+## @ci（推送后回填，2026-10-24 13:4x @win，Asia/Shanghai）
+
+**交付 head `e96f65a`（第 2 轮第 3 分片）三绿，attempt 1**：
+
+| 工作流 | run id | 结论 |
+|---|---|---|
+| CI | 40019155173 | success |
+| CI-Windows | 40019155387 | success（skip 门禁 `673/673` 过） |
+| Security | 40019155373 | success |
+
+模块门九行（本 run 现读）：dajiala 122/122、justoneapi 163/164、tikhub 140/140、wellbyte 171/172、
+article_identity 63/63、kb 305/347、**manifest 219/230**、**subscription 363/412（88.11%）**、TOTAL 88.56%。
+**S35.2 判据达成：subscription CI 余量 = 363 − 351 = 12 行 ≥ 5**（基线 353/余量 2 → 现 363/余量 12；
++10 = list_sources total 分支 + update_source 全身）。
+全量：2356 passed / 6 skipped（ubuntu 连库真实执行）/ 4 deselected。
+
+完成判据对照：
+- 连跑 3 次模块门读数相等——**收口判定**：修后交付头 `e96f65a` 同树三次 attempt
+  （run 40019155173 attempts 1/2/3，原文 `s35_1_postfix_threerun.txt`）：**八行跟踪模块逐字相同**
+  （manifest 219/230 三跑全同——S35.1 的对象已钉死；subscription 363/412 稳定）；TOTAL 三值
+  88.56/88.58/88.59，差分定位到两个**非跟踪模块**的时序分支（job_worker.py:192-201、
+  scheduler.py:147-148/444-445）⇒ 登记 **P-117** 交规划方裁定（逐点钉死成本递增，或 TOTAL 行按
+  容差读）。「TOTAL 行逐字相同」这一子句未在本卡达成，如实记录，不写"通过"。
+- vitest ECONNREFUSED 计数 0、415 全绿 ✅（§S35.4）。
+- 三绿 ✅（上表）。
+
+## @ci 过程读数（第 1、2 轮的失败账，如实留档）
+
+| head | run | 结果 | 原因与处置 |
+|---|---|---|---|
+| 83a2606（第 1 轮） | CI 40010753485 ✅ / CI-Windows 40010753538 ❌ / Security 40010753493 ✅ | CI-Windows 红 | skip 门禁 669>666：漏抬基线 → 第 2 轮抬到 669 |
+| 891a897（第 2 轮分片 1） | CI 40014623059 ❌ / CI-Windows 40014623069 ❌ | 双红 | ①门关侧用例断言全表无同形键，被门开侧那发的真实 Job 打红；②同批 4 条 scheduler 连库用例又 +4 skip。→ 清场 + 计数不变判据 + 基线 673 |
+| c8fa2e0（第 2 轮分片 2） | CI 40017598228 ❌ | 红 | 修复脚本在 B 块断言处夭折 ⇒ A 块清场未落盘，daily_report 漏进 w2_worker 队列 → 第 3 分片补清场 |
+| e96f65a（第 2 轮分片 3） | **三绿** | ✅ | 本表 |
 
 _（占位：交付 head 三绿 run id；subscription.py 模块门行（余量行数）；S35.1 的三次派发跑九行对照；S35.3 调度器用例与 S35.2 三发 @ci 实跑读数。）_
