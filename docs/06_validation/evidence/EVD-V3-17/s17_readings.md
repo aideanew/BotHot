@@ -130,7 +130,22 @@ docs/02_requirements/constraints/    REQ-C-001-tech-stack.md
    §2 才是未决表 ⇒ 按内容落进 §2（行号/节号漂移本身也是这类卡要抓的东西）。
 2. `AGENTS.md` 第 3 处（测试状态行）超出"矛盾两处"字面，但属卡面明确允许的「状态行」。
 
-## 5. CI 三绿（推送后回填）
+## 5. CI 三绿（交付提交 `8de3a1a`，父提交 `bf141d5`）
 
-本卡交付提交内本节到「已推送、读数待回填」为止（与 STEP-06 被点名的那条偏差同形，
-在此显式声明而非留空）。
+三条检查 attempt 1 全部 success，且 CI 的五个 job 逐个绿：
+
+| 检查 | run id | 结论 | job 明细 |
+|---|---|---|---|
+| CI（ubuntu） | 39888995918 | success | `workflow-lint` / `frontend` / `compose` / `backend` / `compose-smoke` 五个 job 全 success |
+| CI-Windows | 39888995944 | success | `windows-dev` success（skip 门禁 `failed=0 total_skipped=666 baseline=666`，未知族 0） |
+| Security | 39888995921 | success | 四扫描器无 BLOCK（`next` 升 15.5.28 后 pnpm-audit 与 trivy 清空） |
+
+原始面按 D-V6-02 存证在本目录的 `ci_rest_runs_8de3a1a.json`（REST `runs/{id}` + `/jobs` 的
+身份与结论字段，含 `head_sha`），不是"只抄 run 号"。
+
+本卡是纯文档 + 一处 docstring：CI 的 `backend` job 绿同时说明
+`admin.py` 的注释改动没有碰行为（ruff/mypy 也在那一步里）；`frontend` job 绿说明
+拆分子文件没有打断任何文档链接引用面。
+
+卡面 §8 的「run id 入 EVD」到这一节才成立——交付提交时刻本节只有一句"待回填"的声明，
+这一点在 STEP-06 被独立验证者点过名，本卡同样如实标注而非事后抹平。

@@ -1,0 +1,110 @@
+# D-V6-02 原始响应摘录：GET /repos/aideanew/BotHot/actions/runs/{id} 与 /jobs
+# 取数时间 2026-10-23（Asia/Shanghai），取数面 = GitHub REST（本机无 gh，按 D-V4-04 不安装）。
+# 只保留身份与结论字段（id/name/head_branch/head_sha/status/conclusion/时间戳/jobs 结论），
+# 因为「只抄 run 号不算」这条判据要的是可核对的原始面，不是完整 payload。
+[
+ {
+  "id": 39888995918,
+  "name": "CI",
+  "head_branch": "main",
+  "head_sha": "8de3a1a73a535e51ff079870a94810c53ba8e0ac",
+  "run_number": 269,
+  "event": "push",
+  "status": "completed",
+  "conclusion": "success",
+  "created_at": "2026-10-23T02:20:06Z",
+  "updated_at": "2026-10-23T02:35:59Z",
+  "run_started_at": "2026-10-23T02:20:06Z",
+  "html_url": "https://github.com/aideanew/BotHot/actions/runs/39888995918",
+  "jobs": [
+   {
+    "name": "workflow-lint",
+    "status": "completed",
+    "conclusion": "success",
+    "runner": "GitHub Actions 1000002331",
+    "started_at": "2026-10-23T02:20:08Z",
+    "completed_at": "2026-10-23T02:20:17Z"
+   },
+   {
+    "name": "frontend",
+    "status": "completed",
+    "conclusion": "success",
+    "runner": "GitHub Actions 1000002334",
+    "started_at": "2026-10-23T02:20:08Z",
+    "completed_at": "2026-10-23T02:32:22Z"
+   },
+   {
+    "name": "compose",
+    "status": "completed",
+    "conclusion": "success",
+    "runner": "GitHub Actions 1000002337",
+    "started_at": "2026-10-23T02:20:08Z",
+    "completed_at": "2026-10-23T02:20:17Z"
+   },
+   {
+    "name": "backend",
+    "status": "completed",
+    "conclusion": "success",
+    "runner": "GitHub Actions 1000002335",
+    "started_at": "2026-10-23T02:20:08Z",
+    "completed_at": "2026-10-23T02:24:50Z"
+   },
+   {
+    "name": "compose-smoke",
+    "status": "completed",
+    "conclusion": "success",
+    "runner": "GitHub Actions 1000002336",
+    "started_at": "2026-10-23T02:20:08Z",
+    "completed_at": "2026-10-23T02:35:58Z"
+   }
+  ]
+ },
+ {
+  "id": 39888995944,
+  "name": "CI-Windows",
+  "head_branch": "main",
+  "head_sha": "8de3a1a73a535e51ff079870a94810c53ba8e0ac",
+  "run_number": 171,
+  "event": "push",
+  "status": "completed",
+  "conclusion": "success",
+  "created_at": "2026-10-23T02:20:06Z",
+  "updated_at": "2026-10-23T02:41:02Z",
+  "run_started_at": "2026-10-23T02:20:06Z",
+  "html_url": "https://github.com/aideanew/BotHot/actions/runs/39888995944",
+  "jobs": [
+   {
+    "name": "windows-dev",
+    "status": "completed",
+    "conclusion": "success",
+    "runner": "GitHub Actions 1000002333",
+    "started_at": "2026-10-23T02:20:08Z",
+    "completed_at": "2026-10-23T02:41:02Z"
+   }
+  ]
+ },
+ {
+  "id": 39888995921,
+  "name": "Security",
+  "head_branch": "main",
+  "head_sha": "8de3a1a73a535e51ff079870a94810c53ba8e0ac",
+  "run_number": 264,
+  "event": "push",
+  "status": "completed",
+  "conclusion": "success",
+  "created_at": "2026-10-23T02:20:06Z",
+  "updated_at": "2026-10-23T02:21:24Z",
+  "run_started_at": "2026-10-23T02:20:06Z",
+  "html_url": "https://github.com/aideanew/BotHot/actions/runs/39888995921",
+  "jobs": [
+   {
+    "name": "安全扫描（① pip-audit / ② pnpm audit / ③ trivy / ④ gitleaks）",
+    "status": "completed",
+    "conclusion": "success",
+    "runner": "GitHub Actions 1000002332",
+    "started_at": "2026-10-23T02:20:08Z",
+    "completed_at": "2026-10-23T02:21:23Z"
+   }
+  ]
+ }
+]
