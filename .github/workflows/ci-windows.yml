@@ -122,7 +122,10 @@ jobs:
       # （未知族 0）。+3 全部是 STEP-35 新增的连库用例（`tests/test_p2_subscription.py` 的
       # list_sources/update_source 三发，PG-DSN-未设置 族 557→560；同卡的调度器并行用例是改写
       # 非新增，不进账）。实测于本 run 的门禁输出，按 D-V10-11 抬到测量值，不留余量。
-      SKIP_BASELINE_WIN: "669"
+      # **本档 673 的锚** = run 40014623069 @891a897：门禁读数 `failed=0 total_skipped=673 baseline=669`。
+      # +4 全部是 STEP-35 第 2 轮新增的连库用例（`tests/test_scheduler.py`：每日入队门开/门关
+      # 两态 + reconcile 有/无文档两态；实测于该 run 门禁输出），照例不留余量。
+      SKIP_BASELINE_WIN: "673"
     defaults:
       run:
         shell: bash

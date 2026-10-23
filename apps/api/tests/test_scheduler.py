@@ -845,18 +845,27 @@ async def test_daily_jobs_skip_before_0630_with_frozen_clock(
     engine, factory = _factory()
     try:
         sched = _scheduler(factory, _Clock(datetime(2026, 9, 22, 12, 0, tzinfo=UTC)), _StubRunner())
-        await sched._maybe_enqueue_daily_jobs()
-        assert sched._last_daily_date is None and sched._last_cluster_date is None
         async with factory() as session:
-            keys = set(
+            before = set(
                 (
                     await session.scalars(
                         select(Job.idempotency_key).where(Job.type.in_(["daily_report", "hot_cluster"]))
                     )
                 ).all()
             )
-        leaked = [k for k in keys if k.startswith(("daily_report:", "hot_cluster:"))]
-        assert not leaked, f"门关侧不得入队：{leaked}"
+        await sched._maybe_enqueue_daily_jobs()
+        assert sched._last_daily_date is None and sched._last_cluster_date is None
+        # 门关侧的判据是"计数不变"而非"全表无这批键"：同一份 PG 里，门开侧那发（或任何
+        # 其它用例）可能留有同形键——本发只断言自己没有新增（run 40014623059 的实测教训）。
+        async with factory() as session:
+            after = set(
+                (
+                    await session.scalars(
+                        select(Job.idempotency_key).where(Job.type.in_(["daily_report", "hot_cluster"]))
+                    )
+                ).all()
+            )
+        assert after == before, f"门关侧不得入队：新增 {sorted(after - before)}"
     finally:
         await engine.dispose()
 
