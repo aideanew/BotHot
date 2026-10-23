@@ -173,6 +173,10 @@ guard-structure: ## 检查目录结构是否完整
 guard-versions: ## 检查版本锚点一致性（fail-closed）
 	@$(GUARDS) guard-versions
 
+.PHONY: guard-ci-secret-mask
+guard-ci-secret-mask: ## CI 现场生成的密钥写进 GITHUB_ENV 前必须先 add-mask（P-107）
+	@$(GUARDS) guard-ci-secret-mask
+
 # ─── 证据门禁（STEP-00R S0R.4.1）────────────────────────────────
 .PHONY: evidence-check
 evidence-check: ## 复跑仓库内全部 stdlib 证据证明（不装依赖、不起服务）
@@ -187,7 +191,7 @@ rounds-check: ## D-14 轮次熔断：同一卡在第 3 轮返工即红（阈值 
 # 用前置目标的既有写法（同 `test:`/`lint:`），本体不重复执行。
 # 任一子门非 0 即失败——含 evidence-check 的 rc=3「工具缺席」态，那不是通过。
 .PHONY: guard
-guard: guard-ports guard-structure guard-versions rounds-check evidence-check ## 全部架构/证据/治理门
+guard: guard-ports guard-structure guard-versions rounds-check evidence-check guard-ci-secret-mask ## 全部架构/证据/治理门
 	@:  # 由前置目标转调，本体不重复执行
 
 # ─── 清理 ───────────────────────────────────────────

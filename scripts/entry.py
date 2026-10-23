@@ -445,12 +445,14 @@ add("dev", "前后端一起起的说明（两个终端各起一个）", [print_d
 add("clean", "清理构建产物（跨平台，不用 rm -rf）", [clean_tree])
 for _t, _d in (("guard-ports", "端口守卫"), ("guard-versions", "版本锚守卫"),
                ("guard-structure", "目录结构守卫"), ("evidence-check", "stdlib 证据复跑"),
-               ("rounds-check", "D-14 轮次熔断")):
+               ("rounds-check", "D-14 轮次熔断"),
+               ("guard-ci-secret-mask", "CI 生成值写 $GITHUB_ENV 必须先掩码")):
     add(_t, f"{_d}（实体在 guards.py）", [guard(_t)])
 # 聚合门（04 §8 完成定义引用的 `make guard`）。必须是复合目标：
 # check_entry_parity 要求 Makefile 每个目标名都在 BY_NAME 里，漏注册就是红。
 add("guard", "全部架构/证据/治理门", composite=("guard-ports", "guard-structure",
-                                              "guard-versions", "rounds-check", "evidence-check"))
+                                              "guard-versions", "rounds-check", "evidence-check",
+                                              "guard-ci-secret-mask"))
 # 刻意不进 `guard` 复合目标：它吃的是 pytest 刚产出的 coverage.json，
 # 没有那次运行就没有输入——放进聚合门只会让每次都多一个 rc=2，反而把"缺输入"这件事喊废。
 add("coverage-gate", "模块覆盖率门（先跑 `--cov=app --cov-report=json`；实体在 check_module_coverage.py）",

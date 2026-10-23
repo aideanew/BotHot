@@ -20,6 +20,11 @@ dependencies = [
     "prometheus-client>=0.21.0",
     # SPEC-M3 批次 3 / T5.4：engine_key_registrations 的 AES-256-GCM 落库加密
     "cryptography>=43.0.0",
+    # P-106 / D-V18-04：业务日界固定为 Asia/Shanghai，`zoneinfo` 必须取得到时区数据。
+    # 此前只有 psycopg 在 win32 上带它（uv.lock 里 marker = sys_platform == 'win32'），
+    # Linux 运行镜像靠基础镜像碰巧有 /usr/share/zoneinfo——上游哪天剥掉，后端在 import 期
+    # 整体起不来。显式声明、不带平台标记，是本卡唯一真正生效的修法（uv.lock 不被任何运行面消费）。
+    "tzdata",
 ]
 
 [project.optional-dependencies]

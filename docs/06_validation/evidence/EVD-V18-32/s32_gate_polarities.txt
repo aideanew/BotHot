@@ -1,0 +1,27 @@
+guard-ci-secret-mask 极性读数
+基线：HEAD=73b9fa6  工作树=交付前
+python=3.12.10
+
+A 修复前形状（git show HEAD:ci.yml，卡面 §6 锚 :472-473）             违规=2
+        · ci.yml 第 472 行「Generate ephemeral master keys」：把 $(...) 直接写进 $GITHUB_ENV：生成值在 mask 之前就已成形，同一步内无法先掩码 ⇒ 改成 赋值 → ::add-mask:: → 再写
+        · ci.yml 第 473 行「Generate ephemeral master keys」：把 $(...) 直接写进 $GITHUB_ENV：生成值在 mask 之前就已成形，同一步内无法先掩码 ⇒ 改成 赋值 → ::add-mask:: → 再写
+B 修复后（交付工作树 ci.yml）                                        违规=0
+C 卡面反证：删掉两行 ::add-mask::                                   违规=2
+        · ci.yml 第 481 行「Generate ephemeral master keys」：写入 $GITHUB_ENV 的生成值 push_master_key 在同一步内先前没有 ::add-mask::（P-107）
+        · ci.yml 第 483 行「Generate ephemeral master keys」：写入 $GITHUB_ENV 的生成值 engine_master_key 在同一步内先前没有 ::add-mask::（P-107）
+D 顺序颠倒：写入在前、掩码在后                                           违规=1
+        · ci.yml 第 482 行「Generate ephemeral master keys」：写入 $GITHUB_ENV 的生成值 push_master_key 在同一步内先前没有 ::add-mask::（P-107）
+E 注释伪装掩码（说明文字不得改变结论）                                       违规=1
+        · synthetic 第 8 行「step1」：写入 $GITHUB_ENV 的生成值 x 在同一步内先前没有 ::add-mask::（P-107）
+F 跨步安全形（上一步生成+掩码，本步写入）                                     违规=0
+G 假阳控制面（常量 / ${{ }} / $PWD 写入）                             违规=0
+
+门实跑（真仓库）rc=0，stdout 原文：
+guard-ci-secret-mask：扫 D:\Code\AideanBotHot\.github\workflows 下 3 个工作流 / 55 个 run 步，其中 2 行写 $GITHUB_ENV
+✅ guard-ci-secret-mask：所有写入 $GITHUB_ENV 的生成值都在同一步内先掩码
+
+行数核对：grep -c 'add-mask' ci.yml = 3（其中 1 处是 :479 注释行）
+全仓 GITHUB_ENV 写入面（只打印行，值不在此类行里）：
+   .github/workflows/ci.yml:479:          # 生成的密钥必须先 ::add-mask:: 再写 $GITHUB_ENV（P-107 / D-V18-03）：
+   .github/workflows/ci.yml:483:          echo "PUSH_SECRET_MASTER_KEY=$push_master_key" >> "$GITHUB_ENV"
+   .github/workflows/ci.yml:486:          echo "ENGINE_KEY_MASTER_KEY=$engine_master_key" >> "$GITHUB_ENV"

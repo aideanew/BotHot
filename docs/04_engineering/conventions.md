@@ -185,6 +185,11 @@ docs(architecture): 更新系统架构设计文档
    文档侧的对应规范条文在 §6.1（AK/SK 只走环境变量）。**一次性生成的凭据同样是凭据**——
    `compose-smoke` 那一步会打印它自己 `os.urandom(32)` 出来的两把临时主密钥，抄进 EVD 就是把
    "它当时能解开那些行"这件事永久写进仓库（这条的完整处置见台账 §4 P-107）。
+   同一把钥匙在 CI 自己那边也要掩码：**凡工作流里现场生成的值要写进 `$GITHUB_ENV`，
+   必须先 `echo "::add-mask::$变量"` 再写**（顺序颠倒等于没掩，掩别的变量也等于没掩），
+   执行面是 `scripts/guards.py` 的 `guard-ci-secret-mask`，接线在 `make guard`、
+   `entry.py guard` 与 CI 的 Governance 步；越线时点名"文件 + 步骤 + 行号"并 rc=1，
+   没有可检面时 rc=3（按 §4.3 的口径，那同样不是通过）。
 
 ## 5. 依赖管理
 

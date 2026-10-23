@@ -1231,9 +1231,164 @@ def _venv_script(name: str) -> str | None:
     return str(base) if base.exists() else None
 
 
+# ─── STEP-32 S32.2：CI 生成值写 $GITHUB_ENV 必须先 ::add-mask::（P-107 / D-V18-03）───
+
+WORKFLOW_DIR = ROOT / ".github" / "workflows"
+
+# `run: |` / `run: |-` / `run: >-` 块标量，以及 `run: 单行命令`
+_RUN_KEY_RE = re.compile(r"^(?P<indent> *)-?\s*run:\s*(?P<style>[|>][-+]?)?\s*(?P<inline>.*)$")
+# `var=$(...)`（允许 local/export 前缀、允许等号后立刻引号）——"这一步自己生成的值"的唯一来源
+_GEN_ASSIGN_RE = re.compile(r"^\s*(?:local\s+|export\s+)?(?P<var>\w+)\s*=\s*[\"']?\$\(")
+# `var=$other`（整体复制，不带运算）——生成值换个名字继续走
+_COPY_ASSIGN_RE = re.compile(r"^\s*(?:local\s+|export\s+)?(?P<dst>\w+)\s*=\s*[\"']?\$\{?(?P<src>\w+)\}?[\"']?\s*$")
+# `>> "$GITHUB_ENV"` 与 `>>$GITHUB_ENV`（写入动作；`=` 号左边是环境变量名，不是 shell 变量）
+_ENV_SINK_RE = re.compile(r">>?\s*[\"']?\$\{?GITHUB_ENV\b")
+_SHELL_VAR_RE = re.compile(r"\$(?!\{)(?P<name>[A-Za-z_]\w*)|\$\{(?P<braced>[A-Za-z_]\w*)\}")
+
+
+def _workflow_step_bodies(text: str) -> list[tuple[str, list[tuple[int, str]]]]:
+    """把一个 workflow 文件切成「步骤 → run 正文行」。
+
+    返回 [(步骤名, [(文件内 1 起行号, 原文)])]。用缩进而不是 yaml 解析器：
+    `pyyaml` 没在主依赖里声明（现读 `apps/api/pyproject.toml`），而守卫必须能在
+    未装依赖的机器上跑——`make guard` 的前置条件不能是"先 uv sync"。
+    """
+    lines = text.splitlines()
+    steps: list[tuple[str, list[tuple[int, str]]]] = []
+    current_name = ""
+    step_no = 0
+    idx = 0
+    while idx < len(lines):
+        line = lines[idx]
+        name_m = re.match(r"^\s*-?\s*name:\s*(.+?)\s*$", line)
+        if name_m and not name_m.group(1).startswith(("|", ">")):
+            current_name = name_m.group(1).strip("'\"")
+        run_m = _RUN_KEY_RE.match(line)
+        if not run_m:
+            idx += 1
+            continue
+        step_no += 1
+        key_indent = len(run_m.group("indent"))
+        body: list[tuple[int, str]] = []
+        if run_m.group("style"):
+            idx += 1
+            while idx < len(lines):
+                raw = lines[idx]
+                if raw.strip() == "":
+                    body.append((idx + 1, ""))
+                    idx += 1
+                    continue
+                if len(raw) - len(raw.lstrip(" ")) <= key_indent:
+                    break
+                body.append((idx + 1, raw.strip()))
+                idx += 1
+        else:
+            inline = run_m.group("inline").strip()
+            if inline:
+                body.append((idx + 1, inline))
+            idx += 1
+        label = current_name or f"第 {step_no} 步（无 name）"
+        steps.append((label, body))
+    return steps
+
+
+def _masked_vars_in(body_line: str) -> set[str]:
+    """`echo "::add-mask::$x"` / `::add-mask::${x}` 里被登记为掩码的 shell 变量名。"""
+    if "::add-mask::" not in body_line:
+        return set()
+    tail = body_line.split("::add-mask::", 1)[1]
+    return {m.group("name") or m.group("braced") for m in _SHELL_VAR_RE.finditer(tail)}
+
+
+def _written_vars(body_line: str) -> set[str]:
+    """写 `$GITHUB_ENV` 那一行里被内插的 shell 变量名（排除 `$GITHUB_ENV` 本身）。"""
+    out = set()
+    for m in _SHELL_VAR_RE.finditer(body_line):
+        name = m.group("name") or m.group("braced")
+        if name != "GITHUB_ENV":
+            out.add(name)
+    return out
+
+
+def ci_mask_violations(text: str, rel: str) -> list[dict[str, object]]:
+    """纯函数：一个 workflow 文本 ⇒ 违规清单（空 = 通过）。测试喂合成输入用这一层。
+
+    刻意不追的三种形状（追了就会把正确写法误判成红，且超出卡面 D-V18-03 的口径）：
+    `${{ }}` 上下文表达式（不是 shell 变量）、生成值经第三层以上的复制、跨步骤的写入。
+    跨步这一条有代价："上一步掩码、本步写入"确实是安全形状（掩码在整个 job 内有效），
+    但"上一步生成、全程没掩、下一步才写"本门看不到——已登记台账 P-109 交规划方裁定。
+    """
+    found: list[dict[str, object]] = []
+    for label, body in _workflow_step_bodies(text):
+        generated: set[str] = set()
+        masked: set[str] = set()
+        for line_no, line in body:
+            # 注释先跳过，再谈掩码：注释里的 `::add-mask::$x` 不会真的登记掩码，
+            # 让它算数就等于把门的判据交给一句说明文字（自洗判据的形状）。
+            if line.startswith("#"):
+                continue
+            if "::add-mask::" in line:
+                masked |= _masked_vars_in(line)
+                continue
+            gen_m = _GEN_ASSIGN_RE.match(line)
+            if gen_m:
+                generated.add(gen_m.group("var"))
+                continue
+            copy_m = _COPY_ASSIGN_RE.match(line)
+            if copy_m and copy_m.group("src") in generated:
+                generated.add(copy_m.group("dst"))
+                continue
+            if not _ENV_SINK_RE.search(line):
+                continue
+            if "$(" in line:
+                found.append({"file": rel, "step": label, "line": line_no,
+                              "why": "把 $(...) 直接写进 $GITHUB_ENV：生成值在 mask 之前就已成形，"
+                                     "同一步内无法先掩码 ⇒ 改成 赋值 → ::add-mask:: → 再写"})
+                continue
+            leaked = sorted(v for v in _written_vars(line) if v in generated and v not in masked)
+            if leaked:
+                found.append({"file": rel, "step": label, "line": line_no,
+                              "why": f"写入 $GITHUB_ENV 的生成值 {', '.join(leaked)} 在同一步内"
+                                     f"先前没有 ::add-mask::（P-107）"})
+    return found
+
+
+def guard_ci_secret_mask() -> int:
+    """S32.2：凡往 `$GITHUB_ENV` 写入本步生成的值，同一步内必须先 `::add-mask::`。"""
+    files = sorted(p for p in WORKFLOW_DIR.glob("*.y*ml") if p.is_file()) if WORKFLOW_DIR.is_dir() else []
+    if not files:
+        print(f"⚠️  guard-ci-secret-mask：{WORKFLOW_DIR} 下没有任何 workflow 文件 ⇒ 什么都没看，"
+              "**这不是通过**（rc=3）", flush=True)
+        return 3
+    violations: list[dict[str, object]] = []
+    scanned_steps = 0
+    scanned_env_writes = 0
+    for path in files:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        rel = path.name  # 工作流全在一个目录里，文件名即唯一标识（点名时前面已给出扫描目录）
+        violations += ci_mask_violations(text, rel)
+        for _, body in _workflow_step_bodies(text):
+            scanned_steps += 1
+            scanned_env_writes += sum(1 for _, line in body if _ENV_SINK_RE.search(line) and not line.startswith("#"))
+    print(f"guard-ci-secret-mask：扫 {WORKFLOW_DIR} 下 {len(files)} 个工作流 / "
+          f"{scanned_steps} 个 run 步，其中 {scanned_env_writes} 行写 $GITHUB_ENV", flush=True)
+    if scanned_env_writes == 0:
+        # 判据本身没有可检面（例如 $GITHUB_ENV 写法被整体换掉）。零违规在这里不等于安全。
+        print("⚠️  guard-ci-secret-mask：本轮没有任何 $GITHUB_ENV 写入面 ⇒ 判据未被检验，"
+              "**这不是通过**（rc=3）", flush=True)
+        return 3
+    for item in violations:
+        print(f"❌ {item['file']} 步骤「{item['step']}」第 {item['line']} 行：{item['why']}", flush=True)
+    if violations:
+        return 1
+    print("✅ guard-ci-secret-mask：所有写入 $GITHUB_ENV 的生成值都在同一步内先掩码", flush=True)
+    return 0
+
+
 GUARDS = {"guard-ports": guard_ports, "guard-versions": guard_versions,
           "guard-structure": guard_structure, "evidence-check": evidence_check,
-          "rounds-check": rounds_check}
+          "rounds-check": rounds_check,
+          "guard-ci-secret-mask": guard_ci_secret_mask}
 # 只有这两道门需要基线（其余门看的是仓库现状，与"这一批改了什么"无关）
 BASE_AWARE = ("evidence-check", "rounds-check")
 DEFAULT_BASE = "origin/main"

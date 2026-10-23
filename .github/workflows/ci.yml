@@ -257,10 +257,17 @@ jobs:
           rc_evidence=0
           python "$GITHUB_WORKSPACE/scripts/guards.py" rounds-check --base "$base" || rc_rounds=$?
           python "$GITHUB_WORKSPACE/scripts/guards.py" evidence-check --base "$base" || rc_evidence=$?
+          rc_ci_mask=0
+          python "$GITHUB_WORKSPACE/scripts/guards.py" guard-ci-secret-mask || rc_ci_mask=$?
           echo "rounds-check rc=$rc_rounds / evidence-check rc=$rc_evidence"
+          echo "guard-ci-secret-mask rc=$rc_ci_mask"
           # rc=3 是「这一维没有可检面」，不是通过（D-V12-04）⇒ 与 rc=1 同样判失败。
           if [ "$rc_rounds" -ne 0 ] || [ "$rc_evidence" -ne 0 ]; then
             echo "❌ 治理门未通过（rc 非 0 一律失败，含第三态 3）"
+            exit 1
+          fi
+          if [ "$rc_ci_mask" -ne 0 ]; then
+            echo "❌ CI 生成值掩码门未通过（rc 非 0 一律失败，含第三态 3）"
             exit 1
           fi
           echo "✅ 治理门通过"
@@ -469,8 +476,14 @@ jobs:
         run: docker compose -f docker/compose.yml -f docker/compose.ci.yml config --quiet
       - name: Generate ephemeral master keys
         run: |
-          echo "PUSH_SECRET_MASTER_KEY=$(python3 -c 'import base64,os;print(base64.b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
-          echo "ENGINE_KEY_MASTER_KEY=$(python3 -c 'import base64,os;print(base64.b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
+          # 生成的密钥必须先 ::add-mask:: 再写 $GITHUB_ENV（P-107 / D-V18-03）：
+          # 掩码只对当次 job 生效，值随一次性库一起作废；顺序反了则日志已落明文。
+          push_master_key=$(python3 -c 'import base64,os;print(base64.b64encode(os.urandom(32)).decode())')
+          echo "::add-mask::$push_master_key"
+          echo "PUSH_SECRET_MASTER_KEY=$push_master_key" >> "$GITHUB_ENV"
+          engine_master_key=$(python3 -c 'import base64,os;print(base64.b64encode(os.urandom(32)).decode())')
+          echo "::add-mask::$engine_master_key"
+          echo "ENGINE_KEY_MASTER_KEY=$engine_master_key" >> "$GITHUB_ENV"
       - name: Build backend image
         run: docker compose -f docker/compose.yml -f docker/compose.ci.yml build backend
       - name: Start core services
