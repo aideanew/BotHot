@@ -84,14 +84,54 @@ def test_rounds_gate_accepts_the_english_round_spelling() -> None:
     assert violations[0]["explicit_rounds"] == [9, 10]
 
 
-def test_rounds_gate_counts_rework_token_without_round_number() -> None:
-    """「返工」「重做」两个词都算标记；不含轮号的裸词也要计数。"""
-    subjects = [
+def test_rounds_gate_numberless_rework_tokens_do_not_count_as_rounds() -> None:
+    """S34.2（D-V18-16，修 P-85）：计数按**显式轮号**的最大值，不按带标记主题的条数。
+
+    裸的「返工/重做」（不写轮号）仍参与归属，但不再计数——否则"卡面要求分片提交、
+    门惩罚分片提交"两头打架（P-85 的案发现场：STEP-15b 五片各写"第 1 轮"被判 3 次）。
+    熔断线只认显式写出的轮号：最大轮号 ≤2 ⇒ 绿。
+    """
+    numberless = [
         "fix(STEP-95): 返工——判据是空的",
         "fix(STEP-95): 重做——换个判据",
         "fix(STEP-95): 又返工一次",
     ]
-    assert len(guards.rounds_violations(subjects)) == 1
+    assert guards.rounds_violations(numberless) == []
+    # 裸词仍归属：同一张卡里只要有一条显式第 3 轮，照样熔断
+    mixed = numberless[:2] + ["fix(STEP-95): 第 3 轮——必须停"]
+    assert len(guards.rounds_violations(mixed)) == 1
+
+
+def test_rounds_gate_shard_commits_of_one_round_do_not_trip() -> None:
+    """P-85 回放（合成）：一张卡按片分 5 次提交、每片都写"第 1 轮"⇒ 最大轮号 1 ⇒ 绿。
+
+    旧口径数"带标记提交条数"会判 3 次熔断（CI run 39728297911 实测红），那不是
+    "返工三次"，是"一张卡交付了五片"。
+    """
+    shards = [f"refactor(STEP-15b S15b.2 第 1 轮): 逐模块删分支 {i}/5" for i in range(1, 6)]
+    assert guards.rounds_violations(shards) == []
+
+
+def test_rounds_gate_registered_decision_id_grants_the_third_round() -> None:
+    """S34.2（P-56）：第 3 轮主题携带**台账里存在**的裁决号 ⇒ 已升级授权，放行。
+
+    授权来源必须可查：`decisions` 传台账登记号集合（rounds_check 从 decision-log.md 现读）。
+    `decisions=None`（或号不在集合里）⇒ 逃生口关闭，第 3 轮照旧熔断。
+    """
+    upgraded = "fix(STEP-77 S77.1): 第 3 轮——按 D-V17-04 换号 S07.V15.1-R 重做"
+    assert guards.rounds_violations([upgraded], decisions={"D-V17-04"}) == []
+    assert len(guards.rounds_violations([upgraded])) == 1, "无台账集合 ⇒ 逃生口必须关闭"
+    assert len(guards.rounds_violations([upgraded], decisions={"D-V17-99"})) == 1, "号没登记 ⇒ 不放行"
+    # 逃生口按卡生效：另一张卡的第 3 轮没有 D 号 ⇒ 仍红
+    both = [upgraded, "fix(STEP-78 S78.1): 第 3 轮——私自返工"]
+    violations = guards.rounds_violations(both, decisions={"D-V17-04"})
+    assert [v["step"] for v in violations] == ["78"]
+
+
+def test_registered_decision_ids_need_boundaries_both_sides() -> None:
+    """左边界挡证据目录名（EVD-V15-27 不许读出 D-V15-27）；右边界挡前缀吞噬（D-V15-271）。"""
+    text = "证据在 EVD-V15-27/ 与另见 D-V15-27，还有假前缀 D-V15-271 与 D-V9-99。"
+    assert guards.registered_decision_ids(text) == {"D-V15-27", "D-V9-99"}
 
 
 def test_rounds_gate_attributes_per_card_not_globally() -> None:
@@ -573,14 +613,14 @@ def _run(repo: Path, *args: str) -> tuple[int, str]:
 def test_end_to_end_rounds_gate_fires_on_the_third_round(tmp_path: Path) -> None:
     repo = _scaffold(tmp_path)
     base = _git_in(repo, "rev-parse", "HEAD")  # 基线 = 脚手架那次提交，不是第一条返工
-    _commit(repo, "fix(STEP-77 S77.1): 返工——第一次")
+    _commit(repo, "fix(STEP-77 S77.1): 第 1 轮——第一次返工")
     assert _run(repo, "rounds-check", "--base", base)[0] == 0, "1 轮必须放行（D-14 的上界是 ≤2）"
-    _commit(repo, "fix(STEP-77 S77.1): 返工——第二次")
+    _commit(repo, "fix(STEP-77 S77.1): 第 2 轮——第二次返工")
     assert _run(repo, "rounds-check", "--base", base)[0] == 0, "2 轮必须放行"
-    _commit(repo, "fix(STEP-77 S77.1): 返工——第三次")
+    _commit(repo, "fix(STEP-77 S77.1): 第 3 轮——第三次返工")
     rc, out = _run(repo, "rounds-check", "--base", base)
     assert rc == 1, "第 3 轮必须熔断"
-    assert "STEP-77" in out and "3 次" in out, f"必须点名是哪张卡：{out}"
+    assert "STEP-77" in out and "最高第 3 轮" in out, f"必须点名是哪张卡：{out}"
 
 
 def test_end_to_end_rounds_gate_empty_range_is_third_state(tmp_path: Path) -> None:
