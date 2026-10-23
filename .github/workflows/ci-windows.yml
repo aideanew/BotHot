@@ -125,7 +125,10 @@ jobs:
       # **本档 673 的锚** = run 40014623069 @891a897：门禁读数 `failed=0 total_skipped=673 baseline=669`。
       # +4 全部是 STEP-35 第 2 轮新增的连库用例（`tests/test_scheduler.py`：每日入队门开/门关
       # 两态 + reconcile 有/无文档两态；实测于该 run 门禁输出），照例不留余量。
-      SKIP_BASELINE_WIN: "673"
+      # **本档 679 的锚** = STEP-36 S36.1 新增六渠道重开参数化用例（`tests/test_e2e_collection.py::
+      # test_reopened_manifest_does_not_reenqueue`，6 条连库），PG-DSN-未设置 族 +6；
+      # 先红阶段与修复分两批推送，阈值随用例数一步到位，不留余量。
+      SKIP_BASELINE_WIN: "679"
     defaults:
       run:
         shell: bash

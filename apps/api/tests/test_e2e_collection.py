@@ -265,6 +265,8 @@ async def _round_trip(db_session: AsyncSession, case: ChannelCase) -> dict[str, 
 
     return {
         "channel": case.channel,
+        "sub_id": sub_id,
+        "source_id": source_id,
         "discovered": first_report.discovered,
         "calls": first_report.calls_made,
         "offsite_filtered": offsite,
@@ -293,6 +295,30 @@ async def test_e2e_round_trip(db_session, case: ChannelCase) -> None:  # type: i
     assert readings["offsite_filtered"] == case.offsite_filtered, readings
     expected_same_source = not case.is_rss
     assert readings["asset_source_is_manifest_source"] is expected_same_source, readings
+
+
+@pytest.mark.parametrize("case", CHANNELS, ids=[c.channel for c in CHANNELS])
+async def test_reopened_manifest_does_not_reenqueue(db_session, case: ChannelCase) -> None:  # type: ignore[no-untyped-def]
+    """S36.1（P-97 / D-V18-06 ①）：清单被合法回退成 DISCOVERED 后，重试轮不得重复入列已入库的篇。
+
+    先红口径（STEP-06 变异的常驻化）：修前的 ready 键减按 `ContentAsset.source_id == 清单 source`
+    过滤，而 RSS 的资产挂在页面 biz 的 wechat_oa 源上 ⇒ 减除对 RSS 恒不命中 ⇒ 重开行重新入列，
+    状态门报 `30005 manifest 非法流转: INGESTED → ENQUEUED`；五个微信渠道靠同源命中挡住
+    （P-97 登记的非对称）。修后：ready 减跨 source 按规范文章键减 ⇒ 六渠道 enqueued == 0。"""
+    readings = await _round_trip(db_session, case)
+    sub_id, source_id = readings["sub_id"], readings["source_id"]
+
+    rows = await _manifests(db_session, source_id)
+    assert all(m.status == "INGESTED" for m in rows), [m.status for m in rows]
+    for m in rows:
+        m.status = "DISCOVERED"  # `_reopen_manifests`/worker stale 回滚之后的合法回退态
+    await db_session.commit()
+
+    enqueued3 = await SourceSubscriptionService(db_session).run_incremental_sync(
+        await _sub(db_session, sub_id), "r3"
+    )
+    await db_session.commit()
+    assert enqueued3 == 0, f"已入库的篇在清单回退后不得重新入列：{enqueued3}"
 
 
 async def test_e2e_discovery_is_deterministic_across_three_syncs(db_session) -> None:  # type: ignore[no-untyped-def]
