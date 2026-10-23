@@ -101,11 +101,17 @@ def main(argv: list[str] | None = None) -> int:
         conn.commit()
         from app.core.secret_crypto import decrypt_extra_config
 
-        remaining = int(conn.execute(f"SELECT count(*) FROM bot_channels WHERE {PLAINTEXT_SHAPE_SQL}").fetchone()[0])
+        count_row = conn.execute(f"SELECT count(*) FROM bot_channels WHERE {PLAINTEXT_SHAPE_SQL}").fetchone()
+        remaining = int(count_row[0]) if count_row is not None else -1
         checked = 0
         for channel_id, plain, _cipher in pending:
-            stored = conn.execute("SELECT extra_config FROM bot_channels WHERE id = %s", (channel_id,)).fetchone()[0]
-            if decrypt_extra_config(channel_id, str(stored)) != plain:
+            stored_row = conn.execute(
+                "SELECT extra_config FROM bot_channels WHERE id = %s", (channel_id,)
+            ).fetchone()
+            if stored_row is None:
+                print(f"❌ 渠道 {channel_id} 回读缺行", file=sys.stderr)
+                return 2
+            if decrypt_extra_config(channel_id, str(stored_row[0])) != plain:
                 print(f"❌ 渠道 {channel_id} 写后回读不一致", file=sys.stderr)
                 return 2
             checked += 1

@@ -69,12 +69,14 @@ jobs:
       - name: Tool fingerprint
         run: |
           echo "python=$(python -V 2>&1) ruff=$(ruff --version) mypy=$(mypy --version)"
+      # S34.8（P-110/D-V19-06）：lint/type 面扩到 scripts/**——架构守卫的执行体自己
+      # 没有机检，守卫漂了没人知道。先清零（mypy 8 条 + ruff 7 条）再扩的门。
       - name: Lint (ruff)
-        run: ruff check app tests
+        run: ruff check app tests ../../scripts
       # N12（T1.5.4，2026-09-22）：补 mypy 静态门禁——此前 CI 是本地门禁脱机子集（本地口径
       # mypy 56 files 全绿，CI 却零机检）；PG 连库用例在 CI 无 PG 时按既有口径自动 skip
       - name: Type check (mypy)
-        run: mypy app
+        run: mypy app ../../scripts
       # W5：结构迁移。conftest 模块头明确「PG 夹具连真实本地 PG:5433（迁移已应用）」——
       # 此前迁移只在宿主按部署手册手工跑过，CI 从无 schema，这是连库用例必然 skip 的另一半前提。
       - name: Migrate schema (alembic upgrade head)
@@ -135,6 +137,29 @@ jobs:
       # 脚本以 __file__ 定位仓库根，任意 cwd 可跑；alembic head 探测 fail-open 不阻断。
       - name: Contract drift gate (gen_contracts --check)
         run: python "$GITHUB_WORKSPACE/scripts/gen_contracts.py" --check
+      # S34.5（P-101）：make/entry 零/非零对等的 Linux 半边终于有了执行者。
+      # P-101 的案发现场：卡面判据"至少 6 任务、两平台各一次"只有 @win 半边被执行过
+      # （EVD-V5-00X §4.2），因为 ubuntu 的五个 job 从不调用 make。本步在 backend job 里
+      # （PG 服务已起、迁移已到 head，迁移往返步之后 ⇒ make migrate 必为幂等 rc=0）
+      # 用 @win 复算表的同一组 6 个轻量任务跑对等：只比**零/非零一致**，不比具体 rc 值
+      # （make 把工具失败折成 2，entry 可能给 3 = 工具缺席，两者都算"非零"）。任一侧
+      # 一边零一边非零 ⇒ 名字对名字的绑定断了 ⇒ 红。
+      - name: make/entry parity (6 tasks, zero/non-zero)
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -u
+          parity_fail=0
+          for task in dev lint-backend guard-ports fmt-check-backend docker-ps migrate; do
+            make "$task" >/dev/null 2>&1; make_rc=$?
+            python scripts/entry.py "$task" >/dev/null 2>&1; entry_rc=$?
+            if { [ "$make_rc" -eq 0 ] && [ "$entry_rc" -ne 0 ]; } || { [ "$make_rc" -ne 0 ] && [ "$entry_rc" -eq 0 ]; }; then
+              echo "❌ $task：make=$make_rc entry=$entry_rc（零/非零不一致 ⇒ 转调绑定断了）"
+              parity_fail=1
+            else
+              echo "✅ $task：make=$make_rc entry=$entry_rc（一致）"
+            fi
+          done
+          exit "$parity_fail"
       # roadmap v0.6.5 未勾项「治理脚本入 CI 强制步」：check_docs_consistency.py 早就在仓库里，
       # 但**没有任何调用点**（roadmap:95 记的是同一件事），文档里的 `file:line` 引用一直靠自觉。
       # 脚本纯 stdlib（argparse/re/sys/pathlib），不需要 venv 依赖；它校验两件事：

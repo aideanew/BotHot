@@ -182,13 +182,14 @@ jobs:
       - name: entry.py 与 Makefile 目标面一致性
         run: python scripts/check_entry_parity.py
 
-      - name: Lint backend（ruff check app tests）
+      # S34.8（P-110/D-V19-06）：lint/type 面扩到 scripts/**（与 ci.yml 同口径）
+      - name: Lint backend（ruff check app tests + scripts）
         working-directory: apps/api
-        run: python -m ruff check app tests
+        run: python -m ruff check app tests ../../scripts
 
-      - name: Type check backend（mypy app）
+      - name: Type check backend（mypy app + scripts）
         working-directory: apps/api
-        run: python -m mypy app
+        run: python -m mypy app ../../scripts
 
       - name: Backend tests（连库用例在本平台会 skip，只记账不主张）
         working-directory: apps/api
@@ -197,10 +198,12 @@ jobs:
         # faulthandler_timeout 到点把**所有线程的原始栈**写进日志，才答得出"卡在哪个调用"。
         # --timeout-method=thread：Windows 上主线程若阻塞在 C 层（connect、DNS），信号法无效。
         # S00H.2.3 收紧 300→120：两次连续 success（run 39500601366 @ b7cdaee、39496625738 @ 376cfe3）的日志里 faulthandler 转栈头=0 ⇒ 没有单用例越过 120s。
-        # ⚠️ 收紧后本参数与上面的 faulthandler_timeout=120 **同阈值**，卡死时"先转栈再被杀"不再有保障（见 P-54）。
+        # S34.6（P-54）：转栈值改为 100 < --timeout=120。两个阈值必须错开且**转栈值更小**：
+        # 卡死用例先在 100s 被 faulthandler 把全部线程的原始栈写进日志，120s 才被 pytest-timeout
+        # 杀掉——"先留栈再被杀"的时序保障回来了（P-54 记录的同阈值竞态就此解除）。
         run: >-
           python -m pytest tests/ -q --no-header
-          -o faulthandler_timeout=120
+          -o faulthandler_timeout=100
           --timeout=120 --timeout-method=thread
           --junitxml=pytest-report-win.xml
 

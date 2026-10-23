@@ -379,7 +379,7 @@ def clean_tree() -> int:
             removed += 1
             print(f"已删 {t.relative_to(ROOT)}")
     skipped = ("node_modules", ".venv", ".git", ".project", ".pnpm-store")
-    found = []
+    found: list[Path] = []
     for root, dirs, _files in os.walk(ROOT):
         keep = []
         for d in dirs:
@@ -388,8 +388,8 @@ def clean_tree() -> int:
             elif d not in skipped:
                 keep.append(d)
         dirs[:] = keep
-    for d in found:
-        _sh.rmtree(d, ignore_errors=True)
+    for cache_dir in found:
+        _sh.rmtree(cache_dir, ignore_errors=True)
     print(f"清理完成：{removed} 个构建目录 + {len(found)} 个 __pycache__")
     return RC_OK
 
@@ -415,8 +415,13 @@ add("migrate", "alembic upgrade head（先探 PG 端口，不可达即 SKIP）",
     [with_service_check(tool_run("alembic", "alembic", ["upgrade", "head"], API))])
 add("migrate-down", "alembic downgrade -1",
     [with_service_check(tool_run("alembic", "alembic", ["downgrade", "-1"], API))])
-add("lint-backend", "ruff check app tests", [tool_run("ruff", "ruff", ["check", "app", "tests"], API)])
-add("typecheck-backend", "mypy app", [tool_run("mypy", "mypy", ["app"], API)])
+add("lint-backend", "ruff check app tests + scripts",
+    [tool_run("ruff", "ruff", ["check", "app", "tests"], API),
+     # cwd 必须留在 apps/api：ruff 的配置（行宽 120 等）在这里的 pyproject.toml，
+     # 从仓库根跑 scripts 会退回默认行宽 88 ⇒ 假红。路径因此是 ../../scripts。
+     tool_run("ruff", "ruff", ["check", "../../scripts"], API)])
+add("typecheck-backend", "mypy app + scripts",
+    [tool_run("mypy", "mypy", ["app"], API), tool_run("mypy", "mypy", ["../../scripts"], API)])
 add("fmt-check-backend", "ruff format --check（非阻断，CI 不跑）",
     [tool_run("ruff", "ruff", ["format", "--check", "app", "tests"], API)])
 add("typecheck-frontend", "tsc --noEmit", [exe("pnpm", ["exec", "tsc", "--noEmit"], WEB)])
@@ -437,7 +442,8 @@ add("scan-secrets", "gitleaks 扫描（00S；须与 CI 同版 8.21.2）",
     [exe("gitleaks", ["detect", "--source", ".", "--config", ".gitleaks.toml", "--no-banner"], ROOT)])
 add("docker-up", "docker compose up -d", [exe("docker", ["compose", "-f", str(COMPOSE_FILE), "up", "-d"], ROOT)])
 add("docker-down", "docker compose down", [exe("docker", ["compose", "-f", str(COMPOSE_FILE), "down"], ROOT)])
-add("docker-logs", "docker compose logs", [exe("docker", ["compose", "-f", str(COMPOSE_FILE), "logs", "--tail", "80"], ROOT)])
+add("docker-logs", "docker compose logs",
+    [exe("docker", ["compose", "-f", str(COMPOSE_FILE), "logs", "--tail", "80"], ROOT)])
 add("docker-ps", "docker compose ps", [exe("docker", ["compose", "-f", str(COMPOSE_FILE), "ps"], ROOT)])
 add("docker-build", "docker compose build", [exe("docker", ["compose", "-f", str(COMPOSE_FILE), "build"], ROOT)])
 add("test-all", "后端 + 前端单测 + e2e", composite=("test-backend", "test-frontend-unit", "test-frontend-e2e"))
@@ -507,8 +513,11 @@ def main(argv: list[str]) -> int:
     if sys.platform == "win32":
         # 让中文输出在 cp936 控制台上不被打成问号
         for stream in (sys.stdout, sys.stderr):
+            reconfigure = getattr(stream, "reconfigure", None)
+            if reconfigure is None:
+                continue
             try:
-                stream.reconfigure(encoding="utf-8", errors="replace")
+                reconfigure(encoding="utf-8", errors="replace")
             except Exception:
                 pass
     if not argv or argv[0] in ("help", "-h", "--help"):

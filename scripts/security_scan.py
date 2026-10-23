@@ -21,8 +21,9 @@ import argparse
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 ATTEMPTS = 2
 RETRY_DELAY_S = 3.0
@@ -77,7 +78,10 @@ def run_scanner(
             flush=True,
         )
         if produced:
-            rc_note = "" if proc.returncode == 0 else f"（rc={proc.returncode}：这是「扫描成功且发现问题」的形状，不是工具坏）"
+            rc_note = (
+                "" if proc.returncode == 0
+                else f"（rc={proc.returncode}：这是「扫描成功且发现问题」的形状，不是工具坏）"
+            )
             print(f"[{name}] 判定=ran{rc_note}", flush=True)
             result = {"name": name, "status": RAN, "reason": "", "last_rc": proc.returncode, "tries": tries}
             break
@@ -109,8 +113,11 @@ def run_scanner(
 def main(argv: list[str]) -> int:
     if sys.platform == "win32":
         for stream in (sys.stdout, sys.stderr):
+            reconfigure = getattr(stream, "reconfigure", None)
+            if reconfigure is None:
+                continue
             try:
-                stream.reconfigure(encoding="utf-8", errors="replace")
+                reconfigure(encoding="utf-8", errors="replace")
             except Exception:  # noqa: BLE001 编码只是体验问题，不该把扫描判据带崩
                 pass
     parser = argparse.ArgumentParser(description="安全扫描步的重试与「未运行」判定")

@@ -46,13 +46,13 @@ def forwarded(text: str, target: str) -> bool:
     """recipe 是否已交给实体脚本：转调 entry.py、转调 guards.py，或复合目标用 `@:` 靠前置。"""
     lines = text.splitlines()
     try:
-        idx = next(i for i, l in enumerate(lines) if l.startswith(f"{target}:"))
+        idx = next(i for i, line in enumerate(lines) if line.startswith(f"{target}:"))
     except StopIteration:
         return False
-    for l in lines[idx + 1:]:
-        if not l.startswith("\t"):
+    for line in lines[idx + 1:]:
+        if not line.startswith("\t"):
             break
-        if "$(ENTRY)" in l or "$(GUARDS)" in l or l.strip().startswith("@:"):
+        if "$(ENTRY)" in line or "$(GUARDS)" in line or line.strip().startswith("@:"):
             return True
     return False
 

@@ -157,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
     if rc == RC_OK:
         print("✅ 全部模块与全局达标")
     else:
-        print("❌ 覆盖率门判红/判 NOT-PASS（rc=%d）" % rc)
+        print(f"❌ 覆盖率门判红/判 NOT-PASS（rc={rc}）")
     return rc
 
 
