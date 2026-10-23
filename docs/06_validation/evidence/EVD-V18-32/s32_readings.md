@@ -189,11 +189,57 @@ CI 两处都只跑 `mypy app`（`ci.yml:77`、`ci-windows.yml:191`）⇒ `script
 `main()` 里给守卫函数传参的 call-arg、以及一条 not-covered-by-ignore note）；
 对 `git show HEAD:scripts/guards.py` 跑同一命令得**同样的 3 条** ⇒ 非本批引入，未新增。
 
-## 6. S32.4 与三绿（push 后回填）
-- 交付提交：待回填
-- `compose-smoke` 步日志原文里两把密钥所在位置显示为 `***`：只记行号，不抄值
-- CI / CI-Windows / Security 三绿（同一 head、attempt 1）：待回填
-- gitleaks 全历史新增：待回填
+## 6. S32.4 与三绿（@ci 读数，原始日志摘录见 `s32_ci_log_readings.txt`）
+
+**交付提交** `da09dd1`（完整 sha `da09dd11b652161b828c6b8d6d08ad5846a91b29`），push 于 15:00。
+
+| workflow | run id | attempt | 结论 | 备注 |
+|---|---|---|---|---|
+| CI（ubuntu） | 39914958722 | 1 | **success** | 5 个 job 全成：workflow-lint / frontend / backend / compose / compose-smoke |
+| CI-Windows | 39914958495 | 1 | **success** | windows-dev 一 job |
+| Security | 39914958693 | 1 | **success** | gitleaks 等三门；同 head |
+
+三绿取的是**同一 head、attempt 1**（卡面完成判据第 1 条）。`actionlint` 也在里面（workflow-lint success）
+⇒ 本批对 `ci.yml` 的加法没有把 YAML/shell 形状改坏。
+
+### 6.1 S32.4 掩码读数（compose-smoke 步原文，只记位置与形状，不抄值）
+修复后（run 39914958722，聚合文件 `2_compose-smoke.txt`）：
+- env 落盘三处 **全部是 `***`**：`:137`、`:138`（生成步之后第一份）、`:355`、`:356`、`:1077`、`:1078`
+  （`Start core services` 与 `Smoke` 两个步骤各自打印的 env 块）
+- 另有两行 `:122`、`:125` 命中密钥名，但那是 **runner 把 `run:` 正文原样回显**的脚本行
+  （行里是 `$push_master_key` 这样的变量名，没有值）⇒ 不计入暴露面
+- 判定：`masked=6 / leaks=0`
+
+修复前对照（run 39891503640，台账 P-107 点名的那一次）：**同样三处 env 落盘是 44 字符的 base64**
+（`:131`、`:132`、`:344`、`:345`、`:1064`、`:1065`，`masked=0 / leaks=6`）。
+⇒ P-107 说的"下一步的 `env:` 块里原文进日志"是**量出来的**，不是推断；
+本文件与摘录里所有 ≥32 位连续串都被探针替换成 `<REDACTED:len44>`，没有任何一次运行把值写进仓库。
+
+### 6.2 新门在 CI 里确实跑过（不是只写进 yml）
+`backend` job 的 Governance 步聚合日志里：
+- `:1143` `guard-ci-secret-mask：扫 …\.github\workflows 下 3 个工作流 / 55 个 run 步，其中 2 行写 $GITHUB_ENV`
+- `:1144` `✅ guard-ci-secret-mask：所有写入 $GITHUB_ENV 的生成值都在同一步内先掩码`
+- `:1145-1146` `rounds-check rc=0 / evidence-check rc=0` 与 `guard-ci-secret-mask rc=0`
+⇒ 卡面增量 1 第③处（CI 调用）在真实 run 上有读数；`rounds-check` 那行还顺带证明本批在 D-14 口径下是**第 1 轮**（范围内 1 个提交）。
+
+### 6.3 汇总计数（同一 run）
+- `@ci` backend：**2278 passed / 6 skipped / 4 deselected**，0 failed，187.49s，
+  `Total coverage: 88.02%`，`skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0`。
+  对 `f86811e` 基线 2259 ⇒ **+20**，与本卡新增的 16+4 条用例逐条对得上。
+  88.02% 落在 P-104 的抖动带里（88.01/87.95/88.00/87.96 之后第五个点）⇒ 可以拿它过线，不当精确判据。
+- `@win` windows-dev：**1618 passed / 666 skipped / 4 deselected**，1066.50s。
+  **666 与基线相等**——本批没有新增任何 skip，零余量的那道门没被抬。
+  前端 49 files / 415 tests 全绿。
+  ⚠ 一条直接生效证据：`@win` 的 `pip install` 清单里出现了 **tzdata**
+  （`Installing collected packages: … tzdata …`）⇒ `pyproject.toml` 那一行在真实安装面上落了地，
+  而不只是文档上的声明；这与 §4.4「uv.lock 不被任何运行面消费」是同一件事的两面。
+- gitleaks：`Security` success；本机另外实跑 `374 commits scanned / no leaks found`（§5.1）⇒ 历史侧 0 新增。
+
+### 6.4 读数过程中发生的两件工具事
+1. 日志回读探针**第一发直接 `SSLEOFError`**（两次都是），加了三发重试才稳定 ⇒
+   任何"取不到日志"都不许折算成"日志里没有"；判据里 `masked/leaks` 两个数是同一次成功取到的。
+2. 探针的遮蔽器把所有 ≥32 位连续串一律替换，因此把 40 位 sha 与工作流的绝对路径也一并遮了
+   （`<REDACTED:len40>`）。这是**过度遮蔽**而非不足：sha 以 `git rev-parse` 为准，不依赖日志文本。
 
 ## 7. 台账追加（P-109 / P-110 摘要）
 - **P-109**：`guard-ci-secret-mask` 的召回边界按卡面停在"同一步内"。
@@ -201,3 +247,21 @@ CI 两处都只跑 `mypy app`（`ci.yml:77`、`ci-windows.yml:191`）⇒ `script
   要不要扩到 job 级、以及要不要把 `$GITHUB_OUTPUT` 纳进来（同一暴露面），交规划方裁定。
 - **P-110**：`scripts/**` 不在任何 mypy/ruff 机检口径内（CI 只 `mypy app`），
   实测 `guards.py` 带 3 条既有 error。守卫本身是判据的执行体，它自己的类型面没人管。
+
+## 8. 收口判定（D-V18-15 的覆盖面：卡面三级任务 + 继承增量 + 本版增量）
+| 判据 | 读数 | 结论 |
+|---|---|---|
+| S32.1 掩码形重写 | `ci.yml:479-486`，长度与生成方式未动 | ✅ |
+| S32.2 守卫 + 接线 + 反证 | `guards.py` 新函数、三处接线、`make guard`/CI 双路实跑 | ✅ |
+| S32.3 tzdata 主依赖 + 重锁 + 单测 | pyproject 无 marker 一条、uv 重锁 +2 行、4 条用例 | ✅ |
+| S32.4 compose-smoke 日志显示 `***` | §6.1：6 处全 `***`，0 处疑似明文 | ✅ |
+| 三绿同一 head attempt 1 | §6 表 | ✅ |
+| 反证红→还原绿两次读数入证据 | §3.3 + `s32_gate_polarities.txt` | ✅ |
+| `grep -c 'add-mask' ci.yml` ≥ 2 | =3（含 1 处注释；真掩码 2 处，见 §2） | ✅ |
+| `uv lock --check` rc=0 且 tzdata 不再只有 win32 标记 | rc=0；`uv.lock:154/193` 无 marker | ✅ |
+| gitleaks 全历史 0 新增 | Security success + 本机 374 commits no leaks | ✅ |
+| 继承增量表（`STEP-继承卡增量-V0.18.md`） | 该表只有 STEP-18/11/00E/05/12 五行，**没有** STEP-32 的行 ⇒ 零项 | ✅（空面，如实记） |
+| 卡面自身增量 1（接线三处，各限一处） | `entry.py:449/455`、`Makefile:176-178/194`、`ci.yml:260-261/263/269-272` 全是加法，未改任何既有行的语义；Makefile 聚合那一列由 `test_guard_rounds.py` 的双向断言逼出（§5.3.1） | ✅ |
+| 卡面自身增量 2（uv 仓库外 / 禁手改锁 / 索引保持 / diff 只涉 tzdata） | uv 0.13.5 在 `%APPDATA%\Python\Python312\Scripts`；重锁由 uv 生成，`git diff --stat` = +2 行且两行都是 tzdata；1483 处清华镜像 / 0 处 pypi.org 前后相同 | ✅ |
+| 卡面自身增量 3（效力来源写在 pyproject 上） | §4.4 + §6.3 的 `@win` pip 清单出现 tzdata，两面对上了；"锁文件不被消费"留在 P-55/STEP-38，本卡不越界 | ✅ |
+| 卡面自身增量 4（队列 32→33→同一提交三绿→39） | 本卡交付 head `da09dd1` 三绿已读；STEP-33 未在本批动过一行 ⇒ 顺序成立 | ✅ |

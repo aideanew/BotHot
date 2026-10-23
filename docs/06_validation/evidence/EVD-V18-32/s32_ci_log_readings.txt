@@ -1,0 +1,116 @@
+# STEP-32 的 @ci 读数（三绿 + compose-smoke 掩码 + Governance 步）
+# 生成命令：仓外探针 s32_log_read.py / s32_backend_read.py（token 只在进程内存里，不落盘）
+# 回显纪律：任何 ≥32 位的 base64/连续串一律替换成 <REDACTED:lenN>，所以 40 位 sha 与工作流绝对路径也被一并遮蔽
+
+===== ① 修复后：run 39914958722（head da09dd1，attempt 1，CI success）=====
+  第 1 次取日志失败：URLError
+zip 成员数=69
+名字含 compose/smoke 的成员: ['0_compose.txt', 'compose/system.txt', 'compose/1_Set up job.txt', 'compose/2_Run actions_checkout@v4.txt', 'compose/3_Validate compose config.txt', 'compose/6_Post Run actions_checkout@v4.txt', 'compose/7_Complete job.txt', '2_compose-smoke.txt', 'compose-smoke/system.txt', 'compose-smoke/1_Set up job.txt', 'compose-smoke/2_Run actions_checkout@v4.txt', 'compose-smoke/3_Validate compose config.txt', 'compose-smoke/4_Generate ephemeral master keys.txt', 'compose-smoke/5_Build backend image.txt', 'compose-smoke/6_Start core services.txt', 'compose-smoke/7_Smoke (health + scheduler_worker heartbeat).txt', 'compose-smoke/16_Post Run actions_checkout@v4.txt', 'compose-smoke/17_Complete job.txt']
+  2_compose-smoke.txt:122 [脚本回显（只有变量名）] 2026-10-23T07:00:12.4909869Z [36;1mecho "PUSH_SECRET_MASTER_KEY=$push_master_key" >> "$GITHUB_ENV"[0m
+  2_compose-smoke.txt:125 [脚本回显（只有变量名）] 2026-10-23T07:00:12.4911121Z [36;1mecho "ENGINE_KEY_MASTER_KEY=$engine_master_key" >> "$GITHUB_ENV"[0m
+  2_compose-smoke.txt:137 [env 落盘 = ***] 2026-10-23T07:00:12.5467532Z   PUSH_SECRET_MASTER_KEY: ***
+  2_compose-smoke.txt:138 [env 落盘 = ***] 2026-10-23T07:00:12.5467882Z   ENGINE_KEY_MASTER_KEY: ***
+  2_compose-smoke.txt:355 [env 落盘 = ***] 2026-10-23T07:19:21.0480503Z   PUSH_SECRET_MASTER_KEY: ***
+  2_compose-smoke.txt:356 [env 落盘 = ***] 2026-10-23T07:19:21.0480800Z   ENGINE_KEY_MASTER_KEY: ***
+  2_compose-smoke.txt:1077 [env 落盘 = ***] 2026-10-23T07:20:06.5113040Z   PUSH_SECRET_MASTER_KEY: ***
+  2_compose-smoke.txt:1078 [env 落盘 = ***] 2026-10-23T07:20:06.5113512Z   ENGINE_KEY_MASTER_KEY: ***
+
+读数：命中=8（脚本回显=2 / env 落盘显示 *** =6 / env 落盘非***且含≥32位base64=0）
+成员清单佐证（同一 run 里 compose-smoke 的步骤文件）: ['compose-smoke/system.txt', 'compose-smoke/1_Set up job.txt', 'compose-smoke/2_Run actions_checkout@v4.txt', 'compose-smoke/3_Validate compose config.txt', 'compose-smoke/4_Generate ephemeral master keys.txt', 'compose-smoke/5_Build backend image.txt', 'compose-smoke/6_Start core services.txt', 'compose-smoke/7_Smoke (health + scheduler_worker heartbeat).txt']
+判定： PASS（所有 env 落盘处都是 ***，没有任何一处出现疑似明文）
+
+===== ② 修复前对照：run 39891503640（P-107 台账点名的那一次）=====
+zip 成员数=10
+名字含 compose/smoke 的成员: ['1_compose.txt', 'compose/system.txt', '2_compose-smoke.txt', 'compose-smoke/system.txt']
+  2_compose-smoke.txt:117 [脚本回显（只有变量名）] 2026-10-23T02:47:48.6774155Z ##[group]Run echo "PUSH_SECRET_MASTER_KEY=$(python3 -c 'import base64,os;print(base64.b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
+  2_compose-smoke.txt:118 [脚本回显（只有变量名）] 2026-10-23T02:47:48.6775082Z [36;1mecho "PUSH_SECRET_MASTER_KEY=$(python3 -c 'import base64,os;print(base64.b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"[0m
+  2_compose-smoke.txt:119 [脚本回显（只有变量名）] 2026-10-23T02:47:48.6775876Z [36;1mecho "ENGINE_KEY_MASTER_KEY=$(python3 -c 'import base64,os;print(base64.b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"[0m
+  2_compose-smoke.txt:131 [env 落盘 且非 ***] 2026-10-23T02:47:48.7321042Z   PUSH_SECRET_MASTER_KEY: <REDACTED:len44>
+  2_compose-smoke.txt:132 [env 落盘 且非 ***] 2026-10-23T02:47:48.7321523Z   ENGINE_KEY_MASTER_KEY: <REDACTED:len44>
+  2_compose-smoke.txt:344 [env 落盘 且非 ***] 2026-10-23T03:07:19.2842308Z   PUSH_SECRET_MASTER_KEY: <REDACTED:len44>
+  2_compose-smoke.txt:345 [env 落盘 且非 ***] 2026-10-23T03:07:19.2842761Z   ENGINE_KEY_MASTER_KEY: <REDACTED:len44>
+  2_compose-smoke.txt:1064 [env 落盘 且非 ***] 2026-10-23T03:07:55.2860722Z   PUSH_SECRET_MASTER_KEY: <REDACTED:len44>
+  2_compose-smoke.txt:1065 [env 落盘 且非 ***] 2026-10-23T03:07:55.2861589Z   ENGINE_KEY_MASTER_KEY: <REDACTED:len44>
+
+读数：命中=9（脚本回显=3 / env 落盘显示 *** =0 / env 落盘非***且含≥32位base64=6）
+成员清单佐证（同一 run 里 compose-smoke 的步骤文件）: ['compose-smoke/system.txt']
+判定： FAIL/UNKNOWN（masked=0 leaks=6）
+
+===== ③ backend job：治理步与测试汇总（同一 run 39914958722）=====
+成员=69，backend 聚合文件=['1_backend.txt']
+  backend:315  Collecting ruff==0.12.12 (from bothot-backend==0.1.0)
+  backend:316  Using cached ruff-0.12.12-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (25 kB)
+  backend:317  Collecting mypy==2.3.1 (from bothot-backend==0.1.0)
+  backend:318  Using cached mypy-2.3.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+  backend:329  Collecting typing_extensions>=4.6.0 (from mypy==2.3.1->bothot-backend==0.1.0)
+  backend:331  Collecting mypy_extensions>=1.0.0 (from mypy==2.3.1->bothot-backend==0.1.0)
+  backend:332  Using cached mypy_extensions-1.1.0-py3-none-any.whl.metadata (1.1 kB)
+  backend:333  Collecting pathspec>=1.0.0 (from mypy==2.3.1->bothot-backend==0.1.0)
+  backend:335  Collecting librt>=0.13.0 (from mypy==2.3.1->bothot-backend==0.1.0)
+  backend:337  Collecting ast-serialize<1.0.0,>=0.6.0 (from mypy==2.3.1->bothot-backend==0.1.0)
+  backend:404  Using cached mypy-2.3.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (15.3 MB)
+  backend:408  Using cached ruff-0.12.12-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (13.3 MB)
+  backend:427  Using cached mypy_extensions-1.1.0-py3-none-any.whl (5.0 kB)
+  backend:476  Installing collected packages: websockets, uvloop, tzdata, typing_extensions, structlog, six, ruff, rpds-py, redis, pyyaml, python-multipart, python-dotenv, pygments, pycparser, psycopg-bina
+  backend:478  Successfully installed Mako-1.4.3 MarkupSafe-3.0.4 alembic-1.20.1 annotated-doc-0.0.5 annotated-types-0.8.0 anyio-4.15.1 ast-serialize-0.13.1 attrs-26.1.0 bothot-backend-0.1.0 certifi-2026.1
+  backend:482  ##[group]Run echo "python=$(python -V 2>&1) ruff=$(ruff --version) mypy=$(mypy --version)"
+  backend:483  [36;1mecho "python=$(python -V 2>&1) ruff=$(ruff --version) mypy=$(mypy --version)"[0m
+  backend:495  python=Python 3.12.15 ruff=ruff 0.12.12 mypy=mypy 2.3.1 (compiled: yes)
+  backend:496  ##[group]Run ruff check app tests
+  backend:497  [36;1mruff check app tests[0m
+  backend:509  All checks passed!
+  backend:510  ##[group]Run mypy app
+  backend:511  [36;1mmypy app[0m
+  backend:691  [36;1m    print(f"❌ skip 门禁：无法解析 pytest-report.xml（{exc}）")[0m
+  backend:702  [36;1mprint(f"skip 门禁：total_skipped={total} baseline={baseline} pg_unreachable={len(pg_skips)}")[0m
+  backend:718  [36;1mprint("✅ skip 门禁通过：连库用例真实执行，skip 数在基线内")[0m
+  backend:821  app/core/schema_guard.py                         22      3    86%   32-34
+  backend:908  Required test coverage of 75% reached. Total coverage: 88.02%
+  backend:916  2278 passed, 6 skipped, 4 deselected, 2 warnings in 187.49s (0:03:07)
+  backend:917  skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+  backend:918  ✅ skip 门禁通过：连库用例真实执行，skip 数在基线内
+  backend:955  [36;1mpython "$GITHUB_WORKSPACE/scripts/guards.py" rounds-check --base "$base" || rc_rounds=$?[0m
+  backend:956  [36;1mpython "$GITHUB_WORKSPACE/scripts/guards.py" evidence-check --base "$base" || rc_evidence=$?[0m
+  backend:958  [36;1mpython "$GITHUB_WORKSPACE/scripts/guards.py" guard-ci-secret-mask || rc_ci_mask=$?[0m
+  backend:959  [36;1mecho "rounds-check rc=$rc_rounds / evidence-check rc=$rc_evidence"[0m
+  backend:960  [36;1mecho "guard-ci-secret-mask rc=$rc_ci_mask"[0m
+  backend:985  rounds-check：范围 <REDACTED:len40>..HEAD 共 1 个提交，阈值 ≤2 轮（D-14，第 3 轮熔断）
+  backend:986  ✅ rounds-check：范围内无卡越过轮次上限
+  backend:1031  合计违规 0 条。注：CI 的 ruff/mypy 为终判，本表只降提交风险。
+  backend:1140  ── 真实工具步：ruff ──
+  backend:1141  All checks passed!
+  backend:1142  ✅ evidence-check 全部通过（前置两道门 + stdlib 证据 + 真实工具两步）
+  backend:1143  guard-ci-secret-mask：扫 <REDACTED:len32>.github/workflows 下 3 个工作流 / 55 个 run 步，其中 2 行写 $GITHUB_ENV
+  backend:1144  ✅ guard-ci-secret-mask：所有写入 $GITHUB_ENV 的生成值都在同一步内先掩码
+  backend:1145  rounds-check rc=0 / evidence-check rc=0
+  backend:1146  guard-ci-secret-mask rc=0
+
+===== ④ CI-Windows run 39914958495（同一 head，attempt 1，success）=====
+成员=24，聚合文件=['0_windows-dev.txt']（口径 ^(\d+)_windows-dev\.txt$）
+  0_windows-dev:272  [36;1m  echo "❌ Python 期望 3.12 实际 $py_major（与 CI ubuntu 侧不同版会让 ruff/mypy 结论不可比）"; exit 1[0m
+  0_windows-dev:346  Collecting ruff==0.12.12 (from bothot-backend==0.1.0)
+  0_windows-dev:347  Using cached ruff-0.12.12-py3-none-win_amd64.whl.metadata (26 kB)
+  0_windows-dev:348  Collecting mypy==2.3.1 (from bothot-backend==0.1.0)
+  0_windows-dev:349  Using cached mypy-2.3.1-cp312-cp312-win_amd64.whl.metadata (2.4 kB)
+  0_windows-dev:360  Collecting typing_extensions>=4.6.0 (from mypy==2.3.1->bothot-backend==0.1.0)
+  0_windows-dev:362  Collecting mypy_extensions>=1.0.0 (from mypy==2.3.1->bothot-backend==0.1.0)
+  0_windows-dev:363  Using cached mypy_extensions-1.1.0-py3-none-any.whl.metadata (1.1 kB)
+  0_windows-dev:364  Collecting pathspec>=1.0.0 (from mypy==2.3.1->bothot-backend==0.1.0)
+  0_windows-dev:366  Collecting librt>=0.13.0 (from mypy==2.3.1->bothot-backend==0.1.0)
+  0_windows-dev:368  Collecting ast-serialize<1.0.0,>=0.6.0 (from mypy==2.3.1->bothot-backend==0.1.0)
+  0_windows-dev:432  Using cached mypy-2.3.1-cp312-cp312-win_amd64.whl (11.2 MB)
+  0_windows-dev:436  Using cached ruff-0.12.12-py3-none-win_amd64.whl (13.2 MB)
+  0_windows-dev:454  Using cached mypy_extensions-1.1.0-py3-none-any.whl (5.0 kB)
+  0_windows-dev:498  Installing collected packages: websockets, tzdata, typing_extensions, structlog, six, ruff, rpds-py, redis, pyyaml, python-multipart, python-dotenv, pygments, pycparser, psycopg-binary, prom
+  0_windows-dev:500  Successfully installed Mako-1.4.3 MarkupSafe-3.0.4 alembic-1.20.1 annotated-doc-0.0.5 annotated-types-0.8.0 anyio-4.15.1 ast-serialize-0.13.1 attrs-26.1.0 bothot-backend-0.1.0 certifi-2026.1
+  0_windows-dev:562  Makefile 目标 38 个；entry.py 任务 42 个；实体文件 entry.py=1 guards.py=1
+  0_windows-dev:563  ✅ 每个 Makefile 目标都能在 entry.py/guards.py 找到实体，且 recipe 已转调
+  0_windows-dev:565  ##[group]Run python -m ruff check app tests
+  0_windows-dev:566  [36;1mpython -m ruff check app tests[0m
+  0_windows-dev:578  All checks passed!
+  0_windows-dev:579  ##[group]Run python -m mypy app
+  0_windows-dev:580  [36;1mpython -m mypy app[0m
+  0_windows-dev:648  1618 passed, 666 skipped, 4 deselected, 2 warnings in 1066.50s (0:17:46)
+  0_windows-dev:759  [33m[2m✓[22m[39m 低质样例（url 含『低质』）：score<30、passed=false、reasons 非空[33m 405[2mms[22m[39m
+  0_windows-dev:1799  [2m Test Files [22m [1m[32m49 passed[39m[22m[90m (49)[39m
+  0_windows-dev:1800  [2m      Tests [22m [1m[32m415 passed[39m[22m[90m (415)[39m
