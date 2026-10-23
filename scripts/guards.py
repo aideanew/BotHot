@@ -12,12 +12,15 @@ Windows 上"跑不了"和"跑了没问题"在读数上长得一模一样——�
 from __future__ import annotations
 
 import ast
+import io
 import os
 import re
 import subprocess
 import sys
+import tokenize
 from collections.abc import Callable
 from pathlib import Path
+from typing import TypedDict
 
 ROOT = Path(__file__).resolve().parents[1]
 API = ROOT / "apps" / "api"
@@ -134,7 +137,8 @@ def guard_versions() -> int:
     for label, value in ((".nvmrc 为空或不存在", nvmrc), ("Dockerfile 未找到 node 版本", dockerfile),
                          ("package.json engines.node 未找到", engines),
                          ("packageManager 未找到 pnpm 版本", pm_version),
-                         ("compose 前端 BASE_IMAGE 未找到 node 锚（compose 可覆盖 Dockerfile FROM，必须同锚盯防）", compose)):
+                         ("compose 前端 BASE_IMAGE 未找到 node 锚（compose 可覆盖 Dockerfile FROM，必须同锚盯防）",
+                          compose)):
         if not value:
             print(f"❌ {label}")
             rc = 1
@@ -186,6 +190,24 @@ _CN_DIGITS = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
 _ROUND_CN_RE = re.compile(r"第\s*([一二三四五六七八九十]{1,3})\s*轮")
 _REWORK_TOKENS = ("返工", "重做")
 _REWORK_THRESHOLD = MAX_ROUNDS + 1  # 出现「第 3 轮」这类显式轮号即红
+# 「已升级」标记（STEP-34 S34.2，P-56 / D-V18-16）：主题携带一条台账里真实存在的裁决号
+# ⇒ 该轮是持签授权的升级，越过熔断。左边界同 P-57：号前不能是字母数字或 `-`，
+# 否则证据目录名（EVD-V15-27）会被读出裁决号 D-V15-27。序号定长两位 + 右边界 `(?![0-9])`
+# 双保险：`D-V15-271` 既不能整个吞成一号，也不能回退成 D-V15-27（现行台账序号全部两位，
+# 与 P-57 的 `D-V\d+-\d\d` 同形）。
+_DECISION_ID_RE = re.compile(r"(?<![A-Za-z0-9-])(D-V\d+-\d\d|D-\d{1,2})(?![0-9])")
+# 台账位置：rounds_check 从这里取"已登记裁决号"集合；文件缺席 ⇒ 集合为空 ⇒ 逃生口关闭。
+DECISION_LOG = ROOT / "docs" / "03_solution" / "decisions" / "decision-log.md"
+
+
+class RoundViolation(TypedDict):
+    """rounds_violations 的返回项。count 只是陈述（带标记主题条数），判据看 max_round。"""
+
+    step: str
+    count: int
+    max_round: int
+    explicit_rounds: list[int]
+    subjects: list[str]
 
 # 耦合门（D-V4-03）的两个 glob 根（相对仓库根，POSIX 分隔符）
 EVIDENCE_ROOT = "docs/06_validation/evidence"
@@ -238,18 +260,27 @@ def _is_round_marker(subject: str) -> bool:
     return any(tok in subject for tok in _REWORK_TOKENS) or bool(_round_numbers(subject))
 
 
-def rounds_violations(subjects: list[str], max_rounds: int = MAX_ROUNDS) -> list[dict[str, object]]:
+def rounds_violations(
+    subjects: list[str],
+    max_rounds: int = MAX_ROUNDS,
+    decisions: set[str] | None = None,
+) -> list[RoundViolation]:
     """按 STEP id 归集轮次标记，返回越限项（纯函数，可喂合成主题）。
 
-    两条红路（缺一会漏）：
-      1. 同一卡在范围内被标记 > max_rounds 次 ⇒ 已经第 3 轮；
-      2. 任一主题直接写出 ≥ max_rounds+1 的轮号 ⇒ 即便前面的轮发生在范围外，
-         "第 3 轮"这个事实本身就够熔断。
+    计数口径（D-V18-16，修 P-85）：一张卡计它**显式写出的最大轮号**，不再数"带标记的
+    提交条数"——同一轮的分片提交（每片都写"第 1 轮"）不再被判成多轮。不写轮号的裸
+    "返工/重做"仍参与归属（卡号归它），但不参与计数：P-85 的案发现场正是"卡面要求
+    分片提交、门惩罚分片提交"两头打架。
+
+    熔断线：最大轮号 > max_rounds（即显式出现第 3 轮）⇒ 红。
+    逃生口（P-56 / D-V18-16）：该卡任一主题携带一条 `decisions` 里登记过的裁决号
+    （`D-V<版本>-<序号>` / `D-<序号>`）⇒ 认定为"已升级"的授权轮，越过熔断——
+    授权来源在台账可查，主题必须保留真实轮次事实。`decisions=None` 时逃生口关闭
+    （fail-closed：宁可误红也不无声放行）。
 
     归属口径（D-V12-02 / S27.5）：每条主题只计**主卡**（`_primary_card`），
     跨卡提及不再连坐；只写 L3 号的按第一段反推卡号。
     """
-    limit = max_rounds
     marks: dict[str, list[str]] = {}
     for subject in subjects:
         if not _is_round_marker(subject):
@@ -257,21 +288,32 @@ def rounds_violations(subjects: list[str], max_rounds: int = MAX_ROUNDS) -> list
         card = _primary_card(subject)
         if card:
             marks.setdefault(card, []).append(subject)
-    out: list[dict[str, object]] = []
+    out: list[RoundViolation] = []
     for step_id, hits in sorted(marks.items()):
-        explicit = [n for s in hits for n in _round_numbers(s) if n >= _REWORK_THRESHOLD]
-        if len(hits) > limit or explicit:
-            out.append({
-                "step": step_id,
-                "count": len(hits),
-                "explicit_rounds": sorted(set(explicit)),
-                "subjects": hits,
-            })
+        rounds = [n for s in hits for n in _round_numbers(s)]
+        max_round = max(rounds) if rounds else 0
+        if max_round <= max_rounds:
+            continue
+        if decisions and any(set(_DECISION_ID_RE.findall(s)) & decisions for s in hits):
+            continue
+        out.append({
+            "step": step_id,
+            "count": len(hits),
+            "max_round": max_round,
+            "explicit_rounds": sorted({n for n in rounds if n >= _REWORK_THRESHOLD}),
+            "subjects": hits,
+        })
     return out
 
 
+def registered_decision_ids(text: str) -> set[str]:
+    """台账全文 ⇒ 已登记裁决号集合（纯函数；左边界与 P-57 同族：号前不能是字母数字或 `-`，
+    否则证据目录名 `EVD-V15-27` 里那一段会被读成裁决号 D-V15-27）。"""
+    return set(_DECISION_ID_RE.findall(text))
+
+
 def rounds_check(base: str = "origin/main") -> int:
-    """D-14 轮次熔断门：统计 `base..HEAD` 内每张卡的返工轮次，越限即红并点名。"""
+    """D-14 轮次熔断门：统计 `base..HEAD` 内每张卡的显式轮号，越限即红并点名。"""
     subjects, warn = _commit_subjects(base)
     if warn:
         print(f"❌ rounds-check：{warn}", flush=True)
@@ -281,17 +323,22 @@ def rounds_check(base: str = "origin/main") -> int:
         # 与 evidence-check 的"工具缺席"同一口径），否则空范围会伪装成 PASS。
         print(f"⚠️  rounds-check：{base}..HEAD 为空 ⇒ 无可检提交，**这不是通过**（rc=3）", flush=True)
         return 3
-    violations = rounds_violations(subjects)
+    # 逃生口的钥匙从台账现读：文件缺席 ⇒ 空集合 ⇒ 逃生口关闭（fail-closed）。
+    decisions = (
+        registered_decision_ids(DECISION_LOG.read_text(encoding="utf-8", errors="replace"))
+        if DECISION_LOG.exists() else set()
+    )
+    violations = rounds_violations(subjects, decisions=decisions)
     print(f"rounds-check：范围 {base}..HEAD 共 {len(subjects)} 个提交，"
-          f"阈值 ≤{MAX_ROUNDS} 轮（D-14，第 {MAX_ROUNDS + 1} 轮熔断）", flush=True)
+          f"阈值 ≤{MAX_ROUNDS} 轮（D-14，第 {MAX_ROUNDS + 1} 轮熔断；按最大轮号计，D-V18-16）", flush=True)
     for item in violations:
-        print(f"❌ STEP-{item['step']}：返工标记 {item['count']} 次"
-              + (f"，且出现显式第 {item['explicit_rounds']} 轮" if item["explicit_rounds"] else ""), flush=True)
-        for subject in item["subjects"]:  # type: ignore[union-attr]
+        print(f"❌ STEP-{item['step']}：显式轮号最高第 {item['max_round']} 轮"
+              f"（{item['count']} 条带标记主题）", flush=True)
+        for subject in item["subjects"]:
             print(f"     · {subject}")
     if violations:
         print(f"结论：{len(violations)} 张卡越过 D-14 ⇒ 停手并升级裁决"
-              f"（不得自行开第 {MAX_ROUNDS + 2} 轮）", flush=True)
+              f"（持签授权的升级在主题里携带台账裁决号，见 P-56）", flush=True)
         return 1
     print("✅ rounds-check：范围内无卡越过轮次上限", flush=True)
     return 0
@@ -1231,6 +1278,51 @@ def _venv_script(name: str) -> str | None:
     return str(base) if base.exists() else None
 
 
+# ─── STEP-34 S34.1：S00X.2.2.1「只降不升」判据锚到调用形（P-100）─────────────────
+#
+# 旧判据是 @win 侧一行 grep（抓字符串 `open(`），把 `_enclosing_open(` 这类**标识符**
+# 也算命中：2026-10-23 复算字面 2、语义 0，任何一次把 open 写进标识符的重构都会让它自红。
+# 这里用 tokenize 只认调用形，判据本体进 guards.py、常驻面交给 pytest（两平台 CI 都跑）。
+
+
+def open_call_violations(source: str, rel: str) -> list[dict[str, str]]:
+    """`scripts/**` 里不带 `encoding=` 的 `open(` 调用（S00X.2.2.1 只降不升；P-100）。
+
+    只认**调用形**：NAME 逐字 `open` 且下一个有效 token 是 `(`，且前一个有效 token
+    不是 `.`（属性访问 `f.open(`）也不是 `def`/`class`（定义位 `def open(`）；
+    注释与字符串由 tokenizer 天然排除——这正是旧 grep 两处假阳的来源。
+    `encoding=` 按行判（与 P-100 出门判据的 grep 同口径）：多行调用把 encoding 写在
+    首行之外的形状不认。现读 `scripts/**` 无任何真实 `open(` 调用，该边界暂无对象。
+    tokenize 失败的文件按 fail-closed 报一条违规，不静默放行。
+    """
+    out: list[dict[str, str]] = []
+    try:
+        tokens = [
+            tok for tok in tokenize.generate_tokens(io.StringIO(source).readline)
+            if tok.type not in (tokenize.COMMENT, tokenize.NL, tokenize.NEWLINE,
+                                tokenize.INDENT, tokenize.DEDENT, tokenize.ENCODING)
+        ]
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return [{"file": rel, "line": "?", "why": "源码 tokenize 失败 ⇒ 守卫对不可解析文件 fail-closed"}]
+    lines = source.splitlines()
+    for idx, tok in enumerate(tokens):
+        if tok.type != tokenize.NAME or tok.string != "open":
+            continue
+        prev_tok = tokens[idx - 1] if idx else None
+        if prev_tok is not None and prev_tok.type == tokenize.OP and prev_tok.string == ".":
+            continue  # 属性访问 obj.open(...)——S00X 判的是裸 open()
+        if prev_tok is not None and prev_tok.type == tokenize.NAME and prev_tok.string in ("def", "class"):
+            continue  # 定义位：def open(...) / class open(...) 是名字，不是调用
+        nxt = tokens[idx + 1] if idx + 1 < len(tokens) else None
+        if nxt is None or nxt.type != tokenize.OP or nxt.string != "(":
+            continue  # import / 裸引用，不是调用
+        line_text = lines[tok.start[0] - 1] if tok.start[0] - 1 < len(lines) else ""
+        if "encoding=" not in line_text:
+            out.append({"file": rel, "line": str(tok.start[0]),
+                        "why": "open( 调用未带 encoding=（S00X.2.2.1 只降不升；P-100）"})
+    return out
+
+
 # ─── STEP-32 S32.2：CI 生成值写 $GITHUB_ENV 必须先 ::add-mask::（P-107 / D-V18-03）───
 
 WORKFLOW_DIR = ROOT / ".github" / "workflows"
@@ -1241,25 +1333,48 @@ _RUN_KEY_RE = re.compile(r"^(?P<indent> *)-?\s*run:\s*(?P<style>[|>][-+]?)?\s*(?
 _GEN_ASSIGN_RE = re.compile(r"^\s*(?:local\s+|export\s+)?(?P<var>\w+)\s*=\s*[\"']?\$\(")
 # `var=$other`（整体复制，不带运算）——生成值换个名字继续走
 _COPY_ASSIGN_RE = re.compile(r"^\s*(?:local\s+|export\s+)?(?P<dst>\w+)\s*=\s*[\"']?\$\{?(?P<src>\w+)\}?[\"']?\s*$")
-# `>> "$GITHUB_ENV"` 与 `>>$GITHUB_ENV`（写入动作；`=` 号左边是环境变量名，不是 shell 变量）
-_ENV_SINK_RE = re.compile(r">>?\s*[\"']?\$\{?GITHUB_ENV\b")
+# `>> "$GITHUB_ENV"` / `>> "$GITHUB_OUTPUT"`（写入动作；`=` 号左边是环境变量名，不是 shell 变量）。
+# S34.7（D-V19-05）：GITHUB_OUTPUT 与 GITHUB_ENV 同等对待——两者都是"值不经回显就出步"的通道。
+_ENV_SINK_RE = re.compile(r">>?\s*[\"']?\$\{?GITHUB_(?:ENV|OUTPUT)\b")
 _SHELL_VAR_RE = re.compile(r"\$(?!\{)(?P<name>[A-Za-z_]\w*)|\$\{(?P<braced>[A-Za-z_]\w*)\}")
+# 这两个名字是写入目的地，不是被写的值（`>> "$GITHUB_ENV"` 那一行里它必须被排除）
+_SINK_VAR_NAMES = {"GITHUB_ENV", "GITHUB_OUTPUT"}
 
 
-def _workflow_step_bodies(text: str) -> list[tuple[str, list[tuple[int, str]]]]:
-    """把一个 workflow 文件切成「步骤 → run 正文行」。
+_JOB_KEY_RE = re.compile(r"^  (?P<job>[A-Za-z0-9_-]+):\s*(?:#.*)?$")
 
-    返回 [(步骤名, [(文件内 1 起行号, 原文)])]。用缩进而不是 yaml 解析器：
-    `pyyaml` 没在主依赖里声明（现读 `apps/api/pyproject.toml`），而守卫必须能在
-    未装依赖的机器上跑——`make guard` 的前置条件不能是"先 uv sync"。
+
+def _workflow_jobs(text: str) -> list[tuple[str, list[tuple[str, list[tuple[int, str]]]]]]:
+    """把一个 workflow 文件切成「job → 步骤 → run 正文行」。
+
+    S34.7（D-V19-05）：掩码在 GitHub Actions 里是 **job 级**生效，判据集合必须按 job
+    归零，所以解析器要先能认出 job 边界。job id 是 `jobs:` 段里**缩进恰好 2** 的键；
+    用一个"已进入 jobs: 段"的状态位排除 `on:` 段里同缩进的触发器名（`push:`、
+    `workflow_dispatch:`）。仍用缩进而不是 yaml 解析器：`pyyaml` 不在主依赖里
+    （现读 `apps/api/pyproject.toml`），守卫必须能在未装依赖的机器上跑。
     """
     lines = text.splitlines()
+    jobs: list[tuple[str, list[tuple[str, list[tuple[int, str]]]]]] = []
+    current_job = ""
     steps: list[tuple[str, list[tuple[int, str]]]] = []
-    current_name = ""
-    step_no = 0
+    in_jobs = False
     idx = 0
     while idx < len(lines):
         line = lines[idx]
+        if re.match(r"^jobs:\s*(?:#.*)?$", line):
+            in_jobs = True
+            idx += 1
+            continue
+        if in_jobs and re.match(r"^[A-Za-z0-9_-]+:", line):
+            in_jobs = False  # 退回顶层键（jobs: 段结束）
+        job_m = _JOB_KEY_RE.match(line) if in_jobs else None
+        if job_m:
+            if current_job:
+                jobs.append((current_job, steps))
+            current_job = job_m.group("job")
+            steps = []
+            idx += 1
+            continue
         name_m = re.match(r"^\s*-?\s*name:\s*(.+?)\s*$", line)
         if name_m and not name_m.group(1).startswith(("|", ">")):
             current_name = name_m.group(1).strip("'\"")
@@ -1267,7 +1382,7 @@ def _workflow_step_bodies(text: str) -> list[tuple[str, list[tuple[int, str]]]]:
         if not run_m:
             idx += 1
             continue
-        step_no += 1
+        step_no = len(steps) + 1
         key_indent = len(run_m.group("indent"))
         body: list[tuple[int, str]] = []
         if run_m.group("style"):
@@ -1289,7 +1404,20 @@ def _workflow_step_bodies(text: str) -> list[tuple[str, list[tuple[int, str]]]]:
             idx += 1
         label = current_name or f"第 {step_no} 步（无 name）"
         steps.append((label, body))
-    return steps
+    if current_job:
+        jobs.append((current_job, steps))
+    return jobs
+
+
+def _workflow_step_bodies(text: str) -> list[tuple[str, list[tuple[int, str]]]]:
+    """把一个 workflow 文件切成「步骤 → run 正文行」（跨 job 拍平；job 归属见 _workflow_jobs）。
+
+    返回 [(步骤名, [(文件内 1 起行号, 原文)])]。
+    """
+    flat: list[tuple[str, list[tuple[int, str]]]] = []
+    for _, steps in _workflow_jobs(text):
+        flat.extend(steps)
+    return flat
 
 
 def _masked_vars_in(body_line: str) -> set[str]:
@@ -1301,11 +1429,11 @@ def _masked_vars_in(body_line: str) -> set[str]:
 
 
 def _written_vars(body_line: str) -> set[str]:
-    """写 `$GITHUB_ENV` 那一行里被内插的 shell 变量名（排除 `$GITHUB_ENV` 本身）。"""
+    """写 `$GITHUB_ENV` / `$GITHUB_OUTPUT` 那一行里被内插的 shell 变量名（排除目的地本身）。"""
     out = set()
     for m in _SHELL_VAR_RE.finditer(body_line):
         name = m.group("name") or m.group("braced")
-        if name != "GITHUB_ENV":
+        if name not in _SINK_VAR_NAMES:
             out.add(name)
     return out
 
@@ -1313,48 +1441,60 @@ def _written_vars(body_line: str) -> set[str]:
 def ci_mask_violations(text: str, rel: str) -> list[dict[str, object]]:
     """纯函数：一个 workflow 文本 ⇒ 违规清单（空 = 通过）。测试喂合成输入用这一层。
 
-    刻意不追的三种形状（追了就会把正确写法误判成红，且超出卡面 D-V18-03 的口径）：
-    `${{ }}` 上下文表达式（不是 shell 变量）、生成值经第三层以上的复制、跨步骤的写入。
-    跨步这一条有代价："上一步掩码、本步写入"确实是安全形状（掩码在整个 job 内有效），
-    但"上一步生成、全程没掩、下一步才写"本门看不到——已登记台账 P-109 交规划方裁定。
+    S34.7（D-V19-05，修 P-109）：「已生成 / 已掩码」两个集合的粒度从**每步**改为**每 job**
+    ——掩码在 GitHub Actions 里本就跨步生效，job 级才是正确口径。于是两件事同时成立：
+    "上一步 mask、本步写"依旧绿（掩码的合法形状）；"上一步生成、全程没掩、下一步才写"
+    从此红（旧口径看不到它，是 P-109 登记的召回缺口）。
+
+    写入面：`$GITHUB_ENV` 与 `$GITHUB_OUTPUT` 同等对待——两者都是"值不经回显就出步"的通道。
+
+    刻意不追的形状（追了就会把正确写法误判成红，或超出本门口径）：
+    `${{ }}` 上下文表达式（不是 shell 变量）、生成值经第三层以上的复制
+    （`z=$(echo "$y")` 是普通字符串拼接）、以及 `{ 多行; } >> "$GITHUB_OUTPUT"` 块写法里
+    "值行与写入行分离"的形状（值行没有 sink、写入行没有变量——现读全仓零处该写法，
+    真用到时须先扩判据）。
     """
     found: list[dict[str, object]] = []
-    for label, body in _workflow_step_bodies(text):
+    for job, steps in _workflow_jobs(text):
         generated: set[str] = set()
         masked: set[str] = set()
-        for line_no, line in body:
-            # 注释先跳过，再谈掩码：注释里的 `::add-mask::$x` 不会真的登记掩码，
-            # 让它算数就等于把门的判据交给一句说明文字（自洗判据的形状）。
-            if line.startswith("#"):
-                continue
-            if "::add-mask::" in line:
-                masked |= _masked_vars_in(line)
-                continue
-            gen_m = _GEN_ASSIGN_RE.match(line)
-            if gen_m:
-                generated.add(gen_m.group("var"))
-                continue
-            copy_m = _COPY_ASSIGN_RE.match(line)
-            if copy_m and copy_m.group("src") in generated:
-                generated.add(copy_m.group("dst"))
-                continue
-            if not _ENV_SINK_RE.search(line):
-                continue
-            if "$(" in line:
-                found.append({"file": rel, "step": label, "line": line_no,
-                              "why": "把 $(...) 直接写进 $GITHUB_ENV：生成值在 mask 之前就已成形，"
-                                     "同一步内无法先掩码 ⇒ 改成 赋值 → ::add-mask:: → 再写"})
-                continue
-            leaked = sorted(v for v in _written_vars(line) if v in generated and v not in masked)
-            if leaked:
-                found.append({"file": rel, "step": label, "line": line_no,
-                              "why": f"写入 $GITHUB_ENV 的生成值 {', '.join(leaked)} 在同一步内"
-                                     f"先前没有 ::add-mask::（P-107）"})
+        for label, body in steps:
+            for line_no, line in body:
+                # 注释先跳过，再谈掩码：注释里的 `::add-mask::$x` 不会真的登记掩码，
+                # 让它算数就等于把门的判据交给一句说明文字（自洗判据的形状）。
+                if line.startswith("#"):
+                    continue
+                if "::add-mask::" in line:
+                    masked |= _masked_vars_in(line)
+                    continue
+                gen_m = _GEN_ASSIGN_RE.match(line)
+                if gen_m:
+                    generated.add(gen_m.group("var"))
+                    continue
+                copy_m = _COPY_ASSIGN_RE.match(line)
+                if copy_m and copy_m.group("src") in generated:
+                    generated.add(copy_m.group("dst"))
+                    continue
+                if not _ENV_SINK_RE.search(line):
+                    continue
+                if "$(" in line:
+                    found.append({"file": rel, "step": f"{job}/{label}", "line": line_no,
+                                  "why": "把 $(...) 直接写进 $GITHUB_ENV/$GITHUB_OUTPUT："
+                                         "生成值在 mask 之前就已成形，无法先掩码 ⇒ "
+                                         "改成 赋值 → ::add-mask:: → 再写"})
+                    continue
+                leaked = sorted(v for v in _written_vars(line) if v in generated and v not in masked)
+                if leaked:
+                    found.append({"file": rel, "step": f"{job}/{label}", "line": line_no,
+                                  "why": f"写入 $GITHUB_ENV/$GITHUB_OUTPUT 的生成值 "
+                                         f"{', '.join(leaked)} 在本 job 内此前没有 ::add-mask::"
+                                         "（P-107 / P-109）"})
     return found
 
 
 def guard_ci_secret_mask() -> int:
-    """S32.2：凡往 `$GITHUB_ENV` 写入本步生成的值，同一步内必须先 `::add-mask::`。"""
+    """S32.2 / S34.7：凡往 `$GITHUB_ENV`/`$GITHUB_OUTPUT` 写入本 job 生成的值，
+    写入前必须先 `::add-mask::`（掩码 job 级生效，跨步可掩）。"""
     files = sorted(p for p in WORKFLOW_DIR.glob("*.y*ml") if p.is_file()) if WORKFLOW_DIR.is_dir() else []
     if not files:
         print(f"⚠️  guard-ci-secret-mask：{WORKFLOW_DIR} 下没有任何 workflow 文件 ⇒ 什么都没看，"
@@ -1371,24 +1511,27 @@ def guard_ci_secret_mask() -> int:
             scanned_steps += 1
             scanned_env_writes += sum(1 for _, line in body if _ENV_SINK_RE.search(line) and not line.startswith("#"))
     print(f"guard-ci-secret-mask：扫 {WORKFLOW_DIR} 下 {len(files)} 个工作流 / "
-          f"{scanned_steps} 个 run 步，其中 {scanned_env_writes} 行写 $GITHUB_ENV", flush=True)
+          f"{scanned_steps} 个 run 步，其中 {scanned_env_writes} 行写 $GITHUB_ENV/$GITHUB_OUTPUT",
+          flush=True)
     if scanned_env_writes == 0:
-        # 判据本身没有可检面（例如 $GITHUB_ENV 写法被整体换掉）。零违规在这里不等于安全。
-        print("⚠️  guard-ci-secret-mask：本轮没有任何 $GITHUB_ENV 写入面 ⇒ 判据未被检验，"
-              "**这不是通过**（rc=3）", flush=True)
+        # 判据本身没有可检面（例如两个写入通道的写法被整体换掉）。零违规在这里不等于安全。
+        print("⚠️  guard-ci-secret-mask：本轮没有任何 $GITHUB_ENV/$GITHUB_OUTPUT 写入面 "
+              "⇒ 判据未被检验，**这不是通过**（rc=3）", flush=True)
         return 3
     for item in violations:
         print(f"❌ {item['file']} 步骤「{item['step']}」第 {item['line']} 行：{item['why']}", flush=True)
     if violations:
         return 1
-    print("✅ guard-ci-secret-mask：所有写入 $GITHUB_ENV 的生成值都在同一步内先掩码", flush=True)
+    print("✅ guard-ci-secret-mask：所有写入 $GITHUB_ENV/$GITHUB_OUTPUT 的生成值都先掩了码"
+          "（job 级口径）", flush=True)
     return 0
 
 
-GUARDS = {"guard-ports": guard_ports, "guard-versions": guard_versions,
-          "guard-structure": guard_structure, "evidence-check": evidence_check,
-          "rounds-check": rounds_check,
-          "guard-ci-secret-mask": guard_ci_secret_mask}
+GUARDS: dict[str, Callable[..., int]] = {
+    "guard-ports": guard_ports, "guard-versions": guard_versions,
+    "guard-structure": guard_structure, "evidence-check": evidence_check,
+    "rounds-check": rounds_check,
+    "guard-ci-secret-mask": guard_ci_secret_mask}
 # 只有这两道门需要基线（其余门看的是仓库现状，与"这一批改了什么"无关）
 BASE_AWARE = ("evidence-check", "rounds-check")
 DEFAULT_BASE = "origin/main"
@@ -1405,8 +1548,11 @@ def default_base() -> str:
 def main(argv: list[str]) -> int:
     if sys.platform == "win32":
         for stream in (sys.stdout, sys.stderr):
+            reconfigure = getattr(stream, "reconfigure", None)
+            if reconfigure is None:
+                continue
             try:
-                stream.reconfigure(encoding="utf-8", errors="replace")
+                reconfigure(encoding="utf-8", errors="replace")
             except Exception:
                 pass
     name = argv[0] if argv else ""
