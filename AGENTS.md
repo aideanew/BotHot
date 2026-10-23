@@ -64,8 +64,11 @@ PLAN 规划 → SPEC 规格 → APPROVE 批准 → IMPLEMENT 实施 → VERIFY �
 - **版本**：**v1.0.0**（X-12：原写 v0.6.5，落后一个大版本）。
   证据：`git tag -l` → `v1.0.0`；tag 落在 `c19fe87`（2026-10-08，
   "docs(release): v1.0.0 账本终稿"）；`CHANGELOG.md:45` 有 `## [v1.0.0] - 2026-10-08` 段。
-  当前 `main` 已领先 tag **286 个提交**（`git rev-list --count v1.0.0..HEAD`，2026-10-23 现读至 `bf141d5`），
+  当前 `main` 已领先 tag **291 个提交**（`git rev-list --count v1.0.0..HEAD`，2026-10-23 现读至 `9983c63`），
   故"已发布 v1.0.0 + 主干继续前进"两者不矛盾；写版本号时以 tag 为准，不以 v0.x 叙事为准。
+  ⚠ STEP-12 的发布对账（2026-10-23）：候选发布说明已写在 `CHANGELOG.md` 的
+  `## [v1.1.0] — 未发布` 段，`[Unreleased]` **刻意没搬空**——搬空 + 打 tag + 推 tag 就是发布动作本身，
+  归用户拍板；就绪判据与未闭合清单见 `docs/06_validation/evidence/EVD-V17-12/s12_readings.md`。
 - **后端**：FastAPI + SQLAlchemy 2.0 + Alembic，9 个业务域
 - **前端**：**Next.js 15** App Router（X-02 更正），10 个功能域
   - 证据：`apps/web/package.json:27` `"next": "^15.5.28"`、`:28` `"react": "^19.0.0"`；
@@ -85,13 +88,20 @@ PLAN 规划 → SPEC 规格 → APPROVE 批准 → IMPLEMENT 实施 → VERIFY �
   STEP-19 的收口判词（`docs/06_validation/evidence/EVD-V3-19/verdicts.md`）进一步判 F-001
   「需要谁接着做：无」。需求侧的详文与判据见
   `docs/02_requirements/features/REQ-F-001-multi-channel-push.md`。
-- **文章来源**：4 平台已接入（providers/article_sources/）—— Dajiala 极致了（发现+HTML详情）、JustOneAPI（发现+正文详情）、TikHub（发现+搜索，需充值）、Wellbyte 数井（搜索+URL驱动发现）；与 RedFox 共存于发现注册表，详情兜底协调器按成本排序
-- **热点**：全链路贯通——聚簇（TF-IDF，候选上限护栏 + 倒排剪枝）、**评分已接线**（worker 聚簇后评分 + 日报前兜底重算 + 每小时 hot_rescore 周期重评，Feed 分数同步回刷）、Feed 三类生产者、日报（LLM 摘要并行化 Semaphore(3) + 失败降级）；业务日界 = Asia/Shanghai
+- **文章来源**：**4 个付费/第三方平台 + RSS 共五个 provider 文件**（`apps/api/app/providers/article_sources/`：
+  `dajiala.py`、`justoneapi.py`、`tikhub.py`、`wellbyte.py`、`rss.py`，另有 `base.py`；2026-10-23 现读，
+  STEP-12 对账时把"4 平台"这句补全——RSS 自 STEP-09 起是一等信息源，不再是外链兜底）。
+  Dajiala 极致了（发现+HTML详情）、JustOneAPI（发现+正文详情）、TikHub（发现+搜索，需充值）、
+  Wellbyte 数井（搜索+URL驱动发现）；与 RedFox 共存于发现注册表，详情兜底协调器按成本排序
+  （协调器默认关，触发条件/供应商/预算由 STEP-10 做成运营可配）
+- **热点**：全链路贯通——聚簇（TF-IDF，候选上限护栏 + 倒排剪枝）、**评分已接线**（worker 聚簇后评分 + 日报前兜底重算 + 每小时 hot_rescore 周期重评，Feed 分数同步回刷）、Feed 三类生产者、日报（LLM 摘要并行化 + 失败降级；**上限不是写死的 `Semaphore(3)`**——STEP-12 现读更正：由 `apps/api/app/core/security.py` 的 `upstream_semaphore(name)` 限界，默认值 `config.py:212` = **4**，可用 `UPSTREAM_CONCURRENCY_<NAME>` 逐 provider 覆盖；失败语义在 `services/llm_summary.py`：任何失败返回 None，调用方走"中心文章正文首段截断"降级）；业务日界 = Asia/Shanghai
 - **测试**：连库用例真实执行（CI 有 postgres service + skip 门禁 + alembic 单头断言 + e2e/冒烟 job）。
-  现读（2026-10-23，`@ci` run 39885880010 @3491054）：**2258 passed / 6 skipped / 4 deselected**，
-  `skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0`。本机（隔离 PG16@5547）最近一次全量是
+  现读（2026-10-23，`@ci` run **39896802610** @`9983c63`）：**2258 passed / 6 skipped / 4 deselected**、
+  `Total coverage: 88.00%`，`skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0`。本机（隔离 PG16@5547）最近一次全量是
   10-22 的 `2257 passed / 6 skipped`（在覆盖率门第 11 条判据落地之前）；10-23 本机
   无 docker CLI、5547 无监听 ⇒ 连库面未在本地复算，连库结论以 `@ci` 为准。
+  ⚠ STEP-12 对账补一句：这个全局覆盖率数**同树三次复算是 88.01 / 87.95 / 88.00**（测试数完全相同），
+  有 ±1 行抖 ⇒ 可以拿它过线，不可以把它当精确判据（台账 §4 P-104）。
   那 4 条 deselected 是 STEP-11 的 perf 用例
   （`apps/api/pyproject.toml` 的 `addopts = ["-m", "not perf"]` 默认摘除，手动 `-m perf` 才跑）。
   `@win` 侧 skip 基线 **666**（零余量，按原因族记账；新增连库用例必须同步抬到测量值）。

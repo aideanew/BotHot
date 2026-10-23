@@ -1,6 +1,7 @@
 # STEP-12 文档对账证据汇总与发布
 
-> 基线 main@61358c3｜状态：⚪ 未开始
+> 基线 main@61358c3｜状态：**🟡 对账与就绪报告已交付（2026-10-23，队列⑯）；发布动作按队列指令交回用户拍板，未执行**
+> 执行记录见本文件末尾；读数在 `docs/06_validation/evidence/EVD-V17-12/`。
 
 | 字段 | 内容 |
 |---|---|
@@ -30,3 +31,30 @@
 ## V0.9.0 → V0.10.0 本卡变更（基线 main@81cb997）
 
 - 本版无实质变更；执行前现读行号（基线 81cb997，自 53ebc4a 起业务代码零改动）。
+
+## 执行记录（V0.17.0 队列⑯ · 2026-10-23 · 执行 Agent-Doc，`@win` 现读 + `@ci` 原始面）
+
+读数与判定全在 `docs/06_validation/evidence/EVD-V17-12/`（`s12_readings.md` + `req_anchor_reconciliation.txt`）。
+**发布动作不在本卡交付面内**（队列指令原话："只出对账与证据，发布由用户拍板"），所以本卡的 Done
+= 对账做完 + 就绪判定给出 + 必须人拍板的项列清，**不等于已发布**。
+
+| 三级任务 | 状态 | 本轮事实 |
+|---|---|---|
+| S12.1.1 门面文档对账 | ✅ 达成（改正 3 条不实/过期 + 1 条刷新） | AGENTS.md 状态段 **12 条**逐条给证据：不实的是"4 平台已接入"（目录里现读是 4 平台 + RSS = 5 个 provider）与"日报摘要 `Semaphore(3)`"（全仓 0 命中，真机制是 `core/security.py:526/534` 的 `upstream_concurrency/upstream_semaphore`，默认 **4**，见 `config.py:212`）；过期的是"main 领先 tag **286** 个提交"（现读 **291** @`9983c63`）；刷新的是测试基线那次的 run 号 |
+| S12.1.2 需求条目验收锚 | ✅ 达成（0 断链）+ 新登记 P-108 | 15 份文档、**99 个仓内文件锚全命中**、4 个 `::` 符号锚全命中、写法不齐 0；探针带四发极性自测（编造符号/编造文件必须红）。⚠ 这条判据**没有常驻门**（`check_docs_consistency` 只扫 backlog.md）⇒ 台账 §4 P-108 |
+| S12.1.3 conventions 三条隔离纪律 | ✅ 达成 | 新增 `conventions.md` **§4.5**：测试端口（5547/6390 + 命中部署端口 exit 2）、代理密封（`conftest.py:87-96`，含那条"故意 skip"的 `test_env_isolation.py:77`）、DSN/口令/主密钥不得进仓内文本 |
+| S12.2.1 运行镜像时区库核验 | 🟡 **判定达成，但取数面是 CI；直接核验未测** | 本机无 docker ⇒ 起不了容器。替代证据 = `compose-smoke`：backend 镜像 `uvicorn app.main:ap…` 起得来（health 信封 code=0）+ worker/scheduler 心跳 age=2s ⇒ `hot.py:38` 与 `alerting.py:116` 那两处**导入期** `ZoneInfo("Asia/Shanghai")` 解析成功。顺带抓出一条发布前该知道的隐式依赖：`pyproject` 无 `tzdata`、Dockerfile 不装、基镜像是 `python:3.12-slim` ⇒ 台账 §4 **P-106**（上游哪天剥掉它，后端是**进程起不来**，不是功能降级） |
+| S12.2.2 EVD 汇总 + CHANGELOG + task-index | ✅ 交付（task-index 一项如实报"路径不存在"） | `CHANGELOG.md` 新增 `## [v1.1.0] — 未发布` 段：**11 Added / 7 Changed / 6 Fixed**（顶层条目 24），每个 hash 都 `git log -1` 复核主语（复核中改掉一次错配：`b79c8e9`/`859c0df` 我原当成 STEP-02/03，实为 STEP-01 返工批）。`[Unreleased]` **刻意不搬空**（搬空就是发布）。⚠ 对账出来的失真：`[Unreleased]` 只有 6 个顶层条目而 tag 之间隔了 **291 个提交** ⇒ v1.1.0 那段不是"换个标题"，是重新对账。`docs/05_execution/task-index` **不存在**（只有 V0.1.0 历史树里那份），现役载体是 `07-执行过程记录.md` |
+
+### 发布就绪判定（本卡的出口件）
+技术面 8 条判据全绿（三绿连续 / 全量连库真跑 2258-6-4 且 skip 逐条点名 / 单头 + 往返 / 覆盖率 87.95% /
+门面无不实陈述 / 需求锚 99+4 全命中 / 契约面 CI 内通过 / gitleaks 364 commits no leaks）。
+**必须先由人拍板的三件事**：① 版本号与范围（291 个提交跨 5 个规划版本，含 3 次 DDL 与一次 Next 14→15；
+`v1.1.0` 只是占位）；② 仓库可见性（REST 现读 `private=false / visibility=public`）；
+③ 台账 §4 **P-107**——`compose-smoke` 的一次性主密钥会被 Actions 打进公开日志（评级低，因为那两把钥匙
+只作用于当次 job 的一次性库；修法一行 `::add-mask::`，属 CI 面、D-11 范围外，故本卡只登记不代改）。
+
+### 所有权
+动了：`AGENTS.md`、`conventions.md`（§4.5）、`CHANGELOG.md`、`EVD-V17-12/`、台账、本执行记录、`07-执行过程记录.md` 行 39。
+**故意没动**：`docs/02_requirements/**`（对账没发现要改的锚，无实陈述就不改字）、`Dockerfile`/`pyproject`（P-106）、
+`.github/workflows/*`（P-107）、`[Unreleased]` 段（搬空 = 越权发布）。

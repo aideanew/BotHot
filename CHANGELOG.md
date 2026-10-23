@@ -42,6 +42,72 @@
     配套 React 18→19、@types/* 同步、eslint-config-next 15；`spaces/[id]` params Promise 化（`use()` 解包 + Suspense 边界）；6 测试文件 params 传 `Promise.resolve` + `await act` 包裹（React 19 act 语义）；TopBar/首页等 11 处内部导航 `<a>` → `<Link>`（next 15 将 no-html-link-for-pages 升为 Error）。pnpm audit --prod 归零
   - **mock e2e ⑦ 空间详情红**（CI run 37749239965）：`EngineSwitcher` 挂载即拉 `listEngines`，engines 域原裁定"无 mock 分支"致请求穿透 MOCK 网关 → rewrite 代理 :3300 ECONNREFUSED → 500 → console 门禁红；推翻原裁定补 mock 分支（builtin 可用 + 4 引擎位未配 Key 样例，patchSpaceEngine 未配 Key 拒 10004）。hot 域穿透**保留**：hot.spec 无 console 门禁且该穿透构成"后端不可达降级路径"的真实 e2e 覆盖
 
+## [v1.1.0] — **未发布**（STEP-12 对账产物；发布与否由用户拍板）
+
+> 本节是**候选发布说明**，不是已发布事实：截至本批，`git tag -l` 只有 `v1.0.0`（落在 `c19fe87`，2026-10-08），
+> `main` 已领先该 tag **291 个提交**（`git rev-list --count v1.0.0..HEAD` 于 `9983c63` 现读）。
+> **上面的 `[Unreleased]` 段刻意没有搬空**——"把 Unreleased 落成 v1.1.0 + 打 tag + 推送 tag"这三步就是发布动作本身，
+> 归用户决定；STEP-12 的所有权只到"对账与证据"。
+> 读法：下面每条末尾的来源提交短 hash 都可 `git log --oneline` 对；能力级的判据与读数在
+> `docs/06_validation/evidence/EVD-V17-12/s12_readings.md`（含 99 个需求侧文件锚的逐条对账结果）。
+
+### Added（用户可见的新能力）
+
+- **采集渠道与文章分类改为运营可配**：后端读写面 + 管理端配置页；此前 registry/categorizer 只读 env 常量，
+  全仓无写接口。来源 `05ff3ff`、`7c4bda8`（后端）、`848afb2`（前端配置页，STEP-14b）
+- **RSS 成为一等信息源**：独立 provider、订阅生命周期与清单四态，不再只当"外链兜底"。来源 `22b9ede`（STEP-09）
+- **信息源标识与按源路由**：外部标识解析、协议升级、按源选渠道 + 降级开关。来源 `bb4e3ac`、`211533c`、
+  `df488f7`、`7ed167b`（STEP-08）
+- **详情兜底协调器接进入库链路**（默认关、免费源先跑）与触发条件/供应商/预算运营可配。
+  来源 `1e5c462`（S10.V15.1）、`b60e1e9`（S10.V15.2）（STEP-10）
+- **采集静默的可观测出口**：发现链指标族、同步埋点、静默丢行/吞异常的告警出口。来源 `d19b9ab`（STEP-05）
+- **写操作结构化审计日志**：23 个写操作全量归类，操作者身份取自服务端会话而非请求体。来源 `5a2e471`（STEP-31）
+- **管理端直投补写站内通知历史**（第三条直投路径补齐，三路径落库顺序被用例钉住）。来源 `f383f0d`（STEP-26）
+- **模块覆盖率门进 CI**：按模块设线（provider ≥80 / services ≥85 / article_identity=100 / 全局 ≥79），
+  阈值只许调高，反证常驻。来源 `88381e2`（STEP-06）
+- **引擎不可用原因可视化**：`GET /api/v1/engines` 每位带 `reason`（`ok`/`not_allowlisted`/`key_missing`/
+  `not_implemented`），切换拒绝的文案与之一一对应。来源 `81205f1`（STEP-13）、`d839eb7`（STEP-15 消费面）
+- **分页目标壳**（`hasMore` 等目标形状）+ 前端消费。来源 `fbb0409`（STEP-14a）、`d839eb7`
+- **验收环境四入口**：`entry.py` / `make` 的 `testenv-up`、`testenv-down`、`verify-backend`、`verify-frontend`
+  （一条命令出"真库全量 + skip 构成 + 覆盖率"与"前端 install→typecheck→vitest→build"）。来源 `9983c63`（STEP-00E）
+
+### Changed（行为口径变了，读旧文档的人要注意）
+
+- **正式验收面 = CI `ubuntu-latest`；Windows 侧独立成 `CI-Windows` 工作流作开发平台门**
+  （D-V4-01 / D-V7-01）：两 job 曾同居一个工作流，导致"验收面绿、徽章显示灰"。
+  来源 `593dc5b`（拆分与超时根因）、`0c1815c`（多平台门收口）
+- **CI-Windows 的 skip 门改为"按原因族记账 + 未知族即红 + 阈值零余量"**：新增一条连库用例必然把门顶红，
+  这是设计要求（重测构成后才抬阈值）。来源 `593dc5b`、`0c1815c`、`88381e2`（抬到测量值那一档）；
+  阈值史 320→441→443→444→…写在 `cross-platform.md` §8
+- **健康/就绪探针有界化**：依赖不可达时 `degraded` 快速返回而不是挂住，`/ready` 与 schema 守卫分层。
+  来源 `a3ad07a`、`0c1815c`（STEP-00H 的 skip 基线与超时收紧；根因修正在同卡前两轮）
+- **角色门禁单参数化 + 推送任务归属服务端化**：`require_roles` 是"取最高档"的语义（写两个参数＝admin-only），
+  运营写权按意图恢复；任务创建者归属只信服务端会话。来源 `7504ef8`（STEP-24 S24.1-3 + STEP-25 S25.1-3），
+  第 2 轮更正 `392a635`
+- **健康/就绪探针有界化**：依赖不可达时 `degraded` 快速返回而不是挂住，`/ready` 与 schema 守卫分层。
+  来源 `a3ad07a`（STEP-00H）
+- **`next` / `eslint-config-next` 升到 15.5.28**（上游安全公告 GHSA-2464-fhr4-w9xw + CVE-2026-94482 的修复线）；
+  同批把 pnpm-audit 与 trivy 的 BLOCK 清空。来源 `bf141d5`
+- **需求基线拆成 12 份可机检条目**（REQ-F-001…008 + NF×2 + C×2），主文档只留摘要与三向表。来源 `8de3a1a`（STEP-17）
+
+### Fixed
+
+- **推送域 4 个读接口缺角色门 + `/tasks` 路由被遮蔽**（后者使运营永远看不到自己的任务）。
+  来源 `1236d50`、`31a6667`、`15470ee`（STEP-22）
+- **两处夹具在掩盖缺陷**：`test_scheduler` 用假 id/假长链播种（于是"入库后 Diff=0"这条恒真）、
+  `test_p0_asset_cache` 的 `URL_A` 不是真 `__biz` 锚（同号两篇互顶正文看不出来）。改后各带一条变异红点。
+  来源 `88381e2`（STEP-06）
+- **三家 provider 的时间锚、TikHub 的降级语义、"一行坏数据打挂整页"**（P-15/P-16/P-17）。
+  来源 `2a7195d`、返工轮 `f7a3a6b`（STEP-20）
+- **契约生成面**：jsonschema 成语义真源、`api.envelope` 收编、`collection.schema.json` 由生成器产出、
+  mid/idx 前导零规范化（同文两键的第三种形态）。来源 `25088c4`（STEP-01）、`a6f54e1`（STEP-02 S2.4）、
+  `d044d2a`（STEP-03 收口）
+- **四条历史探针全部达"修复后期望"**（短链二次入库命中缓存、同号两篇互顶正文、多源同键
+  `MultipleResultsFound`、已 READY 篇二轮 Diff 仍判新增）——**注意 P-2 那条的达成原因变了**（由 NULL 守卫给出，
+  不再是"两支键空间对齐"），这条限定语必须一起读，读数在 `EVD-V17-06` §4。来源 `88381e2`（STEP-06 复跑）
+- **端到端采集链此前从未被整体跑过**（发现→清单→入列→入库→二轮 Diff 五段，历史用例最多覆盖三段）。
+  来源 `88381e2`（STEP-06 六渠道 E2E，连跑三次同键集）
+
 ## [v1.0.0] - 2026-10-08
 
 > 主题：v1.0 正式发布——S0–S3 执行批次（通知四链路/加密/告警/轻量迁移）+

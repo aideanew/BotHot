@@ -1,0 +1,31 @@
+# STEP-12 S12.1.2 需求侧验收锚对账（原始读数，@win，head_sha=9983c63）
+
+## 1. 判据本体
+扫描文档数=15
+引用到的仓内文件锚（去重）=99
+其中文件不存在=0
+带 :: 符号的锚=4，其中符号对不上=0
+符号锚但文件名对不上任何仓内锚=0
+写法不齐（正文写 tests/x.py 而非 apps/api/tests/x.py）=0
+rc=0
+
+## 2. 四发极性（证明上面的 0 不是恒真）
+  ① 真实符号应在: got=True want=True OK
+  ② 编造符号应不在: got=False want=False OK
+  ③ 真实文件应存在: got=True want=True OK
+  ④ 编造文件应不存在: got=False want=False OK
+selftest_rc=0
+rc=0
+
+## 3. 覆盖面说明（读之前先看这段）
+- 语料 = `docs/02_requirements/**/*.md`（STEP-17 拆出的 12 份 + 主文档）+ `AGENTS.md`，共 **15 份**。
+- 文件锚 = 形如 `apps/api/tests/xxx.py`、`apps/web/tests/xxx.spec.tsx` 的仓内路径，
+  **按 HEAD 的 blob 判存在**（`git cat-file -e HEAD:<path>`），不看工作树——共享工作树里未提交的改动不算数。
+- 符号锚 = 带 `::` 的引用；语料里这样的引用共 **4 处**，逐条在真实文件体里按
+  `def` / `async def` / `it(` / `test(` / `describe(` 找定义。裸文件名（`x.py::case`）也解析，
+  靠的正是上面那 99 条文件锚的全集——先收全集再解析，否则跨文档引用会被误判成断链。
+- **两类不判（写明，免得被读成"全查过了"）**：
+  ① 锚指向的文件存在，但"那条用例今天是否真跑"（pass vs skip）不在本探针职责内——
+     那由 `@ci` 的 skip 门禁与 `conventions.md` §4.3 的点名纪律判；
+  ② 带参数化 id 的引用（形如 `test_x[case]`）当前不匹配符号正则，因此不计入符号锚；
+     本批语料里没有这种写法，但**这是一条会随文档写法漂移的盲区**，写在 §6 的常驻化建议里。
