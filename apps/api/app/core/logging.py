@@ -113,10 +113,20 @@ def configure_logging(force: bool = False) -> None:
 
     level = _resolve_level()
     renderer: Any
+    # 异常栈的展开方式（STEP-43）：
+    # - json：渲染前先用 format_exc_info 把 exc_info 展开成纯文本栈（P-115：此前生产 JSON
+    #   日志里异常只剩 `"exc_info": true`，没有任何栈）；纯文本栈不含栈帧局部变量。
+    # - console：固定 plain_traceback。缺省值会在 rich 可导入时改用 rich 栈并默认展示
+    #   栈帧局部变量（P-114：凭据形的局部变量原样进日志），rich 在不在取决于开发机装了什么。
+    exc_processors: list[Any] = []
     if _resolve_format() == "json":
+        exc_processors = [structlog.processors.format_exc_info]
         renderer = structlog.processors.JSONRenderer(ensure_ascii=False)
     else:
-        renderer = structlog.dev.ConsoleRenderer(colors=sys.stderr.isatty() and sys.stdout.isatty())
+        renderer = structlog.dev.ConsoleRenderer(
+            colors=sys.stderr.isatty() and sys.stdout.isatty(),
+            exception_formatter=structlog.dev.plain_traceback,
+        )
 
     shared = _shared_processors()
 
@@ -131,7 +141,12 @@ def configure_logging(force: bool = False) -> None:
         foreign_pre_chain=shared,
         # 遮蔽放在渲染器**之后**：此时入参已是整行字符串（含展开的异常栈），
         # 原生日志、第三方 stdlib 日志、traceback 全部经过同一处（STEP-40，P-113）。
-        processors=[structlog.stdlib.ProcessorFormatter.remove_processors_meta, renderer, redact_rendered],
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            *exc_processors,
+            renderer,
+            redact_rendered,
+        ],
     )
 
     handler = logging.StreamHandler(_resolve_stream())

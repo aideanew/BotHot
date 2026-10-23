@@ -189,3 +189,52 @@ def test_audit_path_params_keep_uuid_and_short_ident_mask_the_rest() -> None:
         "doc_id": PATH_PARAM_PLACEHOLDER,
         "x": PATH_PARAM_PLACEHOLDER,
     }
+
+
+# ── STEP-43：异常栈（P-114 栈帧局部变量 / P-115 JSON 无栈） ─────────────────────
+
+
+def _raise_with_local(secret_value: str) -> None:
+    raise RuntimeError("s43-boom")
+
+
+def test_exception_keeps_stack_and_never_shows_frame_locals(log_buffer: io.StringIO) -> None:
+    s = _secret()
+    try:
+        _raise_with_local(s)
+    except RuntimeError:
+        structlog.get_logger("s43").exception("原生日志带栈")
+        logging.getLogger("s43.third").exception("第三方日志带栈")
+    out = log_buffer.getvalue()
+    assert out.count("s43-boom") >= 2, "两条日志都必须带出异常（P-115：JSON 模式此前只剩 exc_info=true）"
+    assert "_raise_with_local" in out, "必须有栈帧，不只是异常消息"
+    assert s not in out, "栈帧局部变量不得进日志（P-114）"
+
+
+def test_console_renderer_pins_plain_traceback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """rich 是否可导入取决于开发机；渲染器必须显式固定 plain_traceback，不吃缺省值。"""
+    saved_config = structlog.get_config()
+    root = logging.getLogger()
+    saved_handlers = list(root.handlers)
+    saved_level = root.level
+    saved_flag = app_logging._configured
+    monkeypatch.setenv("LOG_FORMAT", "console")
+    monkeypatch.setattr(app_logging, "_resolve_stream", io.StringIO)
+    app_logging.configure_logging(force=True)
+    try:
+        ours = [h for h in root.handlers if getattr(h, app_logging._OUR_HANDLER_ATTR, False)]
+        assert len(ours) == 1
+        fmt = ours[0].formatter
+        assert isinstance(fmt, structlog.stdlib.ProcessorFormatter)
+        consoles = [p for p in fmt.processors if isinstance(p, structlog.dev.ConsoleRenderer)]
+        assert len(consoles) == 1
+        assert consoles[0]._exception_formatter is structlog.dev.plain_traceback
+    finally:
+        monkeypatch.undo()
+        for h in list(root.handlers):
+            root.removeHandler(h)
+        for h in saved_handlers:
+            root.addHandler(h)
+        root.setLevel(saved_level)
+        structlog.configure(**saved_config)
+        app_logging._configured = saved_flag
