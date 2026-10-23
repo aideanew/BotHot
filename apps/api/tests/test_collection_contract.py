@@ -777,7 +777,7 @@ def cites_live_decision(entry: Divergence) -> bool:
     但不扫 `ref/field/rule`——那些是机器匹配的坐标，往里塞 D-V* 会造出假引用。
     """
     text = " ".join((entry.draft, entry.model, entry.reason))
-    cited = set(re.findall(r"D-V\d+-\d\d", text))
+    cited = set(re.findall(r"(?<![A-Za-z0-9-])D-V\d+-\d\d(?![0-9])", text))
     return bool(cited) and cited <= live_decision_ids()
 
 
@@ -3072,8 +3072,12 @@ def _invisible_decision_ids(lines: list[str]) -> list[str]:
     "看行首"的判据就整片失明——列数与粘行两条守卫同时抓不到，
     而引用侧 `live_decision_ids()` 仍把那条号算成 live，登记于是买到一条渲染上不存在的裁决。
     所以这里问反向的问题：被说到的每个号，是否都有一行当得了它？
+
+    S34.3（P-57）：匹配加左边界——号前不能是字母数字或 `-`，否则证据目录名
+    `EVD-V15-27` 里从第二个字符起的那一段被读成裁决号 D-V15-27 ⇒ 假红；右边界
+    `(?![0-9])` 防 `D-V8-051` 这类长一位的号被整个吞掉或截断误认。
     """
-    mentioned = {found for line in lines for found in re.findall(r"D-V\d+-\d\d", line)}
+    mentioned = {found for line in lines for found in re.findall(r"(?<![A-Za-z0-9-])D-V\d+-\d\d(?![0-9])", line)}
     return sorted(mentioned - set(_decision_rows(lines)))
 
 
@@ -3312,7 +3316,7 @@ def test_declared_decision_ranges_are_complete() -> None:
     现读触发：`00-README.md` 曾写右端少一条，而台账、`03`、`STEP-00W` 都是四条。
     少写一条的后果不是数字错，而是**有人据此以为 D-V7-04 不存在**、不去读它的默认值。
     """
-    ledger_ids = set(re.findall(r"D-V\d+-\d\d", "\n".join(_ledger_lines())))
+    ledger_ids = set(re.findall(r"(?<![A-Za-z0-9-])D-V\d+-\d\d(?![0-9])", "\n".join(_ledger_lines())))
     claims: list[tuple[str, int, int, int, int]] = []
     cross: list[tuple[str, int, int, int, int]] = []
     for path in sorted((REPO_ROOT / "docs" / "任务规划V0.12.0").rglob("*.md")):
@@ -3374,6 +3378,40 @@ def test_ledger_guards_fire_on_the_two_real_defects_they_were_written_for() -> N
     ]
     assert _invisible_decision_ids(numbered) == ["D-V8-05"], "加一列编号就令整片行不可见 ⇒ 必须红"
     assert _ledger_table_problems(numbered), "编号列表述没进入总判据"
+
+
+def test_ledger_mention_pattern_ignores_evidence_directory_names() -> None:
+    """S34.3（P-57）：裁决号匹配必须有左边界——证据目录名不构成"被提到的裁决号"。
+
+    `EVD-V15-27` 里从第二个字符起就是 `D-V15-27`，旧模式（无左边界）在台账里一引用
+    证据目录就把 `D-V15-27` 记成"被提到却没登记"⇒ 假红。P-57 的止血（改台账措辞）
+    没关门：下一个在台账里引用证据目录的人一定再踩。极性两发：
+    ① 目录名形态 ⇒ 绿；② 裸裁决号形态（未登记）⇒ 仍红。
+    """
+    with_dir_ref = _MINI_LEDGER + [
+        "| **D-V8-07** | 熔断 | A | B | NON | t | e | | |",
+        "执行证据见 docs/06_validation/evidence/EVD-V8-07/ 与 EVD-V18-34/。",
+    ]
+    assert _invisible_decision_ids(with_dir_ref) == [], (
+        f"证据目录名被读成裁决号：{_invisible_decision_ids(with_dir_ref)}"
+    )
+    with_bare_mention = _MINI_LEDGER + ["同族裁决另见 D-V8-09（未登记）。"]
+    assert _invisible_decision_ids(with_bare_mention) == ["D-V8-09"], "裸的未登记号必须仍被点名"
+
+
+def test_citation_pattern_ignores_evidence_directory_names() -> None:
+    """`cites_live_decision` 的匹配面同族（S34.3）：引用文本里写证据目录名，
+    不等于引了一条裁决——旧模式会把 `EVD-V8-07` 认成 `D-V8-07` 买通"引用存在"的判据。"""
+    entry_with_dir = Divergence(
+        ref="ref-x", field="f.y", kind="structural", rule="s34-3a",
+        draft="旧", model="新", reason="证据目录见 EVD-V8-07/。",
+    )
+    assert not cites_live_decision(entry_with_dir), "目录名不该算作裁决引用"
+    entry_with_id = Divergence(
+        ref="ref-x", field="f.y", kind="structural", rule="s34-3b",
+        draft="旧", model="新", reason="见 D-V8-05。",
+    )
+    assert cites_live_decision(entry_with_id), "真裁决号仍必须算引用"
 
 
 def test_decision_log_tables_are_well_formed() -> None:
