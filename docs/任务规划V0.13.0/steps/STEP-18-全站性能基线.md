@@ -1,6 +1,6 @@
 # STEP-18 全站性能基线
 
-> 基线 main@61358c3｜状态：✅ 收口（2026-10-24，P-118 以"自备 PG16@5547"口径解除——zonky 便携 PG16.15；四条 SLA 首测全达标、可感性全证明、PERF-baseline-v1 + roadmap 落账；读数在 EVD-V18-18/）
+> 基线 main@61358c3｜状态：✅ 收口（2026-10-24，交付 head 88d7518 三绿 attempt 1：CI 40053307363 / CI-Windows 40053307366 / Security 40053307379；P-118 以"自备 PG16@5547"口径解除——zonky 便携 PG16.15；四条 SLA 首测全达标、可感性全证明、PERF-baseline-v1 + roadmap 落账；读数在 EVD-V18-18/）
 
 | 字段 | 内容 |
 |---|---|
