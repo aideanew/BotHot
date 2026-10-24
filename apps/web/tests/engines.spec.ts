@@ -57,6 +57,7 @@ describe("P4 引擎 API（ADR-0004）", () => {
       keyEnv: "COZE_API_KEY",
       activeSource: "registered",
       decryptFailed: false,
+      implemented: false,
       description: "Coze 知识库 API（SaaS）",
     };
     expect(registered.configured).toBe(true);
@@ -64,7 +65,7 @@ describe("P4 引擎 API（ADR-0004）", () => {
     expect(registered.activeSource).toBe("registered");
     expect(registered.decryptFailed).toBe(false);
 
-    // 旧后端不返回这两字段，须仍可解析（字段可选，不做非空断言）。
+    // S48（P-119）后契约两键为 required：夹具补默认值；"旧后端不返回"的时代已由契约收口。
     const legacy: EngineItem = {
       engine: "builtin",
       configured: true,
@@ -72,9 +73,14 @@ describe("P4 引擎 API（ADR-0004）", () => {
       allowlisted: true,
       reason: "ok",
       keyEnv: "",
+      activeSource: null,
+      decryptFailed: false,
+      implemented: true,
       description: "内置引擎（LangBot 系，默认）",
     };
-    expect(legacy.activeSource).toBeUndefined();
-    expect(legacy.decryptFailed).toBeUndefined();
+    // S48（P-119）：两键 required 后不再有 undefined 形态；断言改为契约语义——
+    // 「未配置来源」由 null 表达（string | null），解密失败缺省 false。
+    expect(legacy.activeSource).toBeNull();
+    expect(legacy.decryptFailed).toBe(false);
   });
 });

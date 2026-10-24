@@ -1,0 +1,2 @@
+lib/api/mock-routes.ts(173,5): error TS2322: Type 'string' is not assignable to type '"env" | "registered" | null | undefined'.
+lib/api/mock-routes.ts(175,5): error TS1360: Type '{ engine: string; configured: true; available: true; allowlisted: true; reason: "ok"; implemented: true; keyEnv: string; activeSource: string; description: string; }' does not satisfy the expected type 'EngineCapability'.

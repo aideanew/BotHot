@@ -13,17 +13,15 @@
  * 那正是本仓反复登记过的那族静默失败（P0-3、P-9、外链过滤那一族）。
  * 所以漏登记必须是 50101 一条会响的错误，而不是一份看起来正常的空数据。
  *
- * 形状来源（如实声明）：本表的值类型取 `lib/api/types.ts` 与各域自己声明的**线上响应类型**，
- * 不是 `packages/contracts` 的生成物——那个包目前只冻结了 6 个域的**持久层实体镜像**
- * （`src/index.ts:33-38` 的口径限定写明"域 dto 是 SQLAlchemy 列内省，不是 API 响应形状"，
- * 而 identity / chat / engine 三域还是 `.gitkeep` 骨架）。卡面 S15b.2.1 要的
- * `satisfies 生成类型` 在现行契约包下**不可满足**，已按升级条件登记 P-82 交 Contract 列，
- * 而不是在这里手写一批新类型冒充契约。
+ * 形状来源（S48 起分两档）：
+ * - **引擎域已由契约生成类型约束**（`packages/contracts/src/engine/dto.ts`，STEP-46 生成；
+ *   本表样例与两条 handler 均 satisfies 契约类型，写错一个字段 tsc 红——P-119 收口）。
+ * - 其余域仍取 `lib/api/types.ts` 与各域自声明的线上响应类型（待 STEP-52 随 STEP-47 铺开）。
  */
 
 import { ApiError, CATEGORIES, ERROR_MESSAGES, UNCATEGORIZED } from "./types";
 import { MOCK_DOCS, MOCK_SPACE_DETAILS, MOCK_SPACES } from "./mock-data";
-import type { EngineItem } from "./engines";
+import type { EngineCapability, EngineList, SpaceEngineBinding } from "@bothot/contracts";
 import type {
   ExtractedArticle,
   LinkResult,
@@ -161,7 +159,7 @@ export function unregisteredMockRoute(method: string, path: string): ApiError {
  * 会被 rewrite 代理到不存在的后端（ECONNREFUSED :3300 → 500 → console 门禁红，
  * CI run 37749239965 实证）。
  */
-const MOCK_ENGINES: EngineItem[] = [
+const MOCK_ENGINES = [
   {
     engine: "builtin",
     configured: true,
@@ -171,8 +169,9 @@ const MOCK_ENGINES: EngineItem[] = [
     implemented: true,
     keyEnv: "",
     activeSource: "env",
+    decryptFailed: false,
     description: "内置关键词检索引擎（演示数据）",
-  },
+  } satisfies EngineCapability,
   {
     engine: "main-platform",
     configured: false,
@@ -181,8 +180,10 @@ const MOCK_ENGINES: EngineItem[] = [
     reason: "key_missing",
     implemented: false,
     keyEnv: "MAIN_PLATFORM_API_KEY",
+    activeSource: null,
+    decryptFailed: false,
     description: "主平台知识引擎",
-  },
+  } satisfies EngineCapability,
   {
     engine: "coze",
     configured: false,
@@ -191,8 +192,10 @@ const MOCK_ENGINES: EngineItem[] = [
     reason: "key_missing",
     implemented: false,
     keyEnv: "COZE_API_KEY",
+    activeSource: null,
+    decryptFailed: false,
     description: "Coze 知识引擎",
-  },
+  } satisfies EngineCapability,
   {
     engine: "dify",
     configured: false,
@@ -201,8 +204,10 @@ const MOCK_ENGINES: EngineItem[] = [
     reason: "key_missing",
     implemented: false,
     keyEnv: "DIFY_API_KEY",
+    activeSource: null,
+    decryptFailed: false,
     description: "Dify 知识引擎",
-  },
+  } satisfies EngineCapability,
   {
     engine: "fastgpt",
     configured: false,
@@ -211,15 +216,17 @@ const MOCK_ENGINES: EngineItem[] = [
     reason: "key_missing",
     implemented: false,
     keyEnv: "FASTGPT_API_KEY",
+    activeSource: null,
+    decryptFailed: false,
     description: "FastGPT 知识引擎",
-  },
+  } satisfies EngineCapability,
 ];
 
 registerMockRoutes(
   {
     method: "GET",
     pattern: /^\/api\/v1\/engines$/,
-    handle: () => ({ items: MOCK_ENGINES, defaultEngine: "builtin" }),
+    handle: () => ({ items: MOCK_ENGINES, defaultEngine: "builtin" }) satisfies EngineList,
   },
   {
     // 演示态切换：只放行 available 的引擎位，其余按真后端口径拒 10004（不是拒 500、也不是静默成功）
@@ -235,7 +242,7 @@ registerMockRoutes(
           "引擎未开放 / 未配置 Key / 尚未实接，请联系管理员"
         );
       }
-      return { engine, engineKbId: `mock-kb-${engine}`, spaceId: params.spaceId };
+      return { engine, engineKbId: `mock-kb-${engine}`, spaceId: params.spaceId } satisfies SpaceEngineBinding;
     },
   }
 );

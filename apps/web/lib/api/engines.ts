@@ -10,6 +10,8 @@
  * （builtin 可用、其余未配 Key），与 notifications.ts 的 MOCK 门同一动机。
  */
 
+import type { EngineCapability, EngineList, SpaceEngineBinding } from "@bothot/contracts";
+
 import { request } from "./http";
 
 /**
@@ -39,30 +41,15 @@ export const ENGINE_REASON_LABEL: Record<EngineReason, string> = {
   not_implemented: "暂未接入",
 };
 
-/** GET /api/v1/engines → data.items（引擎位 + Key 可用性） */
-export interface EngineItem {
-  engine: string;
-  configured: boolean;
-  available: boolean;
-  allowlisted: boolean;
-  /** 契约 required：不可用时该画哪句原因，只看这一个字段 */
-  reason: EngineReason;
-  keyEnv: string;
-  /** 生效来源（T5.4）：登记覆盖 env 时显式回报，未配置为 null。旧后端不返回，故可选。 */
-  activeSource?: "env" | "registered" | null;
-  /** 是否已实接（六方法均实现）。仅 builtin 为真；骨架位为假。旧后端不返回，故可选。 */
-  implemented?: boolean;
-  /** 已登记 Key 不可解（密文损坏或主密钥已轮换）——标注而非丢弃，避免误读成「未配置」。 */
-  decryptFailed?: boolean;
-  description: string;
-}
-
-/** PATCH /api/v1/spaces/{id}/engine → data */
-export interface PatchEngineResult {
-  engine: string;
-  engineKbId: string;
-  spaceId: string;
-}
+/**
+ * GET /api/v1/engines → data.items（引擎位 + Key 可用性）。
+ *
+ * S48（P-119/D-V21-02）：`activeSource`/`decryptFailed` 在契约里是 **required**（后端
+ * `_engine_status` 恒返回），本接口旧写法把两键放宽成可选 ⇒ 演示态样例缺键也无机器察觉。
+ * 现在直接别名契约生成类型（`packages/contracts/src/engine/dto.ts`，STEP-46 生成），
+ * 生成侧一变这里跟着变，写错一个字段 tsc 红。
+ */
+export type EngineItem = EngineCapability;
 
 /**
  * 引擎位 → 用户可见标签（T1.1.4 引用来源标注取此口径）。
@@ -76,11 +63,8 @@ export function engineLabel(engine?: string | null): string {
 }
 
 /** GET /api/v1/engines —— 5 引擎位 + Key 可用性（演示态样例见 `mock-routes.ts` 的 engines 段）。 */
-export async function listEngines(): Promise<{
-  items: EngineItem[];
-  defaultEngine: string;
-}> {
-  return request<{ items: EngineItem[]; defaultEngine: string }>("/api/v1/engines");
+export async function listEngines(): Promise<EngineList> {
+  return request<EngineList>("/api/v1/engines");
 }
 
 /**
@@ -90,8 +74,8 @@ export async function listEngines(): Promise<{
 export async function patchSpaceEngine(
   spaceId: string,
   engine: string
-): Promise<PatchEngineResult> {
-  return request<PatchEngineResult>(
+): Promise<SpaceEngineBinding> {
+  return request<SpaceEngineBinding>(
     `/api/v1/spaces/${encodeURIComponent(spaceId)}/engine`,
     {
       method: "PATCH",
