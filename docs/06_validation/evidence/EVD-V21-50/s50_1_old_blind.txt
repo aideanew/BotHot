@@ -1,0 +1,1 @@
+S50.1 先红（旧脚本盲区）：AGENTS.md:84 的 next 版本临时写错一位（^15.5.28 -> ^15.5.29），旧 check_docs_consistency.py rc=0（通过）——门没在看这格。改后新门应 rc=1。

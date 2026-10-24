@@ -335,7 +335,145 @@ def self_test() -> bool:
     ok5 = len(empty) == 1 and "一个根路径文件锚都没有" in empty[0]
     print(f"  ⑦ 零锚语料应 fail-closed: got={empty} {'OK' if ok5 else 'BAD'}")
 
-    return ok and ok2 and ok3 and ok4 and ok5
+    # S50 负例：值不符 / 行号不符 / history 跳过（合成语料，不读仓库）
+    lines_pkg = ['{', '  "next": "^15.5.28"', "}"]
+
+    def _syn(p: str, n: int) -> str | None:
+        return lines_pkg[n - 1] if p == "apps/web/package.json" and 0 < n <= len(lines_pkg) else None
+
+    pv = stack_citation_problems(
+        {"AGENTS.md": ['`apps/web/package.json:2` `"next": "^15.5.29"`']}, _syn
+    )
+    ok6 = len(pv) == 1 and "不符" in pv[0]
+    print(f"  ⑧ 值写错一位必须被点名: got={pv} {'OK' if ok6 else 'BAD'}")
+    pl = stack_citation_problems(
+        {"AGENTS.md": ['`apps/web/package.json:1` `"next": "^15.5.28"`']}, _syn
+    )
+    ok7 = len(pl) == 1 and "不符" in pl[0]
+    print(f"  ⑨ 行号指错必须被点名: got={pl} {'OK' if ok7 else 'BAD'}")
+    ph = stack_citation_problems(
+        {"AGENTS.md": ['`apps/web/package.json:2` `"next": "^15.5.24"` <!-- stack-history -->']}, _syn
+    )
+    ok8 = ph == []
+    print(f"  ⑩ history 行跳过: got={ph} {'OK' if ok8 else 'BAD'}")
+
+    return ok and ok2 and ok3 and ok4 and ok5 and ok6 and ok7 and ok8
+
+
+
+# ═══ STEP-50（STACK-001）：技术栈版本声明 ↔ 实值一致性门 ═══════════════════════
+
+#: 本门只认这两类被引文件（引用样本见 REQ-C-001 与 AGENTS 证据行）
+_CITED_FILES = ("apps/web/package.json", "apps/api/pyproject.toml")
+_JSON_PAIR = re.compile(r"`\"([A-Za-z0-9_.-]+)\": \"([^`\"]+)\"`")
+_TOML_PAIR = re.compile(r"`([A-Za-z0-9_.-]+) = \"([^`\"]+)\"`")
+_ANCHOR = re.compile(r"`?(apps/web/package\.json|apps/api/pyproject\.toml):(\d+)`?")
+_ANCHOR_BARE = re.compile(r"`?:(\d+)`?")
+_HISTORY_MARK = "<!-- stack-history -->"
+
+
+def stack_citation_problems(corpus: dict[str, list[str]], read_line) -> list[str]:
+    """判据本体（纯函数）：{文档名: 行列表} ⇒ 引用失配清单（空 = 通过）。
+
+    抽取形如反引号包住的 ``"键": "值"``（package.json 形）或 ``键 = "值"``（pyproject 形）、
+    且同一行带 `被引文件:行号` 锚的引用，断言被引文件该行**逐字包含**该键值对
+    （package.json 行含 `"键": "值"`；pyproject 行含 `键 = "值"`）。
+    行内含 ``<!-- stack-history -->`` 的整行跳过（叙述历史值，REQ-C-001:28 的先例）。
+    ``:N`` 裸锚沿用本行先前出现的被引文件（AGENTS:84 的 ``、:28`` 写法）。
+    ``read_line(path, n)`` 由调用方注入（判据可喂合成语料自测）。
+    """
+    problems: list[str] = []
+    for doc, lines in sorted(corpus.items()):
+        for idx, line in enumerate(lines, start=1):
+            if _HISTORY_MARK in line:
+                continue
+            current_file = ""
+            current_lineno = 0
+            pos = 0
+            while pos < len(line):
+                # 三类 token 各取最靠前的一个，谁在前先处理谁——
+                # `:28` 裸锚常出现在下一个键值对之前（AGENTS:84 的写法），顺序不能倒。
+                cands: list[tuple[int, str, re.Match[str]]] = []
+                a = _ANCHOR.search(line, pos)
+                if a is not None:
+                    cands.append((a.start(), "anchor", a))
+                b = _ANCHOR_BARE.search(line, pos)
+                if b is not None and current_file:
+                    cands.append((b.start(), "bare", b))
+                pairs = [m for m in (_JSON_PAIR.search(line, pos), _TOML_PAIR.search(line, pos)) if m]
+                pair = min(pairs, key=lambda m: m.start()) if pairs else None
+                if pair is not None:
+                    cands.append((pair.start(), "pair", pair))
+                if not cands:
+                    break
+                _, kind, m = min(cands, key=lambda t: t[0])
+                if kind == "anchor":
+                    current_file = m.group(1)
+                    current_lineno = int(m.group(2))
+                    pos = m.end()
+                elif kind == "bare":
+                    current_lineno = int(m.group(1))
+                    pos = m.end()
+                else:
+                    # 卡面验收④（STACK-001）：脚本不比对 requires-python——
+                    # 它声明的是"允许更宽"的版本区间，与 CI 钉的精确版本是两套口径，
+                    # 文本比对会把这种合法的宽关系误判成漂移。
+                    if m.group(1) == "requires-python":
+                        pos = m.end()
+                        continue
+                    if current_file:
+                        key, value = m.group(1), m.group(2)
+                        actual = read_line(current_file, current_lineno)
+                        if current_file.endswith("package.json"):
+                            expected = f'"{key}": "{value}"'
+                        else:
+                            expected = f'{key} = "{value}"'
+                        if actual is None or expected not in actual:
+                            problems.append(
+                                f"{doc}:{idx} 声明 {expected!r} 与 {current_file}:{current_lineno} 实值不符"
+                            )
+                    pos = m.end()
+    return problems
+
+
+def _real_read_line(path: str, n: int) -> str | None:
+    full = PROJECT_ROOT / path
+    if not full.exists():
+        return None
+    lines = full.read_text(encoding="utf-8", errors="replace").splitlines()
+    return lines[n - 1] if 0 < n <= len(lines) else None
+
+
+def _stack_corpus() -> dict[str, list[str]]:
+    corpus: dict[str, list[str]] = {}
+    if AGENTS_FILE.exists():
+        corpus["AGENTS.md"] = AGENTS_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
+    if REQUIREMENTS_DIR.is_dir():
+        for path in sorted(REQUIREMENTS_DIR.rglob("*.md")):
+            corpus[str(path.relative_to(PROJECT_ROOT)).replace("\\", "/")] = (
+                path.read_text(encoding="utf-8", errors="replace").splitlines()
+            )
+    return corpus
+
+
+def verify_stack_citations(verbose: bool = False) -> bool:
+    """门面：扫 AGENTS.md 与需求文档的技术栈引用，与被引实值逐字比对。"""
+    corpus = _stack_corpus()
+    problems = stack_citation_problems(corpus, _real_read_line)
+    checked = sum(
+        1
+        for lines in corpus.values()
+        for line in lines
+        if _HISTORY_MARK not in line and (_JSON_PAIR.search(line) or _TOML_PAIR.search(line))
+    )
+    print(f"[stack] 语料 {len(corpus)} 份，含键值引用的行 {checked} 行")
+    for problem in problems:
+        print(f"[error] {problem}")
+    if problems:
+        print(f"\n[error] [stack] 技术栈引用失配：{len(problems)} 处")
+        return False
+    print("[ok] [stack] 技术栈引用与实值一致")
+    return True
 
 
 def main() -> None:
@@ -374,6 +512,9 @@ def main() -> None:
         print("\n[error] 文档一致性检查失败：存在虚假 ✅ 标记")
         sys.exit(1)
     if not anchors_ok:
+        sys.exit(1)
+    stack_ok = verify_stack_citations(args.verbose)
+    if not stack_ok:
         sys.exit(1)
 
     print("\n[ok] 文档一致性检查通过")

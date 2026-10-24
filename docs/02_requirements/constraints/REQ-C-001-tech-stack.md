@@ -26,7 +26,7 @@ owner: product
 ## 本卡改掉的一处失效引用（不是可选的润色）
 
 `docs/02_requirements/product-requirements.md` 与 `AGENTS.md` 都写着
-`"next": "^15.5.24"`（引 `apps/web/package.json:27`）。该 spec 在 2026-10-23 的
+`"next": "^15.5.24"`（引 `apps/web/package.json:27`）。该 spec 在 2026-10-23 的 <!-- stack-history -->
 依赖安全补丁批里升到 `^15.5.28`（next 公告，见台账 P-99）⇒ **两处引用当场失效**。
 REQ-C-001 自己的判据就是「门面文本与实值一致」，所以这两处是本卡必须修的项，
 不是顺手润色。历史规划文档（`docs/任务规划V0.1.0/**` 等）里的旧值属禁止改写面，保持原样。
