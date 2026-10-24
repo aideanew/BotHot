@@ -17,7 +17,8 @@ from sqlalchemy import func, select
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from test_p0_asset_cache import _CountingStubResolver, _client as _lb_client  # noqa: E402
+from test_p0_asset_cache import _client as _lb_client
+from test_p0_asset_cache import _CountingStubResolver  # noqa: E402
 
 from app.models.entities import ContentAsset, KnowledgeDocument, Source  # noqa: E402
 from app.repositories.space import SpaceRepository  # noqa: E402
