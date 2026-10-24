@@ -14,27 +14,116 @@
   "$defs": {
     "EngineReason": {
       "type": "string",
-      "enum": ["ok", "not_allowlisted", "key_missing", "not_implemented"]
+      "enum": [
+        "ok",
+        "not_allowlisted",
+        "key_missing",
+        "not_implemented"
+      ]
     },
     "EngineCapability": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["engine", "available", "reason", "implemented", "configured", "allowlisted", "keyEnv", "activeSource", "decryptFailed", "description"],
+      "required": [
+        "engine",
+        "available",
+        "reason",
+        "implemented",
+        "configured",
+        "allowlisted",
+        "keyEnv",
+        "activeSource",
+        "decryptFailed",
+        "description"
+      ],
       "properties": {
-        "engine": { "type": "string", "minLength": 1, "maxLength": 32 },
-        "available": { "type": "boolean" },
-        "reason": { "$ref": "#/$defs/EngineReason" },
-        "implemented": { "type": "boolean" },
-        "configured": { "type": "boolean" },
-        "allowlisted": { "type": "boolean" },
-        "keyEnv": { "type": "string" },
+        "engine": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "reason": {
+          "$ref": "#/$defs/EngineReason"
+        },
+        "implemented": {
+          "type": "boolean"
+        },
+        "configured": {
+          "type": "boolean"
+        },
+        "allowlisted": {
+          "type": "boolean"
+        },
+        "keyEnv": {
+          "type": "string"
+        },
         "activeSource": {
-          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
           "description": "生效的 Key 来源：registered / env；未配置或 builtin 为 null"
         },
-        "decryptFailed": { "type": "boolean" },
-        "description": { "type": "string" }
+        "decryptFailed": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        }
       }
+    },
+    "EngineList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "defaultEngine"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EngineCapability"
+          }
+        },
+        "defaultEngine": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        }
+      },
+      "description": "GET /api/v1/engines 的信封 data（V0.21.0 STEP-46 增补，D-V21-01）"
+    },
+    "SpaceEngineBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine",
+        "engineKbId",
+        "spaceId"
+      ],
+      "properties": {
+        "engine": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "engineKbId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "spaceId": {
+          "type": "string"
+        }
+      },
+      "description": "PATCH /api/v1/spaces/{space_id}/engine 的信封 data（V0.21.0 STEP-46 增补）"
     }
   }
 }

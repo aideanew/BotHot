@@ -131,7 +131,9 @@ jobs:
       # **本档 683 的锚** = STEP-36 第 2 批新增连库用例（S36.3 两发：test_p2_subscription 的
       # rss 形状/未知类型；S36.4 两发：test_channel_routing 的配置面开/关），族 +4；
       # 照例不留余量。
-      SKIP_BASELINE_WIN: "683"
+      # **本档 685 的锚** = V0.21.0 STEP-46 新增连库用例两发（tests/test_engine_response_contract.py：
+      # GET /engines 与 PATCH /spaces/{id}/engine 的 data 逐键对契约），族 +2；不留余量。
+      SKIP_BASELINE_WIN: "685"
     defaults:
       run:
         shell: bash

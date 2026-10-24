@@ -285,6 +285,80 @@ def generate_schemas() -> dict[str, str]:
     return out
 
 
+# ── 契约模块 → TS 响应形状（STEP-46，D-V21-01：P-82 的解法）──
+#
+# 为什么从 JSON Schema 产物派生、而不是再内省一遍 Pydantic：schema 已是 ADR-0008 的
+# 唯一源产物且有逐字节幂等门；TS 从同一份产物派生 ⇒ "后端模型 → schema → TS" 一条链，
+# 不会出现第二份形状。只支持本仓契约实际用到的关键词；遇到不认识的形状**立刻报错**，
+# 不降级成 `unknown`（降级 = 让 satisfies 失去牙齿，正是 P-82 要堵的口子）。
+
+#: 需要出 TS 的契约域 → 输出目录（packages/contracts/src/<目录>/dto.ts）
+CONTRACT_TS_DOMAINS: dict[str, str] = {
+    "engine": "engine",
+}
+
+_TS_SCALARS = {"string": "string", "integer": "number", "number": "number", "boolean": "boolean", "null": "null"}
+
+
+def _ts_ident(name: str) -> str:
+    if not name.isidentifier():
+        raise SystemExit(f"[error] 契约名 {name!r} 不是合法 TS 标识符")
+    return name
+
+
+def _json_schema_to_ts(node: dict[str, Any], where: str) -> str:
+    if "$ref" in node:
+        ref = str(node["$ref"])
+        if not ref.startswith("#/$defs/"):
+            raise SystemExit(f"[error] {where}: 只支持本文档 $defs 引用，得到 {ref}")
+        return _ts_ident(ref.rsplit("/", 1)[-1])
+    if "anyOf" in node:
+        parts = [_json_schema_to_ts(sub, where) for sub in node["anyOf"]]
+        return " | ".join(dict.fromkeys(parts))
+    if "const" in node:
+        return json.dumps(node["const"], ensure_ascii=False)
+    if "enum" in node:
+        return " | ".join(json.dumps(v, ensure_ascii=False) for v in node["enum"])
+    kind = node.get("type")
+    if kind == "array":
+        inner = _json_schema_to_ts(node.get("items") or {}, where + "[]")
+        return f"Array<{inner}>"
+    if kind == "object":
+        return _object_to_ts(node, where)
+    if isinstance(kind, str) and kind in _TS_SCALARS:
+        return _TS_SCALARS[kind]
+    raise SystemExit(f"[error] {where}: 生成器不认识的形状 {json.dumps(node, ensure_ascii=False)[:120]}")
+
+
+def _object_to_ts(node: dict[str, Any], where: str) -> str:
+    props: dict[str, Any] = node.get("properties") or {}
+    if not props:
+        raise SystemExit(f"[error] {where}: 无 properties 的 object 不出 TS（会退化成 any 形）")
+    required = set(node.get("required") or [])
+    rows = []
+    for name, spec in props.items():
+        opt = "" if name in required else "?"
+        rows.append(f"  {name}{opt}: {_json_schema_to_ts(spec, f'{where}.{name}')};")
+    return "{\n" + "\n".join(rows) + "\n}"
+
+
+def generate_contract_ts(schemas: dict[str, str]) -> dict[str, str]:
+    """{输出目录: dto.ts 内容}，从 generate_schemas() 的产物派生。"""
+    out: dict[str, str] = {}
+    for domain, folder in CONTRACT_TS_DOMAINS.items():
+        doc = json.loads(schemas[domain])
+        blocks = []
+        for name, body in doc["$defs"].items():
+            ident = _ts_ident(name)
+            if body.get("type") == "object" and "$ref" not in body:
+                blocks.append(f"export interface {ident} {_object_to_ts(body, name)}")
+            else:
+                blocks.append(f"export type {ident} = {_json_schema_to_ts(body, name)};")
+        note = f"packages/contracts/schemas/{domain}.schema.json（← apps/api/app/contracts/{domain}.py，ADR-0008）"
+        out[folder] = _render_domain(domain, blocks, note)
+    return out
+
+
 def _schema_target(domain: str) -> Path:
     return SCHEMAS_DIR / f"{domain}.schema.json"
 
@@ -355,6 +429,11 @@ def main() -> None:
 
     schemas = generate_schemas()
     contents: dict[str, str] = {} if args.only_schemas else generate()
+    if not args.only_schemas:
+        overlap = set(contents) & set(CONTRACT_TS_DOMAINS.values())
+        if overlap:
+            raise SystemExit(f"[error] dto 目录同时被实体内省与契约派生占用: {sorted(overlap)}")
+        contents.update(generate_contract_ts(schemas))
 
     if args.check:
         # 两面都要跑完再判定：写成 `check(contents) or check_schemas(schemas)` 会在第一面

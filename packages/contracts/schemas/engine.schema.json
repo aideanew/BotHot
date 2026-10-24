@@ -59,6 +59,28 @@
       ],
       "type": "object"
     },
+    "EngineList": {
+      "additionalProperties": false,
+      "description": "`GET /api/v1/engines` 的信封 `data`（STEP-46，D-V21-01：响应形状进契约）。",
+      "properties": {
+        "defaultEngine": {
+          "maxLength": 32,
+          "minLength": 1,
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/EngineCapability"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "items",
+        "defaultEngine"
+      ],
+      "type": "object"
+    },
     "EngineReason": {
       "description": "引擎位不可用的首要原因；可用时为 `ok`。",
       "enum": [
@@ -68,6 +90,30 @@
         "not_implemented"
       ],
       "type": "string"
+    },
+    "SpaceEngineBinding": {
+      "additionalProperties": false,
+      "description": "`PATCH /api/v1/spaces/{space_id}/engine` 的信封 `data`（STEP-46）。\n\n`engineKbId` 对应 `knowledge_spaces.engine_kb_id`（String(128) NOT NULL DEFAULT ''）：\n非 builtin 引擎未实接前为空串，不是 null。",
+      "properties": {
+        "engine": {
+          "maxLength": 32,
+          "minLength": 1,
+          "type": "string"
+        },
+        "engineKbId": {
+          "maxLength": 128,
+          "type": "string"
+        },
+        "spaceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "engine",
+        "engineKbId",
+        "spaceId"
+      ],
+      "type": "object"
     }
   },
   "$id": "bothot://contracts/engine/v1",

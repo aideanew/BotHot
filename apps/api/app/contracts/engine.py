@@ -52,6 +52,29 @@ class EngineCapability(BaseModel):
     description: str
 
 
+class EngineList(BaseModel):
+    """`GET /api/v1/engines` 的信封 `data`（STEP-46，D-V21-01：响应形状进契约）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[EngineCapability]
+    defaultEngine: Annotated[str, Field(min_length=1, max_length=32)]  # noqa: N815
+
+
+class SpaceEngineBinding(BaseModel):
+    """`PATCH /api/v1/spaces/{space_id}/engine` 的信封 `data`（STEP-46）。
+
+    `engineKbId` 对应 `knowledge_spaces.engine_kb_id`（String(128) NOT NULL DEFAULT ''）：
+    非 builtin 引擎未实接前为空串，不是 null。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    engine: Annotated[str, Field(min_length=1, max_length=32)]
+    engineKbId: Annotated[str, Field(max_length=128)]  # noqa: N815
+    spaceId: str  # noqa: N815
+
+
 #: 稿与本模块的已知差异（语义判定见 tests/test_contract_jsonschema.py）。
 CONTRACT_DIVERGENCES: tuple[Divergence, ...] = (
     Divergence(

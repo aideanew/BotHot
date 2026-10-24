@@ -14,7 +14,11 @@
  *
  * 域 DTO（S3.4 接线，2026-10-08 起 index.ts 导出）：
  * - 已导出：bot / hot / ingest / knowledge / push_event / subscription（6 域，模型内省生成）
- * - 保持骨架：identity / chat / engine（`.gitkeep`，待后端对应模型纳入生成器后接线）
+ * - 保持骨架：identity / chat（`.gitkeep`，待后端对应模型纳入生成器后接线）
+ *
+ * API 响应形状（STEP-46 起，D-V21-01，解 P-82）：从 `app/contracts/<域>.py` → schema → TS
+ * 一条链派生，**是**线上 `data` 形状，可直接用于 `satisfies`：
+ * - 已导出：engine（EngineList / EngineCapability / EngineReason / SpaceEngineBinding）
  *
  * ⚠️ 口径限定（重要）：域 dto 是**持久层实体镜像**（SQLAlchemy 列内省），
  * 不是 API 响应形状——序列化器会隐藏字段（如 BotChannel 的 `secret_enc` →
@@ -56,3 +60,6 @@ export type { PushEvent } from "./push_event/dto";
 
 // ── subscription 域 ──
 export type { Source, SourceSubscription, SourceIdentifier } from "./subscription/dto";
+
+// ── engine 域（API 响应形状，契约模块派生，STEP-46）──
+export type { EngineCapability, EngineList, EngineReason, SpaceEngineBinding } from "./engine/dto";
