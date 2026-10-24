@@ -1,6 +1,6 @@
 # STEP-46 引擎域响应形状契约链（P-82 第一刀）
 
-> 基线 main@9028b89｜状态：🟡 规划方已交付（本版规划提交内），待 @ci 三绿｜版本 V0.21.0
+> 基线 main@9028b89｜状态：✅ 已收口（@ci 三绿：CI 40099919134 / CI-Windows 40099919204 / Security 40099919142）｜版本 V0.21.0
 
 | 字段 | 内容 |
 |---|---|
@@ -33,4 +33,4 @@
    1. [x] S46.3.1 不连库牙齿 3 条（多键红、缺键红、engineKbId=null 红；TS 产物无 `unknown`）
    2. [x] S46.3.2 连库 2 条（GET /engines、PATCH /spaces/{id}/engine 真端点 data 过 schema）
    3. [x] S46.3.3 Windows skip 基线 +2
-4. [ ] **S46.4** @ci 三绿（规划方回填 `s46_readings.md` §@ci）
+4. [x] **S46.4** @ci 三绿（规划方回填 `s46_readings.md` §@ci）

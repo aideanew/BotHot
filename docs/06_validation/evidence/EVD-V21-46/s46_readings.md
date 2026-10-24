@@ -32,4 +32,8 @@
 - 改了冻结稿 `docs/任务规划V0.12.0/contracts/engine.schema.json`：规划方权限（D-V21-01），只加两个 def，既有 def 未动；格式化后数组由单行变多行，语义比对用例通过。
 
 ## @ci（推送后回填）
-- 待回填。
+- 读取时间：2026-10-24 22:30 CST；head 9816f7f8ea467fea5435f389d9e23a1e6e99b24a，三条均 attempt 1、completed / success。
+- CI run 40099919134：success。backend「Tests (pytest) + coverage + skip gate」2379 passed / 6 skipped / 4 deselected，skip 门禁 total_skipped 6 = baseline 6（pg_unreachable 0）；「Module coverage gate (check_module_coverage)」success，TOTAL 88.63% ≥ 79.0%；治理门 success。
+- CI-Windows run 40099919204：success。1700 passed / 685 skipped / 4 deselected；Windows skip 门禁 failed 0、total_skipped 685、baseline 685（本卡 +2 连库用例落在抬升后的基线上，测量值 == 基线）。
+- Security run 40099919142：success（pip-audit / pnpm audit / trivy / gitleaks / 汇总门禁全绿）。
+- 结论：STEP-46 @ci 三绿。
