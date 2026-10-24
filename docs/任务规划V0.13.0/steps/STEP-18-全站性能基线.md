@@ -1,6 +1,6 @@
 # STEP-18 全站性能基线
 
-> 基线 main@61358c3｜状态：⏸ 环境阻塞停卡交回（2026-10-24，P-118：执行机无 docker/PG/Redis/LangBot，四条 SLA 如实 NOT_MEASURED；待用户提供自备 PG16@5547 或 docker 后重开）
+> 基线 main@61358c3｜状态：✅ 收口（2026-10-24，P-118 以"自备 PG16@5547"口径解除——zonky 便携 PG16.15；四条 SLA 首测全达标、可感性全证明、PERF-baseline-v1 + roadmap 落账；读数在 EVD-V18-18/）
 
 | 字段 | 内容 |
 |---|---|

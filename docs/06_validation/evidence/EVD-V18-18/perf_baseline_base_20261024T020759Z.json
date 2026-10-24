@@ -1,0 +1,65 @@
+{
+  "api": {
+    "GET /api/v1/spaces": {
+      "p50": 11.31,
+      "p95": 13.18,
+      "n": 50
+    },
+    "GET /api/v1/hot/topics": {
+      "p50": 8.42,
+      "p95": 10.49,
+      "n": 50
+    },
+    "GET /api/v1/jobs": {
+      "p50": 8.6,
+      "p95": 17.31,
+      "n": 50
+    }
+  },
+  "feed": {
+    "GET /api/v1/hot/feed": {
+      "p50": 9.4,
+      "p95": 10.7,
+      "n": 50
+    }
+  },
+  "ingest": {
+    "ingest[short]": {
+      "p50": 29.15,
+      "p95": 40.06,
+      "n": 50
+    },
+    "ingest[long]": {
+      "p50": 27.57,
+      "p95": 32.8,
+      "n": 50
+    }
+  },
+  "first_token": {
+    "first_token[recorded-replay]": {
+      "p50": 0.94,
+      "p95": 2.03,
+      "n": 50
+    }
+  },
+  "fingerprint": {
+    "timestamp_cst": "2026-10-24T10:07:59.685184+08:00",
+    "python": "3.12.10",
+    "platform": "Windows-10-10.0.19045-SP0",
+    "postgres": "PostgreSQL 16.15, compiled by Visual C++ build 1944, 64-bit",
+    "dsn_scope": "localhost:5547/bothot_test",
+    "client_position": "in-process（TestClient 同进程 / 服务层直调；无网络栈，指纹如实声明）",
+    "redis": "NOT RUNNING（依赖 Redis 的路径不在测，V0.18 增量口径）",
+    "rate_limit": "RATE_LIMIT_ENABLED=false（测量配置，指纹声明）：限流中间件的 Redis 1s 连接超时会串在每条请求前并淹没全部端点读数；限流自身正确性归既有测试面",
+    "langbot": "桩（test_p0_asset_cache._client 形态）",
+    "llm": "录制回放（无真实 LLM 凭据；S18.1.2 判据允许并要求标注）",
+    "dataset": {
+      "users": 1,
+      "hot_topics": 60,
+      "feed_items": 190,
+      "jobs": 40
+    },
+    "inject_delay_ms": 0,
+    "n_per_probe": 50
+  }
+}
