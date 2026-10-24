@@ -67,8 +67,8 @@ BotHot 后端识别出 **9 个业务域**，前端识别出 **10 个功能域**�
 | REQ-F-001 多渠道机器人推送 | 6 渠道 × 3 触发方式 + 渠道/任务/日志管理 | 已实现（外部前置：微信 ClawBot 需部署服务） | [features/REQ-F-001-multi-channel-push.md](features/REQ-F-001-multi-channel-push.md) |
 | REQ-F-002 热点聚簇与日报 | 聚簇 / 48h 加权评分 / Feed / LLM 日报 | 已实现（聚簇升级嵌入向量属显式排除项 HOT-005） | [features/REQ-F-002-hot-cluster-daily-report.md](features/REQ-F-002-hot-cluster-daily-report.md) |
 | REQ-F-003 知识库与可插拔引擎 | 多空间隔离 + 公共库 + 5 引擎位 | **部分**：builtin 已实现，main/coze/dify/fastgpt 为骨架（D-V3-03 显式不做） | [features/REQ-F-003-knowledge-base-engines.md](features/REQ-F-003-knowledge-base-engines.md) |
-| REQ-F-004 公众号链接入库 | 解析 / 标准化 / 评分分类 / 短链映射 | **证据不足**：判据锚有具名用例满足，但规划侧从未给过实现度判词 | [features/REQ-F-004-article-ingest.md](features/REQ-F-004-article-ingest.md) |
-| REQ-F-005 RAG 知识问答 | SSE 流式 + 多空间会话 + 可选重排 | 部分：后端在案，前端流式证据未执行过 | [features/REQ-F-005-rag-chat.md](features/REQ-F-005-rag-chat.md) |
+| REQ-F-004 公众号链接入库 | 解析 / 标准化 / 评分分类 / 短链映射 | **已实现**（X-5，2026-10-25：八个判据锚文件实跑 283 passed / 0 failed，EVD-V21-51） | [features/REQ-F-004-article-ingest.md](features/REQ-F-004-article-ingest.md) |
+| REQ-F-005 RAG 知识问答 | SSE 流式 + 多空间会话 + 可选重排 | **部分：组件层已证**（X-6，2026-10-25：`ask-sse.spec.ts` + `r061-sse-ask.spec.ts` 实跑 35 passed——前端 SSE 消费与打字机渲染已有组件级证据；真后端端到端仍未测，`e2e/r19-chat-stream.spec.ts` 仍零执行） | [features/REQ-F-005-rag-chat.md](features/REQ-F-005-rag-chat.md) |
 | REQ-F-006 整号订阅与增量同步 | 订阅整号 + Manifest Diff 水位 + 锚定/滑动 + 空轮询退避 | 已实现（V0.13.0 那句「行为层未做」已过期） | [features/REQ-F-006-subscription-sync.md](features/REQ-F-006-subscription-sync.md) |
 | REQ-F-007 SSO 统一认证 | OIDC + `users.sub` 锚 + HttpOnly/Lax Cookie + 角色门禁 + Backchannel Logout | 已实现（命题范围；与主平台的真实握手需白名单配合） | [features/REQ-F-007-sso.md](features/REQ-F-007-sso.md) |
 | REQ-F-008 管理后台 | 空间/文档/订阅/引擎 + 渠道/任务 + 热点/日报 + Onboarding | 部分：四屏在 mock 档结构上不可达（P-88），真后端档无读数 | [features/REQ-F-008-admin-console.md](features/REQ-F-008-admin-console.md) |
@@ -81,7 +81,7 @@ BotHot 后端识别出 **9 个业务域**，前端识别出 **10 个功能域**�
 
 | 需求 | 内容 | 实现度 | 详文 |
 |---|---|---|---|
-| REQ-NF-001 性能 | API<500ms、首 Token<3s、入库<30s、Feed<100ms | **部分**：四条里只有「单篇入库」拿到服务层读数，其余三条无测量值（承接卡 STEP-18） | [non-functional/REQ-NF-001-performance.md](non-functional/REQ-NF-001-performance.md) |
+| REQ-NF-001 性能 | API<500ms、首 Token<3s、入库<30s、Feed<100ms | **已实现（首测基线，2026-10-24）**：四条 p50/p95 全部达标（API 5–13ms / 首 Token 0.8–1ms 录制回放 / 入库 27–30ms / Feed 6–13ms），读数与局限见 `docs/03_solution/design/PERF-baseline-v1.md` | [non-functional/REQ-NF-001-performance.md](non-functional/REQ-NF-001-performance.md) |
 | REQ-NF-002 安全 | Cookie / 密钥加密 / OIDC 校验 / ~~CORS 白名单~~ / SQL 注入防护 | 部分：加密与生产守卫有锚；**CORS 一条按实况改写为「经 `next.config.mjs` 同源 rewrites 达成，无 CORS 中间件」**（C-3：不重新立项）；SQL 注入与 SameSite 无机检用例 → backlog SEC-006 | [non-functional/REQ-NF-002-security.md](non-functional/REQ-NF-002-security.md) |
 
 ---

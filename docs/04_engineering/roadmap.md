@@ -11,7 +11,7 @@ version: 1.0
 
 # BotHot 路线图
 
-## 当前阶段：v0.6.5 — 观测与安全运行时硬化（W6-W10）+ 通知持久化底座
+## 当前阶段：v1.1.x 维护期（X-2 纠真，2026-10-25）——tag `v1.1.2` = `a221f89`（2026-10-24 发布，Release 页在册），版本史见 `CHANGELOG.md` 的 `[v1.1.2]` 段；此前阶段（v0.6.5 观测与安全运行时硬化 W6-W10 + 通知持久化底座）已全部完成
 
 > v0.4/v0.5 已于 2026-09-30 交付；v0.6 由五路并行（WA-WB-WC-WD-WE）+ 集成审查完成；
 > v0.6.5（W6-W10 观测/安全/硬化）已于 `main @ 8b1b5f2` 合并，CI 首跑修复至 `main @ 7bdb964`（2026-10-08 回填）
@@ -41,7 +41,7 @@ version: 1.0
 - [x] 实现企业微信 Webhook Provider — `providers/push/wechat_work.py`（Markdown）
 - [x] 实现 微信 ClawBot Provider — `providers/push/wechat_clawbot.py`（Bearer token + `/api/send`；需部署 ClawBot 服务）
 - [x] 实现通用 Webhook Provider — `providers/push/webhook.py`（POST JSON + HTTP 2xx 校验）
-- [x] 实现站内通知 Provider — `providers/push/web.py`（Redis pub/sub → `bothot:notifications:*`；**投递侧**已完成，前端订阅侧未实现）
+- [x] 实现站内通知 Provider — `providers/push/web.py`（Redis pub/sub → `bothot:notifications:*`；**投递侧**已完成）；**前端订阅侧已实现**（X-1 纠真，2026-10-25 现读：`apps/web/lib/api/notifications.ts:4`（EventSource 订阅 `GET /api/v1/system/notifications`）与 `apps/web/components/NotificationBell.tsx:68`（`export default function NotificationBell`））
 - [x] PushScheduler 定时调度落地 — 60s 扫描（`main.py:247` lifespan 启动）；Cron 解析升级 **croniter 完整 5 段式 + 三种简写兼容**（`services/cron_expr.py`，TECH-002 完成）
 - [x] Cron 任务全生命周期正确性 — 创建即写 `next_run_at`（修复"创建即永不触发"）、新增 `PUT /tasks/{id}`（编辑/暂停恢复）、run-now 补算下次执行、软删除（`api/v1/bots.py`）
 - [x] 渠道密钥 AES-256-GCM 落库 — `core/secret_crypto.py`（AAD 绑定 channel id，`PUSH_SECRET_MASTER_KEY` fail-closed）+ 存量迁移 `ab1004w1a`

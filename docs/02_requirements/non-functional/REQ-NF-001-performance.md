@@ -4,22 +4,22 @@ type: requirement
 title: 性能 SLA
 status: active
 owner: product
-实现度: 部分（四条里只有「单篇入库」拿到服务层读数；API / 首 Token / Feed 三条无测量值）
+实现度: 已实现（首测基线，2026-10-24，STEP-18 全站性能基线；四条 p50/p95 全部达标，读数与前提局限见 `docs/03_solution/design/PERF-baseline-v1.md` 与 `docs/06_validation/evidence/EVD-V18-18/`）
 验收锚:
   - apps/api/tests/perf/test_collection_perf.py
-最后核验 commit: 3491054（2026-10-23，STEP-11 交付提交）
+最后核验 commit: 88d7518（2026-10-24，STEP-18 交付提交；perf 读数以 PERF-baseline-v1.md 为准）
 ---
 
 # REQ-NF-001 性能 SLA
 
 ## 需求条目（四条）
 
-| # | 条目 | 有无测量值 | 读数与出处 |
+| # | 条目 | 有无测量值 | 读数与出处（首测基线 2026-10-24，n=50/探测，@win 便携 PG16@5547） |
 |---|---|---|---|
-| 1 | API 响应 < 500ms（非 LLM 调用） | **无** | 待 STEP-18（全站性能基线）；本卡明确不代替它填数 |
-| 2 | RAG 问答首 Token < 3s | **无** | 需真实 LLM 凭据或录制回放；STEP-18 阻塞条件 ① 要求这种情况下标 `NOT_MEASURED`，不得用超时值冒充延迟 |
-| 3 | 文章入库单篇 < 30s | 服务层有值 | `test_collection_perf.py::test_single_ingest_percentiles`：n=50，**p50 17.7ms / p95 21.1ms / max 85.5ms**（抓取与 LangBot 均为桩） |
-| 4 | Feed 分页查询 < 100ms | **无** | 同条目 1 |
+| 1 | API 响应 < 500ms（非 LLM 调用） | ✅ 有 | 三读接口 p50 5.41–12.82ms / p95 7.37–17.31ms（`PERF-baseline-v1.md` 基线表；余量 ~39×） |
+| 2 | RAG 问答首 Token < 3s | ✅ 有（**录制回放**） | p50 0.76–0.96ms / p95 1.58–3.96ms——桩回放的出帧时延，**真实网络 RTT 不在测**（局限照抄 PERF-baseline-v1.md §前提与局限） |
+| 3 | 文章入库单篇 < 30s | ✅ 有 | 服务层 p50 26.67–29.95ms / p95 32.36–42.21ms（`PERF-baseline-v1.md`；旧 STEP-11 读数 17.7/21.1ms 同为服务层桩口径） |
+| 4 | Feed 分页查询 < 100ms | ✅ 有 | p50 6.15–12.74ms / p95 8.62–21.13ms（同上；余量 ~4.7×） |
 
 ## 采集切片另有两条基线（不是 SLA，是形状）
 

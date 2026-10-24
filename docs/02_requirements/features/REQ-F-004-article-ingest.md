@@ -4,7 +4,7 @@ type: requirement
 title: 公众号链接入库
 status: active
 owner: product
-实现度: 证据不足（按 04 §4.3 的判据锚有具名用例满足，但规划文档侧从未给过这条的实现度判词）
+实现度: 已实现（X-5 判词，2026-10-25：八个判据锚用例文件全量实跑 283 passed / 0 failed——`pytest -q tests/test_e2e_collection.py tests/test_collection_contract.py tests/test_extractor.py tests/test_normalizer_quality.py tests/test_categorizer.py tests/test_d04_short_link.py tests/test_article_identity.py tests/test_kb_longlink_ingest.py`，读数在 EVD-V21-51）
 验收锚:
   - apps/api/tests/test_e2e_collection.py
   - apps/api/tests/test_collection_contract.py

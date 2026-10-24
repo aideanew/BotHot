@@ -4,7 +4,7 @@ type: requirement
 title: RAG 知识问答
 status: active
 owner: product
-实现度: 部分（后端在案已确认；前端流式证据面未执行过，判词原文「部分确认」）
+实现度: 部分：组件层已证（X-6 判词更新，2026-10-25：`ask-sse.spec.ts` + `r061-sse-ask.spec.ts` 实跑 35 passed / 0 failed——前端 SSE 消费与打字机渲染有组件级证据；真后端端到端（`e2e/r19-chat-stream.spec.ts`）仍未测，读数在 EVD-V21-51）
 验收锚:
   - apps/api/tests/test_chat_sse.py
   - apps/api/tests/test_intent.py
