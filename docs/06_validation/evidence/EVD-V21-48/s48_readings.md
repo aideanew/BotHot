@@ -50,6 +50,16 @@
   如实记录），与代码无关（同树 @ci 三绿佐证）；`DROP DATABASE bothot_test` 重建 + 迁移后复跑
   **2379 passed / 6 skipped / 4 deselected / 0 failed**（1632s）。
 
-## @ci（推送后回填）
+## @ci（推送后回填，2026-10-25 0:1x @win，Asia/Shanghai）
 
-_（占位）_
+交付 head `be23d41`（开发期间远端进了规划方的 STEP-46 收口批 `fa276c6`，本卡 rebase 其上后推送）：
+
+| 工作流 | run id | 轮次 | 结论 |
+|---|---|---|---|
+| CI | 40106721804 | attempt 1 | success |
+| CI-Windows | 40106721828 | attempt 1 | success |
+| Security | 40106721807 | attempt 1 | success |
+
+完成判据对照：先红（TS1360 原文）✅；typecheck 0 错 ✅；反证（删 description ⇒ TS1360+TS2322 红、还原绿）✅；
+vitest 全绿（51 文件 420 用例含 s48 守卫 2 条）✅；lint 绿 ✅；三绿 ✅；契约面零改动（rebase 后
+`git diff fa276c6 be23d41 --name-only` 对 packages/contracts / gen_contracts / apps/api 零命中）✅。

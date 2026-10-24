@@ -1,6 +1,6 @@
 # STEP-48 引擎域 mock 样例 satisfies 契约类型（S37.4 第一段 + P-119）
 
-> 基线 main@9028b89（+规划提交）｜状态：⬜ 待执行助手｜版本 V0.21.0
+> 基线 main@9028b89（+规划提交）｜状态：✅ 收口（2026-10-24，交付 head be23d41 三绿 attempt 1：CI 40106721804 / CI-Windows 40106721828 / Security 40106721807；读数在 EVD-V21-48/）｜版本 V0.21.0
 
 | 字段 | 内容 |
 |---|---|
@@ -22,15 +22,15 @@
 | 16 熔断 | 同判据 2 次 FAIL ⇒ 停卡交回 |
 
 ## 三级任务
-1. [ ] **S48.1 先红**
+1. [x] **S48.1 先红**
    1. [ ] S48.1.1 现读 `engines.ts`、`mock-routes.ts` 行号入证
    2. [ ] S48.1.2 临时加 `satisfies` 跑 tsc，TS1360 原文入证，然后撤掉临时改动
-2. [ ] **S48.2 类型对齐**
+2. [x] **S48.2 类型对齐**
    1. [ ] S48.2.1 `EngineItem` 别名到契约类型；`listEngines`/`patchSpaceEngine` 返回类型改契约类型
    2. [ ] S48.2.2 修因收紧产生的调用方 tsc 报错（只改类型）
-3. [ ] **S48.3 样例约束**
+3. [x] **S48.3 样例约束**
    1. [ ] S48.3.1 5 条样例补两键并逐条 `satisfies EngineCapability`
    2. [ ] S48.3.2 两条 handler 返回值分别 `satisfies EngineList` / `SpaceEngineBinding`
    3. [ ] S48.3.3 反证：删字段 ⇒ tsc 红，还原
-4. [ ] **S48.4 运行时守卫** `s48-engine-contract.spec.ts`：mock GET /engines 每条 `Object.keys().length === 10` 且键集合等于契约键集合（键集合在测试里写死并注明"源 = packages/contracts/src/engine/dto.ts"）
-5. [ ] **S48.5** 全量 + 三绿 + 07 记录
+4. [x] **S48.4 运行时守卫** `s48-engine-contract.spec.ts`：mock GET /engines 每条 `Object.keys().length === 10` 且键集合等于契约键集合（键集合在测试里写死并注明"源 = packages/contracts/src/engine/dto.ts"）
+5. [x] **S48.5** 全量 + 三绿 + 07 记录
