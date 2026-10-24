@@ -223,7 +223,7 @@ updated: 2026-10-08
 - **升级路径**：`ContentAsset` 加 embedding 列 + pgvector；`embedding.py` 目前**生产零调用方**（仅测试引用）
 - **定位**：**显式排除项**（非遗漏），单独立项，不阻塞当前阶段
 
-### SEC-006：SQL 注入面与 Cookie SameSite 无机检 ⬜（STEP-17 S17.1 拆分时立项）
+### SEC-006：SQL 注入面与 Cookie SameSite 无机检 ✅（STEP-49 收口；证据 `docs/06_validation/evidence/EVD-V21-49/`）
 - **现状（2026-10-23 现读）**：`REQ-NF-002` 的两条子项在代码里成立、在测试里没有——
   - SQL 注入防护：全链走 SQLAlchemy 参数化，`apps/api/app` 内无字符串拼 SQL 的入口，
     但**没有任何一条用例断言这件事**（无 `text(` 拼接负例、无参数化回归）；

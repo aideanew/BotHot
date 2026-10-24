@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import base64
+import re
 import time
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -271,6 +272,9 @@ def test_full_login_flow_establishes_session_and_me() -> None:
     assert body["code"] == 0 and body["data"]["sub"] == "user-1"
     cookie = callback.headers["set-cookie"]
     assert "bothot_session=" in cookie and "HttpOnly" in cookie
+    # S49.1（SEC-006）：SameSite=Lax 有断言——大小写不敏感（Starlette 按入参原样回写，
+    # 断言不绑定其大小写习惯）。先红读数：临时改 strict ⇒ 本行红（EVD-V21-49 §S49.1）。
+    assert re.search(r"samesite=lax", cookie, re.IGNORECASE), cookie
     # 本地 users 已按 sub upsert
     assert user_store.get_by_sub("user-1") is not None
 

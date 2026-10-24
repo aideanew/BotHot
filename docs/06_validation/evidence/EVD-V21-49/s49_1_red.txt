@@ -1,0 +1,12 @@
+        # S49.1（SEC-006）：SameSite=Lax 有断言——大小写不敏感（Starlette 按入参原样回写，
+        # 断言不绑定其大小写习惯）。先红读数：临时改 strict ⇒ 本行红（EVD-V21-49 §S49.1）。
+>       assert re.search(r"samesite=lax", cookie, re.IGNORECASE), cookie
+E       AssertionError: bothot_session=99xWuJV9oo46BMfpSqMyyMpa9pXKITt49TZISj8NzV4; HttpOnly; Max-Age=604800; Path=/; SameSite=strict
+E       assert None
+E        +  where None = <function search at 0x00000265C6B43E20>('samesite=lax', 'bothot_session=99xWuJV9oo46BMfpSqMyyMpa9pXKITt49TZISj8NzV4; HttpOnly; Max-Age=604800; Path=/; SameSite=strict', re.IGNORECASE)
+E        +    where <function search at 0x00000265C6B43E20> = re.search
+E        +    and   re.IGNORECASE = re.IGNORECASE
+
+tests\test_auth.py:277: AssertionError
+---------------------------- Captured stdout call -----------------------------
+2026-10-24T23:51:23.352136 [warning  ] 限流计数器 Redis 不可用，本轮 fail-open（不限流） [app.core.security]
