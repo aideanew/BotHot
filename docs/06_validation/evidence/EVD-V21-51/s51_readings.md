@@ -50,6 +50,12 @@ tests/test_article_identity.py tests/test_kb_longlink_ingest.py`
 
 `check_docs_consistency.py`（含 STEP-50 新 stack 门）rc=0；`test_r19_ports.py` 7 passed。
 
-## @ci（推送后回填）
+## @ci（推送后回填，2026-10-25 3:3x @win，Asia/Shanghai）
 
-_（占位）_
+交付 head `eae0356` 三绿，attempt 1：
+
+| 工作流 | run id | 结论 |
+|---|---|---|
+| CI | 40120795885 | success |
+| CI-Windows | 40120795898 | success |
+| Security | 40120795845 | success |

@@ -41,6 +41,12 @@ docs 门 rc=0、self-test rc=0。风格修复不改判据行为（self-test 10 �
 
 `STACK-001` 段头 ⬜ → ✅（证据路径写入）。
 
-## @ci（推送后回填）
+## @ci（推送后回填，2026-10-25 2:5x @win，Asia/Shanghai）
 
-_（占位）_
+交付 head `a8c3df9` 三绿，attempt 1：
+
+| 工作流 | run id | 结论 |
+|---|---|---|
+| CI | 40120380856 | success |
+| CI-Windows | 40120380935 | success |
+| Security | 40120380854 | success |
