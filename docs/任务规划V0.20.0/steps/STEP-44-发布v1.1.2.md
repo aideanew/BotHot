@@ -1,6 +1,6 @@
 # STEP-44 发布 v1.1.2
 
-> 基线 main@75b212b｜状态：⚪ 未开始（排在 37 之后）｜版本 V0.20.0
+> 基线 main@75b212b｜状态：✅ 收口（2026-10-24，tag v1.1.2=4d61f5e→a221f89 三绿 attempt 1，Release 页 200，S44.1 复查 PASS）｜版本 V0.20.0
 
 | 字段 | 内容 |
 |---|---|
@@ -19,9 +19,9 @@
 | 16 规模 | ≈0.3 人日 |
 
 ## 三级任务
-1. [ ] **S44.1** 独立复查 STEP-43，只看 diff 与运行结果，输出 PASS / FAIL / UNKNOWN 与 ≤10 行理由；FAIL ⇒ 停卡交回，不发版
-2. [ ] **S44.2** CHANGELOG 并段 `## [v1.1.2] — <发布日>`（大白话写"线上异常日志恢复错误栈"等用户可感条目），hash 逐个复核；AGENTS 版本块改指 v1.1.2
-3. [ ] **S44.3** 提交推送 → 同 head 三绿 → 打注释 tag 并推送 → 建 Release 页；证据记 tag 指向的 sha、三条 run id、Release 网址
+1. [x] **S44.1** 独立复查 STEP-43，只看 diff 与运行结果，输出 PASS / FAIL / UNKNOWN 与 ≤10 行理由；FAIL ⇒ 停卡交回，不发版
+2. [x] **S44.2** CHANGELOG 并段 `## [v1.1.2] — <发布日>`（大白话写"线上异常日志恢复错误栈"等用户可感条目），hash 逐个复核；AGENTS 版本块改指 v1.1.2
+3. [x] **S44.3** 提交推送 → 同 head 三绿 → 打注释 tag 并推送 → 建 Release 页；证据记 tag 指向的 sha、三条 run id、Release 网址
 
 ## 完成判据
 - `git ls-remote --tags origin v1.1.2` 指向三绿提交；v1.0.0/v1.1.0/v1.1.1 未动

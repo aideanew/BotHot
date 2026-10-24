@@ -33,6 +33,28 @@
   - v1.0.0 / v1.1.0 / v1.1.1 未动：见 §5；
   - REST `releases/tags/v1.1.2` 返回 200：见 §5。
 
-## 5. @ci 与发布读数（推送后回填）
+## 5. @ci 与发布读数（推送后回填，2026-10-24 20:0x @win，Asia/Shanghai）
 
-_（占位：发布批推送后回填三条工作流 run id 与结论；tag/Release 现取读数。）_
+**发布批 `a221f89` 的 @ci**（GitHub REST 现读，轮询至全完成）：
+
+| 工作流 | run id | 轮次 | 结论 |
+|---|---|---|---|
+| CI | 40038370476 | attempt 1 | success |
+| CI-Windows | 40038370474 | attempt 1 | success |
+| Security | 40038370536 | attempt 1 | success |
+
+**tag 权威读数**（推送后 `git ls-remote --tags origin` 现取）：
+
+| tag | 标签对象 | `^{}` 指向提交 |
+|---|---|---|
+| v1.0.0（未动） | `8ecf322` | `c19fe87` |
+| v1.1.0（未动） | `db9205d` | `49c3bed` |
+| v1.1.1（未动） | `3eace88` | `75b212b` |
+| **v1.1.2（本卡新打）** | `4d61f5e` | **`a221f89`（三绿发布批）** |
+
+完成判据逐条：
+- ✅ `git ls-remote --tags origin v1.1.2` 的 `^{}` 指向三绿的提交 `a221f89`；v1.0.0/v1.1.0/v1.1.1 未动（上表）。
+- ✅ REST `releases/tags/v1.1.2` → HTTP 200（创建 POST 201）。
+- ✅ `EVD-V20-43/s43_review.md` 结论 PASS（§1）。
+- Release 页（正文 = tag 注释，REST 创建）：
+  https://github.com/aideanew/BotHot/releases/tag/v1.1.2
