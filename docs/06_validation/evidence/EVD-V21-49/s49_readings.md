@@ -44,6 +44,14 @@
 
 `SEC-006` 段头 ⬜ → ✅（证据路径写入）。
 
-## @ci（推送后回填）
+## @ci（推送后回填，2026-10-25 1:5x @win，Asia/Shanghai）
 
-_（占位：三 run id 与结论；Windows skip 门禁读数——本卡新增用例均非连库，预期基线不动。）_
+交付 head `8644bea` 三绿，attempt 1：
+
+| 工作流 | run id | 结论 |
+|---|---|---|
+| CI | 40115770219 | success |
+| CI-Windows | 40115770225 | success |
+| Security | 40115770211 | success |
+
+本卡新增用例均非连库 ⇒ Windows skip 基线不动（预测成立：三绿含 skip 门）。
