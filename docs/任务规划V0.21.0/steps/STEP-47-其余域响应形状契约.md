@@ -26,7 +26,7 @@
 2. [x] **S47.2 spaces**：`SpacePage`/`SpaceView`、`PublicSpacePage`/`PublicSpaceView`、`SpaceDetail`/`SpaceStats`（create/get/patch 三处同形）、`SpaceDeleteResult`、`LinkResult`
 3. [x] **S47.3 docs + resolve + extract**：`SpaceDocPage`/`SpaceDocItem`/`SpaceDocStatus`、`DocCategoryList`、`DocCategoryPatch`、`DocDeleteResult`、`DocsBatchDeleteResult`/`BatchDocFailure`、`DocsRecategorizeResult`、`IngestAccepted`/`DocIngestState`/`DocIngestStatus`、`ResolvedArticleView`、`ExtractedArticleView`/`ExtractedImageView`
 4. [x] **S47.4 路由→契约登记表**：后端一侧 `MOCK_ROUTE_CONTRACTS`（`app/contracts/shapes.py`），测试 `test_mock_route_table_matches_the_frontend_one_to_one` 按前端分发器"首个命中"同序逐条钉住 22 条；前端 `mock-contract-map.ts` 由 STEP-52 照它写
-5. [ ] **S47.5** @ci 三绿（推送后回填）
+5. [x] **S47.5** @ci 三绿（推送后回填）——f4f0261：CI 40203264523 / CI-Windows 40203264350 / Security 40203264404，见 EVD-V21-47 §@ci
 
 ## 交付摘要（2026-10-25）
 - 模块：单模块 `apps/api/app/contracts/shapes.py`，域名 `shapes`（D-V21-08）；稿 `docs/任务规划V0.12.0/contracts/shapes.schema.json`；产物 `packages/contracts/schemas/shapes.schema.json`、`packages/contracts/src/shapes/dto.ts`；`index.ts` 导出 30 个类型。

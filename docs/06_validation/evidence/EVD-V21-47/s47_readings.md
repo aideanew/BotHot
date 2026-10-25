@@ -31,3 +31,8 @@
 - `packages/contracts/src/index.ts` 导出 shapes 30 个类型（第 10 格 `packages/contracts/**` 内）。
 
 ## @ci（推送后回填）
+- 读取时间：2026-10-25 23:2x CST；head f4f02615295e98337ccbe33e213b0d4851f39e4e，三条均 attempt 1、completed / success。
+- CI run 40203264523：success。backend「Tests (pytest) + coverage + skip gate」2466 passed / 6 skipped / 4 deselected，skip 门禁 total_skipped 6 = baseline 6（pg_unreachable 0）；「Module coverage gate (check_module_coverage)」success，TOTAL 88.90% ≥ 79.0%（kb 87.90%、manifest 95.22%、subscription 88.44%）；契约漂移门、文档门、治理门 success。
+- CI-Windows run 40203264350：success。1780 passed / 692 skipped / 4 deselected；Windows skip 门禁 failed 0、total_skipped 692、baseline 692（本卡 +7 连库用例落在抬升后的基线上，测量值 == 基线）。
+- Security run 40203264404：success（pip-audit / pnpm audit / trivy / gitleaks 全绿）。
+- 结论：STEP-47 @ci 三绿。
