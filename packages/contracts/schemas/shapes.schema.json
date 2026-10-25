@@ -1,0 +1,915 @@
+{
+  "$defs": {
+    "BatchDocFailure": {
+      "additionalProperties": false,
+      "description": "批量删除的篇级失败明细。",
+      "properties": {
+        "code": {
+          "type": "integer"
+        },
+        "docId": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "docId",
+        "code",
+        "error"
+      ],
+      "type": "object"
+    },
+    "DocCategoryList": {
+      "additionalProperties": false,
+      "description": "`GET /spaces/{id}/docs:categories` 的信封 `data`（未分类哨兵 `__uncategorized__` 置末）。",
+      "properties": {
+        "items": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    },
+    "DocCategoryPatch": {
+      "additionalProperties": false,
+      "description": "`PATCH /spaces/{id}/docs/{docId}` 的信封 `data`（空串入参回显为默认分类）。",
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "docId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "docId",
+        "category"
+      ],
+      "type": "object"
+    },
+    "DocDeleteResult": {
+      "additionalProperties": false,
+      "description": "`DELETE /spaces/{id}/docs/{docId}` 的信封 `data`。",
+      "properties": {
+        "assets": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "docId": {
+          "type": "string"
+        },
+        "docs": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "docId",
+        "docs",
+        "assets"
+      ],
+      "type": "object"
+    },
+    "DocIngestState": {
+      "additionalProperties": false,
+      "description": "`GET /spaces/{id}/docs/{docId}/status` 的信封 `data`。",
+      "properties": {
+        "docId": {
+          "type": "string"
+        },
+        "langbotFileId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/DocIngestStatus"
+        }
+      },
+      "required": [
+        "docId",
+        "status",
+        "langbotFileId"
+      ],
+      "type": "object"
+    },
+    "DocIngestStatus": {
+      "description": "入库链路的本地状态（FAILED 不出现在 200 里：走 30003 错误信封）。",
+      "enum": [
+        "FETCHED",
+        "INDEXED",
+        "READY"
+      ],
+      "type": "string"
+    },
+    "DocsBatchDeleteResult": {
+      "additionalProperties": false,
+      "description": "`POST /spaces/{id}/docs:delete` 的信封 `data`（failed 非空即部分成功）。",
+      "properties": {
+        "assets": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "docs": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failed": {
+          "items": {
+            "$ref": "#/$defs/BatchDocFailure"
+          },
+          "type": "array"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "requested": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "requested",
+        "docs",
+        "assets",
+        "failed"
+      ],
+      "type": "object"
+    },
+    "DocsRecategorizeResult": {
+      "additionalProperties": false,
+      "description": "`POST /spaces/{id}/docs:recategorize` 的信封 `data`（整批原子）。",
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "docs": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "requested": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "requested",
+        "docs",
+        "category"
+      ],
+      "type": "object"
+    },
+    "ExtractedArticleView": {
+      "additionalProperties": false,
+      "description": "`POST /extract` 的信封 `data`：清洗产物 + 质量评分三键（未过阈值走 20003，不出现在 200 里）。",
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "images": {
+          "items": {
+            "$ref": "#/$defs/ExtractedImageView"
+          },
+          "type": "array"
+        },
+        "langbotFormat": {
+          "type": "string"
+        },
+        "paragraphs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "publishTime": {
+          "type": "string"
+        },
+        "qualityPassed": {
+          "type": "boolean"
+        },
+        "qualityReasons": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "qualityScore": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "wordCount": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "title",
+        "author",
+        "publishTime",
+        "paragraphs",
+        "images",
+        "wordCount",
+        "langbotFormat",
+        "qualityScore",
+        "qualityPassed",
+        "qualityReasons"
+      ],
+      "type": "object"
+    },
+    "ExtractedImageView": {
+      "additionalProperties": false,
+      "description": "抽取结果里的图片（内部 fmt 字段不进视图）。",
+      "properties": {
+        "caption": {
+          "type": "string"
+        },
+        "src": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "src",
+        "caption"
+      ],
+      "type": "object"
+    },
+    "IngestAccepted": {
+      "additionalProperties": false,
+      "description": "`POST /spaces/{id}/docs`（202）的信封 `data`。`taskId` 恒空串（SPEC §3.1 形状稳定位）。",
+      "properties": {
+        "docId": {
+          "type": "string"
+        },
+        "hitCache": {
+          "type": "boolean"
+        },
+        "hitCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "langbotFileId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/DocIngestStatus"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "docId",
+        "title",
+        "status",
+        "langbotFileId",
+        "taskId",
+        "hitCache",
+        "hitCount"
+      ],
+      "type": "object"
+    },
+    "LinkResult": {
+      "additionalProperties": false,
+      "description": "`POST /spaces/{id}/links` 的信封 `data`（幂等 copy）。",
+      "properties": {
+        "copied": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skipped": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "copied",
+        "skipped",
+        "total"
+      ],
+      "type": "object"
+    },
+    "LogoutResult": {
+      "additionalProperties": false,
+      "description": "`POST /auth/logout` 的信封 `data`（幂等：无会话也是这一形）。",
+      "properties": {
+        "logged_out": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "logged_out"
+      ],
+      "type": "object"
+    },
+    "MeUser": {
+      "additionalProperties": false,
+      "description": "`GET /auth/me` → `data.user`。`role` 是主平台 userinfo 原值（大写枚举），门禁看 `is_admin`。",
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "is_admin": {
+          "type": "boolean"
+        },
+        "nickname": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "sub": {
+          "type": "string"
+        },
+        "tier": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sub",
+        "email",
+        "nickname",
+        "tier",
+        "role",
+        "is_admin"
+      ],
+      "type": "object"
+    },
+    "MeView": {
+      "additionalProperties": false,
+      "description": "`GET /auth/me` 的信封 `data`。三个分支同一形状：正常 / 主平台不可达降级 / QA fixture。\n\n降级分支多带 `providerUnreachable: true`，fixture 分支再多带 `qaFixture: true`；\n正常分支两个键都不出现——所以它们是可选键，不是联合形。",
+      "properties": {
+        "providerUnreachable": {
+          "default": false,
+          "type": "boolean"
+        },
+        "qaFixture": {
+          "default": false,
+          "type": "boolean"
+        },
+        "user": {
+          "$ref": "#/$defs/MeUser"
+        },
+        "wallet": {
+          "$ref": "#/$defs/MeWallet"
+        }
+      },
+      "required": [
+        "user",
+        "wallet"
+      ],
+      "type": "object"
+    },
+    "MeWallet": {
+      "additionalProperties": true,
+      "description": "`GET /auth/me` → `data.wallet`。降级/fixture 分支恒为 {balanceYuan:0, currency, available:false}。",
+      "properties": {
+        "available": {
+          "default": true,
+          "type": "boolean"
+        },
+        "availableYuan": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "default": 0
+        },
+        "balanceYuan": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "currency": {
+          "type": "string"
+        },
+        "heldYuan": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "default": 0
+        }
+      },
+      "required": [
+        "balanceYuan",
+        "currency"
+      ],
+      "type": "object"
+    },
+    "NotificationHistoryPage": {
+      "additionalProperties": false,
+      "description": "`GET /system/notifications/history` 的信封 `data`（limit/offset 分页 + 未读数）。",
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/NotificationItem"
+          },
+          "type": "array"
+        },
+        "limit": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unread_total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "total",
+        "limit",
+        "offset",
+        "unread_total"
+      ],
+      "type": "object"
+    },
+    "NotificationItem": {
+      "additionalProperties": false,
+      "description": "通知历史条目（与 SSE 通知帧同键，snake_case 为已发布面）。",
+      "properties": {
+        "created_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "doc_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "is_broadcast": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "read_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "space_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "is_broadcast",
+        "title",
+        "message",
+        "url",
+        "space_id",
+        "doc_id",
+        "read_at",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "NotificationReadResult": {
+      "additionalProperties": false,
+      "description": "`PUT /system/notifications/read` 的信封 `data`。",
+      "properties": {
+        "updated": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "updated"
+      ],
+      "type": "object"
+    },
+    "PublicSpacePage": {
+      "additionalProperties": false,
+      "description": "`GET /spaces/public` 的信封 `data`。",
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/PublicSpaceView"
+          },
+          "type": "array"
+        },
+        "limit": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "total",
+        "limit",
+        "offset"
+      ],
+      "type": "object"
+    },
+    "PublicSpaceView": {
+      "additionalProperties": false,
+      "description": "`GET /spaces/public` 的 `items[]`。",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "docCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "docCount",
+        "engine",
+        "isPublic",
+        "updatedAt"
+      ],
+      "type": "object"
+    },
+    "ResolvedArticleView": {
+      "additionalProperties": false,
+      "description": "`POST /resolve` 的信封 `data`（解析预览；不落库）。",
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "biz": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "publishTime": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "author",
+        "publishTime",
+        "content",
+        "url",
+        "biz"
+      ],
+      "type": "object"
+    },
+    "SpaceDeleteResult": {
+      "additionalProperties": false,
+      "description": "`DELETE /spaces/{id}` 的信封 `data`。",
+      "properties": {
+        "engineResidue": {
+          "type": "boolean"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "engineResidue"
+      ],
+      "type": "object"
+    },
+    "SpaceDetail": {
+      "additionalProperties": false,
+      "description": "`GET/PATCH /spaces/{id}` 与 `POST /spaces`（201）的信封 `data`——三处同一形状。",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "docCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "engineKbId": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "stats": {
+          "$ref": "#/$defs/SpaceStats"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "docCount",
+        "createdAt",
+        "updatedAt",
+        "stats",
+        "engine",
+        "engineKbId",
+        "isPublic"
+      ],
+      "type": "object"
+    },
+    "SpaceDocItem": {
+      "additionalProperties": false,
+      "description": "`GET /spaces/{id}/docs` 的 `items[]`。",
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SpaceDocStatus"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "source",
+        "status",
+        "updatedAt",
+        "category"
+      ],
+      "type": "object"
+    },
+    "SpaceDocPage": {
+      "additionalProperties": false,
+      "description": "`GET /spaces/{id}/docs` 的信封 `data`。",
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/SpaceDocItem"
+          },
+          "type": "array"
+        },
+        "limit": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "total",
+        "limit",
+        "offset"
+      ],
+      "type": "object"
+    },
+    "SpaceDocStatus": {
+      "description": "文档列表里的展示态（本地 FETCHED/INDEXED → pending，READY → ready，FAILED → failed）。",
+      "enum": [
+        "pending",
+        "ready",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "SpacePage": {
+      "additionalProperties": false,
+      "description": "`GET /spaces` 的信封 `data`。",
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/SpaceView"
+          },
+          "type": "array"
+        },
+        "limit": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "total",
+        "limit",
+        "offset"
+      ],
+      "type": "object"
+    },
+    "SpaceStats": {
+      "additionalProperties": false,
+      "description": "`chunks` 为 null 表示\"数据源未接线\"，不是 0（R0.5.3）。",
+      "properties": {
+        "chunks": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "docs": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "docs",
+        "chunks"
+      ],
+      "type": "object"
+    },
+    "SpaceView": {
+      "additionalProperties": false,
+      "description": "`GET /spaces` 的 `items[]`（本人列表不带 owner 三键；那三键只在 /admin 面出现）。",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "docCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "engineKbId": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "docCount",
+        "updatedAt",
+        "engine",
+        "engineKbId",
+        "isPublic"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "bothot://contracts/shapes/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "由 scripts/gen_contracts.py 从 apps/api/app/contracts/shapes.py 生成，请勿手动修改（--check 幂等门禁）。唯一源是 Python 模型（ADR-0008）。",
+  "title": "BotHot shapes 域契约（生成物）",
+  "x-generated-by": "scripts/gen_contracts.py",
+  "x-source-module": "app.contracts.shapes"
+}

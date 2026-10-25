@@ -1,0 +1,891 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bothot://contracts/shapes/v1",
+  "title": "BotHot 其余 mock 域线上响应形状契约（STEP-47 冻结，基线 main@bfd6d82）",
+  "description": "前端 mock 表 22 条路由中除引擎域 2 条（engine.schema.json）外的 20 条，其信封 data 的形状。唯一源 apps/api/app/contracts/shapes.py；真端点反向核 tests/test_shapes_response_contract.py。",
+  "x-invariants": [
+    "除 MeWallet 外所有对象 additionalProperties=false：后端多吐一个键即红。",
+    "MeWallet 正常分支是主平台钱包对象原样透传，本仓不控键集合，故开放（P-121）。",
+    "MeView 三分支同形：providerUnreachable/qaFixture 只在降级/fixture 分支出现，故为可选键而非联合形。"
+  ],
+  "x-not-in-single-source": {
+    "x-invariants": "三条是取值关系与登记说明，不是字段形状。"
+  },
+  "$defs": {
+    "BatchDocFailure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "integer"
+        },
+        "docId": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "docId",
+        "code",
+        "error"
+      ],
+      "type": "object"
+    },
+    "DocCategoryList": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    },
+    "DocCategoryPatch": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "docId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "docId",
+        "category"
+      ],
+      "type": "object"
+    },
+    "DocDeleteResult": {
+      "additionalProperties": false,
+      "properties": {
+        "assets": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "docId": {
+          "type": "string"
+        },
+        "docs": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "docId",
+        "docs",
+        "assets"
+      ],
+      "type": "object"
+    },
+    "DocIngestState": {
+      "additionalProperties": false,
+      "properties": {
+        "docId": {
+          "type": "string"
+        },
+        "langbotFileId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/DocIngestStatus"
+        }
+      },
+      "required": [
+        "docId",
+        "status",
+        "langbotFileId"
+      ],
+      "type": "object"
+    },
+    "DocIngestStatus": {
+      "enum": [
+        "FETCHED",
+        "INDEXED",
+        "READY"
+      ],
+      "type": "string"
+    },
+    "DocsBatchDeleteResult": {
+      "additionalProperties": false,
+      "properties": {
+        "assets": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "docs": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failed": {
+          "items": {
+            "$ref": "#/$defs/BatchDocFailure"
+          },
+          "type": "array"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "requested": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "requested",
+        "docs",
+        "assets",
+        "failed"
+      ],
+      "type": "object"
+    },
+    "DocsRecategorizeResult": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "docs": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "requested": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "requested",
+        "docs",
+        "category"
+      ],
+      "type": "object"
+    },
+    "ExtractedArticleView": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "images": {
+          "items": {
+            "$ref": "#/$defs/ExtractedImageView"
+          },
+          "type": "array"
+        },
+        "langbotFormat": {
+          "type": "string"
+        },
+        "paragraphs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "publishTime": {
+          "type": "string"
+        },
+        "qualityPassed": {
+          "type": "boolean"
+        },
+        "qualityReasons": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "qualityScore": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "wordCount": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "title",
+        "author",
+        "publishTime",
+        "paragraphs",
+        "images",
+        "wordCount",
+        "langbotFormat",
+        "qualityScore",
+        "qualityPassed",
+        "qualityReasons"
+      ],
+      "type": "object"
+    },
+    "ExtractedImageView": {
+      "additionalProperties": false,
+      "properties": {
+        "caption": {
+          "type": "string"
+        },
+        "src": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "src",
+        "caption"
+      ],
+      "type": "object"
+    },
+    "IngestAccepted": {
+      "additionalProperties": false,
+      "properties": {
+        "docId": {
+          "type": "string"
+        },
+        "hitCache": {
+          "type": "boolean"
+        },
+        "hitCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "langbotFileId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/DocIngestStatus"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "docId",
+        "title",
+        "status",
+        "langbotFileId",
+        "taskId",
+        "hitCache",
+        "hitCount"
+      ],
+      "type": "object"
+    },
+    "LinkResult": {
+      "additionalProperties": false,
+      "properties": {
+        "copied": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skipped": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "copied",
+        "skipped",
+        "total"
+      ],
+      "type": "object"
+    },
+    "LogoutResult": {
+      "additionalProperties": false,
+      "properties": {
+        "logged_out": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "logged_out"
+      ],
+      "type": "object"
+    },
+    "MeUser": {
+      "additionalProperties": false,
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "is_admin": {
+          "type": "boolean"
+        },
+        "nickname": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "sub": {
+          "type": "string"
+        },
+        "tier": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sub",
+        "email",
+        "nickname",
+        "tier",
+        "role",
+        "is_admin"
+      ],
+      "type": "object"
+    },
+    "MeView": {
+      "additionalProperties": false,
+      "properties": {
+        "providerUnreachable": {
+          "default": false,
+          "type": "boolean"
+        },
+        "qaFixture": {
+          "default": false,
+          "type": "boolean"
+        },
+        "user": {
+          "$ref": "#/$defs/MeUser"
+        },
+        "wallet": {
+          "$ref": "#/$defs/MeWallet"
+        }
+      },
+      "required": [
+        "user",
+        "wallet"
+      ],
+      "type": "object"
+    },
+    "MeWallet": {
+      "additionalProperties": true,
+      "properties": {
+        "available": {
+          "default": true,
+          "type": "boolean"
+        },
+        "availableYuan": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "default": 0
+        },
+        "balanceYuan": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "currency": {
+          "type": "string"
+        },
+        "heldYuan": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "default": 0
+        }
+      },
+      "required": [
+        "balanceYuan",
+        "currency"
+      ],
+      "type": "object"
+    },
+    "NotificationHistoryPage": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/NotificationItem"
+          },
+          "type": "array"
+        },
+        "limit": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unread_total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "total",
+        "limit",
+        "offset",
+        "unread_total"
+      ],
+      "type": "object"
+    },
+    "NotificationItem": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "doc_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "is_broadcast": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "read_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "space_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "is_broadcast",
+        "title",
+        "message",
+        "url",
+        "space_id",
+        "doc_id",
+        "read_at",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "NotificationReadResult": {
+      "additionalProperties": false,
+      "properties": {
+        "updated": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "updated"
+      ],
+      "type": "object"
+    },
+    "PublicSpacePage": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/PublicSpaceView"
+          },
+          "type": "array"
+        },
+        "limit": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "total",
+        "limit",
+        "offset"
+      ],
+      "type": "object"
+    },
+    "PublicSpaceView": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "docCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "docCount",
+        "engine",
+        "isPublic",
+        "updatedAt"
+      ],
+      "type": "object"
+    },
+    "ResolvedArticleView": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "biz": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "publishTime": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "author",
+        "publishTime",
+        "content",
+        "url",
+        "biz"
+      ],
+      "type": "object"
+    },
+    "SpaceDeleteResult": {
+      "additionalProperties": false,
+      "properties": {
+        "engineResidue": {
+          "type": "boolean"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "engineResidue"
+      ],
+      "type": "object"
+    },
+    "SpaceDetail": {
+      "additionalProperties": false,
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "docCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "engineKbId": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "stats": {
+          "$ref": "#/$defs/SpaceStats"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "docCount",
+        "createdAt",
+        "updatedAt",
+        "stats",
+        "engine",
+        "engineKbId",
+        "isPublic"
+      ],
+      "type": "object"
+    },
+    "SpaceDocItem": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SpaceDocStatus"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "source",
+        "status",
+        "updatedAt",
+        "category"
+      ],
+      "type": "object"
+    },
+    "SpaceDocPage": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/SpaceDocItem"
+          },
+          "type": "array"
+        },
+        "limit": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "total",
+        "limit",
+        "offset"
+      ],
+      "type": "object"
+    },
+    "SpaceDocStatus": {
+      "enum": [
+        "pending",
+        "ready",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "SpacePage": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/SpaceView"
+          },
+          "type": "array"
+        },
+        "limit": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "total",
+        "limit",
+        "offset"
+      ],
+      "type": "object"
+    },
+    "SpaceStats": {
+      "additionalProperties": false,
+      "properties": {
+        "chunks": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "docs": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "docs",
+        "chunks"
+      ],
+      "type": "object"
+    },
+    "SpaceView": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "docCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "engineKbId": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "docCount",
+        "updatedAt",
+        "engine",
+        "engineKbId",
+        "isPublic"
+      ],
+      "type": "object"
+    }
+  }
+}

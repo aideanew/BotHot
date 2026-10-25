@@ -19,6 +19,7 @@
  * API 响应形状（STEP-46 起，D-V21-01，解 P-82）：从 `app/contracts/<域>.py` → schema → TS
  * 一条链派生，**是**线上 `data` 形状，可直接用于 `satisfies`：
  * - 已导出：engine（EngineList / EngineCapability / EngineReason / SpaceEngineBinding）
+ * - 已导出：shapes（STEP-47：mock 表其余 20 条路由的 data 形状，路由→契约名见 app/contracts/shapes.py 的 MOCK_ROUTE_CONTRACTS）
  *
  * ⚠️ 口径限定（重要）：域 dto 是**持久层实体镜像**（SQLAlchemy 列内省），
  * 不是 API 响应形状——序列化器会隐藏字段（如 BotChannel 的 `secret_enc` →
@@ -63,3 +64,37 @@ export type { Source, SourceSubscription, SourceIdentifier } from "./subscriptio
 
 // ── engine 域（API 响应形状，契约模块派生，STEP-46）──
 export type { EngineCapability, EngineList, EngineReason, SpaceEngineBinding } from "./engine/dto";
+
+// ── shapes 域（其余 mock 域的 API 响应形状，契约模块派生，STEP-47）──
+export type {
+  BatchDocFailure,
+  DocCategoryList,
+  DocCategoryPatch,
+  DocDeleteResult,
+  DocIngestState,
+  DocIngestStatus,
+  DocsBatchDeleteResult,
+  DocsRecategorizeResult,
+  ExtractedArticleView,
+  ExtractedImageView,
+  IngestAccepted,
+  LinkResult,
+  LogoutResult,
+  MeUser,
+  MeView,
+  MeWallet,
+  NotificationHistoryPage,
+  NotificationItem,
+  NotificationReadResult,
+  PublicSpacePage,
+  PublicSpaceView,
+  ResolvedArticleView,
+  SpaceDeleteResult,
+  SpaceDetail,
+  SpaceDocItem,
+  SpaceDocPage,
+  SpaceDocStatus,
+  SpacePage,
+  SpaceStats,
+  SpaceView,
+} from "./shapes/dto";

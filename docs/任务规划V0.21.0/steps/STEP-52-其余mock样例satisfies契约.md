@@ -1,19 +1,19 @@
 # STEP-52 其余 mock 样例 satisfies 契约类型（S37.4 第二段，P-82 收口）
 
-> 状态：⬜ 待执行助手（STEP-47 @ci 三绿后）｜版本 V0.21.0
+> 状态：⬜ 待执行助手（STEP-47 @ci 三绿后；47 代码已于 2026-10-25 交付）｜版本 V0.21.0
 
 | 字段 | 内容 |
 |---|---|
 | 1 归属 | 执行助手（Agent-Web） |
 | 2 切片 | SL-SHAPE |
-| 3 来源 | S37.4、P-82、STEP-47 产出的契约名清单（`EVD-V21-47/`） |
-| 4 目标 | mock 表 24 条路由的样例与 handler 返回值全部 `satisfies` 契约类型；未登记即红 |
+| 3 来源 | S37.4、P-82、P-122（STEP-47 盘出的 7 处漂移）；契约名清单 = `apps/api/app/contracts/shapes.py` 的 `MOCK_ROUTE_CONTRACTS`（只读） |
+| 4 目标 | mock 表 22 条路由（引擎 2 条已由 48 做，本卡 20 条）的样例与 handler 返回值全部 `satisfies` 契约类型；未登记即红 |
 | 5 输入 | `packages/contracts/src/**/dto.ts`（只读）；`apps/web/lib/api/mock-routes.ts`、`mock-data.ts`、`types.ts` |
-| 6 输出 | 新 `apps/web/lib/api/mock-contract-map.ts`（路由 pattern 源串 → 契约类型名，纯数据）；改 `mock-routes.ts` 每条 handler 返回值 `satisfies`；`types.ts` 中与契约同形的手写类型改为契约别名；新 `apps/web/tests/s52-mock-contract-coverage.spec.ts`：`MOCK_ROUTES` 每条的 pattern 都在 map 里（缺一条即红）；改 `mock-routes.ts` 头注释，删掉"P-82 不可满足"段；P 表 P-82 闭合 |
+| 6 输出 | 新 `apps/web/lib/api/mock-contract-map.ts`（路由 pattern 源串 → 契约类型名，纯数据）；改 `mock-routes.ts` 每条 handler 返回值 `satisfies`；`types.ts` 中与契约同形的手写类型改为契约别名；新 `apps/web/tests/s52-mock-contract-coverage.spec.ts`：`MOCK_ROUTES` 每条的 pattern 都在 map 里（缺一条即红）；改 `mock-routes.ts` 头注释，删掉"P-82 不可满足"段；P 表 P-82、P-122 闭合。**P-122 七处逐条处理**：`/auth/me` mock 改回线上嵌套形 `{user:{…},wallet:{…}}`（归一化函数两种形态都吃，页面零改动——先跑现有 me 归一化用例确认）；logout 返回 `{logged_out:true}`；两条列表补 `total/limit/offset`（回显请求值）；`POST /spaces` 补 `engine/engineKbId/isPublic`；`DELETE /spaces/{id}` 补 `engineResidue`；详情未命中改抛 30004；`Space`/`SpaceDoc` 等手写类型与契约同形的改为契约别名（线上恒有的键不再可选） |
 | 7 验收 | ① 先红：覆盖测试在只有引擎域登记时红，列出缺失路由数 ② 改后 typecheck/vitest/lint 绿 ③ 反证：任一域样例删一键 ⇒ tsc 红（至少 3 个域各一次，输出入证）④ 三绿 |
 | 8 命令 | 同 STEP-48 第 8 格 |
 | 9 证据 | `EVD-V21-52/` |
-| 10 允许修改 | 第 6 格所列 + 因类型收紧报错的调用方类型标注 |
+| 10 允许修改 | 第 6 格所列 + `apps/web/lib/api/mock-data.ts`（样例补键）+ 因类型收紧报错的调用方类型标注与测试夹具补默认值 |
 | 11 禁止修改 | `packages/contracts/**`、`apps/api/**` |
 | 12 依赖 | STEP-47、STEP-48 ｜ Blocks：STEP-53 |
 | 13 档位 | sonnet |

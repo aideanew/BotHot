@@ -35,6 +35,7 @@ from app.contracts import envelope as envelope_contract
 from app.contracts import events as events_contract
 from app.contracts import identity as identity_contract
 from app.contracts import resources as resources_contract
+from app.contracts import shapes as shapes_contract
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DRAFT_DIR = REPO_ROOT / "docs" / "任务规划V0.12.0" / "contracts"
@@ -47,6 +48,7 @@ DOMAINS: dict[str, tuple[str, Any]] = {
     "resources": ("resources.schema.json", resources_contract.CONTRACT_DIVERGENCES),
     "api.envelope": ("api.envelope.schema.json", envelope_contract.CONTRACT_DIVERGENCES),
     "engine": ("engine.schema.json", engine_contract.CONTRACT_DIVERGENCES),
+    "shapes": ("shapes.schema.json", shapes_contract.CONTRACT_DIVERGENCES),
 }
 
 #: `Divergence` 文档里"接受集不变"的四种登记（structural / serialization / strictness / documentation）。

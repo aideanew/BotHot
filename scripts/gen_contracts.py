@@ -169,6 +169,8 @@ CONTRACT_SCHEMA_MODULES: dict[str, str] = {
     "api.envelope": "app.contracts.envelope",
     # STEP-13 S13.3.1：可插拔引擎能力面（D-V3-03 选 A，只做可见化）。
     "engine": "app.contracts.engine",
+    # STEP-47（P-82 第二刀，D-V21-08）：其余 mock 域的线上响应形状。
+    "shapes": "app.contracts.shapes",
 }
 
 
@@ -295,6 +297,7 @@ def generate_schemas() -> dict[str, str]:
 #: 需要出 TS 的契约域 → 输出目录（packages/contracts/src/<目录>/dto.ts）
 CONTRACT_TS_DOMAINS: dict[str, str] = {
     "engine": "engine",
+    "shapes": "shapes",
 }
 
 _TS_SCALARS = {"string": "string", "integer": "number", "number": "number", "boolean": "boolean", "null": "null"}

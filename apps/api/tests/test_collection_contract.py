@@ -42,6 +42,7 @@ from app.contracts import envelope as envelope_contract
 from app.contracts import events as events_contract
 from app.contracts import identity as identity_contract
 from app.contracts import resources as resources_contract
+from app.contracts import shapes as shapes_contract
 from app.contracts.collection import (
     ARTICLE_KEY_PATTERN,
     CONTRACT_DIVERGENCES,
@@ -101,6 +102,12 @@ DOMAINS: dict[str, tuple[Path, Path, tuple[Divergence, ...]]] = {
         CONTRACT_DIR / "engine.schema.json",
         SCHEMA_DIR / "engine.schema.json",
         engine_contract.CONTRACT_DIVERGENCES,
+    ),
+    # STEP-47：其余 mock 域的线上响应形状（P-82 第二刀）。
+    "shapes": (
+        CONTRACT_DIR / "shapes.schema.json",
+        SCHEMA_DIR / "shapes.schema.json",
+        shapes_contract.CONTRACT_DIVERGENCES,
     ),
 }
 

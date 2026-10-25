@@ -133,7 +133,9 @@ jobs:
       # 照例不留余量。
       # **本档 685 的锚** = V0.21.0 STEP-46 新增连库用例两发（tests/test_engine_response_contract.py：
       # GET /engines 与 PATCH /spaces/{id}/engine 的 data 逐键对契约），族 +2；不留余量。
-      SKIP_BASELINE_WIN: "685"
+      # **本档 692 的锚** = V0.21.0 STEP-47 新增连库用例七发（tests/test_shapes_response_contract.py：
+      # spaces CRUD / docs 读写 / 批量删部分失败 / 公共库 / 入库与状态 / 通知 / me 降级分支），族 +7；不留余量。
+      SKIP_BASELINE_WIN: "692"
     defaults:
       run:
         shell: bash

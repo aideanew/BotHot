@@ -1,0 +1,6 @@
+# tsc 探针：前端手写类型赋给 STEP-47 契约类型（临时文件 apps/web/s47-probe.ts，已删除；行号指探针文件）
+(10,14): error TS2741: Property 'user' is missing in type 'MeData' but required in type 'MeView'.
+(12,14): error TS2322: Type 'Space' is not assignable to type 'SpaceView'.
+(13,14): error TS2322: Type 'import("apps/web/lib/api/types").SpaceDetail' is not assignable to type 'import("packages/contracts/src/shapes/dto").SpaceDetail'.
+(14,14): error TS2322: Type 'SpaceDoc' is not assignable to type 'SpaceDocItem'.
+(15,14): error TS2322: Type 'SpaceDocsPage' is not assignable to type 'SpaceDocPage'.
