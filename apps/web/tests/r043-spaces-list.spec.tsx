@@ -34,6 +34,10 @@ type MockSpace = {
   description: string;
   docCount: number;
   updatedAt: string;
+  // STEP-52：Space 改契约别名后 engine/engineKbId/isPublic 恒有 ⇒ 夹具补齐默认值
+  engine: string;
+  engineKbId: string;
+  isPublic: boolean;
 };
 
 function mkSpace(over: Partial<MockSpace> & { id: string }): MockSpace {
@@ -42,6 +46,9 @@ function mkSpace(over: Partial<MockSpace> & { id: string }): MockSpace {
     description: "",
     docCount: 0,
     updatedAt: "2026-09-23T08:00:00Z",
+    engine: "builtin",
+    engineKbId: "lb-mock",
+    isPublic: false,
     ...over,
   };
 }

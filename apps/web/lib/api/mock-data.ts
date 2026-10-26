@@ -7,6 +7,11 @@
 
 import type { Space, SpaceDetail, SpaceDoc } from "./types";
 
+/**
+ * 样例键与契约同集（STEP-52）：`engine`/`engineKbId`/`isPublic` 与 `category`
+ * 在线上是恒有键，样例缺一个键 ⇒ 演示态渲染路径与线上不同形，
+ * 而 `satisfies` 会直接把这种样例判红（P-122）。
+ */
 export const MOCK_SPACES: Space[] = [
   {
     id: "sp-001",
@@ -14,6 +19,9 @@ export const MOCK_SPACES: Space[] = [
     description: "产品手册、FAQ 与功能说明文档",
     docCount: 12,
     updatedAt: "2026-09-05T10:00:00+08:00",
+    engine: "builtin",
+    engineKbId: "mock-kb-sp-001",
+    isPublic: false,
   },
   {
     id: "sp-002",
@@ -21,6 +29,9 @@ export const MOCK_SPACES: Space[] = [
     description: "竞品公众号文章与行业动态追踪",
     docCount: 5,
     updatedAt: "2026-09-06T14:30:00+08:00",
+    engine: "builtin",
+    engineKbId: "mock-kb-sp-002",
+    isPublic: false,
   },
 ];
 
@@ -39,13 +50,13 @@ export const MOCK_SPACE_DETAILS: Record<string, SpaceDetail> = {
 
 export const MOCK_DOCS: Record<string, SpaceDoc[]> = {
   "sp-001": [
-    { id: "doc-001", title: "用户手册 v2.3", source: "公众号：产品团队", status: "ready", updatedAt: "2026-09-05T10:00:00+08:00" },
-    { id: "doc-002", title: "常见问题解答（第 4 期）", source: "公众号：产品团队", status: "ready", updatedAt: "2026-09-04T16:20:00+08:00" },
-    { id: "doc-003", title: "新功能预告：批量入库", source: "公众号：产品团队", status: "pending", updatedAt: "2026-09-06T09:15:00+08:00" },
-    { id: "doc-004", title: "旧版迁移指南（已归档）", source: "公众号：产品团队", status: "failed", updatedAt: "2026-09-02T11:40:00+08:00" },
+    { id: "doc-001", title: "用户手册 v2.3", source: "公众号：产品团队", status: "ready", updatedAt: "2026-09-05T10:00:00+08:00", category: "" },
+    { id: "doc-002", title: "常见问题解答（第 4 期）", source: "公众号：产品团队", status: "ready", updatedAt: "2026-09-04T16:20:00+08:00", category: "" },
+    { id: "doc-003", title: "新功能预告：批量入库", source: "公众号：产品团队", status: "pending", updatedAt: "2026-09-06T09:15:00+08:00", category: "" },
+    { id: "doc-004", title: "旧版迁移指南（已归档）", source: "公众号：产品团队", status: "failed", updatedAt: "2026-09-02T11:40:00+08:00", category: "" },
   ],
   "sp-002": [
-    { id: "doc-101", title: "行业周报：AI 应用趋势", source: "公众号：行业观察", status: "ready", updatedAt: "2026-09-06T14:30:00+08:00" },
-    { id: "doc-102", title: "竞品 X 发布新版本", source: "公众号：行业观察", status: "ready", updatedAt: "2026-09-05T18:00:00+08:00" },
+    { id: "doc-101", title: "行业周报：AI 应用趋势", source: "公众号：行业观察", status: "ready", updatedAt: "2026-09-06T14:30:00+08:00", category: "" },
+    { id: "doc-102", title: "竞品 X 发布新版本", source: "公众号：行业观察", status: "ready", updatedAt: "2026-09-05T18:00:00+08:00", category: "" },
   ],
 };

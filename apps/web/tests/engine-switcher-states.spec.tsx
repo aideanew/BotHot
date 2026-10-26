@@ -66,6 +66,7 @@ const SPACE: Space = {
   updatedAt: "2026-09-22T00:00:00Z",
   engine: "builtin",
   engineKbId: "lb-kb-1",
+  isPublic: false,
 };
 
 function renderSwitcher(): void {

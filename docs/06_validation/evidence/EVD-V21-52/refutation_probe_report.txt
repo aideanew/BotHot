@@ -1,0 +1,5 @@
+identity rc=2 errors=1 :: lib/api/mock-routes.ts(329,17): error TS1360: Type '{}' does not satisfy the expected type 'LogoutResult'.
+spaces rc=2 errors=1 :: lib/api/mock-routes.ts(665,8): error TS1360: Type '{ ok: true; }' does not satisfy the expected type 'SpaceDeleteResult'.
+spaces-list rc=2 errors=1 :: lib/api/mock-routes.ts(563,8): error TS1360: Type '{ items: SpaceView[]; limit: number; offset: number; }' does not satisfy the expected type 'SpacePage'.
+notifications rc=2 errors=1 :: lib/api/mock-routes.ts(486,8): error TS1360: Type '{ items: never[]; total: number; limit: number; offset: number; }' does not satisfy the expected type 'NotificationHistoryPage'.
+restored sha256 match for mock-routes.ts: True

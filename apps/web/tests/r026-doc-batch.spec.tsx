@@ -81,7 +81,8 @@ function article(id: string, title: string, category?: string): SpaceDoc {
     source: "公众号A",
     status: "ready",
     updatedAt: "2026-09-22T00:00:00+00:00",
-    category,
+    // STEP-52：契约里 category 恒有（空串 = 未分类），夹具缺省补空串而非 undefined
+    category: category ?? "",
   };
 }
 

@@ -65,7 +65,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
 });
 
 import AdminPage from "@/app/admin/page";
-import { ApiError, request, type SpaceDoc } from "@/lib/api";
+import { ApiError, request, type AdminSpace, type SpaceDoc } from "@/lib/api";
 
 function adminMe(isAdmin: boolean) {
   h.auth.me = {
@@ -85,12 +85,17 @@ function article(id: string, title: string, category?: string): SpaceDoc {
     source: "公众号B",
     status: "ready",
     updatedAt: "2026-09-23T00:00:00+00:00",
-    category,
+    // STEP-52：契约里 category 恒有（空串 = 未分类），夹具缺省补空串而非 undefined
+    category: category ?? "",
   };
 }
 
-/** 两个归属不同用户的空间；乙空间的 owner 行已不存在（LEFT JOIN 孤儿） */
-const SPACES = [
+/**
+ * 两个归属不同用户的空间；乙空间的 owner 行已不存在（LEFT JOIN 孤儿）。
+ * STEP-52：标注成 `AdminSpace[]`（它 extends 已收紧的 `Space`）——不标注时这里的
+ * `vi.fn()` 是无类型的，夹具缺线上恒有键 tsc 看不见；标注后补齐（P-122 ⑦ 同族）。
+ */
+const SPACES: AdminSpace[] = [
   {
     id: "sp-a",
     name: "甲的空间",
@@ -99,6 +104,7 @@ const SPACES = [
     updatedAt: "2026-09-23T00:00:00+00:00",
     engine: "builtin",
     engineKbId: "lb-a",
+    isPublic: false,
     ownerId: "u-zhang",
     ownerSub: "sub-zhang",
     ownerNickname: "张三",
@@ -110,6 +116,8 @@ const SPACES = [
     docCount: 0,
     updatedAt: "2026-09-22T00:00:00+00:00",
     engine: "",
+    engineKbId: "",
+    isPublic: false,
     ownerId: "",
     ownerSub: "",
     ownerNickname: "",

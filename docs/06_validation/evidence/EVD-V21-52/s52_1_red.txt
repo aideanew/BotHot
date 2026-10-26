@@ -1,0 +1,60 @@
+[33m(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90mD:/Code/AideanBotHot/apps/web[39m
+
+ [31m❯[39m tests/s52-mock-contract-coverage.spec.ts [2m([22m[2m2 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 73[2mms[22m[39m
+   [31m❯[39m S52 mock 路由契约覆盖 [2m(2)[22m
+[31m     [31m×[31m MOCK_ROUTES 每条路由都在对照表里（缺失即红，列缺失清单）[39m[32m 68[2mms[22m[39m
+     [32m✓[39m 对照表没有死条目（登记了但 mock 没注册 ⇒ 红）[32m 2[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/s52-mock-contract-coverage.spec.ts[2m > [22mS52 mock 路由契约覆盖[2m > [22mMOCK_ROUTES 每条路由都在对照表里（缺失即红，列缺失清单）
+[31m[1mAssertionError[22m: 未登记契约的路由：GET /api/v1/auth/me、POST /api/v1/auth/logout、GET /api/v1/spaces/public、POST /api/v1/spaces/{seg}/links、POST /api/v1/resolve、POST /api/v1/extract、POST /api/v1/spaces/{seg}/docs、GET /api/v1/spaces/{seg}/docs/{seg}/status、GET /api/v1/system/notifications/history、PUT /api/v1/system/notifications/read、POST /api/v1/spaces、GET /api/v1/spaces、GET /api/v1/spaces/{seg}/docs、GET /api/v1/spaces/{seg}/docs:categories、DELETE /api/v1/spaces/{seg}/docs/{seg}、PATCH /api/v1/spaces/{seg}/docs/{seg}、POST /api/v1/spaces/{seg}/docs:delete、POST /api/v1/spaces/{seg}/docs:recategorize、GET /api/v1/spaces/{seg}、DELETE /api/v1/spaces/{seg}: expected [ 'GET /api/v1/auth/me', …(19) ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   "GET /api/v1/auth/me",[39m
+[31m+   "POST /api/v1/auth/logout",[39m
+[31m+   "GET /api/v1/spaces/public",[39m
+[31m+   "POST /api/v1/spaces/{seg}/links",[39m
+[31m+   "POST /api/v1/resolve",[39m
+[31m+   "POST /api/v1/extract",[39m
+[31m+   "POST /api/v1/spaces/{seg}/docs",[39m
+[31m+   "GET /api/v1/spaces/{seg}/docs/{seg}/status",[39m
+[31m+   "GET /api/v1/system/notifications/history",[39m
+[31m+   "PUT /api/v1/system/notifications/read",[39m
+[31m+   "POST /api/v1/spaces",[39m
+[31m+   "GET /api/v1/spaces",[39m
+[31m+   "GET /api/v1/spaces/{seg}/docs",[39m
+[31m+   "GET /api/v1/spaces/{seg}/docs:categories",[39m
+[31m+   "DELETE /api/v1/spaces/{seg}/docs/{seg}",[39m
+[31m+   "PATCH /api/v1/spaces/{seg}/docs/{seg}",[39m
+[31m+   "POST /api/v1/spaces/{seg}/docs:delete",[39m
+[31m+   "POST /api/v1/spaces/{seg}/docs:recategorize",[39m
+[31m+   "GET /api/v1/spaces/{seg}",[39m
+[31m+   "DELETE /api/v1/spaces/{seg}",[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/s52-mock-contract-coverage.spec.ts:[2m50:54[22m[39m
+    [90m 48|[39m     expect(registered.size).toBeGreaterThanOrEqual(22);
+    [90m 49|[39m     const missing = [...registered].filter((k) => !mapped.has(k));
+    [90m 50|[39m     expect(missing, `未登记契约的路由：${missing.join("、")}`).toEqual([]);
+    [90m   |[39m                                                      [31m^[39m
+    [90m 51|[39m   });
+    [90m 52|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (2)[39m
+[2m   Start at [22m 10:10:15
+[2m   Duration [22m 1.45s[2m (environment 84%, tests 7%, transform 6%, setup 2%, worker 1%, import 1%)[22m
+
+JUNIT report written to D:/Code/AideanBotHot/apps/web/vitest-report/junit.xml

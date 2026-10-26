@@ -6,6 +6,7 @@
  */
 
 import type { Envelope } from "@bothot/contracts";
+import type * as Shapes from "@bothot/contracts";
 
 export type { Envelope };
 
@@ -37,18 +38,13 @@ export interface MeData {
   providerUnreachable: boolean;
 }
 
-/** 真实 /me 的钱包对象（B-T5 契约：金额为字符串保留两位） */
-export interface MeWalletInfo {
-  balanceYuan: string | number;
-  heldYuan?: string | number;
-  availableYuan?: string | number;
-  currency: string;
-  /**
-   * 后端降级态显式回报「余额不可查」（主平台 wallet 不可达）。
-   * 为 false 时不得渲染成 ¥0.00——那会让用户误以为余额清零。旧后端不返回，故可选。
-   */
-  available?: boolean;
-}
+/**
+ * 真实 /me 的钱包对象（B-T5 契约：金额为字符串保留两位）。
+ * STEP-52：改为契约别名——形状唯一来源是 `app/contracts/shapes.py` 的 `MeWallet`，
+ * 本地不再留一份可漂移的手写副本。
+ * 降级语义仍然读这一条：`available === false` 时不得渲染成 ¥0.00（旧后端不返回，故可选）。
+ */
+export type MeWalletInfo = Shapes.MeWallet;
 
 /** 布尔归一化：wire 上是真布尔，兼容 "true"/"1" 等历史形态。缺失一律 false（fail closed）。 */
 function isTrue(value: unknown): boolean {
@@ -93,20 +89,13 @@ export function normalizeMeData(
   };
 }
 
-/** GET/POST /api/v1/spaces → data.items（B-T4 契约 v0.2：camelCase） */
-export interface Space {
-  id: string;
-  name: string;
-  description: string;
-  docCount: number;
-  updatedAt: string;
-  /** AB-P004 P4：引擎位（builtin 默认） */
-  engine?: string;
-  /** AB-P004 P4：引擎侧 KB 标识（builtin 时与 langbot_kb_uuid 双写） */
-  engineKbId?: string;
-  /** AB-P004 P1：公共库标记 */
-  isPublic?: boolean;
-}
+/**
+ * GET/POST /api/v1/spaces → data.items（B-T4 契约 v0.2：camelCase）。
+ * STEP-52 收紧：`engine`/`engineKbId`/`isPublic` 线上恒有 ⇒ 改为契约别名后不再可选。
+ * 留可选的代价不是"少写三个键"，是 mock 样例可以整片不写它们，
+ * 于是"引擎位漂移"这类形状差在演示态永远看不见（P-122 盘出的第七处即此族）。
+ */
+export type Space = Shapes.SpaceView;
 
 /**
  * GET /api/v1/admin/spaces → data.items（SPEC-M3 批次 2 读面）。
@@ -119,37 +108,24 @@ export interface AdminSpace extends Space {
   ownerNickname: string;
 }
 
-/** GET /api/v1/spaces/{id} → data（详情含统计） */
-export interface SpaceDetail extends Space {
-  createdAt: string;
-  /**
-   * chunks 为 null 表示「该指标不可得」（数据源未接线），不是 0。
-   * 展示侧须隐藏该指标，不得渲成「0 个知识分块」——那会把指标缺失谎报成空数据。
-   */
-  stats: { docs: number; chunks: number | null };
-}
+/**
+ * GET /api/v1/spaces/{id} → data（详情含统计）。
+ * `stats.chunks` 为 null 表示「该指标不可得」（数据源未接线），不是 0。
+ * 展示侧须隐藏该指标，不得渲成「0 个知识分块」——那会把指标缺失谎报成空数据。
+ */
+export type SpaceDetail = Shapes.SpaceDetail;
 
-/** 文档状态：pending 采集中 | ready 可用 | failed 失败 */
-export type DocStatus = "pending" | "ready" | "failed";
+/** 文档状态：pending 采集中 | ready 可用 | failed 失败（契约 `SpaceDocStatus`） */
+export type DocStatus = Shapes.SpaceDocStatus;
 
-/** GET /api/v1/spaces/{id}/docs → data.items */
-export interface SpaceDoc {
-  id: string;
-  title: string;
-  source: string;
-  status: DocStatus;
-  updatedAt: string;
-  /** T3.2：分类标签（categorizer 规则版；空串=未分类） */
-  category?: string;
-}
+/**
+ * GET /api/v1/spaces/{id}/docs → data.items。
+ * STEP-52：`category` 线上恒有（空串 = 未分类），改为契约别名后不再可选（P-122）。
+ */
+export type SpaceDoc = Shapes.SpaceDocItem;
 
 /** R0.2.1：DELETE /spaces/{id}/docs/{docId} → data（assets=被连带清理的孤儿资产数） */
-export interface DeleteDocResult {
-  ok: boolean;
-  docId: string;
-  docs: number;
-  assets: number;
-}
+export type DeleteDocResult = Shapes.DocDeleteResult;
 
 /** M3 批次 2：PATCH /api/v1/admin/spaces/{id} → data（description 为空串 = 清空简介） */
 export interface PatchAdminSpaceResult {
@@ -159,10 +135,7 @@ export interface PatchAdminSpaceResult {
 }
 
 /** R0.2.2：PATCH /spaces/{id}/docs/{docId} → data（空串回默认口径「其他」） */
-export interface PatchDocResult {
-  docId: string;
-  category: string;
-}
+export type PatchDocResult = Shapes.DocCategoryPatch;
 
 /**
  * R0.2.6：单次批量请求的 ids **业务**上限（后端 `batch_docs_max_ids` = 50）。
@@ -171,33 +144,16 @@ export interface PatchDocResult {
 export const BATCH_DOCS_MAX_IDS = 50;
 
 /** R0.2.6：批量删除的篇级失败明细（后端 `_failure_entry`；非 AppError 回落 50001） */
-export interface BatchDocFailure {
-  docId: string;
-  code: number;
-  /** 后端只回错误码登记表标签（如 LANGBOT_API_ERROR），非展示文案 */
-  error: string;
-}
+export type BatchDocFailure = Shapes.BatchDocFailure;
 
 /**
  * R0.2.6：POST /spaces/{id}/docs:delete → data（**篇级部分成功**）。
  * failed 为空即全成功；已生效篇立即落库，失败篇的 PG 行完整保留、可原样重试。
  */
-export interface DeleteDocsBatchResult {
-  ok: boolean;
-  requested: number;
-  docs: number;
-  /** 连带清理的孤儿资产数（跨空间共享则保留） */
-  assets: number;
-  failed: BatchDocFailure[];
-}
+export type DeleteDocsBatchResult = Shapes.DocsBatchDeleteResult;
 
 /** R0.2.6：POST /spaces/{id}/docs:recategorize → data（**整批原子**，无中间态） */
-export interface RecategorizeDocsBatchResult {
-  ok: boolean;
-  requested: number;
-  docs: number;
-  category: string;
-}
+export type RecategorizeDocsBatchResult = Shapes.DocsRecategorizeResult;
 
 /**
  * 篇级失败的可展示文案。后端 `failed[].error` 只回错误码登记表标签，此处登记
@@ -228,14 +184,11 @@ export const CATEGORIES: readonly string[] = [
  */
 export const UNCATEGORIZED = "__uncategorized__" as const;
 
-/** GET /api/v1/spaces/{id}/docs → data（T1.5.7 分页 + R0.1.1 分类过滤） */
-export interface SpaceDocsPage {
-  items: SpaceDoc[];
-  /** 过滤后的总数（与 items 同谓词，分页下不虚高） */
-  total: number;
-  limit: number;
-  offset: number;
-}
+/**
+ * GET /api/v1/spaces/{id}/docs → data（T1.5.7 分页 + R0.1.1 分类过滤）。
+ * `total` 与 `items` 同谓词（过滤后总数，分页窗口不虚高）。
+ */
+export type SpaceDocsPage = Shapes.SpaceDocPage;
 
 /** listSpaceDocs 入参（limit 上限 200 由后端校验；默认 100/0） */
 export interface ListSpaceDocsOptions {
@@ -248,22 +201,10 @@ export interface ListSpaceDocsOptions {
 // ---------- AB-P004 P1 公共库（v0.4b，契约 §六 v0.5 草案） ----------
 
 /** GET /api/v1/spaces/public → data.items（公共库卡） */
-export interface PublicSpace {
-  id: string;
-  name: string;
-  description: string;
-  docCount: number;
-  engine: string;
-  isPublic: boolean;
-  updatedAt: string;
-}
+export type PublicSpace = Shapes.PublicSpaceView;
 
 /** POST /api/v1/spaces/{id}/links → data（批量 copy 结果） */
-export interface LinkResult {
-  copied: number;
-  skipped: number;
-  total: number;
-}
+export type LinkResult = Shapes.LinkResult;
 
 // ---------- AB-P004 P2 整号订阅（v0.5 契约） ----------
 
@@ -419,34 +360,13 @@ export interface ChatAnswer {
 // ---------- 链接解析入库域（C-T7，契约 v0.3d/e/f） ----------
 
 /** POST /api/v1/resolve → data（解析预览；content 为轻量行式文本） */
-export interface ResolvedArticle {
-  title: string;
-  author: string;
-  publishTime: string;
-  content: string;
-  url: string;
-  biz: string;
-}
+export type ResolvedArticle = Shapes.ResolvedArticleView;
 
 /** extract 响应中的图片项（fmt 为内部字段不进前端契约视图） */
-export interface ExtractedImage {
-  src: string;
-  caption: string;
-}
+export type ExtractedImage = Shapes.ExtractedImageView;
 
 /** POST /api/v1/extract → data（含 v0.3f 质量分） */
-export interface ExtractedArticle {
-  title: string;
-  author: string;
-  publishTime: string;
-  paragraphs: string[];
-  images: ExtractedImage[];
-  wordCount: number;
-  langbotFormat: string;
-  qualityScore: number;
-  qualityPassed: boolean;
-  qualityReasons: string[];
-}
+export type ExtractedArticle = Shapes.ExtractedArticleView;
 
 /** 业务错误：code 来自契约错误码段位，msg 为可直接展示的中文文案 */
 export class ApiError extends Error {

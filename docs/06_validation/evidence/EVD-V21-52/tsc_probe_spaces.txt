@@ -1,0 +1,8 @@
+
+> bothot-frontend@0.1.0 typecheck D:\Code\AideanBotHot\apps\web
+> tsc --noEmit
+
+lib/api/mock-routes.ts(665,8): error TS1360: Type '{ ok: true; }' does not satisfy the expected type 'SpaceDeleteResult'.
+  Property 'engineResidue' is missing in type '{ ok: true; }' but required in type 'SpaceDeleteResult'.
+ ELIFECYCLE  Command failed with exit code 2.
+

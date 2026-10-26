@@ -80,6 +80,7 @@ const BASE: SpaceDetail = {
   docCount: 2,
   engine: "builtin",
   engineKbId: "lb-1",
+  isPublic: false,
   createdAt: "2026-09-01T00:00:00+00:00",
   updatedAt: "2026-09-22T00:00:00+00:00",
   stats: { docs: 2, chunks: null },

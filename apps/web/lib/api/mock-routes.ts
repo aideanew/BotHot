@@ -13,22 +13,44 @@
  * 那正是本仓反复登记过的那族静默失败（P0-3、P-9、外链过滤那一族）。
  * 所以漏登记必须是 50101 一条会响的错误，而不是一份看起来正常的空数据。
  *
- * 形状来源（S48 起分两档）：
- * - **引擎域已由契约生成类型约束**（`packages/contracts/src/engine/dto.ts`，STEP-46 生成；
- *   本表样例与两条 handler 均 satisfies 契约类型，写错一个字段 tsc 红——P-119 收口）。
- * - 其余域仍取 `lib/api/types.ts` 与各域自声明的线上响应类型（待 STEP-52 随 STEP-47 铺开）。
+ * 形状来源（S48 起步、S52 铺满）：本表 22 条路由的样例与 handler 返回值**全部**
+ * `satisfies` 契约类型（`packages/contracts`，由 `apps/api/app/contracts/**` 生成），
+ * 路由 pattern → 契约类型名的对照只有一份：`mock-contract-map.ts`（镜像后端
+ * `app/contracts/shapes.py` 的 `MOCK_ROUTE_CONTRACTS`）。三道机器红：
+ * ① 有路由没登记契约 ⇒ `s52-mock-contract-coverage` 红；② 登记了但 mock 里没有这条路由，
+ * 或表里的类型名与后端权威串不一致 ⇒ 同文件红；③ 样例少一个契约键 ⇒ tsc 红。
+ * P-82 收口前的"演示态形状与线上不同形"这一族就此关闭（satisfies 与表之间的绑定
+ * 仍靠人工对账，洞已登记为 P-124）。
  */
 
 import { ApiError, CATEGORIES, ERROR_MESSAGES, UNCATEGORIZED } from "./types";
 import { MOCK_DOCS, MOCK_SPACE_DETAILS, MOCK_SPACES } from "./mock-data";
-import type { EngineCapability, EngineList, SpaceEngineBinding } from "@bothot/contracts";
 import type {
-  ExtractedArticle,
+  BatchDocFailure,
+  DocCategoryList,
+  DocCategoryPatch,
+  DocDeleteResult,
+  DocIngestState,
+  DocsBatchDeleteResult,
+  DocsRecategorizeResult,
+  EngineCapability,
+  EngineList,
+  ExtractedArticleView,
+  IngestAccepted,
   LinkResult,
-  MeData,
-  PublicSpace,
-  ResolvedArticle,
-} from "./types";
+  LogoutResult,
+  MeView,
+  NotificationHistoryPage,
+  NotificationReadResult,
+  PublicSpacePage,
+  PublicSpaceView,
+  ResolvedArticleView,
+  SpaceDeleteResult,
+  SpaceDetail,
+  SpaceDocPage,
+  SpaceEngineBinding,
+  SpacePage,
+} from "@bothot/contracts";
 
 /** 一次 mock 分发拿到的上下文——与真实那次 fetch 能拿到的信息同集。 */
 export interface MockContext {
@@ -271,16 +293,24 @@ export function mockLoggedIn(): boolean {
   return loginStore()?.getItem(MOCK_LOGIN_KEY) === "1";
 }
 
-/** 演示态 `/me`：扁平形态（`normalizeMeData` 两种形态都吃，见 types.ts 的注释） */
-const MOCK_ME: MeData = {
-  sub: "mock-user-001",
-  email: "admin@bothot.local",
-  nickname: "演示用户",
-  tier: "pro",
-  wallet: "¥128.50",
-  is_admin: false,
+/**
+ * 演示态 `/me`：**线上嵌套形态** `{user:{…}, wallet:{…}}`（契约 `MeView`）。
+ * 此前这里是扁平形（`{sub,…,wallet:"¥128.50"}`）——`normalizeMeData` 两种形态都吃，
+ * 于是页面在演示态永远走"扁平分支"，真实的嵌套解包路径只有接上后端才第一次执行（P-122 第一处）。
+ */
+const MOCK_ME = {
+  user: {
+    sub: "mock-user-001",
+    email: "admin@bothot.local",
+    nickname: "演示用户",
+    tier: "pro",
+    /** 主平台 userinfo 的大写枚举，与本地授权秩（`is_admin`）不同源（SPEC-M3 批次 2） */
+    role: "USER",
+    is_admin: false,
+  },
+  wallet: { balanceYuan: "128.50", currency: "CNY" },
   providerUnreachable: false,
-};
+} satisfies MeView;
 
 registerMockRoutes(
   {
@@ -299,7 +329,8 @@ registerMockRoutes(
     pattern: /^\/api\/v1\/auth\/logout$/,
     handle: () => {
       mockClearLoggedIn();
-      return null;
+      // 真后端回 `{logged_out:true}`；此前返回 null，于是"登出回执"这条消费路径在演示态永不执行（P-122）
+      return { logged_out: true } satisfies LogoutResult;
     },
   }
 );
@@ -311,7 +342,7 @@ registerMockRoutes(
  * `GET /spaces/{id}` 之前，否则 "public" 会被当成一个空间 id 吃掉——这条不是风格问题，
  * 是这张表唯一会产生**错数据**的顺序陷阱，所以在这里写明并要求 spaces 迁入时遵守。
  */
-const MOCK_PUBLIC_SPACES: PublicSpace[] = [
+const MOCK_PUBLIC_SPACES = [
   {
     id: "mock-public-ai-001",
     name: "AI前沿库",
@@ -321,15 +352,26 @@ const MOCK_PUBLIC_SPACES: PublicSpace[] = [
     isPublic: true,
     updatedAt: "2026-09-14T00:00:00",
   },
-];
+] satisfies PublicSpaceView[];
 
-const MOCK_LINK_RESULT: LinkResult = { copied: 50, skipped: 0, total: 50 };
+const MOCK_LINK_RESULT = { copied: 50, skipped: 0, total: 50 } satisfies LinkResult;
+
+/** 后端 `limit_offset_query` 的缺省页宽（`app/api/deps.py:41` = 50）；请求带值时一律回显请求值 */
+const MOCK_PAGE_LIMIT = 50;
 
 registerMockRoutes(
   {
+    // 契约 `PublicSpacePage` 是整页（items+total+limit+offset），此前样例只给 `{items}`：
+    // 分页窗口在演示态拿到的是"没有总数的半张响应"，与线上不同形（P-122 第三处）
     method: "GET",
     pattern: /^\/api\/v1\/spaces\/public$/,
-    handle: () => ({ items: MOCK_PUBLIC_SPACES }),
+    handle: ({ query }) =>
+      ({
+        items: MOCK_PUBLIC_SPACES,
+        total: MOCK_PUBLIC_SPACES.length,
+        limit: Number(query.get("limit") ?? MOCK_PAGE_LIMIT),
+        offset: Number(query.get("offset") ?? 0),
+      }) satisfies PublicSpacePage,
   },
   {
     // 幂等 copy：演示态固定给"全部新增、零跳过"，与真后端的 {copied, skipped, total} 同形
@@ -342,7 +384,7 @@ registerMockRoutes(
 // ── ingest 域（第四个迁入的域：解析 / 抽取 / 提交 / 状态轮询）──────────
 
 /** 正常文章（高质量） */
-const MOCK_RESOLVE_OK: ResolvedArticle = {
+const MOCK_RESOLVE_OK = {
   title: "深度解析：大模型知识库落地的三个关键环节",
   author: "技术前沿周刊",
   publishTime: "2026-09-05 08:30",
@@ -350,9 +392,9 @@ const MOCK_RESOLVE_OK: ResolvedArticle = {
     "知识库的质量决定了问答效果的上限。\n采集、清洗、评分是入库前的三道关口。\n本文逐一拆解每个环节的最佳实践。",
   url: "https://mp.weixin.qq.com/s/mock-ok-001",
   biz: "mock-biz-001",
-};
+} satisfies ResolvedArticleView;
 
-const MOCK_EXTRACT_OK: ExtractedArticle = {
+const MOCK_EXTRACT_OK = {
   title: "深度解析：大模型知识库落地的三个关键环节",
   author: "技术前沿周刊",
   publishTime: "2026-09-05 08:30",
@@ -367,10 +409,10 @@ const MOCK_EXTRACT_OK: ExtractedArticle = {
   qualityScore: 86,
   qualityPassed: true,
   qualityReasons: [],
-};
+} satisfies ExtractedArticleView;
 
 /** 低质样例：URL 含"低质"时命中，用于演示后端 20003 的同步拦截 */
-const MOCK_LOW_QUALITY: ExtractedArticle = {
+const MOCK_LOW_QUALITY = {
   title: "（低质样例）标题党短文",
   author: "营销号日报",
   publishTime: "2026-09-06 12:00",
@@ -381,7 +423,7 @@ const MOCK_LOW_QUALITY: ExtractedArticle = {
   qualityPassed: false,
   qualityScore: 12,
   qualityReasons: ["正文过短（少于 200 字）", "无有效配图"],
-};
+} satisfies ExtractedArticleView;
 
 function bodyUrl(ctx: MockContext): string {
   return String((ctx.body as { url?: string } | undefined)?.url ?? "");
@@ -415,7 +457,7 @@ registerMockRoutes(
       taskId: "",
       hitCache: false,
       hitCount: 0,
-    }),
+    }) satisfies IngestAccepted,
   },
   {
     // 演示态"3s 后即 READY"的演练路径：轮询循环照跑，只是第一跳就返回终态
@@ -426,7 +468,7 @@ registerMockRoutes(
       docId: params.docId ?? "",
       status: "READY",
       langbotFileId: "file-mock",
-    }),
+    }) satisfies DocIngestState,
   }
 );
 
@@ -436,20 +478,22 @@ registerMockRoutes(
   {
     // 演示数据没有真实通知历史 ⇒ 空页；但 limit/offset 必须**回显请求里的值**，
     // 否则前端分页窗口（"这一页拿满 ⇒ 还有下一页"）在演示态永远算错。
+    // 缺省页宽取后端 `limit_offset_query` 的 50（`app/api/deps.py:41`）——原来写死 20，
+    // 只在"不带 query 直接打这条路由"时露出来，属同一族回显口径。
     method: "GET",
     pattern: /^\/api\/v1\/system\/notifications\/history$/,
     handle: ({ query }) => ({
       items: [],
       total: 0,
-      limit: Number(query.get("limit") ?? 20),
+      limit: Number(query.get("limit") ?? MOCK_PAGE_LIMIT),
       offset: Number(query.get("offset") ?? 0),
       unread_total: 0,
-    }),
+    }) satisfies NotificationHistoryPage,
   },
   {
     method: "PUT",
     pattern: /^\/api\/v1\/system\/notifications\/read$/,
-    handle: () => ({ updated: 0 }),
+    handle: () => ({ updated: 0 }) satisfies NotificationReadResult,
   }
 );
 
@@ -461,8 +505,8 @@ registerMockRoutes(
 // `docs:categories`、`docs/{docId}/status` 之后——先命中的生效，反了就会把
 // "public" 当成一个空间 id 返回详情样例。
 
-/** 按 category 过滤后切片（口径与后端 `_docs_stmt` 一致）。 */
-function sliceMockDocs(id: string, query: URLSearchParams) {
+/** 按 category 过滤后切片（口径与后端 `_docs_stmt` 一致）。返回整页契约形状。 */
+function sliceMockDocs(id: string, query: URLSearchParams): SpaceDocPage {
   const all = MOCK_DOCS[id] ?? [];
   const category = query.get("category") ?? "";
   const filtered = category
@@ -490,27 +534,38 @@ function bodyOf(ctx: MockContext): Record<string, unknown> {
 }
 registerMockRoutes(
   {
+    // 创建响应复用详情形状（后端 spaces.py:141 明写），故 satisfies SpaceDetail；
+    // 此前样例缺 engine/engineKbId/isPublic 三键，与 `GET /spaces` 的 items 不同形（P-122 第四处）
     method: "POST",
     pattern: /^\/api\/v1\/spaces$/,
     handle: (ctx) => {
       const now = new Date().toISOString();
       const payload = bodyOf(ctx);
+      const id = `sp-mock-${Date.now()}`;
       return {
-        id: `sp-mock-${Date.now()}`,
+        id,
         name: String(payload.name ?? ""),
         description: String(payload.description ?? ""),
         docCount: 0,
         updatedAt: now,
         createdAt: now,
+        engine: "builtin",
+        engineKbId: `mock-kb-${id}`,
+        isPublic: false,
         stats: { docs: 0, chunks: null },
-      };
+      } satisfies SpaceDetail;
     },
   },
   {
     // 具体路径先行：`docs:categories` / `docs:delete` / `docs:recategorize` / `docs` 都在前面注册
     method: "GET",
     pattern: /^\/api\/v1\/spaces$/,
-    handle: () => ({ items: MOCK_SPACES }),
+    handle: ({ query }) => ({
+      items: MOCK_SPACES,
+      total: MOCK_SPACES.length,
+      limit: Number(query.get("limit") ?? MOCK_PAGE_LIMIT),
+      offset: Number(query.get("offset") ?? 0),
+    }) satisfies SpacePage,
   },
   {
     method: "GET",
@@ -522,7 +577,7 @@ registerMockRoutes(
     method: "GET",
     pattern: /^\/api\/v1\/spaces\/([^/]+)\/docs:categories$/,
     paramNames: ["id"],
-    handle: ({ params }) => ({ items: orderMockCategories(params.id ?? "") }),
+    handle: ({ params }) => ({ items: orderMockCategories(params.id ?? "") }) satisfies DocCategoryList,
   },
   {
     method: "DELETE",
@@ -535,7 +590,7 @@ registerMockRoutes(
         const idx = list.findIndex((d) => d.id === docId);
         if (idx >= 0) list.splice(idx, 1);
       }
-      return { ok: true, docId, docs: 1, assets: 0 };
+      return { ok: true, docId, docs: 1, assets: 0 } satisfies DocDeleteResult;
     },
   },
   {
@@ -547,7 +602,7 @@ registerMockRoutes(
       const doc = (list ?? []).find((d) => d.id === (params.docId ?? ""));
       const category = String((body as { category?: string } | undefined)?.category ?? "");
       if (doc) doc.category = category;
-      return { docId: params.docId ?? "", category: category || "其他" };
+      return { docId: params.docId ?? "", category: category || "其他" } satisfies DocCategoryPatch;
     },
   },
   {
@@ -557,7 +612,7 @@ registerMockRoutes(
     handle: ({ params, body }) => {
       const list = MOCK_DOCS[params.id ?? ""];
       const ids = ((body as { ids?: string[] } | undefined)?.ids ?? []);
-      const failed: { docId: string; code: number; error: string }[] = [];
+      const failed: BatchDocFailure[] = [];
       if (list) {
         for (const id of ids) {
           const idx = list.findIndex((d) => d.id === id);
@@ -571,7 +626,7 @@ registerMockRoutes(
         docs: Math.max(0, ids.length - failed.length),
         assets: 0,
         failed,
-      };
+      } satisfies DocsBatchDeleteResult;
     },
   },
   {
@@ -586,7 +641,7 @@ registerMockRoutes(
       (list ?? []).forEach((d) => {
         if (ids.includes(d.id)) d.category = normalized;
       });
-      return { ok: true, requested: ids.length, docs: ids.length, category: normalized };
+      return { ok: true, requested: ids.length, docs: ids.length, category: normalized } satisfies DocsRecategorizeResult;
     },
   },
   {
@@ -596,7 +651,10 @@ registerMockRoutes(
     handle: ({ params }) => {
       const detail = MOCK_SPACE_DETAILS[params.id ?? ""];
       if (!detail) {
-        throw new ApiError(30101, ERROR_MESSAGES[30101], `mock-${Date.now()}`);
+        // 与后端同码：`GET /spaces/{id}` 未命中 → 30004（不泄露存在性，spaces.py:695）。
+        // 此前 mock 抛 30101，恰好绕过了前端只认 30101/10102 的那条分支——现改成线上真实会走的那条
+        // （该缺口已登记 P-123，本卡不顺手修 useSpaceDetail）。
+        throw new ApiError(30004, ERROR_MESSAGES[30004], `mock-${Date.now()}`);
       }
       return detail;
     },
@@ -605,7 +663,11 @@ registerMockRoutes(
     method: "DELETE",
     pattern: /^\/api\/v1\/spaces\/([^/]+)$/,
     paramNames: ["id"],
-    handle: () => ({ ok: true }),
+    handle: () => ({
+      ok: true,
+      // 演示态不调引擎 ⇒ 引擎侧不可能有残留；真后端把"KB 没删净"如实回报，样例必须带这个键（P-122 第五处）
+      engineResidue: false,
+    }) satisfies SpaceDeleteResult,
   }
 );
 

@@ -1,0 +1,8 @@
+
+> bothot-frontend@0.1.0 typecheck D:\Code\AideanBotHot\apps\web
+> tsc --noEmit
+
+lib/api/mock-routes.ts(486,8): error TS1360: Type '{ items: never[]; total: number; limit: number; offset: number; }' does not satisfy the expected type 'NotificationHistoryPage'.
+  Property 'unread_total' is missing in type '{ items: never[]; total: number; limit: number; offset: number; }' but required in type 'NotificationHistoryPage'.
+ ELIFECYCLE  Command failed with exit code 2.
+

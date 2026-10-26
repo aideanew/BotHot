@@ -1,0 +1,5 @@
+
+> bothot-frontend@0.1.0 typecheck D:\Code\AideanBotHot\apps\web
+> tsc --noEmit
+
+

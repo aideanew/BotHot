@@ -163,7 +163,10 @@ export function useSpaceDetail(spaceId: string) {
           // 会话过期掉落：停在此页，AuthGate 随 status→guest 自动切卡（G2.3）
           return;
         }
-        if (err instanceof ApiError && (err.code === 30101 || err.code === 10102)) {
+        // 无效 id / 越权的线上码是 30004（后端全仓无 30101；test_spaces_api.py:239 钉 30004），
+        // 与 PublicLibraryPicker / SubscribeShortcut / useSubscriptions 三处的既有口径一致。
+        // 只认 30101/10102 时，404 语义空态对真后端永不渲染（STEP-52 越界申报，见 P-123）。
+        if (err instanceof ApiError && (err.code === 30004 || err.code === 30101 || err.code === 10102)) {
           setNotFound(true);
           return;
         }

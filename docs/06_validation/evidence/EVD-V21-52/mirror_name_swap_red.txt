@@ -1,0 +1,48 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90mD:/Code/AideanBotHot/apps/web[39m
+
+ [31m❯[39m tests/s52-mock-contract-coverage.spec.ts [2m([22m[2m3 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 77[2mms[22m[39m
+   [31m❯[39m S52 mock 路由契约覆盖 [2m(3)[22m
+     [32m✓[39m MOCK_ROUTES 每条路由都在对照表里（缺失即红，列缺失清单）[32m 60[2mms[22m[39m
+     [32m✓[39m 对照表没有死条目（登记了但 mock 没注册 ⇒ 红）[32m 3[2mms[22m[39m
+[31m     [31m×[31m 对照表与后端权威源逐条同名（名对名漂移即红）[39m[32m 12[2mms[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m2 passed[39m[22m[90m (3)[39m
+[2m   Start at [22m 10:37:18
+[2m   Duration [22m 1.16s[2m (environment 82%, tests 9%, transform 6%, setup 2%, worker 1%, import 1%)[22m
+
+JUNIT report written to D:/Code/AideanBotHot/apps/web/vitest-report/junit.xml
+
+[33m(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/s52-mock-contract-coverage.spec.ts[2m > [22mS52 mock 路由契约覆盖[2m > [22m对照表与后端权威源逐条同名（名对名漂移即红）
+[31m[1mAssertionError[22m: 对照表与后端权威表的条目与类型名: expected [ …(22) ] to deeply equal [ …(22) ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[33m@@ -18,7 +18,7 @@[39m
+[2m    "POST /api/v1/spaces -> SpaceDetail",[22m
+[2m    "POST /api/v1/spaces/{id}/docs -> IngestAccepted",[22m
+[2m    "POST /api/v1/spaces/{id}/docs:delete -> DocsBatchDeleteResult",[22m
+[2m    "POST /api/v1/spaces/{id}/docs:recategorize -> DocsRecategorizeResult",[22m
+[2m    "POST /api/v1/spaces/{id}/links -> LinkResult",[22m
+[32m-   "PUT /api/v1/system/notifications/read -> NotificationReadResult",[39m
+[31m+   "PUT /api/v1/system/notifications/read -> NotificationHistoryPage",[39m
+[2m  ][22m
+
+[36m [2m❯[22m tests/s52-mock-contract-coverage.spec.ts:[2m98:57[22m[39m
+    [90m 96|[39m       Object.entries(MOCK_CONTRACT_MAP).map(([key, name]) => [`${key} …
+    [90m 97|[39m     );
+    [90m 98|[39m     expect([...mine.keys()].sort(), "对照表与后端权威表的条目与类型名").toEqual([
+    [90m   |[39m                                                         [31m^[39m
+    [90m 99|[39m       ...authority.keys(),
+    [90m100|[39m     ].sort());
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
