@@ -1,0 +1,6 @@
+local-recovery-42a21f2   42a21f2ee463e3636c341909e832523470771dbd
+local-recovery-6751185   67511854ab2582c584f54487f9768cd9496213cc
+v1.0.0                   c19fe879e07a67efa2d482a0cd4ce340bd577a92
+v1.1.0                   49c3bed64307696fc65981c5eea516e70102f20f
+v1.1.1                   75b212ba062df3e197000e2a6e28adfe5e978df5
+v1.1.2                   a221f89a0ffd035c5252bb5aa8ddffcdf436199b

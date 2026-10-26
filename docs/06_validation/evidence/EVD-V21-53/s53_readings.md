@@ -80,8 +80,59 @@ db9205df7fc7a55bf5653e33e368b6cb8e128d75 refs/tags/v1.1.0
 
 发版批与 tag 推完后逐个 `git rev-list -n1 <tag>` 复取，逐字相同才算"一个都没动"（读数在 §5）。
 
-## 4. S53.3 tag + Release + 三绿
+## 4. S53.3 tag + Release + 三绿（判据②③④）
 
-（待回填：发版批 head、三绿 run id、tag 对象与指向提交的 `git ls-remote` 两行、
-`GET /repos/aideanew/BotHot/releases/tags/v1.1.3` 的状态码与 `html_url`、`git show-ref --tags` 与
-`git rev-list -n1` 的前后对比、`git diff --name-only c8307f7 <发版批>` 的代码零改动复核。）
+**被 tag 的 head**：`88cb20f`（本发版批），三绿见 §0 表 + `s53_3_ci_status_on_tagged_head.txt`：
+CI 40333241083 / CI-Windows 40333241047 / Security 40333241179，均 `completed success`、`attempt=1`。
+
+**判据② tag 指向三绿 head**：只创建并推送一个注释标签——
+
+```
+$ git tag -a v1.1.3 -F <tag 消息文件> 88cb20f        # 消息里带三绿 run id 与本版要点
+$ git rev-parse v1.1.3 v1.1.3^{commit}
+f98740b227d26c99bd4cb69dc050bafe60160264             # 标签对象
+88cb20f7e5d24b4daa2efa5854083a386dffc5b0             # 指向的提交 = 三绿 head
+$ git push origin v1.1.3                             # 逐字点名，**没有用 --tags**
+ * [new tag]  v1.1.3 -> v1.1.3
+$ git ls-remote --tags origin v1.1.2 v1.1.3
+4d61f5e90dc7adb6923793952f5295ff63a9b2e1  refs/tags/v1.1.2      ← 与推前逐字相同
+f98740b227d26c99bd4cb69dc050bafe60160264  refs/tags/v1.1.3
+```
+
+**判据④ 已有 tag 一个都没动**：推前后各取一次 `git show-ref --tags` 与逐标签 `git rev-list -n1`
+（`s53_3_show_ref_before/after.txt`、`s53_3_tags_revlist_before/after.txt`），diff 只有新增的 v1.1.3 三行，
+六个既有标签（`local-recovery-42a21f2`、`local-recovery-6751185`、`v1.0.0`、`v1.1.0`、`v1.1.1`、`v1.1.2`）
+一行未变。**顺带记一件容易背锅的事**：`git tag` 与 `git ls-remote --tags` 的集合差显示
+两枚 `local-recovery-*` 只存在于本地——那是历史恢复用的本地标签，**本次没有推它们**（正因为没推，
+集合差才长这样；如果哪天有人 `--tags` 全推，这个差会消失并留下痕迹）。
+
+**判据③ Release 页 200**（`s53_3_release_get.txt`）：
+
+```
+GET /repos/aideanew/BotHot/releases/tags/v1.1.3 -> HTTP 200
+  id= 424334858  tag_name= v1.1.3  draft= False  prerelease= False
+  published_at= 2026-10-26T14:13:27Z  html_url= https://github.com/aideanew/BotHot/releases/tag/v1.1.3
+  body 字节数= 2599
+```
+
+创建走 `POST /repos/aideanew/BotHot/releases`（201），**先 GET 探询再决定建不建**：
+已存在就只报 `already_exists` 不重复创建（判据要的是"这条 Release 在且 200"，不是"我建了两次"）。
+
+**卡面第 13 格（tag 推后任一工作流红 ⇒ 不删 tag、登记 P 号交回）不适用但已核实**：
+三个工作流的触发面都是 `push: branches: [master, main]` + `pull_request`（`ci.yml:1-3`、
+`ci-windows.yml:1-4`、`security.yml` 同形），**没有任何一条按 tag 触发** ⇒ 推标签不会产生新 run，
+被判据②要求的"tag 指向的提交三绿"就是上面那三个 attempt-1 的 success。
+
+**推送凭据口径**：与 STEP-55 收口批同一套（进程内取内嵌 PAT、临时 store 文件同条命令内创建→使用→
+`rm -f`→核实不存在、`-c credential.helper=` 先清空继承的 helper 再挂本次的、远端 URL 未动、不回显值）。
+两次读数都是 `mode_digits=0o666`（本平台 POSIX 位不成立，见 `EVD-V21-55/s55_push_credential_note.md`）、
+`cred_exists_after_rm=NO`。中途一次 GCM 抢先咨询把推送挂住（凭据文件因此在盘上多留几分钟）：
+按 PID 核实命令行后杀树，脚本改为"清空继承 helper + `GIT_TERMINAL_PROMPT=0` + `timeout 240`"再推成功。
+
+## 5. 本版边界（发版批自己声明的"没做什么"）
+
+- 不改代码：`git diff --name-only c8307f7 88cb20f` 只有 `AGENTS.md`、`CHANGELOG.md` 与本证据目录三件，
+  `apps/`、`packages/`、`scripts/`、`.github/` 命中数 **0** ⇒ §1 那份 S53.1 的 PASS 对被 tag 的 head 仍成立。
+- 不动 `ERROR_MESSAGES` 里的 30101 僵尸文案（D-V21-14：发版前不删，删除与组件侧收敛另排卡）。
+- 不新建分支、不推 `local-recovery-*`、不动任何已有 tag、不给 ci-windows 加覆盖率门（D-V21-13）。
+- P-126 只登记不修（归属规划方）；它不阻塞本版，因为现测孤儿数为 0。
