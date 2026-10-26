@@ -234,6 +234,48 @@ identity / spaces / 整页 / notifications 四域的旧样例形状与 P-122 列
     附录 A 第五节给的命令形式（在 `apps/api` 下不带 `--json`）也走不通。已登记 **P-125**（含逐键实测表）。
 - 新增连库用例：无 ⇒ `SKIP_BASELINE_WIN` 不动（起点 692，STEP-47 已抬，本卡不碰该文件）。
 
-## @ci（推送后回填）
+## @ci（推送后回填，2026-10-26 11:1x–11:3x @win，Asia/Shanghai）
 
-待填。
+交付头 `0aa2923`（基线 `b4157a9`，推送前后均 `HEAD...origin/main` = `0 0`）。
+三条工作流全部 **attempt 1、status=completed、conclusion=success**：
+
+| 工作流 | run id | 日志级读数（匿名 REST 拿号 + 签名 URL 取 zip 原文） |
+|---|---|---|
+| CI | 40263352699 | backend **2466 passed / 6 skipped / 4 deselected**（246.92s），`Total coverage: 88.91%`，`skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0`，模块覆盖率门 `✅ 全部模块与全局达标`；frontend `Test Files 52 passed` / `Tests 423 passed`；mock UI e2e `31 passed (1.4m)` |
+| CI-Windows | 40263352628 | backend **1780 passed / 692 skipped / 4 deselected**（1149.64s），`windows 门禁：failed=0 total_skipped=692 baseline=692`（零余量，基线不动 ✓）；frontend `52 files / 423 tests` |
+| Security | 40263352616 | `pip-audit：🔴 0 / 🟡 0`、`pnpm audit：🔴 0 / 🟡 0`、`trivy：🔴 0 / 🟡 0`、`gitleaks：✅ 未检出明文密钥` |
+
+两条与本机读数的对照，逐条说明而不是并排了事：
+
+- **本机 2464 passed / 2 failed vs @ci 2466 passed / 0 failed**：差的正是那两条 P-120 家族用例
+  （固定 id 直插用户 + 残留 Job 被 w2_worker 吃走）。CI 每次新容器新库 ⇒ 不触发；
+  这条对照本身就是"属本机持久库问题、不属代码问题"的证据（同树两侧计数只差这两条）。
+- **本机 vitest 423 vs @ci（两平台）423**：逐字相同 ⇒ 新增用例③"读后端 `shapes.py` 源文件"在
+  Linux 与 Windows 两侧都取到了同一份文件（cwd 相对路径口径成立，`ci.yml` 前端 job
+  `working-directory: apps/web`、`ci-windows.yml:289` 同）。
+- **本机 mock e2e 31 passed vs @ci `31 passed (1.4m)`**：逐字相同 ⇒ 越界申报那一行确实把
+  trunk ⑦ 从红修回绿，且后续的类型层改动（`satisfies`、头注释）没有改变运行时行为。
+
+## 完成判据对照（卡面第 7 格 + 附录 A 第十节格式）
+
+| 判据 | 读数 |
+|---|---|
+| ① 先红：覆盖测试在只有引擎域登记时红，列出缺失路由数 | ✅ 缺 20 条（原文 `s52_1_red.txt`）；同批另存一次"归一化写错 ⇒ 22 条全列"的假红与根因（`s52_1_red_attempt1_normalized_bug.txt`） |
+| ② 改后 typecheck / vitest / lint 绿 | ✅ 0 错 / 52 files 423 passed / 0 警告（本机与 @ci 两平台同数） |
+| ③ 反证：任一域样例删一键 ⇒ tsc 红（≥3 个域） | ✅ 四个域各一次（TS1360 四份原文）+ 名对名探针一次（用例③红、tsc 绿）+ 摘 satisfies 探针一次（两道门都绿 ⇒ P-124） |
+| ④ 三绿 | ✅ 见上表，同一 head `0aa2923`，attempt 1 |
+| P-82 / P-122 闭合 | ✅ 见 P 表末两行（本卡收口批登记） |
+| 卡面三级任务逐条判定 | ✅ S52.1–S52.5 全部有读数，勾选见卡面 |
+| 未做 / 交回 | P-123（前端错误码对账 + 两处僵尸文案）、P-124（22 条运行时键集合门）、P-125（模块覆盖率门 @win 不可复算）；本卡零后端改动，`SKIP_BASELINE_WIN` 不动 |
+
+## 推送凭据口径（安全铁律对账）
+
+GCM 本机已无可用的 `github.com` 凭据（`credential.interactive=false` 下报
+"unable to get password from user"，非交互模式不会弹窗）。按项目单页授权改走内嵌 PAT：
+令牌由脚本在**进程内**从单页读出，写入 `/tmp` 下一次性凭据文件（`stat` 读到 mode=600），
+用 `-c credential.helper=store --file=…` 消费，**同一条命令内 `rm -f` 并核实文件不存在**；
+remote URL 未动（`git remote -v` 仍是无凭据的 https 地址），推送输出经
+`sed 's/[A-Za-z0-9_]{30,}/***REDACTED***/g'` 兜底过滤，全程无一处回显令牌正文。
+第一次尝试在代理上撞到 `schannel: failed to receive handshake`（TLS 抖动），
+原样重试一次即成功（`b4157a9..0aa2923`），未改任何 git 配置、未走直连兜底。
+读 @ci 日志时同样只用进程内令牌，且不跟随 `/logs` 的 302 转发凭据（先取 Location，再无凭据取签名体）。
