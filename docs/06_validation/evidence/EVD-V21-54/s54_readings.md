@@ -129,6 +129,37 @@ skip 构成与基线：两轮各 6 条 skip，与 STEP-52 后端基线那一跑�
    做一道 AST 门"连库用例若以写死主键/唯一键 INSERT，则清场必须在 `finally` 或前置幂等清理里"
    （手法与 STEP-49 的 SQL 参数化 AST 门同族），归属 Agent-Guard。这条建议记在 07 记录的交回栏。
 
-## @ci（推送后回填）
+## @ci（推送后回填，2026-10-26 13:0x–13:3x，Asia/Shanghai）
 
-待填。
+交付头 `4245847a076ef45b96e63eeb3fa28285f12ef222`（父 = 规划方 `faed03a`，快进无 rebase）。
+三条工作流全部 **attempt 1、completed、success**；run id 与日志级读数：
+
+| 工作流 | run id | 读数（匿名 REST 拿号 + 签名 URL 取 zip 原文） |
+|---|---|---|
+| CI | 40272848476 | backend `2466 passed, 6 skipped, 4 deselected`（199.74s）、`Total coverage: 88.88%`、模块覆盖率门 `✅ 全部模块与全局达标`、`skip 门禁` 基线内；frontend `Test Files 52 passed` / `Tests 423 passed`；mock e2e `31 passed (1.5m)` |
+| CI-Windows | 40272848421 | backend `1780 passed, 692 skipped, 4 deselected`（1167.84s）、`windows 门禁：failed=0 total_skipped=692 baseline=692`（零余量基线未被本卡推动）；frontend `52 files / 423 tests`；ruff `All checks passed!`、mypy `Success: no issues found in 134 source files` |
+| Security | 40272848410 | `pip-audit：🔴 0 / 🟡 0`、`pnpm audit（汇总口径）：high/critical=0 moderate/low/info=0`，整条工作流 success（其汇总门禁在任一扫描器 BLOCK 时必红，故 success 本身即"四道门无可行动项"） |
+
+判读：CI 的 2466/6/0 与本机持久库两轮的 2466/6/0 三个数逐字相同 ⇒ P-120 的"本机可重复"目标成立，
+且两侧独立（新库 vs 复用的旧库）给出同一计数，不是靠清库造出来的绿。
+本卡改动是测试面单文件，CI-Windows 的 skip 基线不动即证明这一点（若清场逻辑意外把某条用例
+变成 skip，692 就会不等，门会红）。
+
+## 收口判定（覆盖卡面三条三级任务 + 第 7 格四判据）
+
+| 判据 | 结论 |
+|---|---|
+| ① 先红：同库连跑两次该文件，第二次红（唯一约束原文） | ✅ 已确认，且本机比卡面更糟——**首跑即红**（残留跨 4 个会话），两份原文入证 |
+| ② 改后同库连跑三次该文件都绿 | ✅ 已确认：25 passed × 3（10.96 / 10.76 / 10.67s），并另做"库内现状"读数证明清理真的执行（用户行与两类 Job 从 1/2 条变 0/0） |
+| ③ 同库连跑两次全量都 0 failed + w2_worker 记录 | ✅ 已确认：两轮各 2466 passed / 6 skipped / 4 deselected / 0 failed；w2_worker 两轮在 `-q` 日志里出现 0 次 ⇒ 都绿。机制如实记为"被上游顺带清残留"，不当作 w2 自身已修；因第二轮也绿，按指令**不登记 P-126** |
+| ④ 三绿 | ✅ 同一 head `4245847`，attempt 1，三条全 success |
+| S54.1 / S54.2 / S54.3 | ✅ 三条全有读数，无未做项 |
+| P-120 闭合 | ✅ 见 P 表闭合行（本批） |
+| 07 记录 | ✅ 追加第 8 行（本批） |
+
+未做 / 交回：本卡范围内零未做项。随本卡交回的只有一条**建议**（不是缺陷）：
+"用例把清场写在断言之后、`finally` 之外"这一族写法在别处可能仍存在，但我逐点过的候选文件
+（`test_r04_jobs.py`、`test_repositories.py`、`test_metadata_filter.py`）对 PG DSN 与
+`session.commit` 的引用数都是 0——那些 `id="..."` 是内存桩、不落共享库，**证据不足**，
+因此不登记 P 号；建议规划方考虑一道 AST 门（写死主键的连库用例必须有 `finally`/前置清场），
+手法与 STEP-49 的 SQL 参数化 AST 门同族。
