@@ -215,4 +215,35 @@ A/B 两行第一轮（14:24–14:29）也在旧一版核对器上跑过，那份
 且 `test_module_coverage_gate.py` + `test_workflow_gate_wiring.py` 一并 **20 passed**。
 这也说明第 1 跑的"11 步全 0"不是走过运气的读数——门确实在下一步把我自己的错抓住了。
 
-@ci 三绿读数在提交推送后追加（纪律：门禁 && commit && push，不用 `;`）。
+## S55.4 提交、三绿与闭合（收口批回填）
+
+交付批 `4a2c62b`（`e4a9a67..4a2c62b`，推送后 `origin/main...HEAD` = `0 0`）。
+门禁串联口径照纪律：`guard-ports && guard-structure && guard-versions && guard-ci-secret-mask && evidence-check && git add && git commit && rounds-check && evidence-check`，
+一步失败就不往下走；`evidence-check` 在 `git add` **之前**跑是 rc=3（"前置门在本批没有可检面"，因为 diff 基线取不到未跟踪文件），
+这条第三态不当通过也不当失败，所以按既有做法先 stage 再复跑，两道都过才提交：
+
+```
+evidence_after_add_rc=0        前置两道门（D-V4-03 耦合 + 敏感形）+ stdlib 证据复跑 + ruff + gitleaks（441 commits，no leaks）
+rounds-check                   范围内 1 个提交，阈值 ≤2 ⇒ ✅
+post_commit_gates 后 evidence-check 再一次 ⇒ ✅
+```
+
+@ci 三绿（同一 head `4a2c62b`，全部 attempt 1，`s55_ci_run_status.txt`）：
+
+| 工作流 | run | 结论 | 判据读数 |
+|---|---|---|---|
+| CI | 40320739120 | success | `2471 passed / 6 skipped / 4 deselected`（243.27s）、skip 门禁 `total_skipped=6 baseline=6 pg_unreachable=0`、`Total coverage: 88.92%`、**模块覆盖率门 ✅ 全部模块与全局达标**（@linux 键形＝相对正斜杠，见 `s55_2_ci_key_shape.txt`）、前端 vitest `53 文件 / 425 passed`、mock e2e `31 passed`（`s55_ci_backend_readings.txt`） |
+| CI-Windows | 40320739123 | success | `failed=0 total_skipped=692 baseline=692`（零余量对齐，本卡新增 5 条用例都不连库 ⇒ 692 不动）、前端 `53 文件 / 425 passed` 与 CI 侧、本机侧**逐字同数**（`s55_ci_windows_readings.txt`） |
+| Security | 40320739138 | success | 整条 success（pip-audit / pnpm audit / gitleaks / guard 步，与前三卡同口径） |
+
+本机 vs CI 的对照（这是"全量 + 三绿"里"全量"两个字的实际含义）：本机最终跑 `2471 passed / 6 skipped / 4 deselected`
+= CI `2471 / 6 / 4`；本机 vitest `53/425` = CI 两侧 `53/425`；本机 mock e2e `31 passed` = CI `31 passed`；
+覆盖率 TOTAL 本机 88.90% vs CI 88.92%（±0.03 在既有的抖动带内，AGENTS.md 测试段记过这条）。
+差异只在两处且都如实归档：本机跑的是**跨会话持久库**（STEP-54 修的那条在这台机器上连跑才判得出确定性），
+CI 是**新库**；本机那条 `rc_pkg_tsc=1` 是我的调用形，CI 用 `ci.yml:382` 的形跑过了。
+
+P 号闭合：P-124（摘 satisfies 两道门看不见 ⇒ 现在有第四道运行时门，反证 A 行红在最终字节上）、
+P-125（@win 不可复算 ⇒ 键形 + 编码两条因都修了，附录 A 原样命令本机 rc=0，"待确认"的键形差异已定为 `os.sep`）、
+P-123 余项（`spaces.ts` 注释与 `types.ts` 僵尸文案说明；发版前不删码，按 D-V21-14）。
+新登记的 P 号见台账 **P-126**（STEP-46/47 的独立复查提前跑出来的覆盖面缺口，不阻塞 v1.1.3）。
+推送凭据口径与一处需要更正的历史说法见 `s55_push_credential_note.md`；本机环境与进程事故见 `s55_local_env_note.md`。

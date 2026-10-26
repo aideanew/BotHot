@@ -1,0 +1,40 @@
+CI(ubuntu) @4a2c62b（run 40320739120，attempt 1，completed/success，created 2026-10-26T12:12:20Z）
+取法：run 级 logs zip + 进程内 Bearer（重定向不带凭据），只取判据行；ANSI 与时间戳前缀已剥。同名行去重。
+关键读数：pytest 2471 passed / 6 skipped / 4 deselected（243.27s）；skip 门禁 total_skipped=6 baseline=6 pg_unreachable=0；
+Total coverage 88.92%；模块覆盖率门 ✅ 全部模块与全局达标（键形是正斜杠相对形，见本目录 s55_2_ci_key_shape.txt）；
+前端 53 文件 425 passed；mock e2e 31 passed。
+
+1_frontend.txt| [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+1_frontend.txt| [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+1_frontend.txt|   31 passed (1.5m)
+11_Unit tests (vitest).txt| [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+11_Unit tests (vitest).txt| [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+16_E2E (mock UI).txt|   31 passed (1.5m)
+2_backend.txt| [36;1m    print(f"❌ skip 门禁：无法解析 pytest-report.xml（{exc}）")[0m
+2_backend.txt| [36;1mprint(f"skip 门禁：total_skipped={total} baseline={baseline} pg_unreachable={len(pg_skips)}")[0m
+2_backend.txt| [36;1mprint("✅ skip 门禁通过：连库用例真实执行，skip 数在基线内")[0m
+2_backend.txt| Required test coverage of 75% reached. Total coverage: 88.92%
+2_backend.txt| 2471 passed, 6 skipped, 4 deselected, 2 warnings in 243.27s (0:04:03)
+2_backend.txt| skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+2_backend.txt| ✅ skip 门禁通过：连库用例真实执行，skip 数在基线内
+2_backend.txt|   达标   99.39%  ≥ 80.0%  163/164 行  app/providers/article_sources/justoneapi.py
+2_backend.txt|   达标   99.42%  ≥ 80.0%  171/172 行  app/providers/article_sources/wellbyte.py
+2_backend.txt|   达标   88.18%  ≥ 85.0%  306/347 行  app/services/kb.py
+2_backend.txt|   达标   95.22%  ≥ 85.0%  219/230 行  app/services/manifest.py
+2_backend.txt|   达标   88.44%  ≥ 85.0%  375/424 行  app/services/subscription.py
+2_backend.txt|   达标   88.92%  ≥ 79.0%  TOTAL
+2_backend.txt| ✅ 全部模块与全局达标
+15_Tests (pytest) + coverage + skip gate.txt| [36;1m    print(f"❌ skip 门禁：无法解析 pytest-report.xml（{exc}）")[0m
+15_Tests (pytest) + coverage + skip gate.txt| [36;1mprint(f"skip 门禁：total_skipped={total} baseline={baseline} pg_unreachable={len(pg_skips)}")[0m
+15_Tests (pytest) + coverage + skip gate.txt| [36;1mprint("✅ skip 门禁通过：连库用例真实执行，skip 数在基线内")[0m
+15_Tests (pytest) + coverage + skip gate.txt| Required test coverage of 75% reached. Total coverage: 88.92%
+15_Tests (pytest) + coverage + skip gate.txt| 2471 passed, 6 skipped, 4 deselected, 2 warnings in 243.27s (0:04:03)
+15_Tests (pytest) + coverage + skip gate.txt| skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+15_Tests (pytest) + coverage + skip gate.txt| ✅ skip 门禁通过：连库用例真实执行，skip 数在基线内
+16_Module coverage gate (check_module_coverage).txt|   达标   99.39%  ≥ 80.0%  163/164 行  app/providers/article_sources/justoneapi.py
+16_Module coverage gate (check_module_coverage).txt|   达标   99.42%  ≥ 80.0%  171/172 行  app/providers/article_sources/wellbyte.py
+16_Module coverage gate (check_module_coverage).txt|   达标   88.18%  ≥ 85.0%  306/347 行  app/services/kb.py
+16_Module coverage gate (check_module_coverage).txt|   达标   95.22%  ≥ 85.0%  219/230 行  app/services/manifest.py
+16_Module coverage gate (check_module_coverage).txt|   达标   88.44%  ≥ 85.0%  375/424 行  app/services/subscription.py
+16_Module coverage gate (check_module_coverage).txt|   达标   88.92%  ≥ 79.0%  TOTAL
+16_Module coverage gate (check_module_coverage).txt| ✅ 全部模块与全局达标

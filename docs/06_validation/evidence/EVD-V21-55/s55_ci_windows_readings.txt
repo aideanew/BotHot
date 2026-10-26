@@ -1,0 +1,16 @@
+CI-Windows @4a2c62b（run 40320739123，attempt 1，completed/success，created 2026-10-26T12:12:20Z）
+取法：run 级 logs zip + 进程内 Bearer（重定向不带凭据），只取判据行；ANSI 与时间戳前缀已剥。
+
+14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt| windows 门禁：failed=0 total_skipped=692 baseline=692
+15_Frontend typecheck + unit（vitest）.txt| Test Files  53 passed (53)
+15_Frontend typecheck + unit（vitest）.txt| Tests  425 passed (425)
+
+读数口径：
+- `failed=0 total_skipped=692 baseline=692` ⇒ skip 账零余量对齐，本卡新增的 5 条用例都不连库，
+  所以 692 不动（与 STEP-54 收口时的基线同值）。
+- 前端 `53 文件 / 425 passed` 与 CI(ubuntu) 那侧、以及本机最终跑**逐字相同**——
+  三处同数说明新用例（`s55-mock-runtime-shape.spec.ts` 2 条）没有平台相关性。
+- CI-Windows 不跑模块覆盖率门（`ci-windows.yml` 无该步，规划方 D-V21-13 明确"不给 ci-windows 加该门：
+  无库覆盖率不可比"），所以 @win 侧那条门的权威读数来自本机最终跑 `s55_local_gates_final.txt`
+  的 `rc_cov=0`（按附录 A 原样、不设 `PYTHONIOENCODING`），@linux 侧来自 CI 的
+  `16_Module coverage gate (check_module_coverage).txt`（见 `s55_ci_backend_readings.txt`）。
