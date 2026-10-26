@@ -29,7 +29,7 @@ from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
 import pytest
-from sqlalchemy import create_engine, delete, func, select, text
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import Settings
@@ -76,6 +76,45 @@ def _purge_t24() -> None:
             conn.execute(text("DELETE FROM knowledge_spaces WHERE name LIKE :p"), {"p": "T24%"})
     except Exception:  # noqa: BLE001
         return
+    finally:
+        engine.dispose()
+
+
+#: 每日入队用例（S35.6 用例 A）自己写死的用户主键与 sub
+_S35_DAILY_USER = ("u-s35-daily", "sub-s35-daily")
+
+
+def _purge_daily_namespace() -> None:
+    """进门先清 + 出门必清：固定主键的用户行，两类每日作业（连带它们的明细行）。
+
+    为什么"进门也清"（P-120 的根因）：`bothot_test` 在本机跨会话持久，CI 每次新库所以从不暴露。
+    上一跑只要有一次没走到清场——插入红、断言红、或同族别的用例红——那行固定主键的用户就留下，
+    下一跑本用例的 INSERT 直接撞 `users_pkey`；`daily_report` / `hot_cluster` 两类作业同理
+    会被后面按队列取件的用例吃走。只靠"出门清"堵不住第一条：清场代码本身在被堵的那条红之后才执行。
+
+    为什么走同步裸 SQL 而不复用用例里的 async 会话：`finally` 里这次清理必须在
+    "用例已经红了、会话可能已经脏了"之后仍然跑得动，独立连接 + 显式删除更可靠
+    （手法与本文件 `_purge_t24` 同源）。
+
+    与 `_purge_t24` 有一处刻意的差别：**这里不吞异常**。清场失败意味着残留会害死下一跑，
+    把它报成红正是本卡要的——宁可红得难看，也不要下一张卡读到一个说不清的红。
+    """
+    engine = create_engine(PG_DSN, connect_args={"connect_timeout": 3})
+    try:
+        with engine.begin() as conn:
+            # 明细先删（不依赖外键级联配置），再删作业本体，最后删用例自己的用户行。
+            # 类型名写死而不是绑定参数：本用例的命名空间就是这两族，可读性优先。
+            conn.execute(
+                text(
+                    "DELETE FROM job_items WHERE job_id IN "
+                    "(SELECT id FROM jobs WHERE type IN ('daily_report', 'hot_cluster'))"
+                )
+            )
+            conn.execute(text("DELETE FROM jobs WHERE type IN ('daily_report', 'hot_cluster')"))
+            conn.execute(
+                text("DELETE FROM users WHERE id = :i OR sub = :s"),
+                {"i": _S35_DAILY_USER[0], "s": _S35_DAILY_USER[1]},
+            )
     finally:
         engine.dispose()
 
@@ -803,6 +842,8 @@ async def test_daily_jobs_enqueue_after_0630_with_frozen_clock(
 ) -> None:
     """上海 07:00（两个门都开）⇒ daily_report 与 hot_cluster 各入队一条，幂等戳按日期。"""
     monkeypatch.setattr(scheduler_module, "datetime", _FrozenDatetime)
+    # 进门先清：残留的用户行会让下面这条 INSERT 撞主键，残留的每日作业会害死后面取队列的用例
+    _purge_daily_namespace()
     engine, factory = _factory()
     try:
         async with factory() as session:
@@ -829,19 +870,13 @@ async def test_daily_jobs_enqueue_after_0630_with_frozen_clock(
             )
         assert "daily_report:2026-10-23" in keys, f"daily_report 幂等戳缺失：{sorted(keys)}"
         assert "hot_cluster:2026-10-24:1" in keys, f"hot_cluster 幂等戳缺失：{sorted(keys)}"
-        # 本仓全量共用同一份 PG：这两条 Job 若留在表里，会漏进后面按队列取件的用例
-        # （run 40017598228 实测：w2_worker 的 run_once 吃走了 daily_report，自己的
-        # hot_cluster 原地 QUEUED）。断言完即清场，把共享 DB 还原成"没有这两条"。
-        async with factory() as session:
-            jobs = (await session.scalars(select(Job).where(Job.type.in_(["daily_report", "hot_cluster"])))).all()
-            ids = [j.id for j in jobs]
-            if ids:
-                await session.execute(delete(JobItem).where(JobItem.job_id.in_(ids)))
-                for j in jobs:
-                    await session.delete(j)
-                await session.commit()
     finally:
         await engine.dispose()
+        # 出门必清（卡面 S54.2 的第二半）：断言红、入队中途红都走进这里，共享库不留行。
+        # 旧写法把清场写在"断言之后、finally 之外"，于是红一次就污染下一跑——
+        # run 40017598228 实测残留的 daily_report 被 w2_worker 的 run_once 吃走，
+        # 自己的 hot_cluster 原地 QUEUED（P-120 裁定行的另一半）。
+        _purge_daily_namespace()
 
 
 async def test_daily_jobs_skip_before_0630_with_frozen_clock(

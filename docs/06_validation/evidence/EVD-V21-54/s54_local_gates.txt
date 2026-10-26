@@ -1,0 +1,66 @@
+== ruff (app tests ../../scripts) ==
+All checks passed!
+rc_ruff=0
+== mypy ==
+Success: no issues found in 134 source files
+rc_mypy=0
+== alembic upgrade head ==
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+rc_alembic=0
+== alembic heads ==
+ab1006c2a (head)
+rc_heads=0
+== gen_contracts --check ==
+2026-10-26T13:08:33.168432 [info     ] setup plugin alembic.autogenerate.schemas [alembic.runtime.plugins]
+2026-10-26T13:08:33.168432 [info     ] setup plugin alembic.autogenerate.tables [alembic.runtime.plugins]
+2026-10-26T13:08:33.168432 [info     ] setup plugin alembic.autogenerate.types [alembic.runtime.plugins]
+2026-10-26T13:08:33.168432 [info     ] setup plugin alembic.autogenerate.constraints [alembic.runtime.plugins]
+2026-10-26T13:08:33.168432 [info     ] setup plugin alembic.autogenerate.defaults [alembic.runtime.plugins]
+2026-10-26T13:08:33.169430 [info     ] setup plugin alembic.autogenerate.comments [alembic.runtime.plugins]
+2026-10-26T13:08:33.169430 [info     ] setup plugin alembic.ext.checkconstraint_byname [alembic.runtime.plugins]
+2026-10-26T13:08:33.266170 [warning  ] ⚠️ schema/code 版本不一致：DB=None, HEAD=ab1006c2a（开发环境仅告警） [app.main]
+2026-10-26T13:08:33.310055 [warning  ] ⚠️ schema/code 版本不一致：DB=None, HEAD=ab1006c2a（开发环境仅告警） [app.main]
+[ok] packages\contracts\src\bot\dto.ts 幂等一致
+[ok] packages\contracts\src\hot\dto.ts 幂等一致
+[ok] packages\contracts\src\push_event\dto.ts 幂等一致
+[ok] packages\contracts\src\knowledge\dto.ts 幂等一致
+[ok] packages\contracts\src\subscription\dto.ts 幂等一致
+[ok] packages\contracts\src\ingest\dto.ts 幂等一致
+[ok] packages\contracts\src\engine\dto.ts 幂等一致
+[ok] packages\contracts\src\shapes\dto.ts 幂等一致
+[ok] packages\contracts\schemas\collection.schema.json 幂等一致
+[ok] packages\contracts\schemas\identity.schema.json 幂等一致
+[ok] packages\contracts\schemas\events.schema.json 幂等一致
+[ok] packages\contracts\schemas\resources.schema.json 幂等一致
+[ok] packages\contracts\schemas\api.envelope.schema.json 幂等一致
+[ok] packages\contracts\schemas\engine.schema.json 幂等一致
+[ok] packages\contracts\schemas\shapes.schema.json 幂等一致
+rc_gen=0
+== check_docs_consistency ==
+[info] 解析 D:\Code\AideanBotHot\docs\04_engineering\backlog.md
+[info] 找到 23 个路径引用
+
+检查完成：共 23 个路径引用，0 个不存在
+[anchor] 语料 15 份，根路径文件锚 133 处（按 HEAD 判存在）
+[ok] [anchor] 需求侧锚对账通过
+[stack] 语料 15 份，含键值引用的行 4 行
+[ok] [stack] 技术栈引用与实值一致
+
+[ok] 文档一致性检查通过
+rc_docs=0
+== coverage gate (新命令：仓库根 + --json) ==
+模块覆盖率门（全局线 79%）
+------------------------------------------------------------------------------
+  失配  app/providers/article_sources/dajiala.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+  失配  app/providers/article_sources/justoneapi.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+  失配  app/providers/article_sources/tikhub.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+  失配  app/providers/article_sources/wellbyte.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+  失配  app/services/article_identity.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+  失配  app/services/kb.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+  失配  app/services/manifest.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+  失配  app/services/subscription.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+------------------------------------------------------------------------------
+  达标   88.94%  ≥ 79.0%  TOTAL
+❌ 覆盖率门判红/判 NOT-PASS（rc=2）
+rc_cov=2
