@@ -1,0 +1,13 @@
+模块覆盖率门（全局线 79%）
+------------------------------------------------------------------------------
+  失配  app/providers/article_sources/dajiala.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+  失配  app/providers/article_sources/justoneapi.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+  失配  app/providers/article_sources/tikhub.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+  失配  app/providers/article_sources/wellbyte.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+  失配  app/services/article_identity.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+  失配  app/services/kb.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+  失配  app/services/manifest.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+  失配  app/services/subscription.py  —— coverage.json 里命中 0 个文件（需要恰好 1 个）
+------------------------------------------------------------------------------
+  达标   88.94%  ≥ 79.0%  TOTAL
+❌ 覆盖率门判红/判 NOT-PASS（rc=2）

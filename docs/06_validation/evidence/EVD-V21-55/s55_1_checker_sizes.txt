@@ -1,0 +1,9 @@
+S55.1 核对器规模（按大括号配平数出来的，不是估的；measure.py 的原文输出，单行箭头函数按 1 行计）
+文件：apps/web/tests/s55-mock-runtime-shape.spec.ts（第 1 轮交付版；提交前把两轮审查的 nits 折进来后的最终形态）
+量完后这条用例再跑一次：rc=0、2 passed（原文 s55_final_spec.txt）
+checkShape: lines 146-223 = 78
+jsonType: lines 64-68 = 5
+loadDefs: lines 79-93 = 15
+auditDefs: lines 111-143 = 33
+own: lines 77-77 = 1
+file lines: 439

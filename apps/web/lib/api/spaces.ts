@@ -45,7 +45,10 @@ export async function listSpaces(): Promise<Space[]> {
 
 /**
  * GET /api/v1/spaces/{id} —— 空间详情。
- * 不存在/无权（30101/10102）由调用方渲染 404 语义空态页，不白屏。
+ * 不存在/无权（30004）由调用方渲染 404 语义空态页，不白屏。
+ * （STEP-55 S55.3 纠真：这行原来写的是"30101/10102"，而后端全仓不产 30101，
+ * 未命中的线上码是 30004——`apps/api/tests/test_spaces_api.py:244` 把码位钉在断言里。
+ * 文案表里的 30101 仍在（D-V21-14：发版前不删码），但它不是这条端点的返回值。）
  */
 export async function getSpace(id: string): Promise<SpaceDetail> {
   return request<SpaceDetail>(`/api/v1/spaces/${encodeURIComponent(id)}`);

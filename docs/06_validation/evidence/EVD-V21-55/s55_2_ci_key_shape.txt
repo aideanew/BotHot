@@ -1,0 +1,32 @@
+CI 那一步打印的文件路径形（P-125 的「待确认：键形为何本机与 @linux 不同」的真读数）
+来源：run 40275791754（CI@e4a9a67，attempt 1，success）的 run 级 logs zip，成员 4_backend.txt；
+取法：进程内 Bearer 请求 /actions/runs/40275791754/logs，重定向不带凭据；只打印覆盖率门那一步的命中行。
+读法：这一列就是这道门在 CI 里看到的 coverage.json 键形——**相对形、正斜杠**，与阈值表逐字相同，
+所以旧 _match 的第一条快路径（key in files）在 CI 一直命中，本机却是 app\services\kb.py（os.sep）⇒
+差别只在分隔符，不在绝对 vs 相对或目录深度。本卡归一后两侧都命中 1 个。
+
+zip bytes=179793
+── 命中日志成员：4_backend.txt
+   2026-10-26T05:49:23.5730378Z TOTAL                                         10416   1154    89%
+   2026-10-26T05:49:26.6248995Z   达标  100.00%  ≥ 80.0%  122/122 行  app/providers/article_sources/dajiala.py
+   2026-10-26T05:49:26.6249545Z   达标   99.39%  ≥ 80.0%  163/164 行  app/providers/article_sources/justoneapi.py
+   2026-10-26T05:49:26.6250509Z   达标  100.00%  ≥ 80.0%  140/140 行  app/providers/article_sources/tikhub.py
+   2026-10-26T05:49:26.6251012Z   达标   99.42%  ≥ 80.0%  171/172 行  app/providers/article_sources/wellbyte.py
+   2026-10-26T05:49:26.6251509Z   达标  100.00%  ≥100.0%  63/63 行  app/services/article_identity.py
+   2026-10-26T05:49:26.6251919Z   达标   88.18%  ≥ 85.0%  306/347 行  app/services/kb.py
+   2026-10-26T05:49:26.6252307Z   达标   95.22%  ≥ 85.0%  219/230 行  app/services/manifest.py
+   2026-10-26T05:49:26.6252707Z   达标   88.44%  ≥ 85.0%  375/424 行  app/services/subscription.py
+   2026-10-26T05:49:26.6253528Z   达标   88.92%  ≥ 79.0%  TOTAL
+   2026-10-26T05:49:26.6253799Z ✅ 全部模块与全局达标
+── 命中日志成员：backend/16_Module coverage gate (check_module_coverage).txt
+   2026-10-26T05:49:26.6248989Z   达标  100.00%  ≥ 80.0%  122/122 行  app/providers/article_sources/dajiala.py
+   2026-10-26T05:49:26.6249542Z   达标   99.39%  ≥ 80.0%  163/164 行  app/providers/article_sources/justoneapi.py
+   2026-10-26T05:49:26.6250505Z   达标  100.00%  ≥ 80.0%  140/140 行  app/providers/article_sources/tikhub.py
+   2026-10-26T05:49:26.6251009Z   达标   99.42%  ≥ 80.0%  171/172 行  app/providers/article_sources/wellbyte.py
+   2026-10-26T05:49:26.6251505Z   达标  100.00%  ≥100.0%  63/63 行  app/services/article_identity.py
+   2026-10-26T05:49:26.6251916Z   达标   88.18%  ≥ 85.0%  306/347 行  app/services/kb.py
+   2026-10-26T05:49:26.6252304Z   达标   95.22%  ≥ 85.0%  219/230 行  app/services/manifest.py
+   2026-10-26T05:49:26.6252705Z   达标   88.44%  ≥ 85.0%  375/424 行  app/services/subscription.py
+   2026-10-26T05:49:26.6253525Z   达标   88.92%  ≥ 79.0%  TOTAL
+   2026-10-26T05:49:26.6253796Z ✅ 全部模块与全局达标
+printing 21 行

@@ -1,0 +1,70 @@
+[33m(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90mD:/Code/AideanBotHot/apps/web[39m
+
+ [31m❯[39m tests/s55-mock-runtime-shape.spec.ts [2m([22m[2m2 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 75[2mms[22m[39m
+   [31m❯[39m S55 mock 响应的运行时形状（直读 schema，不靠 satisfies 是否还在） [2m(2)[22m
+[31m     [31m×[31m 22 条逐条走真实分发器并按 schema 核对（含条数与跳过项）[39m[32m 70[2mms[22m[39m
+     [32m✓[39m 核对器自检：手造坏样本各自必须报错，合法样本必须通过，体检门的四条拒绝路径各自要证明会红[32m 4[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/s55-mock-runtime-shape.spec.ts[2m > [22mS55 mock 响应的运行时形状（直读 schema，不靠 satisfies 是否还在）[2m > [22m22 条逐条走真实分发器并按 schema 核对（含条数与跳过项）
+[31m[1mAssertionError[22m: 与契约不同形：
+  GET /api/v1/spaces/{id}：分发器匹配到的是另一条路由（表里 "GET /api/v1/spaces/{seg}"，实际 "GET /api/v1/spaces"）
+  SpaceDetail←GET /api/v1/spaces/{id}.id：契约必填，样例里没有这个键
+  SpaceDetail←GET /api/v1/spaces/{id}.name：契约必填，样例里没有这个键
+  SpaceDetail←GET /api/v1/spaces/{id}.description：契约必填，样例里没有这个键
+  SpaceDetail←GET /api/v1/spaces/{id}.docCount：契约必填，样例里没有这个键
+  SpaceDetail←GET /api/v1/spaces/{id}.createdAt：契约必填，样例里没有这个键
+  SpaceDetail←GET /api/v1/spaces/{id}.updatedAt：契约必填，样例里没有这个键
+  SpaceDetail←GET /api/v1/spaces/{id}.stats：契约必填，样例里没有这个键
+  SpaceDetail←GET /api/v1/spaces/{id}.engine：契约必填，样例里没有这个键
+  SpaceDetail←GET /api/v1/spaces/{id}.engineKbId：契约必填，样例里没有这个键
+  SpaceDetail←GET /api/v1/spaces/{id}.isPublic：契约必填，样例里没有这个键
+  SpaceDetail←GET /api/v1/spaces/{id}.items：契约 properties 里没有此键（additionalProperties:false）
+  SpaceDetail←GET /api/v1/spaces/{id}.total：契约 properties 里没有此键（additionalProperties:false）
+  SpaceDetail←GET /api/v1/spaces/{id}.limit：契约 properties 里没有此键（additionalProperties:false）
+  SpaceDetail←GET /api/v1/spaces/{id}.offset：契约 properties 里没有此键（additionalProperties:false）: expected [ …(15) ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   "GET /api/v1/spaces/{id}：分发器匹配到的是另一条路由（表里 \"GET /api/v1/spaces/{seg}\"，实际 \"GET /api/v1/spaces\"）",[39m
+[31m+   "SpaceDetail←GET /api/v1/spaces/{id}.id：契约必填，样例里没有这个键",[39m
+[31m+   "SpaceDetail←GET /api/v1/spaces/{id}.name：契约必填，样例里没有这个键",[39m
+[31m+   "SpaceDetail←GET /api/v1/spaces/{id}.description：契约必填，样例里没有这个键",[39m
+[31m+   "SpaceDetail←GET /api/v1/spaces/{id}.docCount：契约必填，样例里没有这个键",[39m
+[31m+   "SpaceDetail←GET /api/v1/spaces/{id}.createdAt：契约必填，样例里没有这个键",[39m
+[31m+   "SpaceDetail←GET /api/v1/spaces/{id}.updatedAt：契约必填，样例里没有这个键",[39m
+[31m+   "SpaceDetail←GET /api/v1/spaces/{id}.stats：契约必填，样例里没有这个键",[39m
+[31m+   "SpaceDetail←GET /api/v1/spaces/{id}.engine：契约必填，样例里没有这个键",[39m
+[31m+   "SpaceDetail←GET /api/v1/spaces/{id}.engineKbId：契约必填，样例里没有这个键",[39m
+[31m+   "SpaceDetail←GET /api/v1/spaces/{id}.isPublic：契约必填，样例里没有这个键",[39m
+[31m+   "SpaceDetail←GET /api/v1/spaces/{id}.items：契约 properties 里没有此键（additionalProperties:false）",[39m
+[31m+   "SpaceDetail←GET /api/v1/spaces/{id}.total：契约 properties 里没有此键（additionalProperties:false）",[39m
+[31m+   "SpaceDetail←GET /api/v1/spaces/{id}.limit：契约 properties 里没有此键（additionalProperties:false）",[39m
+[31m+   "SpaceDetail←GET /api/v1/spaces/{id}.offset：契约 properties 里没有此键（additionalProperties:false）",[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/s55-mock-runtime-shape.spec.ts:[2m336:57[22m[39m
+    [90m334|[39m       "ExtractedArticleView←POST /api/v1/extract（低质分支）.images",
+    [90m335|[39m     ]);
+    [90m336|[39m     expect(errors, `与契约不同形：\n  ${errors.join("\n  ")}`).toEqual([]);
+    [90m   |[39m                                                         [31m^[39m
+    [90m337|[39m   });
+    [90m338|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (2)[39m
+[2m   Start at [22m 14:29:35
+[2m   Duration [22m 965ms[2m (environment 78%, tests 10%, transform 8%, setup 2%, worker 1%, import 1%)[22m
+
+JUNIT report written to D:/Code/AideanBotHot/apps/web/vitest-report/junit.xml

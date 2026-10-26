@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import sys
 from pathlib import Path
@@ -70,16 +71,36 @@ def _resolve(json_path: Path) -> Any:
     return files, totals
 
 
+def _norm(path: str) -> str:
+    """把一侧路径归一到"正斜杠、无前导 `./` 与前导 `/`"的形态（P-125）。
+
+    为什么需要：coverage.json 的键形跟平台与调用方式走——Windows 上 `pytest --cov=app`
+    写出的是 `app\\services\\kb.py`（反斜杠相对路径），Linux 上写出 `app/services/kb.py`。
+    旧实现只做了"needle 用正斜杠、再要求路径里有一个 `/` 前导"，于是在本机 8 个阈值键
+    **全部命中 0 个**（相对路径没有那个前导斜杠），门在 @win 根本不可复算。
+    归一只做形状翻译，不做放宽：两侧都归一后仍要求"全等"或"以 `/`+键结尾"，
+    否则 `app/services/kb.py` 会顺手匹配上 `other/app/services/kb.py`——那等于让别的文件替它受审。
+    """
+    q = path.replace("\\", "/")
+    while q.startswith("./"):
+        q = q[2:]
+    return q.removeprefix("/")
+
+
 def _match(key: str, files: dict[str, dict[str, dict[str, float]]]) -> list[str]:
     """阈值键 → coverage.json 里的文件路径：精确命中优先，否则按后缀唯一命中。
 
-    后缀匹配是为了让门在「运行目录深度变了」（CI 里 `--cov=app` 的相对根与本机不同）时仍然
-    只命中那一个文件。命中多于一个必须报错而不是取第一个：取第一个就等于让别的文件替它受审。
+    后缀匹配是为了让门在「运行目录深度变了」（CI 里 `--cov=app` 的相对根与本机不同）与
+    「键形换了分隔符」（@win 反斜杠 / @linux 正斜杠，P-125）时仍然只命中那一个文件。
+    命中多于一个必须报错而不是取第一个：取第一个就等于让别的文件替它受审。
     """
-    if key in files:
-        return [key]
-    needle = "/" + key.replace("\\", "/")
-    return [p for p in files if p.replace("\\", "/").endswith(needle)]
+    needle = _norm(key)
+    hits: list[str] = []
+    for path in files:
+        normalized = _norm(path)
+        if normalized == needle or normalized.endswith("/" + needle):
+            hits.append(path)
+    return hits
 
 
 def _percent(summary: dict[str, float]) -> float:
@@ -162,4 +183,14 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # 这台机器的控制台语言不许决定门的结果：Windows 默认 cp936 编不出 `✅`/`❌`，
+    # 于是**所有模块都达标**的那一跑也会在末行抛 UnicodeEncodeError ⇒ rc=1（实测，P-125 的
+    # 第二条失配因；判红那侧同样会崩，末行诊断信息一起丢）。附录 A 要求本机"原样复算"这条门，
+    # 所以在这儿钉死 utf-8——CI 的 ubuntu 本就是 utf-8，这一步对它没有可观察差别。
+    # 放在 `__main__` 而不是 main() 里：in-process 单测走 capsys，不该被脚本改了流的编码。
+    # isinstance 这一层不是装饰：`reconfigure` 只在 `TextIOWrapper` 上存在（mypy 会判 union-attr），
+    # 而流被人换成别的对象时如实跳过——那条路径由常驻用例
+    # `test_gate_survives_a_non_utf8_console`（真子进程 + PYTHONIOENCODING=gbk）钉住，不靠这里自证。
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(main())

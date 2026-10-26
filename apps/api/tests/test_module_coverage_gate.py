@@ -16,6 +16,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -161,3 +164,74 @@ def test_ci_wires_the_gate_after_the_pytest_step() -> None:
     assert "coverage-gate" in makefile, "Makefile 缺 coverage-gate 目标"
     entry = (REPO_ROOT / "scripts" / "entry.py").read_text(encoding="utf-8")
     assert "coverage-gate" in entry, "entry.py 未注册 coverage-gate（check_entry_parity 会红）"
+
+
+# ── STEP-55 S55.2（P-125）：`_match` 的键形归一 ─────────────────────────
+#
+# 上面那批用例喂的都是**正斜杠**键（CI 的形状），所以它们对"@win 的反斜杠相对键"完全失明：
+# 旧 `_match` 把 needle 拼成 `/app/services/kb.py` 再要求 `endswith`，而本机 coverage.json
+# 的键是 `app\services\kb.py`（归一后 `app/services/kb.py`，没有前导斜杠）⇒ 8 个阈值键
+# 全判"命中 0 个"、门在 Windows 上不可复算（读数在 `EVD-V21-55/s55_2_pre_fix_rc2.txt`）。
+# 下面四条盯的就是这件事本身，而不是"改完能跑"：一条防漏判、一条防过松、一条防多命中被吞。
+
+_WIN_KEY = "app\\services\\kb.py"
+_LINUX_KEY = "app/services/kb.py"
+
+
+def test_windows_backslash_relative_key_hits_exactly_one() -> None:
+    """本机形状：反斜杠相对键必须命中恰一个（改前这条是 0 个 ⇒ 门 NOT-PASS）。"""
+    files = {_WIN_KEY: {}, "app\\services\\manifest.py": {}, "app\\models\\entities.py": {}}
+    hits = _gate()._match("app/services/kb.py", files)
+    assert hits == [_WIN_KEY], hits
+
+
+def test_linux_forward_slash_key_still_hits_exactly_one() -> None:
+    """CI 形状不能被这次归一弄坏：正斜杠相对键、以及带运行目录前缀的深度路径都各命中一个。"""
+    gate = _gate()
+    direct = gate._match(_LINUX_KEY, {_LINUX_KEY: {}, "app/services/manifest.py": {}})
+    assert direct == [_LINUX_KEY], direct
+    deep = gate._match(_LINUX_KEY, {"/home/runner/work/BotHot/BotHot/apps/api/app/services/kb.py": {}})
+    assert deep == ["/home/runner/work/BotHot/BotHot/apps/api/app/services/kb.py"], deep
+    dotted = gate._match(_LINUX_KEY, {"./app/services/kb.py": {}})
+    assert dotted == ["./app/services/kb.py"], dotted
+
+
+def test_multiple_hits_are_returned_so_the_gate_reports_them() -> None:
+    """命中多于一个必须原样返回（调用方据此判 NOT-PASS），不许取第一个替它受审。"""
+    files = {"app/services/kb.py": {}, "other/app/services/kb.py": {}}
+    assert len(_gate()._match(_LINUX_KEY, files)) == 2
+
+
+def test_normalization_is_not_a_substring_match() -> None:
+    """归一只换形状，不许放松判据：文件名前缀相同、目录名尾部相同的都必须 0 命中。
+
+    这条是防"把门修成永远绿"的——如果归一顺手做成 `in`/前缀匹配，下面两种都会误命中，
+    于是模块改名或被人塞一个同名文件进来都不会红，而读数上看不出区别。
+    """
+    gate = _gate()
+    assert gate._match(_LINUX_KEY, {"app/services/kb_more.py": {}}) == []
+    assert gate._match(_LINUX_KEY, {"app/services/xkb.py": {}}) == []
+    assert gate._match(_LINUX_KEY, {"app/providers/kb.py": {}}) == []
+
+
+def test_gate_survives_a_non_utf8_console(tmp_path: Path) -> None:
+    """控制台语言不许决定门的结果：达标末行是 `✅`，在 cp936/gbk 流上会抛 UnicodeEncodeError。
+
+    P-125 的第二条失配因与 `_match` 无关——本机把键形修好之后，附录 A 那条命令**照原样**跑仍然
+    rc=1（八个模块逐行打印"达标"，然后在末行崩，读数在 `EVD-V21-55/s55_2_cp936_before_after.md`）。
+    这里不改本机 locale，而是用 `PYTHONIOENCODING=gbk` 把编码钉成和它一样：gbk 是 Python 自带的
+    码表，Linux CI 上也能造出同一个流 ⇒ 这条用例在两个平台上判的是同一件事。
+    """
+    path = _json(tmp_path, _doc())
+    env = {**os.environ, "PYTHONIOENCODING": "gbk"}
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--json", path],
+        cwd=str(REPO_ROOT),
+        env=env,
+        capture_output=True,
+        check=False,
+    )
+    out = run.stdout.decode("utf-8", errors="replace")
+    assert run.returncode == 0, f"rc={run.returncode}\n{out}\n{run.stderr.decode('utf-8', 'replace')}"
+    # 只看 rc 会被"其实一条都没判"骗过去：必须真的打印出达标末行（它正是原先崩掉的那一行）
+    assert "全部模块与全局达标" in out, out

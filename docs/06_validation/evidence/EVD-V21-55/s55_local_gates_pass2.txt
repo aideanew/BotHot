@@ -1,0 +1,291 @@
+== ruff (app tests ../../scripts) ==
+F401 [*] `subprocess` imported but unused
+  --> tests\test_module_coverage_gate.py:20:8
+   |
+18 | import json
+19 | import os
+20 | import subprocess
+   |        ^^^^^^^^^^
+21 | import sys
+22 | from pathlib import Path
+   |
+help: Remove unused import: `subprocess`
+
+F401 [*] `sys` imported but unused
+  --> tests\test_module_coverage_gate.py:21:8
+   |
+19 | import os
+20 | import subprocess
+21 | import sys
+   |        ^^^
+22 | from pathlib import Path
+23 | from types import ModuleType
+   |
+help: Remove unused import: `sys`
+
+F811 [*] Redefinition of unused `subprocess` from line 20
+   --> tests\test_module_coverage_gate.py:225:12
+    |
+223 |     码表，Linux CI 上也能造出同一个流 ⇒ 这条用例在两个平台上判的是同一件事。
+224 |     """
+225 |     import subprocess
+    |            ^^^^^^^^^^ `subprocess` redefined here
+226 |     import sys
+    |
+   ::: tests\test_module_coverage_gate.py:20:8
+    |
+ 18 | import json
+ 19 | import os
+ 20 | import subprocess
+    |        ---------- previous definition of `subprocess` here
+ 21 | import sys
+ 22 | from pathlib import Path
+    |
+help: Remove definition: `subprocess`
+
+F811 [*] Redefinition of unused `sys` from line 21
+   --> tests\test_module_coverage_gate.py:226:12
+    |
+224 |     """
+225 |     import subprocess
+226 |     import sys
+    |            ^^^ `sys` redefined here
+227 |
+228 |     path = _json(tmp_path, _doc())
+    |
+   ::: tests\test_module_coverage_gate.py:21:8
+    |
+ 19 | import os
+ 20 | import subprocess
+ 21 | import sys
+    |        --- previous definition of `sys` here
+ 22 | from pathlib import Path
+ 23 | from types import ModuleType
+    |
+help: Remove definition: `sys`
+
+Found 4 errors.
+[*] 4 fixable with the `--fix` option.
+rc_ruff=1
+== mypy (app ../../scripts) ==
+..\..\scripts\check_module_coverage.py:190: error: Item "TextIO" of "TextIO | Any" has no attribute "reconfigure"  [union-attr]
+Found 1 error in 1 file (checked 134 source files)
+rc_mypy=1
+== alembic upgrade head ==
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+rc_alembic=0
+== alembic heads ==
+ab1006c2a (head)
+rc_heads=0
+== gen_contracts --check ==
+2026-10-26T14:31:22.888134 [info     ] setup plugin alembic.autogenerate.schemas [alembic.runtime.plugins]
+2026-10-26T14:31:22.889131 [info     ] setup plugin alembic.autogenerate.tables [alembic.runtime.plugins]
+2026-10-26T14:31:22.889131 [info     ] setup plugin alembic.autogenerate.types [alembic.runtime.plugins]
+2026-10-26T14:31:22.889131 [info     ] setup plugin alembic.autogenerate.constraints [alembic.runtime.plugins]
+2026-10-26T14:31:22.889131 [info     ] setup plugin alembic.autogenerate.defaults [alembic.runtime.plugins]
+2026-10-26T14:31:22.889131 [info     ] setup plugin alembic.autogenerate.comments [alembic.runtime.plugins]
+2026-10-26T14:31:22.889131 [info     ] setup plugin alembic.ext.checkconstraint_byname [alembic.runtime.plugins]
+2026-10-26T14:31:22.934012 [warning  ] ⚠️ schema/code 版本不一致：DB=None, HEAD=ab1006c2a（开发环境仅告警） [app.main]
+2026-10-26T14:31:22.954956 [warning  ] ⚠️ schema/code 版本不一致：DB=None, HEAD=ab1006c2a（开发环境仅告警） [app.main]
+[ok] packages\contracts\src\bot\dto.ts 幂等一致
+[ok] packages\contracts\src\hot\dto.ts 幂等一致
+[ok] packages\contracts\src\push_event\dto.ts 幂等一致
+[ok] packages\contracts\src\knowledge\dto.ts 幂等一致
+[ok] packages\contracts\src\subscription\dto.ts 幂等一致
+[ok] packages\contracts\src\ingest\dto.ts 幂等一致
+[ok] packages\contracts\src\engine\dto.ts 幂等一致
+[ok] packages\contracts\src\shapes\dto.ts 幂等一致
+[ok] packages\contracts\schemas\collection.schema.json 幂等一致
+[ok] packages\contracts\schemas\identity.schema.json 幂等一致
+[ok] packages\contracts\schemas\events.schema.json 幂等一致
+[ok] packages\contracts\schemas\resources.schema.json 幂等一致
+[ok] packages\contracts\schemas\api.envelope.schema.json 幂等一致
+[ok] packages\contracts\schemas\engine.schema.json 幂等一致
+[ok] packages\contracts\schemas\shapes.schema.json 幂等一致
+rc_gen=0
+== check_docs_consistency ==
+[info] 解析 D:\Code\AideanBotHot\docs\04_engineering\backlog.md
+[info] 找到 23 个路径引用
+
+检查完成：共 23 个路径引用，0 个不存在
+[anchor] 语料 15 份，根路径文件锚 133 处（按 HEAD 判存在）
+[ok] [anchor] 需求侧锚对账通过
+[stack] 语料 15 份，含键值引用的行 4 行
+[ok] [stack] 技术栈引用与实值一致
+
+[ok] 文档一致性检查通过
+rc_docs=0
+== pytest 全量 ==
+........................................................................ [  2%]
+........................................................................ [  5%]
+........................................................................ [  8%]
+........................................................................ [ 11%]
+........................................................................ [ 14%]
+.ss..................................................................... [ 17%]
+........................................................................ [ 20%]
+........................................................................ [ 23%]
+........................................................................ [ 26%]
+........................................................................ [ 29%]
+........................................................................ [ 31%]
+..................................................s..................... [ 34%]
+........................................................................ [ 37%]
+........................................................................ [ 40%]
+........................................................................ [ 43%]
+........................................................................ [ 46%]
+........................................................................ [ 49%]
+........................................................................ [ 52%]
+........................................................................ [ 55%]
+........................................................................ [ 58%]
+........................................................................ [ 61%]
+........................................................................ [ 63%]
+........................................................................ [ 66%]
+........................................................................ [ 69%]
+........................................................................ [ 72%]
+........................................................................ [ 75%]
+........................................................................ [ 78%]
+........................................................................ [ 81%]
+........................................................................ [ 84%]
+........................................................................ [ 87%]
+........................................................................ [ 90%]
+.............................................ss......................... [ 93%]
+........................................................................ [ 95%]
+........................................................................ [ 98%]
+........................s...F                                            [100%]
+================================== FAILURES ===================================
+________ test_entry_lint_and_typecheck_run_clean_with_scripts_in_scope ________
+
+    def test_entry_lint_and_typecheck_run_clean_with_scripts_in_scope() -> None:
+        """扩门后的实跑读数（本机 @win，2026-10-23）：两条任务 rc=0。
+        用 subprocess 真跑而不是只查文本——"接线了"不等于"跑得过"。"""
+        import subprocess
+        import sys
+    
+        for args in (["lint-backend"], ["typecheck-backend"]):
+            proc = subprocess.run(
+                [sys.executable, "-X", "utf8", str(_ROOT / "scripts" / "entry.py"), *args],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                cwd=str(_ROOT), timeout=600,
+            )
+>           assert proc.returncode == 0, f"entry.py {args[0]} rc={proc.returncode}\n{proc.stdout[-2000:]}"
+E           AssertionError: entry.py lint-backend rc=1
+E             
+E             === lint-backend · ruff check app tests + scripts ===
+E             $ [apps\api] D:\Code\AideanBotHot\apps\api\.venv\Scripts\ruff.exe check app tests
+E             F401 [*] `subprocess` imported but unused
+E               --> tests\test_module_coverage_gate.py:20:8
+E                |
+E             18 | import json
+E             19 | import os
+E             20 | import subprocess
+E                |        ^^^^^^^^^^
+E             21 | import sys
+E             22 | from pathlib import Path
+E                |
+E             help: Remove unused import: `subprocess`
+E             
+E             F401 [*] `sys` imported but unused
+E               --> tests\test_module_coverage_gate.py:21:8
+E                |
+E             19 | import os
+E             20 | import subprocess
+E             21 | import sys
+E                |        ^^^
+E             22 | from pathlib import Path
+E             23 | from types import ModuleType
+E                |
+E             help: Remove unused import: `sys`
+E             
+E             F811 [*] Redefinition of unused `subprocess` from line 20
+E                --> tests\test_module_coverage_gate.py:225:12
+E                 |
+E             223 |     码表，Linux CI 上也能造出同一个流 ⇒ 这条用例在两个平台上判的是同一件事。
+E             224 |     """
+E             225 |     import subprocess
+E                 |            ^^^^^^^^^^ `subprocess` redefined here
+E             226 |     import sys
+E                 |
+E                ::: tests\test_module_coverage_gate.py:20:8
+E                 |
+E              18 | import json
+E              19 | import os
+E              20 | import subprocess
+E                 |        ---------- previous definition of `subprocess` here
+E              21 | import sys
+E              22 | from pathlib import Path
+E                 |
+E             help: Remove definition: `subprocess`
+E             
+E             F811 [*] Redefinition of unused `sys` from line 21
+E                --> tests\test_module_coverage_gate.py:226:12
+E                 |
+E             224 |     """
+E             225 |     import subprocess
+E             226 |     import sys
+E                 |            ^^^ `sys` redefined here
+E             227 |
+E             228 |     path = _json(tmp_path, _doc())
+E                 |
+E                ::: tests\test_module_coverage_gate.py:21:8
+E                 |
+E              19 | import os
+E              20 | import subprocess
+E              21 | import sys
+E                 |        --- previous definition of `sys` here
+E              22 | from pathlib import Path
+E              23 | from types import ModuleType
+E                 |
+E             help: Remove definition: `sys`
+E             
+E             Found 4 errors.
+E             [*] 4 fixable with the `--fix` option.
+E             → lint-backend 未通过（rc=1；3 = 工具缺失，不是通过）
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['D:\\Code\\AideanBotHot\\apps\\api\\.venv\\Scripts\\python.exe', '-X', 'utf8', 'D:\\Code\\Aidea...`sys`\n\nFound 4 errors.\n[*] 4 fixable with the `--fix` option.\n→ lint-backend 未通过（rc=1；3 = 工具缺失，不是通过）\n', stderr='').returncode
+
+tests\test_workflow_gate_wiring.py:98: AssertionError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_r19_sso_session.py::test_a_replayed_old_cookie_is_rejected_after_logout
+  D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\starlette\testclient.py:457: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return super().request(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=============================== tests coverage ================================
+______________ coverage: platform win32, python 3.12.10-final-0 _______________
+
+Coverage JSON written to file coverage.json
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_chat_sse.py:1130: LangBot :5300 不可达或未注入管理员凭据，跳过真实冒烟
+SKIPPED [1] tests\test_chat_sse.py:1208: LangBot :5300 不可达或未注入管理员凭据，跳过全链冒烟
+SKIPPED [1] tests\test_env_isolation.py:77: 宿主未设这 6 个待清代理变量，本条对照在此环境下无判定力（①②仍有）
+SKIPPED [1] tests\test_session_store_redis.py:47: 测试 Redis 不可达（ConnectionError），拉起容器后复跑
+SKIPPED [1] tests\test_session_store_redis.py:71: 测试 Redis 不可达（ConnectionError），拉起容器后复跑
+SKIPPED [1] tests\test_we_notifications.py:247: Redis 不可达（redis://localhost:6379/0，TimeoutError），恢复后复跑本用例
+1 failed, 2470 passed, 6 skipped, 4 deselected, 2 warnings in 1240.38s (0:20:40)
+rc_pytest=1
+== coverage gate —— 附录 A 原样：仓库根、不设 PYTHONIOENCODING ==
+模块覆盖率门（全局线 79%）
+------------------------------------------------------------------------------
+  达标  100.00%  ≥ 80.0%  122/122 行  app\providers\article_sources\dajiala.py
+  达标   99.39%  ≥ 80.0%  163/164 行  app\providers\article_sources\justoneapi.py
+  达标  100.00%  ≥ 80.0%  140/140 行  app\providers\article_sources\tikhub.py
+  达标   99.42%  ≥ 80.0%  171/172 行  app\providers\article_sources\wellbyte.py
+  达标  100.00%  ≥100.0%  63/63 行  app\services\article_identity.py
+  达标   89.05%  ≥ 85.0%  309/347 行  app\services\kb.py
+  达标   94.78%  ≥ 85.0%  218/230 行  app\services\manifest.py
+  达标   88.44%  ≥ 85.0%  375/424 行  app\services\subscription.py
+------------------------------------------------------------------------------
+  达标   88.91%  ≥ 79.0%  TOTAL
+✅ 全部模块与全局达标
+rc_cov=0
+== 前端 typecheck ==
+
+> bothot-frontend@0.1.0 typecheck D:\Code\AideanBotHot\apps\web
+> tsc --noEmit
+
+                                      

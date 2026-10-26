@@ -1,0 +1,19 @@
+模块覆盖率门（全局线 79%）
+------------------------------------------------------------------------------
+  达标  100.00%  ≥ 80.0%  122/122 行  app\providers\article_sources\dajiala.py
+  达标   99.39%  ≥ 80.0%  163/164 行  app\providers\article_sources\justoneapi.py
+  达标  100.00%  ≥ 80.0%  140/140 行  app\providers\article_sources\tikhub.py
+  达标   99.42%  ≥ 80.0%  171/172 行  app\providers\article_sources\wellbyte.py
+  达标  100.00%  ≥100.0%  63/63 行  app\services\article_identity.py
+  未达标   88.18%  ≥100.0%  306/347 行  app\services\kb.py
+  达标   94.78%  ≥ 85.0%  218/230 行  app\services\manifest.py
+  达标   88.44%  ≥ 85.0%  375/424 行  app\services\subscription.py
+------------------------------------------------------------------------------
+  达标   88.90%  ≥ 79.0%  TOTAL
+Traceback (most recent call last):
+  File "D:\Code\AideanBotHot\scripts\check_module_coverage.py", line 196, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "D:\Code\AideanBotHot\scripts\check_module_coverage.py", line 181, in main
+    print(f"\u274c 覆盖率门判红/判 NOT-PASS（rc={rc}）")
+UnicodeEncodeError: 'gbk' codec can't encode character '\u274c' in position 0: illegal multibyte sequence

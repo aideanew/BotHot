@@ -1,0 +1,78 @@
+STEP-55 S55.1 核对器盲区审计（脚本实测，不是推断）
+对象：apps/web/tests/s55-mock-runtime-shape.spec.ts 的 checkShape/auditDefs
+输入：packages/contracts/schemas/{shapes,engine}.schema.json 的全部 $defs 递归
+时间：2026-10-26（Asia/Shanghai），@win
+
+① 审查点名的四条「今天走不到、一改 schema 就静默失效」
+   对象节点                                 31
+   additionalProperties is False        30
+   additionalProperties is True         1
+   对象缺 additionalProperties             0
+   数组节点                                 10
+   数组缺 items                            0
+   数组用 tuple 形 items                    0
+   $ref 节点                              14
+   $ref 与同级结构键并存                        0
+   属性名撞 Object.prototype                0
+   结论：这四类构造今天在本仓契约里都是 0 个 ⇒ 相关判据确实走不到（不是判错了，是没判）。
+   处置：本轮加 auditDefs 在装载时就抛 ⇒ 它们从『潜在静默』变成『不可能静默』（每条都有自己的红用例）。
+   例外：MeWallet 是 additionalProperties:true（P-121 登记的唯一开放对象），多键放过是契约说的，不是门松了。
+
+② 取值范围族（审查原话：核对器把 minimum/maximum 当注解忽略）
+   minimum              32
+   maximum              1
+   exclusiveMinimum     0
+   exclusiveMaximum     0
+   minLength            3
+   maxLength            4
+   pattern              0
+   format               0
+   结论：minimum/maximum/minLength/maxLength 是本仓契约真声明的约束（limit≥1、qualityScore 0..100、
+   count≥0、engine 长 1..32），本轮已并入 checkShape 标量层；pattern/format 现测各 0 处，仍只当注解忽略。
+
+③ enum 与 type 的先后（审查原话：enum 判在 type 之前）
+   shapes.schema.json#DocIngestStatus                       type='string' 允许值=['FETCHED', 'INDEXED', 'READY']
+   shapes.schema.json#SpaceDocStatus                        type='string' 允许值=['pending', 'ready', 'failed']
+   engine.schema.json#EngineReason                          type='string' 允许值=['ok', 'not_allowlisted', 'key_missing', 'not_implemented']
+   结论：三处 enum 都带 type:string、允许值全是字符串 ⇒ includes 对任何非字符串值都不成立，
+   『先 enum 后 type』的次序不会放过类型错的值；本仓也没有 enum 与 anyOf 混写的可空枚举。
+
+④ 样例侧的实测（同一份判据跑真分发器）
+   23 次分发（22 条路由 + 抽取低质支）：加边界判据前后都是 errors=[] ⇒ 今天的样例没有任何一条越界，
+   『门以前不判范围』不是一项现存缺陷，而是一道会漏未来漂移的覆盖面（反证见 s55_probe_readings.txt 探针 C）。
+
+⑤ enum 与取值范围的先后（本轮自己追问出来的一条，审查没点名）
+   checkShape 的次序是 $ref → anyOf → enum → type，enum 命中就直接 return，
+   所以"同一个节点既写 enum 又写 minimum/minLength"时范围判据会被跳过。
+   现测：3 个 enum 节点（DocIngestStatus、SpaceDocStatus、EngineReason）的键集都只有
+   description/enum/type，与范围关键字的交集总数 = 0 ⇒ 这条今天走不到。
+   留在这里的原因：它是"顺序造成的静默面"，不是"忽略造成的静默面"，
+   下一版若给枚举位加范围（pydantic 里 enum + ge 不会同时出现，但手写 schema 会），
+   这条数就变了——而变了的那天应该有红，不该靠有人读到这段注释。
+
+⑥ 白名单里唯一"可能盖住子树"的关键字：$defs / $schema / $id
+   checkShape 把这三个当注解忽略，所以理论上"某个 def 自己再带一层 $defs"会让那一层没人核对。
+   本轮另外测过：两份 schema 的 $defs 递归里 $defs/not/oneOf/allOf/if/then/else/
+   patternProperties/const/contains/prefixItems 的命中数全部为 0。
+   而且这不是巧合——生成器根本产不出这种形状：scripts/gen_contracts.py:255 对每个模型
+   `sub.pop("$defs", {})` 把嵌套定义搬到根（:258-261 还带键冲突即 error），
+   :315-316 又拒掉一切非 `#/$defs/<名>` 的引用。产物有字节幂等门钉着。
+   ⇒ 这条是"由构造保证"的忽略，与①那类"今天恰好没走到的忽略"不同级别，记在这里是为了让
+   下一版不必再重新查一遍生成器。
+
+⑦ anyOf 的"先命中先通过"是否会挑到松分支
+   checkShape 的 anyOf 按分支顺序取第一个满足的。危险形状只有"同层有两条都判得过的分支"，
+   例如两条 object 分支（前一条 required 更少 ⇒ 样例走形也算过）。现测：两份 schema 的全部
+   anyOf 里，含 2 个以上 object 分支的 = 0 处，含 2 个以上 $ref 分支的 = 0 处
+   （可空位都是 [类型分支, {type:null}] 这种一对一）。⇒ 今天的顺序无关性成立；
+   出现"多条结构化分支"的那天应改成逐条判定或按 required 最多者，而不是靠这条测量继续过。
+
+⑧ 第二轮自查追加的三条（审查点名了 #1/#2/#3 那三类"auditDefs 也漏判的位置"）
+   装载期体检新增：anyOf 与同级结构键并存、required 的键不在 properties、KNOWN 之外的任何关键字。
+   现测（同一份审计脚本口径，两份 schema 的全部 $defs 递归）：
+     anyOf 带同级结构键    0
+     required 越界         0
+     KNOWN 之外关键字      0
+   三条各有自己的 toThrow 用例（自检那条 it 现在共七份拒绝路径证明）。
+   为什么要往装载期搬：checkShape 只在**被样例走到**的那一层判"认不出就抛"，
+   可选键没填 ⇒ 那下面的写法永远不会被 visit——装载期全树判才算数。

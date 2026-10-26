@@ -1,0 +1,14 @@
+@win 反斜杠相对键                改前命中=0 改后命中=1
+@linux 正斜杠相对键              改前命中=1 改后命中=1
+CI 深度绝对路径                  改前命中=1 改后命中=1
+带 ./ 前缀                    改前命中=1 改后命中=1
+多命中须原样返回                   改前命中=1 改后命中=2
+不该放松成子串匹配                  改前命中=0 改后命中=0
+真机 coverage.json｜app/services/article_identity.py               改前=0 改后=1
+真机 coverage.json｜app/services/manifest.py                       改前=0 改后=1
+真机 coverage.json｜app/services/kb.py                             改前=0 改后=1
+真机 coverage.json｜app/services/subscription.py                   改前=0 改后=1
+真机 coverage.json｜app/providers/article_sources/dajiala.py       改前=0 改后=1
+真机 coverage.json｜app/providers/article_sources/justoneapi.py    改前=0 改后=1
+真机 coverage.json｜app/providers/article_sources/tikhub.py        改前=0 改后=1
+真机 coverage.json｜app/providers/article_sources/wellbyte.py      改前=0 改后=1

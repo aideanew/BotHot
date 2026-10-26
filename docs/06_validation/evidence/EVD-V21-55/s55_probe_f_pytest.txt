@@ -1,0 +1,55 @@
+...............F                                                         [100%]
+================================== FAILURES ===================================
+____________________ test_gate_survives_a_non_utf8_console ____________________
+
+tmp_path = WindowsPath('C:/Users/Administrator/AppData/Local/Temp/pytest-of-Administrator/pytest-403/test_gate_survives_a_non_utf8_0')
+
+    def test_gate_survives_a_non_utf8_console(tmp_path: Path) -> None:
+        """控制台语言不许决定门的结果：达标末行是 `✅`，在 cp936/gbk 流上会抛 UnicodeEncodeError。
+    
+        P-125 的第二条失配因与 `_match` 无关——本机把键形修好之后，附录 A 那条命令**照原样**跑仍然
+        rc=1（八个模块逐行打印"达标"，然后在末行崩，读数在 `EVD-V21-55/s55_2_cp936_before_after.txt`）。
+        这里不改本机 locale，而是用 `PYTHONIOENCODING=gbk` 把编码钉成和它一样：gbk 是 Python 自带的
+        码表，Linux CI 上也能造出同一个流 ⇒ 这条用例在两个平台上判的是同一件事。
+        """
+        import subprocess
+        import sys
+    
+        path = _json(tmp_path, _doc())
+        env = {**os.environ, "PYTHONIOENCODING": "gbk"}
+        run = subprocess.run(
+            [sys.executable, str(SCRIPT), "--json", path],
+            cwd=str(REPO_ROOT),
+            env=env,
+            capture_output=True,
+            check=False,
+        )
+        out = run.stdout.decode("utf-8", errors="replace")
+>       assert run.returncode == 0, f"rc={run.returncode}\n{out}\n{run.stderr.decode('utf-8', 'replace')}"
+E       AssertionError: rc=1
+E         ģ�鸲�����ţ�ȫ���� 79%��
+E         ------------------------------------------------------------------------------
+E           ���   80.00%  �� 80.0%  160/200 ��  app/providers/article_sources/dajiala.py
+E           ���   80.00%  �� 80.0%  160/200 ��  app/providers/article_sources/justoneapi.py
+E           ���   80.00%  �� 80.0%  160/200 ��  app/providers/article_sources/tikhub.py
+E           ���   80.00%  �� 80.0%  160/200 ��  app/providers/article_sources/wellbyte.py
+E           ���  100.00%  ��100.0%  200/200 ��  app/services/article_identity.py
+E           ���   85.00%  �� 85.0%  170/200 ��  app/services/kb.py
+E           ���   85.00%  �� 85.0%  170/200 ��  app/services/manifest.py
+E           ���   85.00%  �� 85.0%  170/200 ��  app/services/subscription.py
+E         ------------------------------------------------------------------------------
+E           ���   90.00%  �� 79.0%  TOTAL
+E         
+E         Traceback (most recent call last):
+E           File "D:\Code\AideanBotHot\scripts\check_module_coverage.py", line 191, in <module>
+E             sys.exit(main())
+E                      ^^^^^^
+E           File "D:\Code\AideanBotHot\scripts\check_module_coverage.py", line 178, in main
+E             print("\u2705 ȫ��ģ����ȫ�ִ��")
+E         UnicodeEncodeError: 'gbk' codec can't encode character '\u2705' in position 0: illegal multibyte sequence
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['D:\\Code\\AideanBotHot\\apps\\api\\.venv\\Scripts\\python.exe', 'D:\\Code\\AideanBotHot\\scrip...\nUnicodeEncodeError: \'gbk\' codec can\'t encode character \'\\u2705\' in position 0: illegal multibyte sequence\r\n').returncode
+
+tests\test_module_coverage_gate.py:238: AssertionError
+1 failed, 15 passed in 0.50s

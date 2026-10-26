@@ -1,0 +1,2 @@
+lib/api/mock-routes.ts(669,8): error TS1360: Type '{ ok: true; }' does not satisfy the expected type 'SpaceDeleteResult'.
+  Property 'engineResidue' is missing in type '{ ok: true; }' but required in type 'SpaceDeleteResult'.
