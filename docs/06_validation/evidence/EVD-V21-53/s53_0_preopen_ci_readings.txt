@@ -1,0 +1,18 @@
+=== c8307f7 三绿读数（STEP-55 收口批，纯文档）===
+40325881539 1_frontend.txt|  Test Files  53 passed (53)
+40325881539 1_frontend.txt|       Tests  425 passed (425)
+40325881539 1_frontend.txt|   31 passed (1.4m)
+40325881539 3_backend.txt| print(f"skip 门禁：total_skipped={total} baseline={baseline} pg_unreachable={len(pg_skips)}")
+40325881539 3_backend.txt| Required test coverage of 75% reached. Total coverage: 88.93%
+40325881539 3_backend.txt| 2471 passed, 6 skipped, 4 deselected, 2 warnings in 206.15s (0:03:26)
+40325881539 3_backend.txt| skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+40325881539 3_backend.txt| ✅ 全部模块与全局达标
+40325881543 0_windows-dev.txt| print(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")
+40325881543 0_windows-dev.txt| windows 门禁：failed=0 total_skipped=692 baseline=692
+40325881543 0_windows-dev.txt|  Test Files  53 passed (53)
+40325881543 0_windows-dev.txt|       Tests  425 passed (425)
+40325881543 15_Frontend typecheck + unit（vitest）.txt|  Test Files  53 passed (53)
+40325881543 15_Frontend typecheck + unit（vitest）.txt|       Tests  425 passed (425)
+
+# 取法：run 级 logs zip + 进程内 Bearer（重定向不带凭据），只取判据行；ANSI 与时间戳前缀已剥。
+# 第一次取 40325881543 的日志时代理侧抛 SSLEOFError，重试取到——重试逻辑在脚本里，失败不猜数。

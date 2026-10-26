@@ -10,9 +10,93 @@
 
 ## [Unreleased]
 
-_（空。v1.1.2 于 2026-10-24 发布：`[Unreleased]` 在发布前本就是空的，v1.1.2 段的条目
-按 `git log v1.1.1..HEAD` 区间重新对账写入，来源短 hash 逐个 `git log -1` 复核过主语。）_
+_（空。v1.1.3 于 2026-10-26 发布：`[Unreleased]` 在发布前本就是空的，v1.1.3 段的条目
+按 `git log v1.1.2..HEAD` 区间重新对账写入，来源短 hash 逐个 `git log -1` 复核主语——
+这条口径是 v1.1.0 那次失真教训留下来的，见 `docs/06_validation/evidence/EVD-V17-12/s12_readings.md` §5.1。）_
 
+
+## [v1.1.3] - 2026-10-26
+
+> 补丁+质量版（契约链收尾）。区间 `v1.1.2..HEAD` 共 28 个提交（发布批自身 +1 ⇒ tag 指向的提交上是 29），
+> 用户可感变化如下；其余为 V0.21.0 规划与各步收口/文档批。**本版零数据库迁移、零新增对外 HTTP 端点、
+> 真实端点的响应形状零改动**——本版把"形状"这件事从人眼核对变成了机器判据，改的是演示态（mock）数据面
+> 与前端一处行为（空间详情 404 空态在真实后端下开始生效，见 Fixed 第一条），以及门禁本身。
+> S53.1 对 STEP-46/47 的独立复查结论两项均 PASS（无 FAIL、无 UNKNOWN），逐条依据与留下的 nits 见
+> `docs/06_validation/evidence/EVD-V21-53/s53_1_independent_review.md`；发布批三绿 run id 与 tag/Release 读数见
+> 同目录 `s53_readings.md`。测试基线：CI `2471 passed / 6 skipped / 4 deselected`、`Total coverage 88.9%`、
+> 模块覆盖率门全达标、mock e2e `31 passed`、CI-Windows `failed=0 total_skipped=692=基线`、
+> 前端 `53 文件 / 425 passed`（三处逐字同数）。**覆盖率那个数不可当精确判据**：本区间多次读数（不同提交、
+> 本机与两侧 CI）落在 88.90–88.99，跨度 0.09 个百分点；同树复算本身也会抖
+> （AGENTS.md 测试段记着 88.01/87.95/88.00 那一次），所以它能过线、不能被当逐位对齐的判据。
+
+### Added
+
+- **响应形状进入契约生成链**：`apps/api/app/contracts/{engine,shapes}.py` 成为唯一源，经
+  `scripts/gen_contracts.py` 生成 `packages/contracts/schemas/*.schema.json` 与
+  `packages/contracts/src/**/dto.ts`——engine 域现在 4 个 def（**本版新增其中 2 个**：
+  `EngineList`/`SpaceEngineBinding`，另两个在 v1.1.2 之前就有）、shapes 域 30 个 def；
+  产物有字节幂等漂移门钉着。响应侧的反向核共 9 处：**7 处打真实端点**（连库，覆盖 spaces / docs /
+  batch / public library / ingest / notifications / me 降级支），**2 处只能打桩端点**
+  （`resolve`+`extract` 与 `me`+`logout` 的正常支，因为那两个端点依赖上游客户端替身）；
+  该文件合计 17 条用例。来源 `9816f7f`（STEP-46，引擎域 2 条路由）、`f4f0261`（STEP-47，其余 20 条路由）
+- **演示态其余 20 条 mock 路由的样例补上 `satisfies` 契约类型**（引擎那 2 条由 STEP-48 先接，合计 22 条全覆盖），
+  并新增对照表 `apps/web/lib/api/mock-contract-map.ts`（逐字镜像后端 `MOCK_ROUTE_CONTRACTS`）
+  与三道机器红：漏登记即红、表里有死条目即红、与后端权威源逐条不同名即红。
+  来源 `0aa2923`（STEP-52，闭合 P-122/P-82）、`be23d41`（STEP-48 的引擎 2 条）
+- **运行时形状门**：逐条走真实分发器取实际响应，再用从生成好的 schema JSON 现读的形状递归核对
+  （含 `required`/多键/`$ref`/`anyOf`/`enum`/数组元素/空数组记账，以及契约声明的
+  取值范围 `minimum`/`maximum`/`minLength`/`maxLength`）；装载期还会对整棵 def 树硬抛七类
+  "会让某条判据静默失效"的写法。它补的洞要说准确：**不是"摘掉 `satisfies` 这件事本身会红"**——
+  样例若仍与契约同形，摘掉那句静态标注没有任何门会响（那是类型层的弱化，不是形状漂移）；
+  红的是"**摘掉之后这条样例再走形**"，而那正是旧局面的死角：`satisfies` 一被摘，
+  这条样例此后与契约不同形也不会有任何机器红（覆盖面门与 `tsc` 都看不见，实测 rc=0/rc=0）。
+  现在同不同形由运行时判，与那句 `satisfies` 在不在无关。
+  来源 `4a2c62b`（STEP-55 S55.1，闭合 P-124；反证 A 行的原文读数在 `EVD-V21-55/s55_probe_readings.md`）
+- **引擎域的前端类型与样例接上契约生成类型**（`EngineItem = EngineCapability`、样例逐条 `satisfies`、
+  两个 handler `satisfies`、运行时键集合守卫）。来源 `be23d41`（STEP-48，P-119/D-V21-02）
+- **技术栈版本声明 ↔ 实值一致性门**：AGENTS.md 与需求基线里带键值引用的行（现测 4 行）与
+  `apps/web/package.json`/`apps/api/pyproject.toml` 的实值逐条对账，引用形制不对、值与实值不符、
+  或引用了历史版本值都会红；`requires-python` 刻意不比对（它声明的是兼容下界而非当前实值），
+  且比对器自己带自测负例。
+  **口径说清楚**：语料只有 `AGENTS.md` + `docs/02_requirements/**`，`docs/04_engineering/conventions.md`
+  **不在**它读的范围内——那一处对齐仍靠人（这是本条已知未覆盖面，非本版新引入）。
+  来源 `a8c3df9`（STEP-50）
+- **SQL 参数化面 AST 门 + `SameSite=Lax` 断言**：AST 扫 `app/**` 里进 SQL 的字符串形，逐调用点判拼接
+  （登记时 12 处，读数归档 `docs/06_validation/evidence/EVD-V21-49/s49_2_callsites.txt`），
+  允许表恰一条且有用例钉住它不许扩大，另有三份额外形状的负例（f-string 带运行期值、拼接/format、
+  同一常量形出现在表外文件）；会话 Cookie 的 `SameSite` 由先红 strict 钉住。来源 `8644bea`（STEP-49）
+- **全站性能基线首版**：`perf_baseline.py` 测量 harness + 往返计数用例 + `PERF-baseline-v1.md`，
+  四条 SLA 首测全达标、可感性四条各自证明（注入 25ms 对照），复跑 p50 偏差 ≤13%。
+  来源 `4dc37ec`（STEP-18，P-118 以自备 PG16@5547 解除）、`88d7518`
+
+### Fixed
+
+- **空间详情页的"404 语义空态"在真实后端下从未生效**：入口判断只认 30101/10102，而线上未命中/越权的码是
+  30004（后端全仓不产 30101）——演示态 mock 恰好抛 30101 把这个缺陷盖住了。现在条件式并入 30004，
+  并把注释与僵尸文案的口径纠真（文案保留，删除另排卡）。来源 `0aa2923`（STEP-52 越界申报一行）、
+  `4a2c62b`（STEP-55 S55.3，P-123）
+- **演示态与线上形状的七处漂移逐条修**：`/auth/me` 回线上嵌套形、`logout` 回回执对象、
+  两条列表补整页三键并**回显请求值**（缺省页宽取后端的 50）、`POST /spaces` 补 `engine`/`engineKbId`/`isPublic`、
+  `DELETE /spaces/{id}` 补 `engineResidue`、详情未命中改抛线上码 30004、`types.ts` 15 个手写 interface 改契约别名。
+  来源 `0aa2923`（P-122）
+- **测试库连跑不再随机红**：调度器每日入队用例改为"进门先清 + 出门必清"（新增同步清场函数，
+  先删两类每日 Job 的明细行、再删 Job、最后删用例自己的用户行；清场整段移进 `finally`，
+  断言红或入队中途红都会执行）。此前跨会话残留会让下一跑撞唯一约束。
+  来源 `4245847`（STEP-54，P-120）
+- **模块覆盖率门在 Windows 上可以按附录 A 原样复算**：两个独立因都修在同一脚本里——① 阈值键与
+  `coverage.json` 的键形不再逐字比（本机是 `app\services\kb.py` 反斜杠相对形，八条阈值键全部"命中 0 个"），
+  现在两侧归一再要求"全等或以 `/`+键结尾"，且多命中会如实返回两个由调用方判 NOT-PASS；
+  ② 达标末行的 `✅`（与判红末行的 `❌`）不在 cp936 里，所有模块都达标的那一跑也会在打印末行时抛
+  `UnicodeEncodeError` 变成 rc=1——控制台语言不再能决定门的结果。
+  来源 `4a2c62b`（STEP-55 S55.2，P-125）
+
+### Changed
+
+- **前端类型面以契约为准**：`Space` 的 `engine`/`engineKbId`/`isPublic` 与 `SpaceDoc.category`
+  由可选转必填（契约就是这么声明的），测试夹具按允许面补默认值；`MeData` 作为归一化视图刻意不别名化。
+  来源 `0aa2923`
+- **门面文档纠真**：路线图的通知行与当前阶段、`REQ-NF-001` 的首测判词、端口表拆成"本栈发布 / 外部提供"、
+  `REQ-F-004` 判已实现、`REQ-F-005` 判部分（组件层已证）。来源 `eae0356`（STEP-51，D-V21-05）
 
 ## [v1.1.2] - 2026-10-24
 

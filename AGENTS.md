@@ -68,22 +68,33 @@ PLAN 规划 → SPEC 规格 → APPROVE 批准 → IMPLEMENT 实施 → VERIFY �
 
 ## 当前项目状态
 
-- **版本**：**v1.1.2**（STEP-44 于 2026-10-24 发布，补丁+质量版）。
-  证据：`CHANGELOG.md:17` 有 `## [v1.1.2] - 2026-10-24` 段（条目按 `git log v1.1.1..HEAD`
-  区间重新对账写入）；tag `v1.1.2` 由 STEP-44 打在发布批上——**本行不抄它自己的 sha**（自指：
-  写这段文字时提交还不存在），权威读数一律现取：`git ls-remote --tags origin v1.1.2`
-  （注释标签给出标签对象与 `^{}` 指向的提交两行）、`git rev-parse v1.1.2^{commit}`；
-  发布批的三绿 run id、S44.1 独立复查与 Release 页读数记在
-  `docs/06_validation/evidence/EVD-V20-44/` 与 `EVD-V20-43/`（s43_review.md 结论 PASS）。
-  本版要点：**线上 JSON 异常日志恢复错误栈、console 栈固定纯文本不打印局部变量**（STEP-43，`17c3f13`）；
-  RSS 回退重试不重复排队、外链过滤数进 metrics、源清单显示真实 feed、降级开关可被运营打开
-  （STEP-36）；门禁判据精度与测试确定性收尾（STEP-34/35）；404 文案固定不回显、分页壳收敛
-  （STEP-37）；凌晨 CI 覆盖率门随墙钟红的问题由冻结时钟确定覆盖解决（STEP-45）。
-  上一版 `v1.1.1` 是注释标签，标签对象 `3eace88` 指向提交 `75b212b`（2026-10-23，"docs(STEP-42 发布批)"）；
-  更早的 `v1.1.0` 标签对象 `db9205d` 指向 `49c3bed`——注意 `git rev-parse v1.x.0` 给的是
-  **标签对象**的 sha，不是被标提交，把两者抄混就会得到"tag 落在标签对象上"的错读（提醒保留）。
-  区间计数：`git rev-list --count v1.1.1..HEAD` 于 STEP-37 收口批 `0fb04ec` = **26**，发布批自身 +1 ⇒
-  tag 指向的提交上是 27（自指提交不抄 sha，以现取为准）。
+- **版本**：**v1.1.3**（STEP-53 于 2026-10-26 发布，补丁+质量版：响应形状契约链收尾）。
+  证据：`CHANGELOG.md:18` 有 `## [v1.1.3] - 2026-10-26` 段（条目按 `git log v1.1.2..HEAD` 区间重新对账写入，
+  11 个来源短 hash 逐个 `git log -1` 复核主语）；tag `v1.1.3` 由 STEP-53 打在发布批上——**本行不抄它自己的 sha**（自指：
+  写这段文字时提交还不存在），权威读数一律现取：`git ls-remote --tags origin v1.1.3`
+  （注释标签给出标签对象与 `^{}` 指向的提交两行）、`git rev-parse v1.1.3^{commit}`；
+  发布批的三绿 run id、S53.1 对 STEP-46/47 的独立复查（两项各 PASS，无 FAIL/UNKNOWN）与 Release 页读数记在
+  `docs/06_validation/evidence/EVD-V21-53/`。
+  本版要点：**响应形状进契约生成链**（`app/contracts/{engine,shapes}.py` 为唯一源 → schema JSON →
+  `packages/contracts/src/**/dto.ts`，engine 4 个 def（本版新增其中 2 个）+ shapes 30 个 def，
+  响应反向核 9 处＝7 处真端点 + 2 处桩端点，STEP-46/47/48）；
+  **演示态 22 条 mock 路由样例全部 `satisfies` 契约**并配三道覆盖面门（STEP-52，引擎 2 条来自 STEP-48）；
+  **运行时形状门**——样例与契约不同形就一定红，与那句 `satisfies` 在不在无关（旧死角是"satisfies 被摘后
+  这条样例走形没人判"，覆盖面门与 tsc 当时都 rc=0；摘掉 satisfies 本身若样例仍同形则不红，那是类型层弱化），
+  判据含契约声明的 `minimum`/`maximum`/`minLength`/`maxLength`，装载期还对整棵 def 树硬抛七类会让判据静默的
+  写法（STEP-55）；空间详情页的 404 语义空态在真实后端下开始生效（入口码并入 30004，STEP-52/55）；
+  测试库连跑确定性（每日入队用例"进门先清 + 出门必清"，STEP-54）；**模块覆盖率门在 Windows 上可按附录 A
+  原样复算**（键形归一 + 控制台编码两因，STEP-55）；技术栈版本声明↔实值一致性门（STEP-50，语料是
+  AGENTS.md + `docs/02_requirements/**`，`conventions.md` 不在其内）、SQL 参数化 AST 门与 `SameSite=Lax`
+  断言（STEP-49）、全站性能基线首版 `PERF-baseline-v1`（STEP-18）。
+  本版**零数据库迁移、零新增对外 HTTP 端点、真实端点的响应形状零改动**：改的是演示态（mock）数据面
+  （`/auth/me` 嵌套形、`logout` 回执、分页三键回显、`POST /spaces` 三键、`DELETE /spaces` 的 `engineResidue`
+  等七处对齐线上形状）与前端一处行为（详情 404 空态此前从未生效），加上门禁本身。
+  上一版 `v1.1.2` 也是注释标签，现取口径同上——注意 `git rev-parse v1.x.0` 给的是**标签对象**的 sha，
+  不是被标提交，把两者抄混就会得到"tag 落在标签对象上"的错读（历史读数：`v1.1.1` 标签对象 `3eace88`
+  指向提交 `75b212b`，`v1.1.0` 标签对象 `db9205d` 指向 `49c3bed`；`v1.1.2` 标签对象见 `EVD-V20-44/`，提醒保留）。
+  区间计数：`git rev-list --count v1.1.2..HEAD` 于 STEP-55 收口批 `c8307f7` = **28**，发布批自身 +1 ⇒
+  tag 指向的提交上是 29（自指提交不抄 sha，以现取为准）。
   ⚠ 失真教训仍有效：`[Unreleased]` 的条数 ≠ 区间提交数，发布段必须按区间重新对账
   （v1.1.0 的原始登记见 `docs/06_validation/evidence/EVD-V17-12/s12_readings.md` §5.1）。
 - **后端**：FastAPI + SQLAlchemy 2.0 + Alembic，9 个业务域
