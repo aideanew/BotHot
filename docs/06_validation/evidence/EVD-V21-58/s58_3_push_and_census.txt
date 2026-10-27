@@ -80,3 +80,8 @@ cred_parent_siblings=0  (应为 0)
 GET /git/ref/tags/v1.1.4 -> HTTP 200 object=dd71da795b0e type=tag url=dd71da795b0e08a089d4e79d6e50842b5948f536
 GET /git/tags/dd71da795b0e -> HTTP 200 tag.message 首行='BotHot v1.1.4' 指向=c682acd27284
 GET /git/commits/<被标> -> HTTP 200 作者=CodingHeader 提交信息首行='docs(STEP-58 S58.1-S58.2 第 1 轮): v1.1.4 '
+
+== 8. 已发布 Release 正文的逐字复核（API 侧，2026-10-27 16:3x CST）==
+id=425152771 tag=v1.1.4 draft=False 正文字节=3562 sha256=8ffd52e489888d54
+本地 s58_release_body.md 字节=3562 sha256=8ffd52e489888d54 与远端逐字相等=True
+远端正文含「尚未落档」=False ；含「D-V21-20」=False ；含「D-V21-21」=False

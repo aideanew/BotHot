@@ -1,0 +1,57 @@
+STEP-58 收口批最终头 835ffd1 的 @ci 三绿逐字读数（2026-10-27 16:56:03 CST 现取，run 级 logs zip，行尾 LF）
+
+== 三条工作流结论 ==
+head_sha=835ffd1 total=3
+  40474079344 Security       completed   success   attempt=1 created=2026-10-27T08:31:18Z
+  40474079373 CI             completed   success   attempt=1 created=2026-10-27T08:31:18Z
+  40474079407 CI-Windows     completed   success   attempt=1 created=2026-10-27T08:31:18Z
+
+== 前两个收口头（同批文档链）的结论 ==
+head_sha=25953e3 total=3
+head_sha=c8d92c4 total=3
+
+== CI (ubuntu) 40474079373 关键行 ==
+0_frontend.txt:344: 2026-10-27T08:31:51.4897107Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+0_frontend.txt:826: 2026-10-27T08:34:22.9575937Z   31 passed (1.4m)
+11_Unit tests (vitest).txt:85: 2026-10-27T08:31:51.4897098Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+16_E2E (mock UI).txt:97: 2026-10-27T08:34:22.9575934Z   31 passed (1.4m)
+1_backend.txt:963: 2026-10-27T08:36:44.9935585Z Required test coverage of 75% reached. Total coverage: 88.92%
+1_backend.txt:971: 2026-10-27T08:36:44.9943608Z 2496 passed, 6 skipped, 4 deselected, 2 warnings in 250.16s (0:04:10)
+1_backend.txt:972: 2026-10-27T08:36:47.0698262Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+1_backend.txt:1000: 2026-10-27T08:36:47.1375985Z ✅ 全部模块与全局达标
+15_Tests (pytest) + coverage + skip gate.txt:237: 2026-10-27T08:36:44.9935551Z Required test coverage of 75% reached. Total coverage: 88.92%
+15_Tests (pytest) + coverage + skip gate.txt:245: 2026-10-27T08:36:44.9943606Z 2496 passed, 6 skipped, 4 deselected, 2 warnings in 250.16s (0:04:10)
+15_Tests (pytest) + coverage + skip gate.txt:246: 2026-10-27T08:36:47.0698225Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+16_Module coverage gate (check_module_coverage).txt:26: 2026-10-27T08:36:47.1375980Z ✅ 全部模块与全局达标
+
+== CI-Windows 40474079407 关键行 ==
+0_windows-dev.txt:662: 2026-10-27T08:52:47.1196321Z 1810 passed, 692 skipped, 4 deselected, 2 warnings in 1175.38s (0:19:35)
+0_windows-dev.txt:702: 2026-10-27T08:52:47.9879057Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+0_windows-dev.txt:732: 2026-10-27T08:52:48.0955770Z windows 门禁：failed=0 total_skipped=692 baseline=692
+0_windows-dev.txt:845: 2026-10-27T08:53:18.8064910Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+13_Backend tests（连库用例在本平台会 skip，只记账不主张）.txt:59: 2026-10-27T08:52:47.1196317Z 1810 passed, 692 skipped, 4 deselected, 2 warnings in 1175.38s (0:19:35)
+14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt:40: 2026-10-27T08:52:47.9879027Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt:70: 2026-10-27T08:52:48.0955727Z windows 门禁：failed=0 total_skipped=692 baseline=692
+15_Frontend typecheck + unit（vitest）.txt:107: 2026-10-27T08:53:18.8064898Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+
+== Security 40474079344 判定行 ==
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:403: 2026-10-27T08:31:46.3786861Z [pip-audit] 判定=ran
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:508: 2026-10-27T08:31:48.1084038Z [pnpm-audit] 判定=ran
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:527: 2026-10-27T08:31:48.1361453Z [36;1m# 这里用 `2>&1 | tee`（而不是旧的 `> log 2>&1`）：helper 的"判定=ran / scanner_error"[0m
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:633: 2026-10-27T08:32:01.1119704Z [trivy] 判定=ran
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:742: 2026-10-27T08:32:04.3078679Z [gitleaks] 判定=ran
+8_① pip-audit — Python 依赖漏洞.txt:106: 2026-10-27T08:31:46.3786859Z [pip-audit] 判定=ran
+9_② pnpm audit — Node 依赖漏洞.txt:104: 2026-10-27T08:31:48.1084035Z [pnpm-audit] 判定=ran
+10_③ trivy — 文件系统漏洞 _ 配置 _ 密钥.txt:17: 2026-10-27T08:31:48.1361451Z [36;1m# 这里用 `2>&1 | tee`（而不是旧的 `> log 2>&1`）：helper 的"判定=ran / scanner_error"[0m
+10_③ trivy — 文件系统漏洞 _ 配置 _ 密钥.txt:123: 2026-10-27T08:32:01.1119700Z [trivy] 判定=ran
+11_④ gitleaks — 明文密钥与凭据.txt:108: 2026-10-27T08:32:04.3078677Z [gitleaks] 判定=ran
+
+== 补：前两个收口头的全绿逐行（上面被 grep 过滤掉了，这里不过滤）==
+head_sha=25953e3 total=3
+  40470748974 CI             completed   success   attempt=1 created=2026-10-27T08:01:51Z
+  40470748943 CI-Windows     completed   success   attempt=1 created=2026-10-27T08:01:51Z
+  40470748927 Security       completed   success   attempt=1 created=2026-10-27T08:01:51Z
+head_sha=c8d92c4 total=3
+  40472255396 Security       completed   success   attempt=1 created=2026-10-27T08:15:30Z
+  40472255270 CI             completed   success   attempt=1 created=2026-10-27T08:15:30Z
+  40472255137 CI-Windows     completed   success   attempt=1 created=2026-10-27T08:15:30Z
