@@ -153,7 +153,10 @@ skip 侧：`6 skipped` 与基线同数（新用例全不连库），`SKIP_BASELI
 | 残余：`wallet.get(...)` 在 `data` 是列表时 `AttributeError` ⇒ 500 | 成立且**非本卡引入**（改前同一表达式在 `:259`）。用 MockTransport 复现出 `client.wallet 返回类型: list` → `'list' object has no attribute 'get'`，登 **P-128** 交回规划方，本卡不动 `providers/**` |
 | 读数里两处数字没有支撑字节 | 成立：probe A 改成跑整文件，于是拿到 `1 failed, 7 passed`（原来只跑一条 id，"其余照旧绿"是我推的）；§0 的连通读数也补了原始输出 |
 
-## 8. @ci（推送后回填）
+## 8. @ci（交付头 685e3f8）
+
+三条均 completed success、attempt 1：CI 40458690795 / CI-Windows 40458690759 / Security 40458690827。逐字读数由 run 级 logs zip 现取并归档在 `s57_ci_green_readings.txt`：ubuntu 侧 pytest `2496 passed, 6 skipped, 4 deselected`、skip 门禁 `total_skipped=6 baseline=6` 且`pg_unreachable=0`、`Total coverage` 88.89%、`✅ 全部模块与全局达标`、vitest `53 passed (53)` 与`425 passed (425)`、演示态 e2e `31 passed`；@win 侧 `1810 passed, 692 skipped, 4 deselected`、门禁 `failed=0` 且 `total_skipped=692` = 基线、vitest 同 53/425。与本机第 4 跑对账：ubuntu 2496/6/4 逐字同数，@win 侧 1810 passed 也正好是上一卡的 1802 加本卡 8 条（新用例两侧都不连库）；覆盖率两侧分别是 CI 88.89% 与本机 88.91%（上一卡同期读数：CI 88.91% 见 `EVD-V21-56/s56_ci_green_readings.txt`，本机作废跑里出现过 88.90 与 88.94）——这点来回摆就是台账 P-104 记过的 ±1 行抖，可以拿它过线，不当精确判据。
+
 ## 9. 阻塞：关闭 `MeWallet` 需要一条当前门词汇表里不存在的登记（已登 P-129 交回）
 
 五条红的测试 id 与逐字消息（全在 `s57_local_gates_run2.txt` 里）：

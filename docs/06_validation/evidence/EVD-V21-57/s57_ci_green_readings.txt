@@ -1,0 +1,41 @@
+STEP-57 交付头 685e3f8 的 @ci 三绿逐字读数（2026-10-27 14:27:11 CST 现取，run 级 logs zip）
+
+== 三条工作流结论 ==
+head_sha=685e3f8 total=3
+  40458690827 Security       completed   success   attempt=1 created=2026-10-27T06:01:57Z
+  40458690795 CI             completed   success   attempt=1 created=2026-10-27T06:01:57Z
+  40458690759 CI-Windows     completed   success   attempt=1 created=2026-10-27T06:01:57Z
+
+== CI (ubuntu) 40458690795 关键行 ==
+2_backend.txt:960: 2026-10-27T06:07:01.2797054Z Required test coverage of 75% reached. Total coverage: 88.89%
+2_backend.txt:968: 2026-10-27T06:07:01.2810497Z 2496 passed, 6 skipped, 4 deselected, 2 warnings in 228.67s (0:03:48)
+2_backend.txt:969: 2026-10-27T06:07:03.2629343Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+2_backend.txt:997: 2026-10-27T06:07:03.3252739Z ✅ 全部模块与全局达标
+15_Tests (pytest) + coverage + skip gate.txt:237: 2026-10-27T06:07:01.2797020Z Required test coverage of 75% reached. Total coverage: 88.89%
+15_Tests (pytest) + coverage + skip gate.txt:245: 2026-10-27T06:07:01.2810494Z 2496 passed, 6 skipped, 4 deselected, 2 warnings in 228.67s (0:03:48)
+15_Tests (pytest) + coverage + skip gate.txt:246: 2026-10-27T06:07:03.2629310Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+16_Module coverage gate (check_module_coverage).txt:26: 2026-10-27T06:07:03.3252737Z ✅ 全部模块与全局达标
+3_frontend.txt:345: 2026-10-27T06:02:31.4863113Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+11_Unit tests (vitest).txt:86: 2026-10-27T06:02:31.4863109Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+
+== CI-Windows 40458690759 关键行 ==
+0_windows-dev.txt:654: 2026-10-27T06:23:23.2177448Z 1810 passed, 692 skipped, 4 deselected, 2 warnings in 1175.69s (0:19:35)
+0_windows-dev.txt:694: 2026-10-27T06:23:24.0463346Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+0_windows-dev.txt:724: 2026-10-27T06:23:24.1558239Z windows 门禁：failed=0 total_skipped=692 baseline=692
+0_windows-dev.txt:837: 2026-10-27T06:23:55.0663614Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+13_Backend tests（连库用例在本平台会 skip，只记账不主张）.txt:59: 2026-10-27T06:23:23.2177445Z 1810 passed, 692 skipped, 4 deselected, 2 warnings in 1175.69s (0:19:35)
+14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt:40: 2026-10-27T06:23:24.0463317Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt:70: 2026-10-27T06:23:24.1558196Z windows 门禁：failed=0 total_skipped=692 baseline=692
+15_Frontend typecheck + unit（vitest）.txt:107: 2026-10-27T06:23:55.0663600Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+
+== Security 40458690827（整条结论已在上面）==
+
+== 补：vitest 文件数与演示态 e2e（同两个 run 的 logs，逐字）==
+-- CI 40458690795 --
+3_frontend.txt:344: 2026-10-27T06:02:31.4861767Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+3_frontend.txt:826: 2026-10-27T06:04:55.5336506Z   31 passed (1.4m)
+11_Unit tests (vitest).txt:85: 2026-10-27T06:02:31.4861746Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+16_E2E (mock UI).txt:97: 2026-10-27T06:04:55.5336491Z   31 passed (1.4m)
+-- CI-Windows 40458690759 --
+0_windows-dev.txt:836: 2026-10-27T06:23:55.0661274Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+15_Frontend typecheck + unit（vitest）.txt:106: 2026-10-27T06:23:55.0661260Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
