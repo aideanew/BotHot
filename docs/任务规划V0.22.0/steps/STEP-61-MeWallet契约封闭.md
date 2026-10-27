@@ -4,7 +4,7 @@
 
 | 字段 | 内容 |
 |---|---|
-| 1 归属 | 规划方（opus）｜切片 S-CON-1 |
+| 1 归属 | 执行助手（opus 档；D-V22-06，原子步与判据见 `08-阶段A执行细则.md` §4，冲突以 08 为准）｜切片 S-CON-1 |
 | 2 来源 | D-V21-21；STEP-57 卡面第 5 格 ③ 未执行 |
 | 3 目标 | 冻结稿、`shapes.py`、生成产物三处 `MeWallet` 均封闭，多余键契约测试红 |
 | 4 输出 | 先红读数；同一提交改冻结稿 `additionalProperties:false` + `shapes.py` `extra="forbid"` + 重生成产物 |

@@ -4,7 +4,7 @@
 
 | 字段 | 内容 |
 |---|---|
-| 1 归属 | 规划方（opus）｜切片 S-E2E-2 |
+| 1 归属 | 执行助手（opus 档；D-V22-06，原子步与判据见 `08-阶段A执行细则.md` §3，冲突以 08 为准）｜切片 S-E2E-2 |
 | 2 来源 | REQ-F-005（`product-requirements.md:71`）、`r19-chat-stream.spec.ts` 零执行 |
 | 3 目标 | `e2e-real` job 中 `r19-chat-stream.spec.ts` 八态全部执行且通过 |
 | 4 输出 | `scripts/e2e/fake_llm.py`（chat SSE + embeddings，三种异常模式）；job 起假上游 :3290；种子空间与文档；spec 开关与八态枚举改读 `ux_states.schema.json` |
