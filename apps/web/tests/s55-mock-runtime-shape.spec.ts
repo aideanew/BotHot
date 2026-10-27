@@ -411,8 +411,9 @@ describe("S55 mock 响应的运行时形状（直读 schema，不靠 satisfies �
       ),
       "合法样本不该报"
     ).toEqual([]);
-    // MeWallet 是契约里唯一的开放对象（additionalProperties:true，P-121）⇒ 多键放过是**契约说的**，不是门松了
-    expect(checkShape({ ...wallet, "未知扩展": "x" }, defs["MeWallet"], defs, "开放对象", [])).toEqual([]);
+    // STEP-61 之后契约里已经没有开放对象了（MeWallet 也封闭）⇒ 多键必须报，P-121 的"判不了形"那一半就此闭合
+    const walletExtra = checkShape({ ...wallet, "未知扩展": "x" }, defs["MeWallet"], defs, "封闭对象", []);
+    expect(walletExtra.length, "MeWallet 仍放行契约外键 ⇒ 开放没拆干净").toBeGreaterThan(0);
     expect(() => checkShape({}, { allOf: [] } as unknown as Node, defs, "不认识的写法", [])).toThrow(
       /核对器不认识/
     );

@@ -382,7 +382,7 @@
       "type": "object"
     },
     "MeWallet": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "available": {
           "default": true,

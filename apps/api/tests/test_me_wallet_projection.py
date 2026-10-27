@@ -1,8 +1,10 @@
 """STEP-57：`/auth/me` 的钱包只吐白名单五键（P-121，裁决 D-V21-17 取代 D-V21-09）。
 
 先红那条判的是「上游多给一个键，我们就原样转出去」。风险面在于这件事在改前**任何一道门都不会红**：
-契约侧至今仍是开放对象（`shapes.py` 里那行 `extra="allow"`，规划方 2026-10-27 在 P-129 三条出路里
-选定本卡只发投影那一半），而主平台加字段不需要通知我们 ⇒ 断的是泄露这条腿，判形那一半另开卡。
+当时契约侧还是开放对象（`shapes.py` 里那行 `extra="allow"`，规划方 2026-10-27 在 P-129 三条出路里
+选定本卡只发投影那一半），而主平台加字段不需要通知我们 ⇒ STEP-57 断的是泄露这条腿。
+判形那条腿由 **STEP-61** 补上（D-V21-21 留下的另一半、D-V22-05 的落笔方式）：`MeWallet` 现已封闭，
+两侧的同步关系由本文件末尾的 `test_degraded_shape_and_contract_agree_on_the_five_keys` 钉住。
 """
 
 from __future__ import annotations
@@ -10,7 +12,8 @@ from __future__ import annotations
 import structlog.testing
 from test_auth import _client_with, _login_state, _svc_bundle
 
-from app.services.auth.service import _project_wallet
+from app.contracts.shapes import MeWallet
+from app.services.auth.service import _WALLET_KEYS, _WALLET_UNAVAILABLE, _project_wallet
 
 #: 卡面 S57.2 的白名单，就这五个。唯一源在 `app/services/auth/service.py` 的 `_WALLET_KEYS`，
 #: 本文件只用来判「响应里不许出现白名单之外的键」，不重复实现投影逻辑（抄一份就是第二个真源）。
@@ -126,3 +129,15 @@ def test_projection_copies_the_degraded_shape_instead_of_sharing_it() -> None:
     first = _project_wallet({"currency": "CNY"})
     first["balanceYuan"] = "篡改"
     assert _project_wallet({"currency": "CNY"}) == DEGRADED
+
+
+def test_degraded_shape_and_contract_agree_on_the_five_keys() -> None:
+    """STEP-61 验收④：投影侧白名单、降级形、契约发布的键三者同源，谁漂了谁红。
+
+    只判「降级形 ⊆ 五键」不够——那是卡面判据的下半；契约若少发一个键，前端照契约写就会读不到
+    我们其实会吐的字段，所以两边都必须正好是这五个。`extra` 这一条钉的是"开放没被谁悄悄改回去"。
+    """
+    assert set(_WALLET_UNAVAILABLE) <= set(_WALLET_KEYS), "降级形含白名单外的键 ⇒ 先改 service 再谈契约"
+    assert set(_WALLET_KEYS) == set(WALLET_KEYS), "投影白名单与本文件登记的五个键不一致"
+    assert set(MeWallet.model_fields) == set(WALLET_KEYS), "契约发布的键集合与投影白名单不一致"
+    assert MeWallet.model_config.get("extra") == "forbid", "MeWallet 又变回开放对象了"

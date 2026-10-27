@@ -9,9 +9,10 @@ STEP-46 只切了引擎域两条；本模块把前端 mock 表（`apps/web/lib/a
 - 依赖方向：不 import `app.providers` / `app.services` / `app.api`。
 - 键名保持已发布面原样：camelCase 的照抄 camelCase，通知域历史上是 snake_case 也照抄。
 
-本模块里唯一 `extra="allow"` 的是 `MeWallet`：正常分支它是**主平台钱包对象原样透传**
-（`wallet.get("wallet", wallet)`），本仓不控制它的键集合。这一处如实写成开放对象，并登记 P-121
-（建议后端白名单投影后再收紧），而不是假装它是封闭的。
+本模块所有对象一律封闭（`extra="forbid"`）。`MeWallet` 曾是唯一的开放对象——正常分支它是主平台钱包
+对象原样透传（`wallet.get("wallet", wallet)`），本仓不控制它的键集合，当时如实写成开放并登记 P-121。
+STEP-57 的后端白名单投影（`app/services/auth/service.py` 的 `_project_wallet`）断掉泄露路径之后，
+STEP-61 按 D-V21-21 留下的另一半、以 D-V22-05 的"同一提交改稿+改码+重生成"落笔方式把它改成封闭。
 """
 from __future__ import annotations
 
@@ -45,9 +46,13 @@ class MeUser(_Closed):
 
 
 class MeWallet(BaseModel):
-    """`GET /auth/me` → `data.wallet`。降级/fixture 分支恒为 {balanceYuan:0, currency, available:false}。"""
+    """`GET /auth/me` → `data.wallet`。降级/fixture 分支恒为 {balanceYuan:0, currency, available:false}。
 
-    model_config = ConfigDict(extra="allow")
+    STEP-61（D-V21-21 的另一半）封闭后，正常分支也只剩这五个键——投影侧的白名单在
+    `app/services/auth/service.py` 的 `_WALLET_KEYS`，两边必须同步；上游多给的键由投影丢弃并记名。
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     balanceYuan: str | float  # noqa: N815
     currency: str

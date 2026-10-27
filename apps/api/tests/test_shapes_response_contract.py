@@ -16,8 +16,10 @@ import re
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
+from pydantic import ValidationError
 
 from app.api.deps import (
     get_current_sub,
@@ -27,7 +29,7 @@ from app.api.deps import (
     get_langbot_client,
     get_space_service,
 )
-from app.contracts.shapes import MOCK_ROUTE_CONTRACTS
+from app.contracts.shapes import MOCK_ROUTE_CONTRACTS, MeWallet
 from app.main import create_app
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -74,19 +76,30 @@ def test_stats_chunks_null_is_legal_but_negative_is_not() -> None:
     assert _errors("SpaceStats", {"docs": 0, "chunks": -1})
 
 
-def test_me_wallet_is_the_only_open_object() -> None:
-    """P-121：钱包是主平台原样透传，开放；其余对象全封闭。数一遍，防有人顺手把别的也放开。
+def test_no_object_definition_is_open() -> None:
+    """STEP-61 之后的状态：**本域没有任何开放对象**，多一个键一律红。
 
-    STEP-57 之后的状态：后端一侧已经按白名单五键投影（`app/services/auth/service.py` 的
-    `_project_wallet`，用例在 `test_me_wallet_projection.py`），所以"上游加字段就直通对外"这条
-    泄露路径已经断掉；但**契约侧仍留着这一个 `additionalProperties: true`**——把它改成封闭需要同步
-    冻结稿那两行声明，规划方 2026-10-27 裁定本卡只发投影那一半（见台账 P-129 与其裁定行）。
-    留开放的实际代价记在那条裁定行里：演示态样例与前端 TS 类型这一层仍不会替我们判"多一个键"。
+    原名 `test_me_wallet_is_the_only_open_object`（P-121 时代钉住"只有 `MeWallet` 开放"）。
+    STEP-57 先用后端白名单投影断掉泄露路径（`test_me_wallet_projection.py`），STEP-61 再按
+    D-V21-21 留下的另一半、以 D-V22-05 的"同一提交改冻结稿 + 改 `shapes.py` + 重生成"把
+    `MeWallet` 改成封闭，于是这一条从"数出唯一开放对象"升级成"一个都不许开放"。
+    数一遍的目的不变：防有人顺手把别的对象也放开。
     """
     open_defs = sorted(n for n, d in SHAPES["$defs"].items() if d.get("additionalProperties") is True)
-    assert open_defs == ["MeWallet"]
-    closed = [n for n, d in SHAPES["$defs"].items() if d.get("type") == "object" and n != "MeWallet"]
-    assert all(SHAPES["$defs"][n].get("additionalProperties") is False for n in closed)
+    assert open_defs == [], f"契约里又出现开放对象（上游加字段就直通对外）：{open_defs}"
+    objects = [n for n, d in SHAPES["$defs"].items() if d.get("type") == "object"]
+    assert all(SHAPES["$defs"][n].get("additionalProperties") is False for n in objects)
+
+
+def test_me_wallet_rejects_a_key_the_contract_does_not_publish() -> None:
+    """STEP-61（D-V21-21 留下的另一半，落笔方式按 D-V22-05/D-V22-06）：契约侧封口。
+
+    投影（`service.py` 的 `_project_wallet`）拦的是"我们往外吐什么"，本用例钉的是"契约认不认识
+    这个键"——两边都改才算补完 P-121。先红读数在 `EVD-V22-61/`：改前 `extra="allow"`，多一个
+    `internalNote` 不抛 ⇒ 本用例红。
+    """
+    with pytest.raises(ValidationError):
+        MeWallet.model_validate({"balanceYuan": "1.00", "currency": "CNY", "internalNote": "风控内部值"})
 
 
 def test_ts_dto_exports_every_def_without_unknown() -> None:
