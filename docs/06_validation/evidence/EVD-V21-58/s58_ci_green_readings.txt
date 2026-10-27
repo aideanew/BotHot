@@ -1,0 +1,83 @@
+STEP-58 发布批 c682acd 的 @ci 三绿逐字读数（2026-10-27 15:43:12 CST 现取，run 级 logs zip；输出行尾归一为 LF）
+
+== 三条工作流结论 ==
+head_sha=c682acd total=3
+  40465549190 Security       completed   success   attempt=1 created=2026-10-27T07:10:43Z
+  40465549229 CI             completed   success   attempt=1 created=2026-10-27T07:10:43Z
+  40465549197 CI-Windows     completed   success   attempt=1 created=2026-10-27T07:10:43Z
+
+== CI (ubuntu) 40465549229 关键行 ==
+3_backend.txt:959: 2026-10-27T07:15:36.3531505Z Required test coverage of 75% reached. Total coverage: 88.93%
+3_backend.txt:967: 2026-10-27T07:15:36.3537474Z 2496 passed, 6 skipped, 4 deselected, 2 warnings in 210.40s (0:03:30)
+3_backend.txt:968: 2026-10-27T07:15:39.0280137Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+3_backend.txt:996: 2026-10-27T07:15:39.0894061Z ✅ 全部模块与全局达标
+15_Tests (pytest) + coverage + skip gate.txt:237: 2026-10-27T07:15:36.3531463Z Required test coverage of 75% reached. Total coverage: 88.93%
+15_Tests (pytest) + coverage + skip gate.txt:245: 2026-10-27T07:15:36.3537472Z 2496 passed, 6 skipped, 4 deselected, 2 warnings in 210.40s (0:03:30)
+15_Tests (pytest) + coverage + skip gate.txt:246: 2026-10-27T07:15:39.0280098Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+16_Module coverage gate (check_module_coverage).txt:26: 2026-10-27T07:15:39.0894059Z ✅ 全部模块与全局达标
+4_frontend.txt:357: 2026-10-27T07:11:30.1311862Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+11_Unit tests (vitest).txt:97: 2026-10-27T07:11:30.1311805Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+
+== CI-Windows 40465549197 关键行 ==
+0_windows-dev.txt:657: 2026-10-27T07:32:01.8158618Z 1810 passed, 692 skipped, 4 deselected, 2 warnings in 1172.62s (0:19:32)
+0_windows-dev.txt:697: 2026-10-27T07:32:02.6766807Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+0_windows-dev.txt:727: 2026-10-27T07:32:02.7841039Z windows 门禁：failed=0 total_skipped=692 baseline=692
+0_windows-dev.txt:840: 2026-10-27T07:32:33.3678299Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+13_Backend tests（连库用例在本平台会 skip，只记账不主张）.txt:59: 2026-10-27T07:32:01.8158616Z 1810 passed, 692 skipped, 4 deselected, 2 warnings in 1172.62s (0:19:32)
+14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt:40: 2026-10-27T07:32:02.6766802Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt:70: 2026-10-27T07:32:02.7840991Z windows 门禁：failed=0 total_skipped=692 baseline=692
+15_Frontend typecheck + unit（vitest）.txt:107: 2026-10-27T07:32:33.3678283Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+
+== Security 40465549190（整条结论已在上面）==
+
+
+== 补取一（同一 zip，另两条正则）==
+-- CI 40465549229：vitest Test Files 与演示态 e2e --
+4_frontend.txt:222: 2026-10-27T07:11:03.5486418Z + @playwright/test 1.63.0
+4_frontend.txt:356: 2026-10-27T07:11:30.1309323Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+4_frontend.txt:430: 2026-10-27T07:11:59.8591112Z ##[group]Run pnpm exec playwright install --with-deps chromium
+4_frontend.txt:431: 2026-10-27T07:11:59.8591632Z [36;1mpnpm exec playwright install --with-deps chromium[0m
+4_frontend.txt:647: 2026-10-27T07:12:13.2749901Z Downloading Chrome for Testing 153.0.8010.12 (playwright chromium v1243) from https://cdn.playwright.dev/builds/cft/153.0.8010.12/linux64/chrome-linux6
+4_frontend.txt:659: 2026-10-27T07:12:17.9849162Z Chrome for Testing 153.0.8010.12 (playwright chromium v1243) downloaded to /home/runner/.cache/ms-playwright/chromium-1243
+4_frontend.txt:660: 2026-10-27T07:12:17.9853660Z Downloading FFmpeg (playwright ffmpeg v1011) from https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1011/ffmpeg-linux.zip
+4_frontend.txt:672: 2026-10-27T07:12:18.4641769Z FFmpeg (playwright ffmpeg v1011) downloaded to /home/runner/.cache/ms-playwright/ffmpeg-1011
+4_frontend.txt:673: 2026-10-27T07:12:18.4645105Z Downloading Chrome Headless Shell 153.0.8010.12 (playwright chromium-headless-shell v1243) from https://cdn.playwright.dev/builds/cft/153.0.8010.12/lin
+4_frontend.txt:685: 2026-10-27T07:12:21.9623454Z Chrome Headless Shell 153.0.8010.12 (playwright chromium-headless-shell v1243) downloaded to /home/runner/.cache/ms-playwright/chromium_headless_shell-
+
+-- Security 40465549190：四个扫描器的判定行 --
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:36: 2026-10-27T07:10:47.6032687Z Complete job name: 安全扫描（① pip-audit / ② pnpm audit / ③ trivy / ④ gitleaks）
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:397: 2026-10-27T07:11:13.8347251Z No known vulnerabilities found
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:634: 2026-10-27T07:11:28.8552037Z [36;1mverdict="$VERDICT_DIR/verdict-gitleaks"[0m
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:637: 2026-10-27T07:11:28.8554588Z [36;1mif ! curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:638: 2026-10-27T07:11:28.8556050Z [36;1m  echo "❌ gitleaks ${GITLEAKS_VERSION} 下载失败"[0m
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:641: 2026-10-27T07:11:28.8557415Z [36;1mtar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks[0m
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:646: 2026-10-27T07:11:28.8559974Z [36;1mif [ ! -f .gitleaks.toml ]; then[0m
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:647: 2026-10-27T07:11:28.8560580Z [36;1m  echo "❌ .gitleaks.toml 不存在：扫描域（规则 + 白名单）失去单一来源"[0m
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:658: 2026-10-27T07:11:28.8566874Z [36;1mif ! python "$GITHUB_WORKSPACE/scripts/security_scan.py" --name gitleaks \[0m
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:659: 2026-10-27T07:11:28.8567927Z [36;1m    --report gitleaks.json --status-file gitleaks-status.json --cwd . -- \[0m
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:660: 2026-10-27T07:11:28.8568731Z [36;1m    /tmp/gitleaks detect \[0m
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:662: 2026-10-27T07:11:28.8569703Z [36;1m    --config .gitleaks.toml \[0m
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:664: 2026-10-27T07:11:28.8570807Z [36;1m    --report-path gitleaks.json \[0m
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:667: 2026-10-27T07:11:28.8572818Z [36;1m    --redact 2>&1 | tee gitleaks-console.log; then[0m
+
+== 补取二（紧正则）==
+-- 再补（紧正则）：CI 演示态 e2e 计数 --
+4_frontend.txt:838: 2026-10-27T07:14:18.7732439Z   31 passed (1.4m)
+16_E2E (mock UI).txt:97: 2026-10-27T07:14:18.7732437Z   31 passed (1.4m)
+hits=0
+-- 再补：Security 的 pnpm/trivy/gitleaks 判定 --
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:397: 2026-10-27T07:11:13.8347251Z No known vulnerabilities found
+8_① pip-audit — Python 依赖漏洞.txt:103: 2026-10-27T07:11:13.8347244Z No known vulnerabilities found
+hits=0
+[pip-audit] 判定=ran / [pnpm-audit] 判定=ran / [trivy] 判定=ran / [gitleaks] 判定=ran —— 四个扫描器都跑到并出了报告，整条工作流 conclusion=success ⇒ 无检出；pip-audit 侧另有逐字行 No known vulnerabilities found。
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:400: 2026-10-27T07:11:13.8349113Z [pip-audit] 判定=ran
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:505: 2026-10-27T07:11:16.5401079Z [pnpm-audit] 判定=ran
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:524: 2026-10-27T07:11:16.5905301Z [36;1m# 这里用 `2>&1 | tee`（而不是旧的 `> log 2>&1`）：helper 的"判定=ran / scanner_error"[0m
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:630: 2026-10-27T07:11:28.8102394Z [trivy] 判定=ran
+0_安全扫描（① pip-audit _ ② pnpm audit _ ③ trivy _ ④ gitleaks）.txt:739: 2026-10-27T07:11:35.0302822Z [gitleaks] 判定=ran
+8_① pip-audit — Python 依赖漏洞.txt:106: 2026-10-27T07:11:13.8349104Z [pip-audit] 判定=ran
+9_② pnpm audit — Node 依赖漏洞.txt:104: 2026-10-27T07:11:16.5401071Z [pnpm-audit] 判定=ran
+10_③ trivy — 文件系统漏洞 _ 配置 _ 密钥.txt:17: 2026-10-27T07:11:16.5905294Z [36;1m# 这里用 `2>&1 | tee`（而不是旧的 `> log 2>&1`）：helper 的"判定=ran / scanner_error"[0m
+10_③ trivy — 文件系统漏洞 _ 配置 _ 密钥.txt:123: 2026-10-27T07:11:28.8102391Z [trivy] 判定=ran
+11_④ gitleaks — 明文密钥与凭据.txt:108: 2026-10-27T07:11:35.0302819Z [gitleaks] 判定=ran
+hits=0

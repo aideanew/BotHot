@@ -1,0 +1,4 @@
+tag v1.1.4：标签对象 dd71da795b0e08a089d4e79d6e50842b5948f536 指向提交 c682acd27284dce30d9b04b1b3631d9b24300259
+POST /repos/aideanew/BotHot/releases -> HTTP 201，Release id=425152771
+GET /repos/aideanew/BotHot/releases/tags/v1.1.4 -> HTTP 200，id=425152771，tag_name=v1.1.4，draft=False，published_at=2026-10-27T07:41:14Z
+url=https://github.com/aideanew/BotHot/releases/tag/v1.1.4

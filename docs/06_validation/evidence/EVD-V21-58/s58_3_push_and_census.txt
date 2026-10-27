@@ -1,0 +1,57 @@
+STEP-58 S58.3 tag / Release / 标签对账（执行助手，2026-10-27 CST）
+
+== 1. 发布批三绿（打 tag 的前置，现取） ==
+head_sha=c682acd total=3
+  40465549190 Security       completed   success   attempt=1 created=2026-10-27T07:10:43Z
+  40465549229 CI             completed   success   attempt=1 created=2026-10-27T07:10:43Z
+  40465549197 CI-Windows     completed   success   attempt=1 created=2026-10-27T07:10:43Z
+逐字关键行见同目录 `s58_ci_green_readings.txt`。三条都是 attempt 1，无重跑。
+
+== 2. 打标签（逐字点名，未用 --tags） ==
+命令：git tag -a v1.1.4 -F <临时消息文件> c682acd
+  标签对象 sha = dd71da795b0e08a089d4e79d6e50842b5948f536（`git for-each-ref` 的 %(objectname)）
+  被标提交   = c682acd27284dce30d9b04b1b3631d9b24300259（`git rev-parse v1.1.4^{commit}`）
+  `git cat-file -t v1.1.4` = tag（注释标签，不是轻量标签）
+打之前 `git fetch` 后 `origin/main...HEAD` = 0 0，HEAD 就是 c682acd。
+
+== 3. 推送标签（临时凭据：同一条命令内创建→使用→删除→核实） ==
+  cred_written exists=True requested_mode=0o600 measured_mode=0o666 mode_is_600=False bytes=122 token_len=93
+  push_ref=v1.1.4 push_rc=0
+  cred_exists_after_rm=NO
+  cred_parent_siblings=0
+  推送输出（脱敏）：* [new tag]  v1.1.4 -> v1.1.4
+  `git remote -v` 两侧 URL 均为 https://github.com/aideanew/BotHot.git，无凭据残留
+口径照旧写清：这台机器上 POSIX 权限位不成立（请求 0o600 回来是 0o666），真正兑现的是
+「存在时间压到一条命令内 + 删除后核实不存在 + 只挂这一次用的 helper」，不是 mode。
+命令侧另加 `GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never` 与 `-c credential.helper=`（先清空继承的
+helper，再只挂 store --file=本次临时文件），避免 GCM 抢先咨询把推送挂住。
+
+== 4. 标签前后逐字对账（本卡唯一新增是 v1.1.4 两行 / 一行 / 八个提交） ==
+对账文件（同目录，LF）：
+  s58_3_ls_remote_tags_before.txt（10 行）→ s58_3_ls_remote_tags_after.txt（12 行）
+      差异只有新增的两行：dd71da7… refs/tags/v1.1.4 与 c682acd… refs/tags/v1.1.4^{}
+      远端标签枚数 5 → 6；既有 5 枚（v1.0.0/v1.1.0/v1.1.1/v1.1.2/v1.1.3）的标签对象与被标提交逐字未动
+  s58_3_show_ref_before.txt（7 行）→ s58_3_show_ref_after.txt（8 行）
+      差异只有新增的一行 v1.1.4；两枚 local-recovery-* 仍只在本地、从未推送 ⇒ 没有 --tags 全推的实证
+  s58_3_tags_revlist_before.txt（454 行）→ …_after.txt（462 行）
+      删除行数 0、新增行数 8（v1.1.4 的祖先里此前无标签可达的那 8 个提交）
+一次自曝（记下来而不是抹掉）：三个 before 文件当时由 `Path.write_text` 写出，行尾被 Windows 默认
+换行翻译成 CRLF，而 after 用 shell 重定向是 LF ⇒ 直接 `diff` 报「1,10c1,12」这种整片不同，
+看起来像标签被大改，其实是行尾噪声。处置：对三个 before 做 `tr -d '\r'` 归一——每个文件先算
+「去 CR 后的内容 md5」、归一后再算整文件 md5，两侧相等（ls-remote 78f5ff6ae999e2d48d7ab6eb405b5d41 /
+show-ref 197a40b9805987b0d78886e6f60fdcd6 / rev-list 0e639f43bf9785288625ea0ce9a3672d），
+所以归一动的只是行尾，不是内容。归一后 diff 才只剩上面那些新增行。
+判据没有变松——变的只是我把两种行尾混在同一个对账里；下次同类对账一律两侧同机制写出。
+
+== 5. Release 页 ==
+POST /repos/aideanew/BotHot/releases → HTTP 201，Release id=425152771，tag_name=v1.1.4，draft=False
+GET  /repos/aideanew/BotHot/releases/tags/v1.1.4 → HTTP 200，id=425152771，
+  published_at=2026-10-27T07:41:14Z，target_commitish=main，
+  url=https://github.com/aideanew/BotHot/releases/tag/v1.1.4
+原文见 `s58_3_release_readings.txt`。
+
+== 6. 推标签不产生新 run（现读三个工作流的触发块） ==
+`.github/workflows/ci.yml`、`ci-windows.yml`、`security.yml` 的 `on.push` 现读都只写
+`branches: [master, main]`，没有一个带 `tags:` ⇒ 推 v1.1.4 不会产生新的工作流 run，
+「发布批三绿」就是本版唯一的三绿锚点（与 STEP-53 发布 v1.1.3 时的判定同形）。
+这条不是沿用上次结论：本次是重读这三个文件的触发块后写的。

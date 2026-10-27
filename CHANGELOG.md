@@ -80,8 +80,9 @@ v1.1.4 这次是被引用的**行号**会漂（`test_shapes_response_contract.py
   **限定必须一起读**：契约里 `MeWallet` 仍是全 30 个 def 中唯一一个开放对象（`additionalProperties: true`），
   所以演示态样例多写一个键、或前端 TS 类型那一层，都不会红——把它改封闭要与冻结稿
   `docs/任务规划V0.12.0/contracts/shapes.schema.json` 那两行声明同步，而冻结稿只有规划方能落笔
-  （**裁决 D-V21-20 的正文尚未落档**：`docs/03_solution/decisions/decision-log.md` 现读止于 D-V21-19，
-  该裁定的内容目前只以台账 P-127 裁定行的"代录"形式与 04 附录 A 第九节第 9 条存在）。
+  （**裁决 D-V21-20 与 D-V21-21 已在 STEP-58 收口批代录入档**：`docs/03_solution/decisions/decision-log.md`
+  现读止于 D-V21-21。口径差别记清楚：tag `v1.1.4` 指向的发布批上这句还是「正文尚未落档」，GitHub Release 正文
+  发布后不回改，两者的差别与 tag 对象 sha 见 `docs/06_validation/evidence/EVD-V21-58/s58_readings.md` §5）。
   规划方因此裁定本卡只发投影那一半（台账 P-129 出路③），封闭那一半转入后续卡。
   另两处已登记的残留：可选键被上游**显式**发成 `null` 时按"给了值"原样带出；主平台把 wallet 信封的 `data`
   发成列表时 `/auth/me` 仍会 500（非本版引入，已登 P-128）。
