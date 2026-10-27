@@ -1,0 +1,17 @@
+..................F..................................................... [ 88%]
+.........                                                                [100%]
+================================== FAILURES ===================================
+___________ test_def_name_sets_are_equal_or_every_drop_is_accounted ___________
+
+    def test_def_name_sets_are_equal_or_every_drop_is_accounted() -> None:
+        """两侧 def 的名字集要么相等，要么每个差集都指得出一条既有登记（P-126 的覆盖面口径补全）。"""
+        problems = _live_name_problems()
+>       assert not problems, "契约名字集有无人负责的差集：\n  " + "\n  ".join(problems)
+E       AssertionError: 契约名字集有无人负责的差集：
+E           shapes/S56OrphanProbe: 生成物多出一个稿里没有的 def（交集比对会把它整条跳过 ⇒ 没人判它）
+E       assert not ['shapes/S56OrphanProbe: 生成物多出一个稿里没有的 def（交集比对会把它整条跳过 ⇒ 没人判它）']
+
+tests\test_contract_jsonschema.py:331: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_contract_jsonschema.py::test_def_name_sets_are_equal_or_every_drop_is_accounted
+1 failed, 80 passed in 7.57s

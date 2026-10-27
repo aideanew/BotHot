@@ -1,0 +1,53 @@
+FF....F....                                                              [100%]
+================================== FAILURES ===================================
+______________________ test_no_contract_def_is_an_orphan ______________________
+
+    def test_no_contract_def_is_an_orphan() -> None:
+        problems = _live_report()
+        counts = " + ".join(f"{d} {len(doc.get('$defs', {}))} 个 def" for d, doc in DOCS.items())
+>       assert not problems, f"契约覆盖面有洞（{counts}，全部要有落点）：\n  " + "\n  ".join(problems)
+E       AssertionError: 契约覆盖面有洞（shapes 30 个 def + engine 4 个 def，全部要有落点）：
+E           engine/EngineCapability: 没有任何真端点反向核，也不被可达 def 引用（引用它的 ['EngineList'] 自己也不可达）
+E           engine/EngineList: 没有任何真端点反向核，也不被可达 def 引用
+E           engine/EngineReason: 没有任何真端点反向核，也不被可达 def 引用（引用它的 ['EngineCapability'] 自己也不可达）
+E           engine/SpaceEngineBinding: 没有任何真端点反向核，也不被可达 def 引用
+E       assert not ["engine/EngineCapability: 没有任何真端点反向核，也不被可达 def 引用（引用它的 ['EngineList'] 自己也不可达）", 'engine/EngineList: 没有任何真端点反向核，也不被可达 ...ason: 没有任何真端点反向核，也不被可达 def 引用（引用它的 ['EngineCapability'] 自己也不可达）", 'engine/SpaceEngineBinding: 没有任何真端点反向核，也不被可达 def 引用']
+
+tests\test_contract_def_coverage.py:206: AssertionError
+_____________________ test_both_domains_contribute_seeds ______________________
+
+    def test_both_domains_contribute_seeds() -> None:
+        """某一域种子为空 ⇒ 可达集退化，`test_no_contract_def_is_an_orphan` 就只在一个域里判。
+    
+        这一条把"某一域整片失去覆盖"与"某条用例被删"分开报，读数更可归因；也防抽取器与被测代码
+        脱钩后（改名、换形制）自己变成一条空转的门。
+        """
+        seeds = _seed_names(SHAPES_SRC, ENGINE_SRC)
+        assert seeds["shapes"], "shapes 域一条 `_check(...)` 都没读到 ⇒ 种子抽取已与被测代码脱钩"
+>       assert seeds["engine"], "engine 域没有任何连库真端点绑定到 def ⇒ 引擎覆盖整片消失"
+E       AssertionError: engine 域没有任何连库真端点绑定到 def ⇒ 引擎覆盖整片消失
+E       assert set()
+
+tests\test_contract_def_coverage.py:217: AssertionError
+______________ test_teeth_keeping_the_reference_is_not_coverage _______________
+
+    def test_teeth_keeping_the_reference_is_not_coverage() -> None:
+        """把真端点用例里的 validator 换掉、但**留着对常量的引用** ⇒ 不再算覆盖。
+    
+        这一条钉的是种子抽取"认调用点而不是认引用"的那一半：只按"函数体里出现过 `_LIST`"取种子的话，
+        删掉断言、留一句 `del _LIST` 或把常量抄进别处也照样读绿。
+        """
+        src = ENGINE_SRC.replace("_errors(_LIST,", "_errors(_NOT_A_VALIDATOR,")
+        assert src != ENGINE_SRC, "锚点没打上，这条反证不算跑过"
+        seeds = _seed_names(SHAPES_SRC, src)
+        assert "EngineList" not in seeds["engine"], "引用还在但已不再拿它判 data ⇒ 不该记覆盖"
+>       assert "SpaceEngineBinding" in seeds["engine"], "另一条真端点用例不受影响，红面要收窄到被打的那条"
+E       AssertionError: 另一条真端点用例不受影响，红面要收窄到被打的那条
+E       assert 'SpaceEngineBinding' in set()
+
+tests\test_contract_def_coverage.py:275: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_contract_def_coverage.py::test_no_contract_def_is_an_orphan
+FAILED tests/test_contract_def_coverage.py::test_both_domains_contribute_seeds
+FAILED tests/test_contract_def_coverage.py::test_teeth_keeping_the_reference_is_not_coverage
+3 failed, 8 passed in 0.37s

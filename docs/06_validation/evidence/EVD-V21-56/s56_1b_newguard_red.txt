@@ -1,0 +1,16 @@
+F..........                                                              [100%]
+================================== FAILURES ===================================
+______________________ test_no_contract_def_is_an_orphan ______________________
+
+    def test_no_contract_def_is_an_orphan() -> None:
+        problems = _live_report()
+        counts = " + ".join(f"{d} {len(doc.get('$defs', {}))} 个 def" for d, doc in DOCS.items())
+>       assert not problems, f"契约覆盖面有洞（{counts}，全部要有落点）：\n  " + "\n  ".join(problems)
+E       AssertionError: 契约覆盖面有洞（shapes 31 个 def + engine 4 个 def，全部要有落点）：
+E           shapes/S56OrphanProbe: 没有任何真端点反向核，也不被可达 def 引用
+E       assert not ['shapes/S56OrphanProbe: 没有任何真端点反向核，也不被可达 def 引用']
+
+tests\test_contract_def_coverage.py:206: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_contract_def_coverage.py::test_no_contract_def_is_an_orphan
+1 failed, 10 passed in 0.34s

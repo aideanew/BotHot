@@ -13,6 +13,9 @@
    判定只有 validator 一家，我只负责造实例。
 3. **登记兜底**：结论不一致的形状必须在本域 `CONTRACT_DIVERGENCES` 里有 `tightening` 或 `conflict`
    登记；只有"接受集不变"那四种登记的——登记说没变、validator 说变了，以 validator 为准、红。
+4. **名字集差集**（STEP-56 S56.3）：两侧 def 的名字集要么相等，要么每个差集都指得出一条既有登记；
+   反向还有一条——探针列表必须等于那个交集、且装饰器吃下去的就是这一串。交集比对不再自己决定
+   "谁不参与判定"，也不再由 `_shape_pairs()` 单方面决定"谁被探针判"。
 
 探针是有限集，所以这一层仍是**下界**：它保证"能被这些实例分辨的差异一定被看见"，
 不保证无穷接受集逐点相等。正则量词与字符类那一类差异仍由旧文件的"pattern 逐字符相等"守着。
@@ -28,6 +31,7 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import SchemaError
+from test_collection_contract import ALIAS_WITNESSES, _not_a_shape_names, _referenced_by
 
 from app.contracts import collection as collection_contract
 from app.contracts import engine as engine_contract
@@ -268,6 +272,13 @@ def _disagreements(
 
 
 def _shape_pairs() -> list[tuple[str, str]]:
+    """要逐对探针比对的 `(域, def 名)`——只取两侧都有的名字。
+
+    STEP-56 S56.3：交集本身不再是判据。"某一侧没有这个名字"过去等于"整条静默跳过"，
+    现在由下面 `test_def_name_sets_are_equal_or_every_drop_is_accounted` 逐名要落点，
+    `test_probe_parametrization_covers_every_pair` 反向要探针——两侧都差一个名都会红，
+    只是红在那两条门上而不是在这里。
+    """
     pairs: list[tuple[str, str]] = []
     for domain in DOMAINS:
         draft, gen = _draft(domain), _generated(domain)
@@ -279,6 +290,92 @@ def _shape_pairs() -> list[tuple[str, str]]:
 
 
 SHAPE_PAIRS = _shape_pairs()
+
+
+# ── S56.3：名字集的差集必须逐个指得出既有登记 ───────────────────────────────────
+
+#: 稿侧独有 def 的三种既有正当去处（读的是 `test_collection_contract.py` 里同一批判据源，
+#: 这里不再抄一份名字表——抄了就等于造第二个真源，迟早漂）：
+#: ①稿根层 `x-not-in-single-source` 声明它不是形状；②它被某个已收编 def 在形状位 `$ref` 引走
+#: （约束在产物里现形）；③它在 `ALIAS_WITNESSES` 里点名了可执行见证测试。
+#: 三条都不成立 ⇒ 这个 def 从产物里无声消失，就是 P-126 那一类"覆盖面靠登记表点名"的病。
+
+
+def _name_problems_for(domain: str, draft: dict[str, Any], gen: dict[str, Any]) -> list[str]:
+    dnames, gnames = set(_defs(draft)), set(_defs(gen))
+    ddefs = _defs(draft)
+    problems: list[str] = []
+    for name in sorted(gnames - dnames):
+        problems.append(f"{domain}/{name}: 生成物多出一个稿里没有的 def（交集比对会把它整条跳过 ⇒ 没人判它）")
+    for name in sorted(dnames - gnames):
+        if name in _not_a_shape_names(draft)[0]:
+            continue
+        if any(_referenced_by(ddefs[k], name) for k in dnames & gnames):
+            continue
+        if name in ALIAS_WITNESSES.get(domain, {}):
+            continue
+        problems.append(
+            f"{domain}/{name}: 稿里有而生成物没有，且「稿声明非形状 / 被已收编 def 引用 / 点名见证测试」"
+            "三条既有去处都不成立 ⇒ 缺席无据"
+        )
+    return problems
+
+
+def _live_name_problems() -> list[str]:
+    return [p for domain in DOMAINS for p in _name_problems_for(domain, _draft(domain), _generated(domain))]
+
+
+def test_def_name_sets_are_equal_or_every_drop_is_accounted() -> None:
+    """两侧 def 的名字集要么相等，要么每个差集都指得出一条既有登记（P-126 的覆盖面口径补全）。"""
+    problems = _live_name_problems()
+    assert not problems, "契约名字集有无人负责的差集：\n  " + "\n  ".join(problems)
+
+
+def test_probe_parametrization_covers_every_pair() -> None:
+    """探针列表要等于"两侧名字集的交"，而且装饰器吃下去的必须是同一串。
+
+    这条判的东西与上面那条不同，所以不是重复：`test_def_name_sets_are_equal_or_every_drop_is_accounted`
+    只看稿与产物两份 JSON，永远不看 `SHAPE_PAIRS` 怎么被构造出来的。今天 `_shape_pairs()` 就是逐域取交集，
+    于是这条按构造成立；它会红的情形是**将来有人在取列表那一步加了筛选或切片**（"这个 def 太难合成先跳过"
+    就是这么进来的），或者把装饰器的实参换成另一张表——那两种写法都不会让名字集门红，只会让探针静默少判。
+    """
+    for domain in DOMAINS:
+        draft, gen = _draft(domain), _generated(domain)
+        listed = {name for d, name in SHAPE_PAIRS if d == domain and name != "<root>"}
+        intersect = set(_defs(draft)) & set(_defs(gen))
+        assert listed == intersect, f"{domain} 探针列表与两侧名字集的交不一致：少 {sorted(intersect - listed)}"
+    mark = next(m for m in test_draft_and_generated_agree_on_every_probe.pytestmark if m.name == "parametrize")
+    assert list(mark.args[1]) == SHAPE_PAIRS, "装饰器吃下去的不是 SHAPE_PAIRS 这一串 ⇒ 探针列表改了地方"
+
+
+def test_name_set_gate_has_teeth_gen_only_name() -> None:
+    """反证一：产物凭空多一个 def ⇒ 红（今天的交集对这个是完全静默的）。"""
+    gen = copy.deepcopy(_generated("engine"))
+    gen["$defs"]["S56Ghost"] = {"type": "string"}
+    problems = _name_problems_for("engine", _draft("engine"), gen)
+    assert any("S56Ghost" in p and "多出一个" in p for p in problems), problems
+
+
+def test_name_set_gate_has_teeth_unaccounted_drop() -> None:
+    """反证二：稿里一个 def 没进产物、也没走那三条去处 ⇒ 红（交集同样静默）。"""
+    draft = copy.deepcopy(_draft("engine"))
+    draft.setdefault("$defs", {})["S56Dropped"] = {"type": "string", "maxLength": 9}
+    problems = _name_problems_for("engine", draft, _generated("engine"))
+    assert any("S56Dropped" in p and "缺席无据" in p for p in problems), problems
+
+
+def test_name_set_gate_has_teeth_a_stripped_claim_reddens() -> None:
+    """反证三：把 events 稿根层的 `x-not-in-single-source` 里 `QueueMechanism` 那条摘掉 ⇒ 红。
+
+    这一条证明放行不是写死的名字：三条去处**摘掉**立刻变成"缺席无据"，
+    同时也证明 `test_def_name_sets_are_equal_or_every_drop_is_accounted` 现在读绿不是因为
+    它从不调用——`QueueMechanism` 走的就是①。
+    """
+    draft = copy.deepcopy(_draft("events"))
+    assert not _name_problems_for("events", draft, _generated("events"))
+    draft.get("x-not-in-single-source", {}).pop("QueueMechanism", None)
+    problems = _name_problems_for("events", draft, _generated("events"))
+    assert any("QueueMechanism" in p and "缺席无据" in p for p in problems), problems
 
 
 def _refs_of(ref: str) -> set[str]:

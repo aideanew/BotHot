@@ -1,0 +1,34 @@
+........................................................................ [ 32%]
+.....F.....................F............................................ [ 65%]
+........................................................................ [ 98%]
+...                                                                      [100%]
+================================== FAILURES ===================================
+_______________ test_every_domain_has_no_unexplained_divergence _______________
+
+    def test_every_domain_has_no_unexplained_divergence() -> None:
+        """整仓库层面的一次总检查：任一域有未解释差异都算失败，并点名是哪个域。"""
+        report = {domain: compare_defs(domain)[0] for domain in DOMAINS}
+        bad = {k: v for k, v in report.items() if v}
+>       assert not bad, "\n".join(f"[{k}]\n  " + "\n  ".join(v) for k, v in bad.items())
+E       AssertionError: [shapes]
+E           S56OrphanProbe: 生成物多出一个 def（稿里没有 ⇒ 谁加的？）
+E       assert not {'shapes': ['S56OrphanProbe: 生成物多出一个 def（稿里没有 ⇒ 谁加的？）']}
+
+tests\test_collection_contract.py:1235: AssertionError
+___________________ test_comparator_does_not_false_positive ___________________
+
+    def test_comparator_does_not_false_positive() -> None:
+        """对照：什么都没改 ⇒ 每个域都必须 0 条（否则上面那组"红"没有意义）。"""
+>       assert {d: compare_defs(d)[0] for d in DOMAINS} == {d: [] for d in DOMAINS}
+E       AssertionError: assert {'collection'...ces': [], ...} == {'collection'...ces': [], ...}
+E         
+E         Omitting 6 identical items, use -vv to show
+E         Differing items:
+E         {'shapes': ['S56OrphanProbe: 生成物多出一个 def（稿里没有 ⇒ 谁加的？）']} != {'shapes': []}
+E         Use -v to get more diff
+
+tests\test_collection_contract.py:1558: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_collection_contract.py::test_every_domain_has_no_unexplained_divergence
+FAILED tests/test_collection_contract.py::test_comparator_does_not_false_positive
+2 failed, 217 passed in 4.27s

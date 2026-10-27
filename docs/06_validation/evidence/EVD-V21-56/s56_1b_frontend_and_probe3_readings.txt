@@ -1,0 +1,46 @@
+STEP-56 探针①b 的前端面读数（最终轮，2026-10-27，从 apps/web 跑）
+
+前提：`S56OrphanProbe` 同时存在于 `apps/api/app/contracts/shapes.py`、冻结稿
+`docs/任务规划V0.12.0/contracts/shapes.schema.json` 与生成好的产物里 ⇒ 稿与产物两侧都有它，
+没有任何真端点反向核、也没有任何 def 引用它——这就是 P-126 的缺陷类。
+
+  pnpm exec tsc --noEmit -p ../../packages/contracts/tsconfig.json   rc=0   （CI 的调用形制：ci.yml:382）
+  pnpm exec vitest run tests/s48-engine-contract.spec.ts
+                           tests/s52-mock-contract-coverage.spec.ts
+                           tests/s55-mock-runtime-shape.spec.ts
+                                                                        rc=0
+                                                                        Test Files  3 passed (3)
+                                                                        Tests       7 passed (7)
+    原文见 s56_1b_frontend_vitest_green.txt
+
+  同一次探针的后端五条（原文 s56_1b_*.txt）：
+    test_contract_def_coverage      rc=1  1 failed / 10 passed，红的正是 test_no_contract_def_is_an_orphan
+    test_contract_jsonschema        rc=0  82 passed（比干净树上多出的那 1 条就是这个新 def 的探针对）
+    test_collection_contract        rc=0  220 passed
+    test_shapes_response_contract   rc=0  17 passed
+    test_engine_response_contract   rc=0  6 passed
+  scripts/gen_contracts.py --check                                        rc=0
+
+⇒ 这一份字节上只有新守卫在红，其余每一道门（含覆盖面门 s52、运行时形状门 s55、引擎键集合守卫 s48）
+  与契约产物幂等门全绿。
+
+对照：探针①a（只在 `shapes.py` 加 def、不进冻结稿）同一批后端门里有两道红——
+旧比对器 `test_collection_contract` 报 `生成物多出一个 def（稿里没有 ⇒ 谁加的？）`、
+本卡新加的名字集门报 `shapes/S56OrphanProbe: 生成物多出一个稿里没有的 def`。
+所以卡面那句"旧门全绿"只在①b 这种形制下成立。
+
+探针③（把产物 `engine/dto.ts` 里 `export type EngineReason = …` 换成一行提到该名的注释）：
+  pytest tests/test_engine_response_contract.py                          rc=1，2 failed / 4 passed
+    FAILED ::test_ts_dto_is_derived_from_the_same_schema   ← 新正则判出的漏导出
+    FAILED ::test_ts_dto_criterion_is_export_scoped        ← 常驻反证自己的锚点在这一份字节上
+                                                              本来就不该打上（导出行已被换成散文）
+  同一份字节上两条判据的裸读数（s56_3_old_vs_new_criterion.txt）：
+    OLD_substring_present = 四个 def 全"在" ⇒ rc_like 0（旧判据放行）
+    NEW_regex_present     = 三个 ⇒ rc_like 1（新判据报出 EngineReason）
+
+还原核实：探针跑完都执行 `restore`，最终一轮的备份是按交付字节重取的
+（`test_engine_response_contract.py` 备份头 `b3f61dd375c4`），每次 `RESTORE_DONE sha_all_equal=True`：
+  shapes.py 668bfe77ea3b / engine 测试 b3f61dd375c4 / shapes.schema.json 9ce7419f05da /
+  engine.schema.json 1209f0972bc7 / shapes/dto.ts 40dbe153fa84 / engine/dto.ts 3db01c78146a
+且 `git status --porcelain` 与 `git diff --stat -- apps/api/app packages/contracts
+scripts/gen_contracts.py docs/任务规划V0.12.0` 都不含这些路径 ⇒ 禁止面与冻结稿逐字回到 HEAD。

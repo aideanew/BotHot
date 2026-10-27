@@ -1,0 +1,46 @@
+STEP-56 作废的本机门链读数汇总（最终跑见 s56_local_gates_final.txt）
+
+记录理由：这五次都不是门变红，而是我改了工作树字节、或者两条链并发跑在同一棵树上。
+整份日志（每份 30KB 左右）不入证据包；这里只留 header、rc 行与最后的进度位置，
+它们足以让任何人复核「s56_readings.md §6 的叙述是不是真的」。
+
+### run1  gates1.txt   header: chain_s56 pid=1231 started=2026-10-27 08:19:14
+  作废理由：pytest 46% 时我增补了 S56.2 的反证用例；停链过程中暴露单实例锁把启动包装算成第二个实例、ABORT 分支用 > 截断了正在跑的日志
+  rc 行：rc_pgpreflight=0  rc_ruff=0  rc_mypy=0  rc_alembic=0  rc_heads=0  rc_gen=0  rc_docs=0  rc_cov=0  rc_fe_tsc=0  rc_pkg_tsc=0  rc_vitest=0  rc_lint=0  rc_build=0  rc_e2e=0
+  最后的进度标记：[ 49%]
+  结束行：=== DONE chain_s56 2026-10-27 08:31:13 ===
+  pytest 汇总行：（没跑到汇总行）
+  覆盖率门 TOTAL：达标   88.90%  ≥ 79.0%  TOTAL
+
+### run2  gates_final.txt   header: chain_s56_final pid=2498 started=2026-10-27 09:11:36
+  作废理由：pytest 75% 时我又改了 test_contract_jsonschema.py 的模块 docstring；rc_pytest=1 是被停的痕迹而不是测试红，其余步骤反而跑完
+  rc 行：rc_pgpreflight=0  rc_ruff=0  rc_mypy=0  rc_alembic=0  rc_heads=0  rc_gen=0  rc_docs=0  rc_cov=0  rc_fe_tsc=0  rc_pkg_tsc=0  rc_vitest=0  rc_lint=0  rc_build=0  rc_e2e=0
+  最后的进度标记：[ 75%]
+  结束行：=== DONE chain_s56_final 2026-10-27 09:32:36 ===
+  pytest 汇总行：（没跑到汇总行）
+  覆盖率门 TOTAL：达标   88.90%  ≥ 79.0%  TOTAL
+
+### run3  gates_final3.txt   header: chain_s56_final pid=2840 started=2026-10-27 09:32:20
+  作废理由：它还在跑的时候我去跑了先红探针（探针改 shapes.py 与 packages/contracts 与冻结稿）⇒ 它的 gen --check 与 pytest 跑在被临时改过的字节上
+  rc 行：rc_pgpreflight=0  rc_ruff=0  rc_mypy=0  rc_alembic=0  rc_heads=0  rc_gen=0  rc_docs=0  rc_cov=0  rc_fe_tsc=0  rc_pkg_tsc=0  rc_vitest=0  rc_lint=0  rc_build=0
+  最后的进度标记：[ 28%]
+  结束行：（无 DONE ⇒ 中途被停）
+  pytest 汇总行：（没跑到汇总行）
+  覆盖率门 TOTAL：达标   88.90%  ≥ 79.0%  TOTAL
+
+### run4  gates_final4.txt   header: chain_s56_final pid=3044 started=2026-10-27 09:37:00
+  作废理由：与 run5 并发：两条链同时写 apps/api/coverage.json 并各自 rm -rf .next 后重跑 build/e2e
+  rc 行：rc_pgpreflight=0  rc_ruff=0  rc_mypy=0  rc_alembic=0  rc_heads=0  rc_gen=0  rc_docs=0  rc_pytest=0  rc_cov=0  rc_fe_tsc=0  rc_pkg_tsc=0  rc_vitest=0  rc_lint=0  rc_build=0  rc_e2e=0
+  最后的进度标记：[100%]
+  结束行：=== DONE chain_s56_final 2026-10-27 09:59:52 ===
+  pytest 汇总行：2488 passed, 6 skipped, 4 deselected, 2 warnings in 1176.32s (0:19:36)
+  覆盖率门 TOTAL：达标   88.89%  ≥ 79.0%  TOTAL
+
+### run5  gates_final5.txt   header: chain_s56_final pid=3121 started=2026-10-27 09:39:47
+  作废理由：与 run4 并发（同一条规则我犯了两次）
+  rc 行：rc_pgpreflight=0  rc_ruff=0  rc_mypy=0  rc_alembic=0  rc_heads=0  rc_gen=0  rc_docs=0  rc_pytest=0  rc_cov=0  rc_fe_tsc=0  rc_pkg_tsc=0  rc_vitest=0  rc_lint=0
+  最后的进度标记：[100%]
+  结束行：（无 DONE ⇒ 中途被停）
+  pytest 汇总行：2488 passed, 6 skipped, 4 deselected, 2 warnings in 1165.01s (0:19:25)
+  覆盖率门 TOTAL：达标   88.94%  ≥ 79.0%  TOTAL
+

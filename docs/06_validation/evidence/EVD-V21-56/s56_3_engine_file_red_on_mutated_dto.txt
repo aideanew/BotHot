@@ -1,0 +1,53 @@
+..FF..                                                                   [100%]
+================================== FAILURES ===================================
+_________________ test_ts_dto_is_derived_from_the_same_schema _________________
+
+    def test_ts_dto_is_derived_from_the_same_schema() -> None:
+        """TS 产物逐个 def 都在（字节幂等由 `gen_contracts --check` 管，这里只防"漏导出某个 def"）。
+    
+        STEP-56 S56.2：判据从 `f" {name} "` 换成与 shapes 域同形的正则。子串判据没有"导出位"这个概念——
+        名字两侧各有一个空白就算它在。这件事由下面那条反证用例机器判，不靠这段描述。
+        """
+        src = TS_DTO.read_text("utf-8")
+        for name in SCHEMA["$defs"]:
+>           assert re.search(rf"export (interface|type) {name}\b", src), f"{name} 未出现在 engine/dto.ts"
+E           AssertionError: EngineReason 未出现在 engine/dto.ts
+E           assert None
+E            +  where None = <function search at 0x0000028627EE3E20>('export (interface|type) EngineReason\\b', '/**\n * engine 域 — 契约 DTO\n *\n * 由 scripts/gen_contracts.py 自动生成，请勿手动修改（--check 幂等门禁）\n * 源：packages/contracts/schem...，这一行足够骗过它）\n\nexport interface SpaceEngineBinding {\n  engine: string;\n  engineKbId: string;\n  spaceId: string;\n}\n')
+E            +    where <function search at 0x0000028627EE3E20> = re.search
+
+tests\test_engine_response_contract.py:65: AssertionError
+___________________ test_ts_dto_criterion_is_export_scoped ____________________
+
+    def test_ts_dto_criterion_is_export_scoped() -> None:
+        """反证：把某个 def 的导出行换成一行提到它的注释 ⇒ 新判据红、旧子串判据在同一份字节上读绿。
+    
+        没有这条，"子串判据会放行"就只是写在注释里的一句话。锚点打在 `EngineReason` 上：现读这份产物，
+        四个 def 名各自唯一"两侧带空白"的出现位就是它自己的导出行（别处都是 `EngineReason;`、
+        `Array<EngineCapability>` 这类带标点的形制），所以把那一行换成散文提到它，旧判据照读绿。
+        新判据仍然放行"被注释掉的 export"（`// export interface X`）——shapes 域那条同形判据也一样，
+        本卡要求两侧同形，就不在这里另开一种强度。
+        """
+        src = TS_DTO.read_text("utf-8")
+        mutated, hit = re.subn(
+            r"^export type EngineReason = .*$",
+            "// EngineReason 的形状在别处给",
+            src,
+            count=1,
+            flags=re.MULTILINE,
+        )
+>       assert hit == 1, "锚点没打上，这条反证不算跑过"
+E       AssertionError: 锚点没打上，这条反证不算跑过
+E       assert 0 == 1
+
+tests\test_engine_response_contract.py:86: AssertionError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_engine_response_contract.py::test_ts_dto_is_derived_from_the_same_schema
+FAILED tests/test_engine_response_contract.py::test_ts_dto_criterion_is_export_scoped
+2 failed, 4 passed, 1 warning in 9.59s

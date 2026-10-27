@@ -1,0 +1,46 @@
+S56.1 正面读数
+  shapes 种子 19 个：['DocCategoryList', 'DocCategoryPatch', 'DocDeleteResult', 'DocIngestState', 'DocsBatchDeleteResult', 'DocsRecategorizeResult', 'ExtractedArticleView', 'IngestAccepted', 'LinkResult', 'LogoutResult', 'MeView', 'NotificationHistoryPage', 'NotificationReadResult', 'PublicSpacePage', 'ResolvedArticleView', 'SpaceDeleteResult', 'SpaceDetail', 'SpaceDocPage', 'SpacePage']
+  engine 种子 2 个：['EngineList', 'SpaceEngineBinding']
+  shapes def 30，engine def 4
+  活体判据读数：[]
+
+  沿 $ref 的入边表（非种子的 def 靠这些活着）：
+    shapes/BatchDocFailure        <- ['DocsBatchDeleteResult']
+    shapes/DocIngestStatus        <- ['DocIngestState', 'IngestAccepted']
+    shapes/ExtractedImageView     <- ['ExtractedArticleView']
+    shapes/MeUser                 <- ['MeView']
+    shapes/MeWallet               <- ['MeView']
+    shapes/NotificationItem       <- ['NotificationHistoryPage']
+    shapes/PublicSpaceView        <- ['PublicSpacePage']
+    shapes/SpaceDocItem           <- ['SpaceDocPage']
+    shapes/SpaceDocStatus         <- ['SpaceDocItem']
+    shapes/SpaceStats             <- ['SpaceDetail']
+    shapes/SpaceView              <- ['SpacePage']
+    engine/EngineCapability       <- ['EngineList']
+    engine/EngineReason           <- ['EngineCapability']
+
+S56.1 反证读数（常驻用例里的四类合成变异）
+  摘掉 MeView 的调用点 ⇒ 种子还含 MeView? False
+  报出来的条目：["shapes/MeUser: 没有任何真端点反向核，也不被可达 def 引用（引用它的 ['MeView'] 自己也不可达）", 'shapes/MeView: 没有任何真端点反向核，也不被可达 def 引用', "shapes/MeWallet: 没有任何真端点反向核，也不被可达 def 引用（引用它的 ['MeView'] 自己也不可达）"]
+
+  打断引擎 validator 绑定 ⇒ 引擎种子 ['EngineList', 'SpaceEngineBinding']
+  引擎侧条目 0 条：[]
+
+S56.3 七域名字集与落点现读
+  collection      draft= 9 gen= 8 draftOnly=1 genOnly=0
+      draftOnly ArticleKey           落点=②被已收编 def 引用
+  identity        draft= 5 gen= 2 draftOnly=3 genOnly=0
+      draftOnly IsAdminEcho          落点=①稿声明非形状
+      draftOnly Sub                  落点=②被已收编 def 引用
+      draftOnly UserId               落点=③ALIAS_WITNESSES 见证
+  events          draft= 6 gen= 2 draftOnly=4 genOnly=0
+      draftOnly EventPayloadRules    落点=①稿声明非形状
+      draftOnly IdempotencyKey       落点=③ALIAS_WITNESSES 见证
+      draftOnly ManifestTransition   落点=①稿声明非形状
+      draftOnly QueueMechanism       落点=①稿声明非形状
+  resources       draft= 5 gen= 3 draftOnly=2 genOnly=0
+      draftOnly ArticleKey           落点=②被已收编 def 引用
+      draftOnly ChannelSecret        落点=①稿声明非形状
+  api.envelope    draft= 3 gen= 3 draftOnly=0 genOnly=0
+  engine          draft= 4 gen= 4 draftOnly=0 genOnly=0
+  shapes          draft=30 gen=30 draftOnly=0 genOnly=0

@@ -1,0 +1,22 @@
+STEP-56 开工前置读数（现取，2026-10-27）
+
+一、规划批三绿（卡面基线 97c929e 之后的规划方提交 97cc469）
+  head_sha=97cc46953d2568c4766ac1fd9549992bcaa80cdf total=3
+    40421495499 CI             completed success attempt=1 created=2026-10-26T23:41:51Z
+    40421495520 CI-Windows     completed success attempt=1 created=2026-10-26T23:41:51Z
+    40421496052 Security       completed success attempt=1 created=2026-10-26T23:41:51Z
+  三条都是 attempt 1；开工时先读到的是 CI / Security 已 success、CI-Windows 仍 in_progress，
+  等到它转 success 才动代码——卡面"规划提交三绿后才开工"按字面执行。
+
+二、本机自备 PG@5547 的应用层前置核实（不是只看端口在听）
+  监听面：netstat 同一条命令里 127.0.0.1:5547 与 [::1]:5547 两处 LISTENING（PID 14840）
+  应用面（SQLAlchemy，与测试夹具同一 DSN 形）：
+    alembic_version=ab1006c2a tables=25 jobs=0 first_connect=0.414s steady=0.002s
+  夹具面（带 AIDEANBOT_TEST_PG_DSN 跑连库用例）：
+    tests/test_engine_response_contract.py + tests/test_shapes_response_contract.py
+    = 22 passed, 0 skipped（第一遍不带环境变量时是 11 passed / 2 skipped——那是 skip 不是连接失败，
+    按"每次开跑前先确认连得上"的口径，skip 就等于没连上，所以补齐环境变量重跑取 0 skipped 这一次）
+
+三、工作树
+  git fetch 后 origin/main = 97cc469，`git merge --ff-only origin/main` 快进（新增三份卡面文件），
+  之后 `origin/main...HEAD` = `0 0`；开工前 `git status --porcelain` 为空。
