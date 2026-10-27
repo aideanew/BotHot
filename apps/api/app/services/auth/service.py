@@ -45,6 +45,42 @@ from app.services.roles import sub_has_min_rank
 
 logger = structlog.get_logger(__name__)
 
+#: 我们已经认识的钱包键（STEP-57 S57.2，P-121/D-V21-17）。契约 `app/contracts/shapes.py` 的
+#: `MeWallet` 是同一份形状的另一面：那边封闭，这边过滤，两边都改才算补上这个洞。
+_WALLET_KEYS: tuple[str, ...] = ("balanceYuan", "currency", "heldYuan", "availableYuan", "available")
+_WALLET_REQUIRED: tuple[str, ...] = ("balanceYuan", "currency")
+#: 不可查时的降级形，与本文件两条既有降级分支同形（`/me` 的 fixture 分支与主平台不可达分支）。
+_WALLET_UNAVAILABLE: dict[str, Any] = {"balanceYuan": 0, "currency": "CNY", "available": False}
+
+
+def _project_wallet(raw: Any) -> dict[str, Any]:
+    """把上游钱包对象裁成白名单五键——主平台加字段不需要通知我们（P-121）。
+
+    三条口径都是刻意的，实现前想清楚的理由记在这里：
+
+    - **上游没给的可选键保持缺席，不补 0**。补 0 等于把「平台没告诉我」写成「余额是 0」，
+      而前端对这两件事给的是两种文案（0 元 vs「余额暂不可查」）。契约里 `heldYuan` 等键
+      的默认值只用来让键可选，不代表后端可以替上游造值。
+    - **必填键缺失（或上游给了 `null`）就回降级形，不抛 500**。到这里会话已经建立，让一个登录
+      成功的人整页 500 只会把「会话有效」与「取不到资料」的降级设计推翻。只判"键在不在"是不够的：
+      `{"balanceYuan": null}` 键在但值不合法，而信封层不做校验，它会一路走到契约之外。
+    - **多出的键只记键名、以 debug 记一次**，值一律不落日志：那些字段可能是主平台的内部
+      风控数据，把它们抄进我们的日志等于换个地方泄露。
+    """
+    if not isinstance(raw, dict):
+        logger.debug("钱包响应形状不认识，按不可查降级", got=type(raw).__name__)
+        return dict(_WALLET_UNAVAILABLE)
+    # `str(k)`：上游 JSON 的键一定是字符串，但这条函数是纯函数、也会被直接喂字典，
+    # 混合键型一旦排不了序就是 TypeError——那正好是文档承诺"不抛 500"的反面。
+    extra = sorted(str(key) for key in raw if key not in _WALLET_KEYS)
+    if extra:
+        logger.debug("钱包响应含契约外键，已按白名单丢弃", keys=extra)
+    missing = [key for key in _WALLET_REQUIRED if raw.get(key) is None]
+    if missing:
+        logger.debug("钱包响应缺必填键，按不可查降级", missing=missing)
+        return dict(_WALLET_UNAVAILABLE)
+    return {key: raw[key] for key in _WALLET_KEYS if key in raw}
+
 
 class AuthService:
     """SSO 编排（无 HTTP 细节；路由层只做参数装配与 cookie 处理）。"""
@@ -213,7 +249,7 @@ class AuthService:
                     "role": local["role"],
                     "is_admin": await self._is_admin(record.sub),
                 },
-                "wallet": {"balanceYuan": 0, "currency": "CNY", "available": False},
+                "wallet": dict(_WALLET_UNAVAILABLE),
                 "providerUnreachable": True,
                 "qaFixture": True,
             }
@@ -241,7 +277,7 @@ class AuthService:
                     # is_admin 取自本地 users.role，主平台不可达不影响判定
                     "is_admin": await self._is_admin(record.sub),
                 },
-                "wallet": {"balanceYuan": 0, "currency": "CNY", "available": False},
+                "wallet": dict(_WALLET_UNAVAILABLE),
                 "providerUnreachable": True,
             }
         return {
@@ -256,7 +292,9 @@ class AuthService:
                 # 用它门禁 UI 会与后端授权双向分歧。
                 "is_admin": await self._is_admin(record.sub),
             },
-            "wallet": wallet.get("wallet", wallet),  # 兼容 data 直接为 wallet 形态
+            # 兼容 data 直接为 wallet 形态；白名单投影是这一步做的（P-121/D-V21-17）——
+            # 上游加字段不需要通知我们，不过滤就等于替它对外宣告。
+            "wallet": _project_wallet(wallet.get("wallet", wallet)),
         }
 
     async def _is_admin(self, sub: str) -> bool:

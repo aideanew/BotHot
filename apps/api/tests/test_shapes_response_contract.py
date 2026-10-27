@@ -75,7 +75,14 @@ def test_stats_chunks_null_is_legal_but_negative_is_not() -> None:
 
 
 def test_me_wallet_is_the_only_open_object() -> None:
-    """P-121：钱包是主平台原样透传，开放；其余对象全封闭。数一遍，防有人顺手把别的也放开。"""
+    """P-121：钱包是主平台原样透传，开放；其余对象全封闭。数一遍，防有人顺手把别的也放开。
+
+    STEP-57 之后的状态：后端一侧已经按白名单五键投影（`app/services/auth/service.py` 的
+    `_project_wallet`，用例在 `test_me_wallet_projection.py`），所以"上游加字段就直通对外"这条
+    泄露路径已经断掉；但**契约侧仍留着这一个 `additionalProperties: true`**——把它改成封闭需要同步
+    冻结稿那两行声明，规划方 2026-10-27 裁定本卡只发投影那一半（见台账 P-129 与其裁定行）。
+    留开放的实际代价记在那条裁定行里：演示态样例与前端 TS 类型这一层仍不会替我们判"多一个键"。
+    """
     open_defs = sorted(n for n, d in SHAPES["$defs"].items() if d.get("additionalProperties") is True)
     assert open_defs == ["MeWallet"]
     closed = [n for n, d in SHAPES["$defs"].items() if d.get("type") == "object" and n != "MeWallet"]

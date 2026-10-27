@@ -1,4 +1,4 @@
-# STEP-57 读数（P-121 闭合：`/auth/me` 钱包白名单投影 + `MeWallet` 改封闭）
+# STEP-57 读数（出路③：只发 `/auth/me` 钱包白名单投影；`MeWallet` 契约侧仍开放）
 
 > 卡：`docs/任务规划V0.21.0/steps/STEP-57-me钱包白名单投影.md`（裁决 D-V21-17，取代 D-V21-09）
 > 基线：main@52673f2（STEP-56 收口批，同 head 三绿 attempt 1）
@@ -12,7 +12,7 @@
   `✅ 全部模块与全局达标`、vitest 53/425、e2e 31；@win `1802 passed, 692 skipped`、
   `windows 门禁：failed=0 total_skipped=692 baseline=692`）。
 - **PG@5547 连通前置**（按规划方 2026-10-27 的口径：先确认连得上再开跑）：双栈在监听之外，
-  实跑 `pytest tests/test_shapes_response_contract.py -q -rs` ⇒ **18 passed，0 skipped**
+  实跑 `pytest tests/test_shapes_response_contract.py -q -rs` ⇒ **18 passed，0 skipped**（那 18 条含第 1 轮我加进去的两条；退回后该文件是 17 条，两次都是 0 skipped）
   （原始读数归档 `s57_0_preflight_and_void_note.txt`；该文件含 `test_me_degraded_branch_shape(db_session)`，
   正是本卡要动的降级分支的邻居。第一次跑是 17 passed，那在我往这个文件加第 18 条用例之前，两次都 0 skipped）。
   只听 `netstat` 不算连上。同份读数里还记着门链第 1 跑为什么作废。
@@ -21,7 +21,7 @@
 
 | 位置 | 现读 |
 |---|---|
-| `apps/api/app/services/auth/service.py:259`（改前；本卡后为 :293） | `"wallet": wallet.get("wallet", wallet)` —— 上游给什么就往外发什么 |
+| `apps/api/app/services/auth/service.py:259`（改前；第 2 轮交付后在 :297） | `"wallet": wallet.get("wallet", wallet)` —— 上游给什么就往外发什么 |
 | `apps/api/app/contracts/shapes.py:47-56` | `class MeWallet(BaseModel)` + `model_config = ConfigDict(extra="allow")`，五个字段里 `balanceYuan`/`currency` 必填，其余带默认值 |
 | `packages/contracts/schemas/shapes.schema.json:388` | `"additionalProperties": true`（全 30 个 def 里唯一一个 `true`） |
 | `apps/api/tests/test_shapes_response_contract.py:75-82` | 旧判据叫「`MeWallet` 是唯一开放对象」，`assert open_defs == ["MeWallet"]` |
@@ -75,7 +75,7 @@
 字面量；`_project_wallet` 每次返回新字典（`test_projection_copies_the_degraded_shape_instead_of_sharing_it`
 钉的就是"调用方改了返回值不许污染下一个人"）。
 
-## 4. S57.3 契约封闭与产物（判据③）
+## 4. S57.3 契约封闭与产物（判据③）——**第 1 轮读数，整节已按出路③ 退回 HEAD 字节，见 §10**
 
 - `shapes.py` 的 `MeWallet` 改继承 `_Closed`，删掉 `extra="allow"` 与那行 `model_config`；文档字符串
   写明投影在哪、为什么可选键不补。
@@ -91,7 +91,10 @@
   ——`契约里又出现开放对象（上游加字段就直通对外）：['MeWallet']` 与 `MeWallet 仍放行契约外键 ⇒ 开放没拆干净`
   （`2 failed, 16 deselected`）；还原后再生成 + `--check` rc=0，四件 sha 全等，两条用例复跑绿。
 
-## 5. 越界申报（卡面字段 6 之外的两处）
+## 5. 越界申报（第 1 轮的两处；第 2 轮随 S57.3 退回而都不成立）
+
+> 本节保留为第 1 轮的读数。**规划方 2026-10-27 选定 P-129 的出路③（本卡只发投影那一半）之后，
+> 下面两处涉及的文件都已原样退回 HEAD 字节**，第 2 轮的交付面见 §10。
 
 **第一处**：`apps/web/tests/s55-mock-runtime-shape.spec.ts:414-418` 从"期望放行"翻成"期望报错"。卡面对
 `apps/web` 写的是「的类型与样例（仅当 tsc 要求）」，而这里既不是类型也不是样例、tsc 也没红——**改它的是卡面
@@ -109,12 +112,12 @@ docstring 里的「写法纪律」等字样在 schema 里 grep 零命中，`git 
 不再有开放对象、以及改前它为什么确实是开放的），不动任何 def。
 
 同文件第 107 行的注释仍写「2026-10-26 现测：31 个对象节点全带 additionalProperties（30 false +
-1 true=MeWallet）」——那是带日期的历史读数，按纪律不回改；本卡之后的现读同样是 **31 个对象节点、
-31 false + 0 true**（口径：`type:"object"` 的节点数，shapes 28 + engine 3；HEAD 侧复算 shapes 是
-27 false + 1 true，与本卡的 28 false + 0 true 只差那一个翻转，def 数两侧都是 30 ⇒ 没有别的对象节点
-被动过）。记在这里而不是抄进那份旧审计的 docstring。
+1 true=MeWallet）」——那是带日期的历史读数，按纪律不回改。当时（第 1 轮把 `MeWallet` 关掉之后）
+同一口径的现读是 **31 个对象节点、31 false + 0 true**（`type:"object"`：shapes 28 + engine 3）。
+**第 2 轮按出路③ 退回之后，本卡交付字节上的现读回到 30 false + 1 true**（shapes 27 false + 1 true
+=MeWallet，engine 3 false），def 数仍是 30 ⇒ 除了那一个翻转，没有别的对象节点被动过。这句记在这里而不是抄进那份旧审计的 docstring。
 
-## 6. 本机门链（交付字节上的那一跑）
+## 6. 本机门链（**第 1 轮字节**的那一跑；第 2 轮读数在 §11）
 
 第 2 跑 `s57_local_gates_run2.txt`，15 步按 `ci.yml` 顺序，链首/链尾指纹相同
 （`fp_start == fp_end == 823083c46acf571c` ⇒ 全程一份字节，中途没人（包括我）动过工作树）：
@@ -132,6 +135,25 @@ skip 侧：`6 skipped` 与基线同数（新用例全不连库），`SKIP_BASELI
 
 那 5 条红**不是本卡新增用例红**，全部集中在「冻结稿 ↔ 产物」比对器这一族，见 §9。
 
+## 7. 独立复查（子智能体，只读）与逐条处置
+
+第 1 轮判 **PASS-with-nits**：卡面范围、三条分支同形、前端读键面、未过滤路径四项 PASS，
+`_project_wallet`、用例质量、读数准确性三项带 nit；没有 FAIL，卡面两条熔断条件（同判据 2 次 FAIL、
+前端读五键之外）都没触发。逐条我自己复核后的处置：
+
+| 复查说的 | 复核与处置 |
+|---|---|
+| `sorted(k for k in raw …)` 遇混合键型是 `TypeError`，与"不抛 500"的承诺矛盾 | 成立（上游 JSON 键一定是字符串，但它是纯函数、也会被直接喂字典）。改 `sorted(str(key) …)`，配常驻用例 `test_projection_survives_mixed_key_types` |
+| `{"balanceYuan": null}` 键在值空会放行 | 成立——先核了信封层：`apps/api/app/core/response.py:19` 的 `success(data=...)` 确实不做形状校验，那种值会一路走到契约之外。判缺改成 `raw.get(key) is None`，用例覆盖并要求报对 `missing` |
+| `shapes.py` 模块 docstring 现在是假话，而且"会生成进 schema 顶层描述" | **前半成立、后半我实测否证**（根 description 是固定文案、docstring 字样在 schema 里零命中）。按"源码里不许留假话"改那 4 行，并按卡面字段 6 登**第二处越界申报**（见 §5） |
+| 只在那一条事件里搜值，别处漏值会放过 | 成立，判据改成搜**整批** `events` |
+| `{"wallet": None}` 被归到"非字典"那条，实际走的是缺必填键 | 成立，两条出口分开判：非字典那条只喂非字典 |
+| census 第三判据违规时打印的是整个 objects 名单，不给违规名单 | 成立，改成 `not_false` |
+| 「记一次」没说是每次还是进程级 | 卡面两种读法都成立；本卡取"每次投影记一次"（不丢事件），并把口径写进断言消息与 §3 |
+| 残余：`wallet.get(...)` 在 `data` 是列表时 `AttributeError` ⇒ 500 | 成立且**非本卡引入**（改前同一表达式在 `:259`）。用 MockTransport 复现出 `client.wallet 返回类型: list` → `'list' object has no attribute 'get'`，登 **P-128** 交回规划方，本卡不动 `providers/**` |
+| 读数里两处数字没有支撑字节 | 成立：probe A 改成跑整文件，于是拿到 `1 failed, 7 passed`（原来只跑一条 id，"其余照旧绿"是我推的）；§0 的连通读数也补了原始输出 |
+
+## 8. @ci（推送后回填）
 ## 9. 阻塞：关闭 `MeWallet` 需要一条当前门词汇表里不存在的登记（已登 P-129 交回）
 
 五条红的测试 id 与逐字消息（全在 `s57_local_gates_run2.txt` 里）：
@@ -180,22 +202,31 @@ test_draft_and_generated_agree_on_every_probe[shapes:MeWallet]
 `s57_pending_code.diff`（含新用例文件 `test_me_wallet_projection.py` 的全文，用 `--no-index` 取，没动索引），
 裁定到手就原样接上再跑门链。本卡新增的 8 条用例、契约收紧本身、以及演示态那条翻过来的断言都在里面。
 
-## 7. 独立复查（子智能体，只读）与逐条处置
+## 10. 出路③ 之后的重新交付（第 2 轮）
 
-第 1 轮判 **PASS-with-nits**：卡面范围、三条分支同形、前端读键面、未过滤路径四项 PASS，
-`_project_wallet`、用例质量、读数准确性三项带 nit；没有 FAIL，卡面两条熔断条件（同判据 2 次 FAIL、
-前端读五键之外）都没触发。逐条我自己复核后的处置：
+规划方 2026-10-27 在 P-129 的三条出路里选定**第三条：本卡只发 `_project_wallet` 投影那一半，`MeWallet` 暂留开放**。按这条裁定做的事：
 
-| 复查说的 | 复核与处置 |
-|---|---|
-| `sorted(k for k in raw …)` 遇混合键型是 `TypeError`，与"不抛 500"的承诺矛盾 | 成立（上游 JSON 键一定是字符串，但它是纯函数、也会被直接喂字典）。改 `sorted(str(key) …)`，配常驻用例 `test_projection_survives_mixed_key_types` |
-| `{"balanceYuan": null}` 键在值空会放行 | 成立——先核了信封层：`apps/api/app/core/response.py:19` 的 `success(data=...)` 确实不做形状校验，那种值会一路走到契约之外。判缺改成 `raw.get(key) is None`，用例覆盖并要求报对 `missing` |
-| `shapes.py` 模块 docstring 现在是假话，而且"会生成进 schema 顶层描述" | **前半成立、后半我实测否证**（根 description 是固定文案、docstring 字样在 schema 里零命中）。按"源码里不许留假话"改那 4 行，并按卡面字段 6 登**第二处越界申报**（见 §5） |
-| 只在那一条事件里搜值，别处漏值会放过 | 成立，判据改成搜**整批** `events` |
-| `{"wallet": None}` 被归到"非字典"那条，实际走的是缺必填键 | 成立，两条出口分开判：非字典那条只喂非字典 |
-| census 第三判据违规时打印的是整个 objects 名单，不给违规名单 | 成立，改成 `not_false` |
-| 「记一次」没说是每次还是进程级 | 卡面两种读法都成立；本卡取"每次投影记一次"（不丢事件），并把口径写进断言消息与 §3 |
-| 残余：`wallet.get(...)` 在 `data` 是列表时 `AttributeError` ⇒ 500 | 成立且**非本卡引入**（改前同一表达式在 `:259`）。用 MockTransport 复现出 `client.wallet 返回类型: list` → `'list' object has no attribute 'get'`，登 **P-128** 交回规划方，本卡不动 `providers/**` |
-| 读数里两处数字没有支撑字节 | 成立：probe A 改成跑整文件，于是拿到 `1 failed, 7 passed`（原来只跑一条 id，"其余照旧绿"是我推的）；§0 的连通读数也补了原始输出 |
+- **退回 HEAD 字节的是三个文件**：`apps/api/app/contracts/shapes.py`（`MeWallet` 仍是 `BaseModel` + `extra="allow"`，模块 docstring 也回到原样）、`packages/contracts/schemas/shapes.schema.json`（`MeWallet` 仍是那唯一一个 `additionalProperties: true`）、`apps/web/tests/s55-mock-runtime-shape.spec.ts`（那条断言重新期望「开放对象多一个键放行」）。退回后用 `gen_contracts.py --check` 复验：15 个产物全部幂等一致，退出码 0 ⇒ 产物与源两侧一致，不是我手改的 JSON。
+- **交付面因此只剩四处**：`app/services/auth/service.py`（`_project_wallet` + 白名单常量 + 三条分支同源于 `_WALLET_UNAVAILABLE`）、`tests/test_auth.py`（伪主平台的 `wallet_extra` 旋钮，默认空 ⇒ 既有用例字节不变）、新 `tests/test_me_wallet_projection.py`（8 条：1 条集成先红 + 7 条纯函数）、`tests/test_shapes_response_contract.py` 里那条普查用例的 **docstring**（正文一字未动，`open_defs == ["MeWallet"]` 仍是判据）。
+- **§5 那两处越界申报随之不成立**（涉及的都回到了 HEAD 字节），本节上方保留原读数不删。
+- **留开放的实际代价要写清，不能说这条已闭合**：后端不会再把契约外键带出去（这条由 8 条用例钉住），但契约侧仍是开放对象 ⇒ 演示态样例多写一个键、或前端 TS 类型这一层，都不会红。P-121 的"契约无法判形"那一半没闭合，只是从"会泄露"降级成"不会泄露但判不了形"；补那一半的前置是冻结稿那两行声明的更新（另开一张卡，P-129 裁定行里记着）。
+- `s57_pending_code.diff` 是**第 1 轮**交付字节的快照（含被退回的 S57.3 那一半），不再是本卡的交付字节；第 2 轮的字节以本轮提交面为准。
+- 熔断面：出路③ 之后本卡判据没有再 FAIL 过——第 1 轮那次 FAIL 是形状声明的落笔权冲突，已由裁定解除，不计作第二次同判据失败。
+- **投影自身也留了一处没做的面，写清不藏**：可选键被上游显式发成 `null` 时（例如 `heldYuan: null`）本函数按「上游给了值」原样带出，只有必填两键做 `is None` 判缺。卡面 S57.2 的口径是「只取五键、没给的不补」，没规定给了 `null` 怎么办，本卡不自己扩大规则；契约侧仍开放 ⇒ 这道门现在也判不到它。补的那一步应和契约封闭同一张卡一起做（改成「值是 `null` 的可选键当缺席」，配一条用例），记在 P-129 裁定行的残留里。
 
-## 8. @ci（推送后回填）
+## 11. 第 2 轮门链读数（交付字节 = 第 4 跑 `s57_local_gates_run4.txt`）
+
+- **第 3 跑标成 superseded，不是回抄数字**：那一跑（`s57_local_gates_run3_superseded.txt`，链首尾字节指纹 f99f022a1f05daf2，15 步退出码全 0，pytest 2496 passed / 6 skipped / 4 deselected、TOTAL 88.92%、vitest 53 文件 425 passed、e2e 31 passed）跑完之后，第 2 轮复查又判出五处会被读成假话的文字（证据包标题、§4/§6 缺轮次标记、§5 的普查数句、`service.py` 的行号、新用例 docstring 里那句「契约当时」）⇒ 改动虽然是注释与文档行，字节确实变了，所以那一跑的读数不能当交付字节的读数用。这与第 1 轮那条「链在跑就不碰工作树」是同一条规矩的另一半：**改过字节就重跑，不改数字去迁就旧读数**。
+
+- **第 4 跑（本轮交付字节）**：链首尾字节指纹同为 1343902a7ee8ccad（`fp_stable=YES`）⇒ 全程一份字节，中途没人（包括我）动过工作树。15 步退出码全 0：
+
+- `pgpreflight` 0（先按夹具路径连上 PG@5547）、`ruff`（app tests ../../scripts）0、`mypy` 0
+- `alembic upgrade head` 0、`alembic heads` 单头 0、`gen_contracts.py --check` 0（退回后产物与源两侧一致）
+- `check_docs_consistency` 0
+- `pytest tests/ -q -rs --cov`：**2496 passed / 6 skipped / 4 deselected，0 failed**（上一卡收口时的 2488 + 本卡 8 条）
+- 覆盖率门按附录 A 原样在仓库根跑、不设编码变量：`达标 88.91% ≥ 79.0% TOTAL` 与 `✅ 全部模块与全局达标`
+- 前端 `typecheck` 0、`contracts typecheck`（CI 的调用形）0、`vitest` `53 passed (53)` 与 `425 passed (425)`、
+  `lint` 无告警、演示态 `next build` 编译通过、`playwright` mock e2e `31 passed (1.6m)`
+
+skip 面：`6 skipped` 与 `SKIP_BASELINE` 同数；`SKIP_BASELINE_WIN`（692）不动——本卡 8 条新用例全不连库。
+计数对账：第 1 轮那 5 条红随契约封闭退回而消失，总数正好是上一卡收口时的 2488 + 本卡 8 = 2496 ⇒ 没有用例被顺带改弱或删掉。覆盖率在 88.91 与 88.92 之间来回摆是台账 P-104 记过的 ±1 行抖（可以拿它过线，不当精确判据）。

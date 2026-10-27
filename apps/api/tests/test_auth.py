@@ -51,13 +51,20 @@ REDIRECT_URI = "https://wechat-rag.aidean.local/auth/aidean/callback"
 class FakeAideanIdP:
     """有状态伪主平台：code 一次性 / refresh 轮换链 / Basic 服务间认证。"""
 
-    def __init__(self, userinfo_extra: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        userinfo_extra: dict[str, str] | None = None,
+        wallet_extra: dict[str, object] | None = None,
+    ) -> None:
         self.codes: dict[str, bool] = {}
         self.refresh_chain: dict[str, bool] = {}
         self.valid_access: set[str] = set()
         self.last_revoke: str | None = None
         self._seq = 0
         self._userinfo_extra = userinfo_extra or {}
+        # STEP-57 S57.1：伪主平台多吐一个钱包键用的旋钮（默认空 ⇒ 既有用例字节不变）。
+        # 现实里主平台加字段不需要通知我们，所以这里模拟的就是"我们没见过的一键"。
+        self._wallet_extra = wallet_extra or {}
 
     def issue_code(self) -> str:
         self._seq += 1
@@ -155,6 +162,7 @@ class FakeAideanIdP:
                             "heldYuan": "0.00",
                             "availableYuan": "12.34",
                             "currency": "CNY",
+                            **self._wallet_extra,
                         },
                     },
                 },
@@ -180,8 +188,10 @@ def _settings() -> Settings:
     )
 
 
-def _svc_bundle() -> tuple[AuthService, FakeAideanIdP, InMemoryUserStore, InMemorySessionStore]:
-    idp = FakeAideanIdP()
+def _svc_bundle(
+    wallet_extra: dict[str, object] | None = None,
+) -> tuple[AuthService, FakeAideanIdP, InMemoryUserStore, InMemorySessionStore]:
+    idp = FakeAideanIdP(wallet_extra=wallet_extra)
     http = httpx.AsyncClient(transport=httpx.MockTransport(idp.handler))
     client = AideanProviderClient(ISSUER, CLIENT_ID, CLIENT_SECRET, client=http)
     user_store = InMemoryUserStore()
