@@ -55,3 +55,42 @@ head_sha=c8d92c4 total=3
   40472255396 Security       completed   success   attempt=1 created=2026-10-27T08:15:30Z
   40472255270 CI             completed   success   attempt=1 created=2026-10-27T08:15:30Z
   40472255137 CI-Windows     completed   success   attempt=1 created=2026-10-27T08:15:30Z
+
+== 补：另两个收口头的部分步骤计数（run 级 logs zip，现取）==
+-- 25953e3 / CI 40470748974 --
+0_backend.txt:963: 2026-10-27T08:06:44.0871720Z Required test coverage of 75% reached. Total coverage: 88.93%
+0_backend.txt:971: 2026-10-27T08:06:44.0879522Z 2496 passed, 6 skipped, 4 deselected, 2 warnings in 215.38s (0:03:35)
+0_backend.txt:972: 2026-10-27T08:06:46.6936116Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+3_frontend.txt:343: 2026-10-27T08:02:24.1376341Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+3_frontend.txt:825: 2026-10-27T08:04:52.5813135Z   31 passed (1.4m)
+hits=0
+-- c8d92c4 / CI 40472255270 --
+0_frontend.txt:354: 2026-10-27T08:16:15.4446552Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+0_frontend.txt:836: 2026-10-27T08:19:16.1831984Z   31 passed (1.5m)
+11_Unit tests (vitest).txt:96: 2026-10-27T08:16:15.4446519Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+16_E2E (mock UI).txt:97: 2026-10-27T08:19:16.1831980Z   31 passed (1.5m)
+2_backend.txt:961: 2026-10-27T08:19:15.3602803Z Required test coverage of 75% reached. Total coverage: 88.91%
+2_backend.txt:969: 2026-10-27T08:19:15.3605933Z 2496 passed, 6 skipped, 4 deselected, 2 warnings in 166.90s (0:02:46)
+2_backend.txt:970: 2026-10-27T08:19:18.0948984Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+15_Tests (pytest) + coverage + skip gate.txt:237: 2026-10-27T08:19:15.3602751Z Required test coverage of 75% reached. Total coverage: 88.91%
+15_Tests (pytest) + coverage + skip gate.txt:245: 2026-10-27T08:19:15.3605927Z 2496 passed, 6 skipped, 4 deselected, 2 warnings in 166.90s (0:02:46)
+15_Tests (pytest) + coverage + skip gate.txt:246: 2026-10-27T08:19:18.0948937Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+-- 25953e3 / CI-Windows 40470748943 --
+0_windows-dev.txt:655: 2026-10-27T08:23:15.5931953Z 1810 passed, 692 skipped, 4 deselected, 2 warnings in 1173.41s (0:19:33)
+0_windows-dev.txt:695: 2026-10-27T08:23:16.4407726Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+0_windows-dev.txt:725: 2026-10-27T08:23:16.5522232Z windows 门禁：failed=0 total_skipped=692 baseline=692
+13_Backend tests（连库用例在本平台会 skip，只记账不主张）.txt:59: 2026-10-27T08:23:15.5931923Z 1810 passed, 692 skipped, 4 deselected, 2 warnings in 1173.41s (0:19:33)
+14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt:40: 2026-10-27T08:23:16.4407694Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt:70: 2026-10-27T08:23:16.5522196Z windows 门禁：failed=0 total_skipped=692 baseline=692
+-- c8d92c4 / CI-Windows 40472255137 --
+0_windows-dev.txt:645: 2026-10-27T08:36:28.4972483Z 1810 passed, 692 skipped, 4 deselected, 2 warnings in 1166.08s (0:19:26)
+0_windows-dev.txt:685: 2026-10-27T08:36:29.4717462Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+0_windows-dev.txt:715: 2026-10-27T08:36:29.5612884Z windows 门禁：failed=0 total_skipped=692 baseline=692
+13_Backend tests（连库用例在本平台会 skip，只记账不主张）.txt:59: 2026-10-27T08:36:28.4972481Z 1810 passed, 692 skipped, 4 deselected, 2 warnings in 1166.08s (0:19:26)
+14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt:40: 2026-10-27T08:36:29.4717459Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt:70: 2026-10-27T08:36:29.5612845Z windows 门禁：failed=0 total_skipped=692 baseline=692
+
+== 补：证据尾批 97a9162 的三条结论（runs 列表，2026-10-27 17:28:17 CST）==
+CI             97a9162 status=completed    concl=success    id=40477749210 attempt=1 <== MINE
+Security       97a9162 status=completed    concl=success    id=40477749179 attempt=1 <== MINE
+CI-Windows     97a9162 status=completed    concl=success    id=40477749192 attempt=1 <== MINE
