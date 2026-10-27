@@ -229,3 +229,35 @@ S56.4 PASS、范围纪律 PASS-with-nits。它独立复算了我的正面读数�
 第一版判据写成 `expr.func != ast.Name(id="_errors")`——ast 节点比较是身份比较，永真 ⇒ 引擎种子恒空，
 正面用例当场红（红得对，但原因不是判据发现问题而是我的调用形错了）。这条与 §2 探针②的第三条红
 同源：那一红是反证自己的锚点随用例被删而消失，属于设计内的自锁生效，不是判据另有问题。
+
+## 8. @ci 三绿读数与判据③的裁定到手（收口批补记）
+
+- 交付头 `3b462d4` 三条 attempt 1 全 success：CI 40439001496 / CI-Windows 40439001492 / Security 40439001387。
+  逐字行归档在 `s56_ci_green_readings.txt`（run 级 logs zip 现取）。关键读数：ubuntu 侧
+  `2488 passed, 6 skipped, 4 deselected`、skip 门禁 `total_skipped=6 baseline=6 pg_unreachable=0`、
+  `Total coverage: 88.91%`、`✅ 全部模块与全局达标`、vitest `53 passed (53)` 与 `425 passed (425)`、
+  演示态 e2e `31 passed`；@win 侧 `1802 passed, 692 skipped, 4 deselected`、门禁
+  `failed=0 total_skipped=692 baseline=692`、vitest 同 53/425。本机 §6 最终跑的 2488/6/4 与 88.91%
+  和 @ci 逐字同数 ⇒ 两个 skip 基线都不动（新守卫 11 条用例全不连库）。
+- **判据③的裁定（D-V21-20）2026-10-27 到手**：按「等价满足」通过——不改冻结稿、不给别名补使用处；
+  有效口径就是交付批已经落地的三条（`genOnly` 恒空即红 + `draftOnly` 逐个指得出三条既有去处 +
+  探针列表与装饰器吃同一串），规划方明确「不需要再加强度」⇒ **收口批没有再动任何测试文件**。
+  盖章权归规划方：`docs/任务规划V0.12.0/contracts/**` 只有规划方能落笔，先红探针可临时改但必须在
+  同一条命令内还原并核实 sha——本卡交付批的 ①b 探针正是这个形状（还原 sha 见 `s56_1b_*`），
+  这条口径同时写进 04 附录 A 第九节第 9 条。
+- 收口批范围（零代码改动）：卡面两处——状态行 ⬜→✅ 与第 5 格判据③末尾代录一句；卡表第 10 行；
+  04 附录 A 第九节第 9 条；P 表两行（P-126 闭合、P-127 裁定代录）；07 第 11 行；证据侧三件
+  （本段、`s56_ci_green_readings.txt`、`s56_closeout_verdict.md`）加交付批漏跟踪的
+  `s56_push_credential_note.txt`。`apps/api/**`、`packages/contracts/**`、`scripts/**`、`apps/web/**`
+  与四个测试文件在收口批里一字未动。
+- **判词原本写在卡面末尾，被第 3 轮复查判为越出规划方本轮对卡面的授权**（STEP-19/53/54/55 的卡面
+  都只有状态行与勾选，判词的先例落点是证据与 07），所以整段移到 `s56_closeout_verdict.md`，
+  卡面回到 16 行、`git diff --numstat` 对该文件现读 **2/2**（只有状态行与第 5 格两行）。
+  复查另有三条 nit 已就地改掉：本段旧版的 readings 自计件数（写完即变，改为本段自身不计）、
+  07 第 11 行证据列把收口批新增写成 1 件（实为 3 件）、P-126 闭合行「四组探针」漏写 `s56_3_*`。
+- 还原列（收口批提交前现核，本段自身不计件数——它随下一次编辑变）：`git diff --numstat` 命中
+  五处文档（readings、P 表 +2、04 +2/−1、07 +1、卡面 2/2）；`git status --porcelain -- apps packages scripts`
+  **零命中**，未跟踪只有本目录三件。⇒ 收口批确为零代码改动。
+- 仍交回规划方两件（D-V21-20 未覆盖）：① `docs/03_solution/decisions/decision-log.md` 里 D-V21-20
+  那一行**尚未落档**（该文件不在本卡允许面内，P 表只是代录内容）；② 「证据包目录与 P 表这两处写在
+  卡面字段 6 之外的动作」的口径确认。

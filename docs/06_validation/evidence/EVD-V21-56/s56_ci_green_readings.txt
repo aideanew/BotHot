@@ -1,0 +1,39 @@
+STEP-56 交付批 3b462d4 的 @ci 三绿逐字读数（2026-10-27 10:55 CST 现取，run 级 logs zip）
+
+== CI (ubuntu) run 40439001496 completed success attempt=1 ==
+0_backend.txt:959: 2026-10-27T02:35:56.1044169Z Required test coverage of 75% reached. Total coverage: 88.91%
+0_backend.txt:967: 2026-10-27T02:35:56.1047875Z 2488 passed, 6 skipped, 4 deselected, 2 warnings in 159.20s (0:02:39)
+0_backend.txt:968: 2026-10-27T02:35:58.1870970Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+0_backend.txt:996: 2026-10-27T02:35:58.2307940Z ✅ 全部模块与全局达标
+15_Tests (pytest) + coverage + skip gate.txt:237: 2026-10-27T02:35:56.1044127Z Required test coverage of 75% reached. Total coverage: 88.91%
+15_Tests (pytest) + coverage + skip gate.txt:245: 2026-10-27T02:35:56.1047871Z 2488 passed, 6 skipped, 4 deselected, 2 warnings in 159.20s (0:02:39)
+15_Tests (pytest) + coverage + skip gate.txt:246: 2026-10-27T02:35:58.1870920Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+16_Module coverage gate (check_module_coverage).txt:26: 2026-10-27T02:35:58.2307938Z ✅ 全部模块与全局达标
+
+== CI-Windows run 40439001492 completed success attempt=1 ==
+0_windows-dev.txt:657: 2026-10-27T02:53:28.9302541Z 1802 passed, 692 skipped, 4 deselected, 2 warnings in 1163.61s (0:19:23)
+0_windows-dev.txt:697: 2026-10-27T02:53:29.7276220Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+0_windows-dev.txt:727: 2026-10-27T02:53:29.8348940Z windows 门禁：failed=0 total_skipped=692 baseline=692
+13_Backend tests（连库用例在本平台会 skip，只记账不主张）.txt:59: 2026-10-27T02:53:28.9302538Z 1802 passed, 692 skipped, 4 deselected, 2 warnings in 1163.61s (0:19:23)
+14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt:40: 2026-10-27T02:53:29.7276214Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt:70: 2026-10-27T02:53:29.8348904Z windows 门禁：failed=0 total_skipped=692 baseline=692
+
+== Security run 40439001387 completed success attempt=1 ==
+head_sha=3b462d4 total=3
+  40439001496 CI             completed   success   attempt=1 created=2026-10-27T02:32:17Z
+  40439001387 Security       completed   success   attempt=1 created=2026-10-27T02:32:17Z
+  40439001492 CI-Windows     completed   success   attempt=1 created=2026-10-27T02:32:17Z
+
+== 前端与演示态 e2e（同两个 run 的 logs，逐字）==
+-- CI 40439001496 --
+2_frontend.txt:356: 2026-10-27T02:33:03.1546296Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+2_frontend.txt:838: 2026-10-27T02:35:54.0618226Z   31 passed (1.5m)
+11_Unit tests (vitest).txt:96: 2026-10-27T02:33:03.1546281Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+16_E2E (mock UI).txt:97: 2026-10-27T02:35:54.0618223Z   31 passed (1.5m)
+-- CI-Windows 40439001492 --
+0_windows-dev.txt:842: 2026-10-27T02:54:00.8546448Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+15_Frontend typecheck + unit（vitest）.txt:109: 2026-10-27T02:54:00.8546435Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+2_frontend.txt:357: 2026-10-27T02:33:03.1548489Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+11_Unit tests (vitest).txt:97: 2026-10-27T02:33:03.1548439Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+0_windows-dev.txt:843: 2026-10-27T02:54:00.8548938Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+15_Frontend typecheck + unit（vitest）.txt:110: 2026-10-27T02:54:00.8548924Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
