@@ -1,0 +1,37 @@
+STEP-57 开工前置读数（2026-10-27 11:38 CST，本机 win32）
+
+== 上一卡 STEP-56 的收口批三绿（head 52673f2bf8ab9d679ec3df7eb2f6bbea1ab3603f，均 attempt 1）==
+head_sha=52673f2 total=3
+  40443130907 Security       completed   success   attempt=1 created=2026-10-27T03:15:14Z
+  40443130984 CI             completed   success   attempt=1 created=2026-10-27T03:15:14Z
+  40443130849 CI-Windows     completed   success   attempt=1 created=2026-10-27T03:15:14Z
+
+== CI run 40443130984 关键行（逐字）==
+2_frontend.txt:345: 2026-10-27T03:15:44.1079383Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+2_frontend.txt:346: 2026-10-27T03:15:44.1081189Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+2_frontend.txt:827: 2026-10-27T03:18:00.4950705Z   31 passed (1.4m)
+11_Unit tests (vitest).txt:87: 2026-10-27T03:15:44.1079348Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+11_Unit tests (vitest).txt:88: 2026-10-27T03:15:44.1081179Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+16_E2E (mock UI).txt:97: 2026-10-27T03:18:00.4950703Z   31 passed (1.4m)
+3_backend.txt:961: 2026-10-27T03:20:52.5122485Z Required test coverage of 75% reached. Total coverage: 88.90%
+3_backend.txt:969: 2026-10-27T03:20:52.5132024Z 2488 passed, 6 skipped, 4 deselected, 2 warnings in 257.98s (0:04:17)
+3_backend.txt:970: 2026-10-27T03:20:54.8912364Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+3_backend.txt:998: 2026-10-27T03:20:54.9622887Z ✅ 全部模块与全局达标
+
+== CI-Windows run 40443130849 关键行（逐字）==
+0_windows-dev.txt:652: 2026-10-27T03:36:24.4870916Z 1802 passed, 692 skipped, 4 deselected, 2 warnings in 1164.16s (0:19:24)
+0_windows-dev.txt:692: 2026-10-27T03:36:25.1767365Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+0_windows-dev.txt:722: 2026-10-27T03:36:25.2916320Z windows 门禁：failed=0 total_skipped=692 baseline=692
+0_windows-dev.txt:834: 2026-10-27T03:36:55.3879788Z [2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+0_windows-dev.txt:835: 2026-10-27T03:36:55.3882416Z [2m      Tests [22m [1m[32m425 passed[39m[22m[90m (425)[39m
+13_Backend tests（连库用例在本平台会 skip，只记账不主张）.txt:59: 2026-10-27T03:36:24.4870914Z 1802 passed, 692 skipped, 4 deselected, 2 warnings in 1164.16s (0:19:24)
+14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt:40: 2026-10-27T03:36:25.1767361Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt:70: 2026-10-27T03:36:25.2916276Z windows 门禁：failed=0 total_skipped=692 baseline=692
+
+== 本机 PG@5547 连通前置 ==
+命令：cd apps/api && AIDEANBOT_TEST_PG_DSN=<隔离库 DSN> PYTHONUTF8=1 python -m pytest tests/test_shapes_response_contract.py -q -rs
+读数：17 passed, 1 warning in 52.26s —— 0 skipped（该文件含 test_me_degraded_branch_shape(db_session)，即 STEP-57 要动的钱包降级分支的邻居）
+netstat：TCP 127.0.0.1:5547 与 [::1]:5547 双栈 LISTENING
+
+== 双端一致 ==
+git fetch 后 left-right = 0 0；head = 52673f2bf8ab9d679ec3df7eb2f6bbea1ab3603f

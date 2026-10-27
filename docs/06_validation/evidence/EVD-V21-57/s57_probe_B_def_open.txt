@@ -1,0 +1,67 @@
+验收③「extra=forbid 反证：契约测试对多余键红」——红跑在最终字节上
+
+变异：把 `shapes.py` 整份换成 HEAD 版（改前：MeWallet 继承 BaseModel + extra=allow），再跑 `gen_contracts.py`（rc=0）让 schema 回到开放形，然后只跑那两条新用例。
+命令：pytest tests/test_shapes_response_contract.py -q -k "no_shape_def_is_an_open_object or me_wallet_now_rejects"
+期望 rc=1，实得 rc=1
+
+---- 变异态输出 ----
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_____________________ test_no_shape_def_is_an_open_object _____________________
+
+    def test_no_shape_def_is_an_open_object() -> None:
+        """STEP-57（P-121 闭合）：shapes 域里不该再有开放对象——`MeWallet` 是最后一个。
+    
+        旧版这条叫「`MeWallet` 是唯一开放对象」，那实际上是给透传背书：白名单还没做的时候，
+        数一遍反而把漏洞写成了规格。现在两半一起收紧——一个 `additionalProperties: true` 都不许有，
+        且每个 object 都必须**显式**写 false（JSON Schema 里缺省不等于封闭，那会让判据静默）。
+        """
+        open_defs = sorted(n for n, d in SHAPES["$defs"].items() if d.get("additionalProperties") is True)
+>       assert open_defs == [], f"契约里又出现开放对象（上游加字段就直通对外）：{open_defs}"
+E       AssertionError: 契约里又出现开放对象（上游加字段就直通对外）：['MeWallet']
+E       assert ['MeWallet'] == []
+E         
+E         Left contains one more item: 'MeWallet'
+E         Use -v to get more diff
+
+tests\test_shapes_response_contract.py:85: AssertionError
+__________________ test_me_wallet_now_rejects_an_unknown_key __________________
+
+    def test_me_wallet_now_rejects_an_unknown_key() -> None:
+        """验收③：封闭之后契约必须判多余键红——改前这一条是"放行"，也正是 P-121 无处可红的原因。"""
+        ok = {"balanceYuan": "1.00", "currency": "CNY"}
+        assert _errors("MeWallet", ok) == [], "五键里的必填两键齐了就该合法（可选键缺席是合法的）"
+>       assert _errors("MeWallet", {**ok, "internalNote": "x"}), "MeWallet 仍放行契约外键 ⇒ 开放没拆干净"
+E       AssertionError: MeWallet 仍放行契约外键 ⇒ 开放没拆干净
+E       assert []
+E        +  where [] = _errors('MeWallet', {'balanceYuan': '1.00', 'currency': 'CNY', 'internalNote': 'x'})
+
+tests\test_shapes_response_contract.py:99: AssertionError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_shapes_response_contract.py::test_no_shape_def_is_an_open_object
+FAILED tests/test_shapes_response_contract.py::test_me_wallet_now_rejects_an_unknown_key
+2 failed, 16 deselected, 1 warning in 7.15s
+
+
+---- 还原（按字节写回，再跑一次生成 + --check）----
+变异前四件 sha：{'service.py': 'c776b20eac3d', 'shapes.py': 'c8f60acafc25', 'shapes.schema.json': '70f575b6597e', 'dto.ts': '40dbe153fa84'}
+还原后四件 sha：{'service.py': 'c776b20eac3d', 'shapes.py': 'c8f60acafc25', 'shapes.schema.json': '70f575b6597e', 'dto.ts': '40dbe153fa84'}
+sha_all_equal=True
+再生成 rc=0、--check rc=0、两条用例复跑 rc=0（都应为 0）
+
+---- 还原态输出 ----
+..                                                                       [100%]
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2 passed, 16 deselected, 1 warning in 7.13s
+

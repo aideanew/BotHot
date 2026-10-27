@@ -1,0 +1,369 @@
+diff --git a/apps/api/app/contracts/shapes.py b/apps/api/app/contracts/shapes.py
+index bc34dfc..c367ad2 100644
+--- a/apps/api/app/contracts/shapes.py
++++ b/apps/api/app/contracts/shapes.py
+@@ -9,9 +9,9 @@ STEP-46 只切了引擎域两条；本模块把前端 mock 表（`apps/web/lib/a
+ - 依赖方向：不 import `app.providers` / `app.services` / `app.api`。
+ - 键名保持已发布面原样：camelCase 的照抄 camelCase，通知域历史上是 snake_case 也照抄。
+ 
+-本模块里唯一 `extra="allow"` 的是 `MeWallet`：正常分支它是**主平台钱包对象原样透传**
+-（`wallet.get("wallet", wallet)`），本仓不控制它的键集合。这一处如实写成开放对象，并登记 P-121
+-（建议后端白名单投影后再收紧），而不是假装它是封闭的。
++本模块里不再有开放对象：STEP-57（P-121 闭合，D-V21-17）把 `MeWallet` 也改成封闭，配套的是后端
++`app/services/auth/service.py` 的 `_project_wallet` 白名单投影——上游加字段既进不了响应也进不了契约。
++STEP-57 之前这里是全模块唯一的 `extra="allow"`，因为它当时真是主平台钱包对象的原样透传。
+ """
+ from __future__ import annotations
+ 
+@@ -44,14 +44,16 @@ class MeUser(_Closed):
+     is_admin: bool
+ 
+ 
+-class MeWallet(BaseModel):
+-    """`GET /auth/me` → `data.wallet`。降级/fixture 分支恒为 {balanceYuan:0, currency, available:false}。"""
+-
+-    model_config = ConfigDict(extra="allow")
++class MeWallet(_Closed):
++    """`GET /auth/me` → `data.wallet`。STEP-57（P-121，D-V21-17 取代 D-V21-09）：后端只吐下面这
++    五个键（投影在 `app/services/auth/service.py` 的 `_project_wallet`），所以本 def 与其余 29 个
++    一样封闭——上游加字段既进不了响应也进不了契约。降级/fixture 分支恒为
++    {balanceYuan:0, currency, available:false}。
++    """
+ 
+     balanceYuan: str | float  # noqa: N815
+     currency: str
+-    heldYuan: str | float = 0  # noqa: N815 —— 主平台可不给；默认值仅为让键可选，不代表后端会补 0
++    heldYuan: str | float = 0  # noqa: N815 —— 默认值只让键可选；投影不会替上游补 0（缺键=缺席，不是 0）
+     availableYuan: str | float = 0  # noqa: N815
+     available: bool = True
+ 
+diff --git a/apps/api/app/services/auth/service.py b/apps/api/app/services/auth/service.py
+index a4f5879..2ccfeef 100644
+--- a/apps/api/app/services/auth/service.py
++++ b/apps/api/app/services/auth/service.py
+@@ -45,6 +45,42 @@ from app.services.roles import sub_has_min_rank
+ 
+ logger = structlog.get_logger(__name__)
+ 
++#: 我们已经认识的钱包键（STEP-57 S57.2，P-121/D-V21-17）。契约 `app/contracts/shapes.py` 的
++#: `MeWallet` 是同一份形状的另一面：那边封闭，这边过滤，两边都改才算补上这个洞。
++_WALLET_KEYS: tuple[str, ...] = ("balanceYuan", "currency", "heldYuan", "availableYuan", "available")
++_WALLET_REQUIRED: tuple[str, ...] = ("balanceYuan", "currency")
++#: 不可查时的降级形，与本文件两条既有降级分支同形（`/me` 的 fixture 分支与主平台不可达分支）。
++_WALLET_UNAVAILABLE: dict[str, Any] = {"balanceYuan": 0, "currency": "CNY", "available": False}
++
++
++def _project_wallet(raw: Any) -> dict[str, Any]:
++    """把上游钱包对象裁成白名单五键——主平台加字段不需要通知我们（P-121）。
++
++    三条口径都是刻意的，实现前想清楚的理由记在这里：
++
++    - **上游没给的可选键保持缺席，不补 0**。补 0 等于把「平台没告诉我」写成「余额是 0」，
++      而前端对这两件事给的是两种文案（0 元 vs「余额暂不可查」）。契约里 `heldYuan` 等键
++      的默认值只用来让键可选，不代表后端可以替上游造值。
++    - **必填键缺失（或上游给了 `null`）就回降级形，不抛 500**。到这里会话已经建立，让一个登录
++      成功的人整页 500 只会把「会话有效」与「取不到资料」的降级设计推翻。只判"键在不在"是不够的：
++      `{"balanceYuan": null}` 键在但值不合法，而信封层不做校验，它会一路走到契约之外。
++    - **多出的键只记键名、以 debug 记一次**，值一律不落日志：那些字段可能是主平台的内部
++      风控数据，把它们抄进我们的日志等于换个地方泄露。
++    """
++    if not isinstance(raw, dict):
++        logger.debug("钱包响应形状不认识，按不可查降级", got=type(raw).__name__)
++        return dict(_WALLET_UNAVAILABLE)
++    # `str(k)`：上游 JSON 的键一定是字符串，但这条函数是纯函数、也会被直接喂字典，
++    # 混合键型一旦排不了序就是 TypeError——那正好是文档承诺"不抛 500"的反面。
++    extra = sorted(str(key) for key in raw if key not in _WALLET_KEYS)
++    if extra:
++        logger.debug("钱包响应含契约外键，已按白名单丢弃", keys=extra)
++    missing = [key for key in _WALLET_REQUIRED if raw.get(key) is None]
++    if missing:
++        logger.debug("钱包响应缺必填键，按不可查降级", missing=missing)
++        return dict(_WALLET_UNAVAILABLE)
++    return {key: raw[key] for key in _WALLET_KEYS if key in raw}
++
+ 
+ class AuthService:
+     """SSO 编排（无 HTTP 细节；路由层只做参数装配与 cookie 处理）。"""
+@@ -213,7 +249,7 @@ class AuthService:
+                     "role": local["role"],
+                     "is_admin": await self._is_admin(record.sub),
+                 },
+-                "wallet": {"balanceYuan": 0, "currency": "CNY", "available": False},
++                "wallet": dict(_WALLET_UNAVAILABLE),
+                 "providerUnreachable": True,
+                 "qaFixture": True,
+             }
+@@ -241,7 +277,7 @@ class AuthService:
+                     # is_admin 取自本地 users.role，主平台不可达不影响判定
+                     "is_admin": await self._is_admin(record.sub),
+                 },
+-                "wallet": {"balanceYuan": 0, "currency": "CNY", "available": False},
++                "wallet": dict(_WALLET_UNAVAILABLE),
+                 "providerUnreachable": True,
+             }
+         return {
+@@ -256,7 +292,9 @@ class AuthService:
+                 # 用它门禁 UI 会与后端授权双向分歧。
+                 "is_admin": await self._is_admin(record.sub),
+             },
+-            "wallet": wallet.get("wallet", wallet),  # 兼容 data 直接为 wallet 形态
++            # 兼容 data 直接为 wallet 形态；白名单投影是这一步做的（P-121/D-V21-17）——
++            # 上游加字段不需要通知我们，不过滤就等于替它对外宣告。
++            "wallet": _project_wallet(wallet.get("wallet", wallet)),
+         }
+ 
+     async def _is_admin(self, sub: str) -> bool:
+diff --git a/apps/api/tests/test_auth.py b/apps/api/tests/test_auth.py
+index a7237d0..408324d 100644
+--- a/apps/api/tests/test_auth.py
++++ b/apps/api/tests/test_auth.py
+@@ -51,13 +51,20 @@ REDIRECT_URI = "https://wechat-rag.aidean.local/auth/aidean/callback"
+ class FakeAideanIdP:
+     """有状态伪主平台：code 一次性 / refresh 轮换链 / Basic 服务间认证。"""
+ 
+-    def __init__(self, userinfo_extra: dict[str, str] | None = None) -> None:
++    def __init__(
++        self,
++        userinfo_extra: dict[str, str] | None = None,
++        wallet_extra: dict[str, object] | None = None,
++    ) -> None:
+         self.codes: dict[str, bool] = {}
+         self.refresh_chain: dict[str, bool] = {}
+         self.valid_access: set[str] = set()
+         self.last_revoke: str | None = None
+         self._seq = 0
+         self._userinfo_extra = userinfo_extra or {}
++        # STEP-57 S57.1：伪主平台多吐一个钱包键用的旋钮（默认空 ⇒ 既有用例字节不变）。
++        # 现实里主平台加字段不需要通知我们，所以这里模拟的就是"我们没见过的一键"。
++        self._wallet_extra = wallet_extra or {}
+ 
+     def issue_code(self) -> str:
+         self._seq += 1
+@@ -155,6 +162,7 @@ class FakeAideanIdP:
+                             "heldYuan": "0.00",
+                             "availableYuan": "12.34",
+                             "currency": "CNY",
++                            **self._wallet_extra,
+                         },
+                     },
+                 },
+@@ -180,8 +188,10 @@ def _settings() -> Settings:
+     )
+ 
+ 
+-def _svc_bundle() -> tuple[AuthService, FakeAideanIdP, InMemoryUserStore, InMemorySessionStore]:
+-    idp = FakeAideanIdP()
++def _svc_bundle(
++    wallet_extra: dict[str, object] | None = None,
++) -> tuple[AuthService, FakeAideanIdP, InMemoryUserStore, InMemorySessionStore]:
++    idp = FakeAideanIdP(wallet_extra=wallet_extra)
+     http = httpx.AsyncClient(transport=httpx.MockTransport(idp.handler))
+     client = AideanProviderClient(ISSUER, CLIENT_ID, CLIENT_SECRET, client=http)
+     user_store = InMemoryUserStore()
+diff --git a/apps/api/tests/test_shapes_response_contract.py b/apps/api/tests/test_shapes_response_contract.py
+index fd2ed4a..a060cd3 100644
+--- a/apps/api/tests/test_shapes_response_contract.py
++++ b/apps/api/tests/test_shapes_response_contract.py
+@@ -74,12 +74,29 @@ def test_stats_chunks_null_is_legal_but_negative_is_not() -> None:
+     assert _errors("SpaceStats", {"docs": 0, "chunks": -1})
+ 
+ 
+-def test_me_wallet_is_the_only_open_object() -> None:
+-    """P-121：钱包是主平台原样透传，开放；其余对象全封闭。数一遍，防有人顺手把别的也放开。"""
++def test_no_shape_def_is_an_open_object() -> None:
++    """STEP-57（P-121 闭合）：shapes 域里不该再有开放对象——`MeWallet` 是最后一个。
++
++    旧版这条叫「`MeWallet` 是唯一开放对象」，那实际上是给透传背书：白名单还没做的时候，
++    数一遍反而把漏洞写成了规格。现在两半一起收紧——一个 `additionalProperties: true` 都不许有，
++    且每个 object 都必须**显式**写 false（JSON Schema 里缺省不等于封闭，那会让判据静默）。
++    """
+     open_defs = sorted(n for n, d in SHAPES["$defs"].items() if d.get("additionalProperties") is True)
+-    assert open_defs == ["MeWallet"]
+-    closed = [n for n, d in SHAPES["$defs"].items() if d.get("type") == "object" and n != "MeWallet"]
+-    assert all(SHAPES["$defs"][n].get("additionalProperties") is False for n in closed)
++    assert open_defs == [], f"契约里又出现开放对象（上游加字段就直通对外）：{open_defs}"
++    silent = sorted(
++        n for n, d in SHAPES["$defs"].items() if d.get("type") == "object" and "additionalProperties" not in d
++    )
++    assert silent == [], f"object 没写 additionalProperties（缺省不是封闭，多键判据会哑）：{silent}"
++    objects = [n for n, d in SHAPES["$defs"].items() if d.get("type") == "object"]
++    not_false = [n for n in objects if SHAPES["$defs"][n]["additionalProperties"] is not False]
++    assert not_false == [], f"object 的 additionalProperties 不是显式 false（任意别的值都放行多余键）：{not_false}"
++
++
++def test_me_wallet_now_rejects_an_unknown_key() -> None:
++    """验收③：封闭之后契约必须判多余键红——改前这一条是"放行"，也正是 P-121 无处可红的原因。"""
++    ok = {"balanceYuan": "1.00", "currency": "CNY"}
++    assert _errors("MeWallet", ok) == [], "五键里的必填两键齐了就该合法（可选键缺席是合法的）"
++    assert _errors("MeWallet", {**ok, "internalNote": "x"}), "MeWallet 仍放行契约外键 ⇒ 开放没拆干净"
+ 
+ 
+ def test_ts_dto_exports_every_def_without_unknown() -> None:
+diff --git a/apps/web/tests/s55-mock-runtime-shape.spec.ts b/apps/web/tests/s55-mock-runtime-shape.spec.ts
+index 657020b..7a7c1f0 100644
+--- a/apps/web/tests/s55-mock-runtime-shape.spec.ts
++++ b/apps/web/tests/s55-mock-runtime-shape.spec.ts
+@@ -411,8 +411,11 @@ describe("S55 mock 响应的运行时形状（直读 schema，不靠 satisfies 
+       ),
+       "合法样本不该报"
+     ).toEqual([]);
+-    // MeWallet 是契约里唯一的开放对象（additionalProperties:true，P-121）⇒ 多键放过是**契约说的**，不是门松了
+-    expect(checkShape({ ...wallet, "未知扩展": "x" }, defs["MeWallet"], defs, "开放对象", [])).toEqual([]);
++    // STEP-57（P-121 闭合，D-V21-17）：`MeWallet` 也改成封闭 ⇒ 契约外键必须报。
++    // 旧版这条期望的是"放行"（当时契约写的是 additionalProperties:true），保留就是让这道门继续
++    // 对一个已知漏洞点头；这是本卡唯一一处越出「apps/web 只改类型与样例」的改动，理由见越界申报。
++    const walletExtra = checkShape({ ...wallet, "未知扩展": "x" }, defs["MeWallet"], defs, "钱包多键", []);
++    expect(walletExtra.length, `MeWallet 现在必须拒收契约外键：${JSON.stringify(walletExtra)}`).toBeGreaterThan(0);
+     expect(() => checkShape({}, { allOf: [] } as unknown as Node, defs, "不认识的写法", [])).toThrow(
+       /核对器不认识/
+     );
+diff --git a/packages/contracts/schemas/shapes.schema.json b/packages/contracts/schemas/shapes.schema.json
+index 0be0ca4..dfb7cbc 100644
+--- a/packages/contracts/schemas/shapes.schema.json
++++ b/packages/contracts/schemas/shapes.schema.json
+@@ -385,8 +385,8 @@
+       "type": "object"
+     },
+     "MeWallet": {
+-      "additionalProperties": true,
+-      "description": "`GET /auth/me` → `data.wallet`。降级/fixture 分支恒为 {balanceYuan:0, currency, available:false}。",
++      "additionalProperties": false,
++      "description": "`GET /auth/me` → `data.wallet`。STEP-57（P-121，D-V21-17 取代 D-V21-09）：后端只吐下面这\n五个键（投影在 `app/services/auth/service.py` 的 `_project_wallet`），所以本 def 与其余 29 个\n一样封闭——上游加字段既进不了响应也进不了契约。降级/fixture 分支恒为\n{balanceYuan:0, currency, available:false}。",
+       "properties": {
+         "available": {
+           "default": true,
+
+--- 新文件（未跟踪，用 --no-index 取，不动索引）---
+diff --git a/apps/api/tests/test_me_wallet_projection.py b/apps/api/tests/test_me_wallet_projection.py
+new file mode 100644
+index 0000000..4fac2b7
+--- /dev/null
++++ b/apps/api/tests/test_me_wallet_projection.py
+@@ -0,0 +1,127 @@
++"""STEP-57：`/auth/me` 的钱包只吐白名单五键（P-121，裁决 D-V21-17 取代 D-V21-09）。
++
++先红那条判的是「上游多给一个键，我们就原样转出去」。风险面在于这件事在改前**任何一道门都不会红**：
++契约当时把 `MeWallet` 写成开放对象（`shapes.py` 里那行 `extra="allow"`），而主平台加字段不需要通知我们。
++"""
++
++from __future__ import annotations
++
++import structlog.testing
++from test_auth import _client_with, _login_state, _svc_bundle
++
++from app.services.auth.service import _project_wallet
++
++#: 卡面 S57.2 的白名单，就这五个。唯一源在 `app/services/auth/service.py` 的 `_WALLET_KEYS`，
++#: 本文件只用来判「响应里不许出现白名单之外的键」，不重复实现投影逻辑（抄一份就是第二个真源）。
++WALLET_KEYS = frozenset({"balanceYuan", "currency", "heldYuan", "availableYuan", "available"})
++#: 降级形（与 `/me` 的 fixture 分支、主平台不可达分支同形，同源于 `_WALLET_UNAVAILABLE`）。
++DEGRADED = {"balanceYuan": 0, "currency": "CNY", "available": False}
++
++
++def _me_wallet(wallet_extra: dict[str, object]) -> dict[str, object]:
++    """走完整登录链拿 `/auth/me` 的 `data.wallet`（内存桩，不连库）。"""
++    svc, idp, _, _ = _svc_bundle(wallet_extra=wallet_extra)
++    client = _client_with(svc)
++    state = _login_state(client)
++    callback = client.get(f"/api/v1/auth/callback?code={idp.issue_code()}&state={state}")
++    assert callback.status_code == 200, callback.text
++    resp = client.get("/api/v1/auth/me")
++    assert resp.status_code == 200, resp.text
++    return resp.json()["data"]["wallet"]
++
++
++# ── S57.1 先红：契约外键不许从上游走到我们的响应 ──────────────────────────────
++
++
++def test_upstream_wallet_cannot_add_a_key_to_our_response() -> None:
++    """上游多吐一个键 ⇒ 我们的响应里不许出现它（改前红，红的正是透传本身）。
++
++    取一个「主平台风控才会有的内部字段名」而不是一个看起来像余额的键名：这条用例要判的是
++    「我们没声明过的东西不往外走」，键名越不像业务字段，越不会被读成"这个本来就该给"。
++    """
++    wallet = _me_wallet({"internalNote": "主平台内部风控备注，不该出现在我们的响应里"})
++    assert "internalNote" not in wallet, f"钱包透传未过滤，响应带出契约外键：{sorted(wallet)}"
++    assert set(wallet) <= WALLET_KEYS, f"响应里的键超出白名单五键：{sorted(set(wallet) - WALLET_KEYS)}"
++    # 过滤不等于丢业务键：既有的四个键必须照旧在（先红那次响应是五键齐全，改后不许少给）
++    for key in ("balanceYuan", "heldYuan", "availableYuan", "currency"):
++        assert key in wallet, f"投影把上游真给的 {key} 一起丢了：{sorted(wallet)}"
++
++
++# ── S57.2 纯函数四例（卡面验收②）+ 两条降级 ──────────────────────────────────
++
++
++def test_projection_keeps_all_five_keys() -> None:
++    raw = {
++        "balanceYuan": "12.34",
++        "currency": "CNY",
++        "heldYuan": "2.00",
++        "availableYuan": "10.34",
++        "available": True,
++    }
++    assert _project_wallet(raw) == raw
++
++
++def test_projection_leaves_absent_optional_keys_absent() -> None:
++    """只给必填两键 ⇒ 输出就只有这两键。
++
++    这一条钉的是「不补 0」：`heldYuan`/`availableYuan` 在契约里有默认值，那只是让键可选，
++    不代表后端可以替上游造一个 0 出去——前端对「0 元」与「余额暂不可查」给的是两种文案。
++    """
++    assert _project_wallet({"balanceYuan": "5.00", "currency": "USD"}) == {
++        "balanceYuan": "5.00",
++        "currency": "USD",
++    }
++
++
++def test_projection_drops_unknown_keys_and_logs_only_their_names() -> None:
++    raw = {"balanceYuan": "1.00", "currency": "CNY", "internalNote": "风控内部值，不该进日志"}
++    with structlog.testing.capture_logs() as events:
++        out = _project_wallet(raw)
++    assert out == {"balanceYuan": "1.00", "currency": "CNY"}
++    logged = [e for e in events if "契约外键" in str(e.get("event"))]
++    assert len(logged) == 1, f"多余键名应当恰好记一次（每次投影记一次，不做进程级去重），实得 {len(logged)} 条"
++    assert logged[0]["keys"] == ["internalNote"], logged[0]
++    assert logged[0]["log_level"] == "debug", f"不该抬到 info 以上污染生产日志：{logged[0]['log_level']}"
++    # 判**整批事件**而不是那一条：值从别的字段（或将来别处的一条日志）漏出去同样是漏
++    assert "风控内部值" not in str(events), "上游给的值不许出现在任何一条日志里"
++
++
++def test_projection_degrades_when_a_required_key_is_missing_or_null() -> None:
++    """缺 `balanceYuan` ⇒ 回降级形，不抛 500（会话已建立，不能让登录成功的人整页失败）。
++
++    `null` 也算缺：键在但值是 `null` 时，只判 `key in raw` 会把它当合法放行，而信封层
++    （`core/response.py` 的 `success(data=...)`）不做形状校验——那种值会一路走到契约之外。
++    """
++    assert _project_wallet({"currency": "CNY", "heldYuan": "1.00"}) == DEGRADED
++    assert _project_wallet({"balanceYuan": "1.00"}) == DEGRADED
++    assert _project_wallet({"balanceYuan": None, "currency": "CNY"}) == DEGRADED
++    with structlog.testing.capture_logs() as events:
++        _project_wallet({"balanceYuan": None, "currency": "CNY"})
++    cause = [e for e in events if "缺必填键" in str(e.get("event"))]
++    assert len(cause) == 1 and cause[0]["missing"] == ["balanceYuan"], f"降级得报对原因：{cause}"
++
++
++def test_projection_degrades_on_a_non_dict_payload() -> None:
++    """上游把 wallet 发成列表/字符串/数字也不崩——降级形是唯一出口。
++
++    这里只喂**非字典**；"是字典但缺必填键"是上一条的口径，两条各自判一条出口，
++    不然一条红了你不知道是哪条腿断的。
++    """
++    for bad in (None, [], "", 0, 1.5, True):
++        assert _project_wallet(bad) == DEGRADED, bad
++
++
++def test_projection_survives_mixed_key_types() -> None:
++    """纯函数会被直接喂字典：混合键型排不了序就是 TypeError，而承诺是"不抛 500"。"""
++    raw: dict[object, object] = {1: "内部值", "balanceYuan": "1.00", "currency": "CNY"}
++    with structlog.testing.capture_logs() as events:
++        out = _project_wallet(raw)
++    assert out == {"balanceYuan": "1.00", "currency": "CNY"}
++    assert [e for e in events if "契约外键" in str(e.get("event"))][0]["keys"] == ["1"], events
++
++
++def test_projection_copies_the_degraded_shape_instead_of_sharing_it() -> None:
++    """降级形每次给新字典：调用方改了返回值不该污染下一个人的响应。"""
++    first = _project_wallet({"currency": "CNY"})
++    first["balanceYuan"] = "篡改"
++    assert _project_wallet({"currency": "CNY"}) == DEGRADED

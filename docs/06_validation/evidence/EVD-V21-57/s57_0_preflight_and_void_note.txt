@@ -1,0 +1,21 @@
+STEP-57 前置读数（2026-10-27 12:2x CST 现取，本机 win32 / git-bash）
+
+== PG@5547 连通前置（监听不等于连得上，按规划方 2026-10-27 的口径）==
+命令：cd apps/api && AIDEANBOT_TEST_PG_DSN=<隔离库 DSN> PYTHONUTF8=1 python -X utf8 -m pytest tests/test_shapes_response_contract.py -q -rs
+读数：18 passed, 1 warning in 50.14s；-rs 输出里 SKIPPED 计数 0
+（该文件含 test_me_degraded_branch_shape(db_session)，正是本卡要动的钱包降级分支的邻居。
+ 第一次跑它还是 17 passed——那是在我往这个文件里加第 18 条用例之前；两次都是 0 skipped。）
+netstat：TCP 127.0.0.1:5547 与 [::1]:5547 双栈 LISTENING（先查到监听，再跑上面这条证明连得上）
+
+== 上一卡（STEP-56）收口批三绿，本卡开工前置 ==
+head 52673f2bf8ab9d679ec3df7eb2f6bbea1ab3603f：CI 40443130984 / CI-Windows 40443130849 / Security 40443130907，
+三条均 completed success、attempt=1。逐字行见 s57_0_preopen_ci_readings.txt。
+git fetch 后 origin/main...HEAD = 0 0 ⇒ 无需 rebase。
+
+== 门链第 1 跑作废说明 ==
+链（PID 1336，日志 gates1.txt）起在第 1 轮独立复查回来之前；复查判出三处必须改字节的问题
+（混合键型 TypeError、必填键为 null、模块 docstring 成假话），于是按「链在跑就不碰工作树」先把链停掉再改：
+taskkill /PID 1336 /T /F 之后按命令行复查 python.exe / node.exe 计数为 0（上次 taskkill //T 之后
+venv 的 pytest 还活着的教训，这次必须核实），半条链的读数归档为 s57_local_gates_void_run1.txt
+（7 步 rc 全 0：pgpreflight / ruff / mypy / alembic upgrade / alembic heads / gen --check / docs；pytest 到 43%）。
+那一份**不是**交付字节上的读数，交付字节上的读数是下面的第 2 跑。

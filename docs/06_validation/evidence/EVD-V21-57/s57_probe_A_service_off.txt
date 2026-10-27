@@ -1,0 +1,178 @@
+判据①的「红跑在最终字节上」
+
+变异：把 service.py 里 `"wallet": _project_wallet(wallet.get("wallet", wallet)),` 的投影调用摘掉（=改前的原样透传），`_project_wallet` 本体保留，所以只有那一条集成用例该红，7 条纯函数用例照旧绿。
+命令：pytest tests/test_me_wallet_projection.py -q（变异态跑**整文件**，为了拿到「只有一条红、其余照旧绿」的计数）
+期望 rc=1，实得 rc=1
+
+---- 变异态输出 ----
+F.......                                                                 [100%]
+================================== FAILURES ===================================
+____________ test_upstream_wallet_cannot_add_a_key_to_our_response ____________
+
+    def test_upstream_wallet_cannot_add_a_key_to_our_response() -> None:
+        """上游多吐一个键 ⇒ 我们的响应里不许出现它（改前红，红的正是透传本身）。
+    
+        取一个「主平台风控才会有的内部字段名」而不是一个看起来像余额的键名：这条用例要判的是
+        「我们没声明过的东西不往外走」，键名越不像业务字段，越不会被读成"这个本来就该给"。
+        """
+        wallet = _me_wallet({"internalNote": "主平台内部风控备注，不该出现在我们的响应里"})
+>       assert "internalNote" not in wallet, f"钱包透传未过滤，响应带出契约外键：{sorted(wallet)}"
+E       AssertionError: 钱包透传未过滤，响应带出契约外键：['availableYuan', 'balanceYuan', 'currency', 'heldYuan', 'internalNote']
+E       assert 'internalNote' not in {'balanceYuan': '12.34', 'heldYuan': '0.00', 'availableYuan': '12.34', 'currency': 'CNY', ...}
+
+tests\test_me_wallet_projection.py:43: AssertionError
+---------------------------- Captured stdout call -----------------------------
+2026-10-27T12:11:31.856423 [warning  ] 限流计数器 Redis 不可用，本轮 fail-open（不限流） [app.core.security]
+Traceback (most recent call last):
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\connection.py", line 1487, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 1107, in create_connection
+    sock = await self._connect_sock(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 1010, in _connect_sock
+    await self.sock_connect(sock, address)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\selector_events.py", line 651, in sock_connect
+    return await fut
+           ^^^^^^^^^
+asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\connection.py", line 850, in connect_check_health
+    await self._connect()
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\connection.py", line 1486, in _connect
+    async with async_timeout(self.socket_connect_timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\timeouts.py", line 115, in __aexit__
+    raise TimeoutError from exc_val
+TimeoutError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Code\AideanBotHot\apps\api\app\core\security.py", line 194, in incr_window
+    count = await client.incr(key)
+            ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\client.py", line 929, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\utils.py", line 249, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\connection.py", line 2824, in get_connection
+    await self.ensure_connection(connection)
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\connection.py", line 2865, in ensure_connection
+    await connection.connect()
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\connection.py", line 819, in connect
+    await self.retry.call_with_retry(
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\retry.py", line 81, in call_with_retry
+    raise error
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\connection.py", line 864, in connect_check_health
+    raise e
+redis.exceptions.TimeoutError: Timeout connecting to server
+2026-10-27T12:11:31.873395 [info     ] HTTP Request: GET http://testserver/api/v1/auth/login "HTTP/1.1 302 Found" [httpx]
+2026-10-27T12:11:32.897559 [info     ] HTTP Request: POST http://aidean-idp.test/oauth/token "HTTP/1.1 200 OK" [httpx] request_id=bbea031a-48a8-4280-8586-08aa3b8fb824
+2026-10-27T12:11:32.898557 [info     ] HTTP Request: GET http://aidean-idp.test/oauth/userinfo "HTTP/1.1 200 OK" [httpx] request_id=bbea031a-48a8-4280-8586-08aa3b8fb824
+2026-10-27T12:11:32.902797 [info     ] HTTP Request: GET http://testserver/api/v1/auth/callback?‹已省略› "HTTP/1.1 200 OK" [httpx]
+2026-10-27T12:11:34.925142 [info     ] HTTP Request: GET http://aidean-idp.test/oauth/userinfo "HTTP/1.1 200 OK" [httpx] request_id=d24bb95b-b433-4691-b911-d8644b1d7367
+2026-10-27T12:11:34.925142 [info     ] HTTP Request: GET http://aidean-idp.test/api/v1/internal/billing/wallet?‹已省略› "HTTP/1.1 200 OK" [httpx] request_id=d24bb95b-b433-4691-b911-d8644b1d7367
+2026-10-27T12:11:34.928169 [info     ] HTTP Request: GET http://testserver/api/v1/auth/me "HTTP/1.1 200 OK" [httpx]
+------------------------------ Captured log call ------------------------------
+WARNING  app.core.security:security.py:221 限流计数器 Redis 不可用，本轮 fail-open（不限流）
+Traceback (most recent call last):
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\connection.py", line 1487, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 1107, in create_connection
+    sock = await self._connect_sock(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 1010, in _connect_sock
+    await self.sock_connect(sock, address)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\selector_events.py", line 651, in sock_connect
+    return await fut
+           ^^^^^^^^^
+asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\connection.py", line 850, in connect_check_health
+    await self._connect()
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\connection.py", line 1486, in _connect
+    async with async_timeout(self.socket_connect_timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\timeouts.py", line 115, in __aexit__
+    raise TimeoutError from exc_val
+TimeoutError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Code\AideanBotHot\apps\api\app\core\security.py", line 194, in incr_window
+    count = await client.incr(key)
+            ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\client.py", line 929, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\utils.py", line 249, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\connection.py", line 2824, in get_connection
+    await self.ensure_connection(connection)
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\connection.py", line 2865, in ensure_connection
+    await connection.connect()
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\connection.py", line 819, in connect
+    await self.retry.call_with_retry(
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\retry.py", line 81, in call_with_retry
+    raise error
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\redis\asyncio\connection.py", line 864, in connect_check_health
+    raise e
+redis.exceptions.TimeoutError: Timeout connecting to server
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/v1/auth/login "HTTP/1.1 302 Found"
+INFO     httpx:_client.py:1740 HTTP Request: POST http://aidean-idp.test/oauth/token "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1740 HTTP Request: GET http://aidean-idp.test/oauth/userinfo "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/v1/auth/callback?code=code-1&state=JCs9fR94C4OPIcnPw8ZE-6h-A5LSexSjW6d82DbwybQ "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1740 HTTP Request: GET http://aidean-idp.test/oauth/userinfo "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1740 HTTP Request: GET http://aidean-idp.test/api/v1/internal/billing/wallet?userId=user-1 "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/v1/auth/me "HTTP/1.1 200 OK"
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_me_wallet_projection.py::test_upstream_wallet_cannot_add_a_key_to_our_response
+1 failed, 7 passed, 1 warning in 15.99s
+
+
+---- 还原（按字节写回）----
+变异前四件 sha：{'service.py': 'c776b20eac3d', 'shapes.py': 'c8f60acafc25', 'shapes.schema.json': '70f575b6597e', 'dto.ts': '40dbe153fa84'}
+还原后四件 sha：{'service.py': 'c776b20eac3d', 'shapes.py': 'c8f60acafc25', 'shapes.schema.json': '70f575b6597e', 'dto.ts': '40dbe153fa84'}
+sha_all_equal=True
+整文件复跑 rc=0（应为 0：8 条 = 1 集成 + 7 纯函数）
+
+---- 还原态输出 ----
+........                                                                 [100%]
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 passed, 1 warning in 15.65s
+
