@@ -25,7 +25,11 @@
 
 ## 5. Execution Steps
 
-1. [ ] 先贴现状（供 before/after）：
+> 执行记录（V0.25.0 批 1，2026-10-28）：第 1～6 条已做，读数见
+> `docs/06_validation/evidence/EVD-V25-71/`（`s71_before_after.txt` / `s71_readings.md`）。
+> 第 7～8 条等本卡提交后的 `@ci` 读数（`e2e-real` 的 `Stop stack` 步）。
+
+1. [x] 先贴现状（供 before/after）：
 
    ```
    :120  if [ -n "${ownp// /}" ] && printf '%s\n' "$ownp" | grep -qx "$pid"; then owns=1; fi
@@ -36,7 +40,7 @@
    :132-134  else note
    ```
 
-2. [ ] **S71.1** 把「有属主且非属主 ⇒ 拒杀」提到最前，改成独立的 `if` 而非 `elif`：
+2. [x] **S71.1** 把「有属主且非属主 ⇒ 拒杀」提到最前，改成独立的 `if` 而非 `elif`：
 
    ```sh
    if [ "$owns" != 1 ]; then
@@ -54,10 +58,10 @@
    fi
    ```
 
-3. [ ] **S71.2** 确认命令行分支现在只在 `ownp` 为空时可达（读 diff 自证）
-4. [ ] **S71.3** `占用者读数` 那行日志**不得删**（P-148 的自证行，是本卡唯一的现场证据来源）
-5. [ ] `bash -n scripts/e2e/run_real_backend.sh` 语法检查
-6. [ ] 本机跑一次 `bash scripts/e2e/run_real_backend.sh --stop`（无栈时也应正常退出，不得报错）
+3. [x] **S71.2** 确认命令行分支现在只在 `ownp` 为空时可达（读 diff 自证）
+4. [x] **S71.3** `占用者读数` 那行日志**不得删**（P-148 的自证行，是本卡唯一的现场证据来源）
+5. [x] `bash -n scripts/e2e/run_real_backend.sh` 语法检查（`syntax ok`）
+6. [x] 本机跑一次 `bash scripts/e2e/run_real_backend.sh --stop`（无栈时也应正常退出，不得报错）
 7. [ ] 本卡单独提交并推送；`@ci` 的 `Stop stack` 步必须仍 success
 8. [ ] 写证据：before/after 的 `sed -n '118,140p'` 原文 + `Stop stack` 步的 @ci 日志片段
 

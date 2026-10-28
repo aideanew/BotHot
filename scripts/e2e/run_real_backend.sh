@@ -125,16 +125,18 @@ stop_all() {
         owns=1
       fi
       if [ "$owns" != 1 ]; then
+        if [ -n "${ownp// /}" ]; then
+          # 端口上确有监听者，且不是 PIDfile 里这个 PID ⇒ 它已被复用，一律不发信号。
+          # 命令行不参与：命令行特征分不清「同名的另一个会话」，那正是 D-V23-16 要堵的洞（D-V24-06 甲）。
+          echo "跳过 $name pid=$pid：端口 :$port 的监听者是 $ownp，不是它（不发信号）"
+          continue
+        fi
         if [ "$have_ps" = 1 ]; then
           cmdline="$(ps -p "$pid" -o args= 2>/dev/null || true)"
           case "$cmdline" in
             *"uvicorn app.main:app --host 127.0.0.1 --port 3300"* | *"next/dist/bin/next"* | *"next-server"* | *"scripts/e2e/fake_llm.py"*) ;;
             *) echo "跳过 $name pid=$pid：既不是端口 :${port:-?} 的监听者、命令行也对不上（PID 可能已被复用，不发信号）"; continue ;;
           esac
-        elif [ -n "${ownp// /}" ]; then
-          # 端口上确有别人在听，且不是这个 PID ⇒ 它已被复用，不发信号（这条是反证走的分支）
-          echo "跳过 $name pid=$pid：端口 :$port 的监听者是 $ownp，不是它（不发信号）"
-          continue
         else
           echo "note: $name pid=$pid 无端口属主证据也无 ps 能力 ⇒ 按 PID 直杀（本机能力受限，非静默）"
         fi
