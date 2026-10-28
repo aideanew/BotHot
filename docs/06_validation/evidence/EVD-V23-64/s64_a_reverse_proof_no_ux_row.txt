@@ -1,0 +1,33 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+________________ test_generated_artifact_matches_current_model ________________
+
+    def test_generated_artifact_matches_current_model() -> None:
+        """有人改了模型却没重跑生成器时，这条必须红——**每个域都查**。
+    
+        `--check` 只在 CI 跑（`.github/workflows/ci.yml` backend job 的
+        "Contract drift gate (gen_contracts --check)" 步），提交前那段窗口本地是裸的；
+        而 `compare_defs()` 读的是**两个文件**，模型改了在本地全组测试照样绿
+        （第三轮验证点名的空档）。这里在进程内 import 生成器重算，不落盘。
+    
+        第五轮验证抓到的正是范围问题：本条第一版硬编码 `["collection"]`，
+        于是 identity 域"模型 ≠ 已提交产物"这段窗口本地完全没门禁——
+        上面三条新盲区（default / 多支 anyOf / tuple items）也全落在这段裸窗口里。
+        """
+        spec = importlib.util.spec_from_file_location("gen_contracts_under_test", GEN_CONTRACTS_PATH)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        fresh = module.generate_schemas()
+>       assert set(fresh) == set(DOMAINS), f"生成器覆盖的域与域表不一致：{sorted(fresh)} vs {sorted(DOMAINS)}"
+E       AssertionError: 生成器覆盖的域与域表不一致：['api.envelope', 'collection', 'engine', 'events', 'identity', 'resources', 'shapes', 'ux'] vs ['api.envelope', 'collection', 'engine', 'events', 'identity', 'resources', 'shapes']
+E       assert {'api.envelop...sources', ...} == {'api.envelop...sources', ...}
+E         
+E         Extra items in the left set:
+E         'ux'
+E         Use -v to get more diff
+
+tests\test_collection_contract.py:3465: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_collection_contract.py::test_generated_artifact_matches_current_model
+1 failed, 218 deselected in 1.37s

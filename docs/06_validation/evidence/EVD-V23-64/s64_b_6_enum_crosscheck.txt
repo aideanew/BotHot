@@ -1,0 +1,17 @@
+活体锚 : packages\contracts\src\ux\states.ts  （手写常量，非生成物）
+冻结稿 : docs\任务规划V0.12.0\contracts\ux_states.schema.json  （definitions.State.enum，只读）
+实读条数：活体 8 / 稿 8
+
+| # | 冻结稿值 | 活体锚值 | 逐值同序 |
+|---|---|---|---|
+| 1 | `initial` | `initial` | ✅ |
+| 2 | `loading` | `loading` | ✅ |
+| 3 | `empty` | `empty` | ✅ |
+| 4 | `success` | `success` | ✅ |
+| 5 | `error` | `error` | ✅ |
+| 6 | `forbidden` | `forbidden` | ✅ |
+| 7 | `unauthenticated` | `unauthenticated` | ✅ |
+| 8 | `degraded` | `degraded` | ✅ |
+
+逐值且同序相等：True
+集合相等（忽略顺序）：True

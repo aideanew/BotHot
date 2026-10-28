@@ -1,0 +1,23 @@
+F...                                                                     [100%]
+================================== FAILURES ===================================
+_______________ test_ux_states_literal_equals_frozen_draft_enum _______________
+
+    def test_ux_states_literal_equals_frozen_draft_enum() -> None:
+        """逐值 + 同序 + 恰 8 值。这是 P-80「归位」的机械凭据：搬完之后冻结稿从"唯一源"降级为"被核对方"。"""
+        live = _ux_states_literal()
+        draft = _frozen_state_enum()
+        # 先判逐值同序（红的时候两侧都打得出来，这是 `08` §2.4 对接红原文的要求），再判"恰为 8 值"
+        # ——后一条管的是"两侧被同步削成 7 值"那种等式仍然成立的形，那正是 P-80 不许的形。
+>       assert live == draft, "八态与冻结稿不同序或不同值：\n  活体 " + repr(live) + "\n  稿   " + repr(draft)
+E       AssertionError: 八态与冻结稿不同序或不同值：
+E           活体 ['initial', 'loading', 'empty', 'success', 'error', 'forbidden', 'degraded', 'unauthenticated']
+E           稿   ['initial', 'loading', 'empty', 'success', 'error', 'forbidden', 'unauthenticated', 'degraded']
+E       assert ['initial', '...rbidden', ...] == ['initial', '...rbidden', ...]
+E         
+E         At index 6 diff: 'degraded' != 'unauthenticated'
+E         Use -v to get more diff
+
+tests\test_ux_states_contract.py:73: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_ux_states_contract.py::test_ux_states_literal_equals_frozen_draft_enum
+1 failed, 3 passed in 0.22s

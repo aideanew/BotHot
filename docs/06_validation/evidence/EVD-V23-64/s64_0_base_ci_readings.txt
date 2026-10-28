@@ -1,0 +1,18 @@
+== 开工前置读数来源（本卡基线 480c073 的 @ci 三条 run；REST 取，token 不落盘）==
+CI run=40628836371 num=363 status=completed conclusion=success created=2026-10-28T03:49:13Z updated=2026-10-28T03:56:20Z
+CI-Windows run=40628836351 num=265 status=completed conclusion=success created=2026-10-28T03:49:13Z updated=2026-10-28T04:11:38Z
+Security run=40628836288 num=359 status=completed conclusion=success created=2026-10-28T03:49:13Z updated=2026-10-28T03:50:19Z
+
+
+== CI run 的 6 个 job 结论 ==
+job=compose                                  conclusion=success   started=2026-10-28T03:49:16Z completed=2026-10-28T03:49:25Z
+job=frontend                                 conclusion=success   started=2026-10-28T03:49:16Z completed=2026-10-28T03:52:54Z
+job=workflow-lint                            conclusion=success   started=2026-10-28T03:49:16Z completed=2026-10-28T03:49:25Z
+job=backend                                  conclusion=success   started=2026-10-28T03:49:16Z completed=2026-10-28T03:53:58Z
+job=compose-smoke                            conclusion=success   started=2026-10-28T03:49:15Z completed=2026-10-28T03:51:12Z
+job=e2e-real                                 conclusion=failure   started=2026-10-28T03:54:00Z completed=2026-10-28T03:56:19Z
+
+== 顺带取到的 STEP-59 后续事实（非本卡判据，交回 #107 与 60/62）：e2e-real 这个 job 在 4ab120d 与 480c073 两个头都读 failure ==
+job=e2e-real                                 conclusion=failure   started=2026-10-28T03:54:00Z completed=2026-10-28T03:56:19Z
+116:0_e2e-real.txt: 2026-10-28T03:56:13.8150851Z   1 failed
+139:ackend, project=real, admin.spec.ts).txt: 2026-10-28T03:56:13.8150847Z   1 failed

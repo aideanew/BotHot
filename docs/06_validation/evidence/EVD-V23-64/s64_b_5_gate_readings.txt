@@ -1,0 +1,64 @@
+== 卡面 10 格 @win 读数（方案 B 交付态，480c073 之上未提交）==
+
+$ pytest tests/test_contract_jsonschema.py tests/test_contract_def_coverage.py tests/test_ux_states_contract.py -q
+........................................................................ [ 75%]
+........................                                                 [100%]
+96 passed in 4.71s
+pytest_rc=0
+
+$ pytest tests/test_collection_contract.py -q（已回退到无 ux 行的基线）
+...                                                                      [100%]
+219 passed in 3.85s
+
+$ ruff check app tests ../../scripts
+All checks passed!
+ruff_rc=0
+
+$ S64.0 基线复测（两文件在 HEAD 字节上，即交付前的未改态）
+  单跑 tests/test_contract_jsonschema.py -q => 81 passed in 4.41s
+  并跑 tests/test_contract_jsonschema.py tests/test_contract_def_coverage.py -q => 92 passed in 6.23s
+  ⇒ 480c073 提交信息里那个 92 是**两文件并跑**的读数，08 §2.1 写的单文件命令实读 81。此处按现读订正，不改已提交的原文。
+
+$ python ../../scripts/gen_contracts.py --check
+[ok] packages\contracts\schemas\api.envelope.schema.json 幂等一致
+[ok] packages\contracts\schemas\engine.schema.json 幂等一致
+[ok] packages\contracts\schemas\shapes.schema.json 幂等一致
+gen_check_rc=0
+
+$ git status --short -- packages/contracts/schemas（应为空：B 不产新 schema）
+warning: could not open directory 'apps/packages/contracts/': No such file or directory
+[空即为零变化]
+
+$ git diff --stat -- packages/contracts/schemas
+[空即为零变化]
+
+$ git diff --quiet -- docs/任务规划V0.12.0/contracts/ux_states.schema.json（验收⑦）
+frozen_draft_unchanged_rc=0
+
+== 订正（上一条 git status 的路径写错了：在 apps/api 下用 ../packages 指到 apps/packages，警告 no such directory 却仍打印空即零变化⇒ 那是无效读数，按纪律重测）==
+$ git -C <repo root> status --short -- packages/contracts/schemas
+rc=0 [上面无输出行 = 该目录既无修改也无未跟踪文件]
+
+$ ls packages/contracts/schemas
+api.envelope.schema.json
+collection.schema.json
+engine.schema.json
+events.schema.json
+identity.schema.json
+resources.schema.json
+shapes.schema.json
+
+$ git diff --quiet -- packages/contracts/schemas
+schemas_dir_unchanged_rc=0
+
+$ cd apps/web && pnpm exec tsc --noEmit（卡面验收⑥）
+tsc_web_rc=0
+$ pnpm exec tsc --noEmit -p ../../packages/contracts/tsconfig.json（ci.yml:381-382 的契约包整包 strict 步，卡面没列但它是判这份新文件的门）
+tsc_contracts_pkg_rc=0
+
+== 最终字节复跑（此后到提交前不再改这三份文件）==
+pytest 三文件: 96 passed in 5.63s
+pytest collection_contract: 219 passed in 4.47s
+ruff check app tests ../../scripts: All checks passed!
+mypy app ../../scripts: Success: no issues found in 134 source files
+gen_check_rc=0

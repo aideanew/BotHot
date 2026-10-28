@@ -1,0 +1,17 @@
+== 真实工件召回（复核者指出 s64_b_4 的召回 8 把常量指到别处，证的是「assert 会响」而不是「描述的那个前提会响」）==
+== 前提：生成物目录里出现一份手写的 ux.schema.json（不是把常量指向 engine.schema.json）==
+--- 造出该文件（本次自己造的临时工件，同一条命令里删掉）---
+ux.schema.json
+--- 跑真实测试 ---
+E       assert not True
+E        +  where True = exists()
+E        +    where exists = WindowsPath('D:/Code/AideanBotHot/packages/contracts/schemas/ux.schema.json').exists
+
+tests\test_ux_states_contract.py:92: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_ux_states_contract.py::test_ux_domain_is_not_half_wired_into_the_generator
+1 failed, 3 passed in 0.19s
+--- 删掉并验证 ---
+api.envelope.schema.json collection.schema.json engine.schema.json events.schema.json identity.schema.json resources.schema.json shapes.schema.json 
+删除后复跑：
+4 passed in 0.11s

@@ -98,3 +98,10 @@ export type {
   SpaceStats,
   SpaceView,
 } from "./shapes/dto";
+
+// ── ux 域（STEP-64 方案 B）──
+// `UxState` 来自手写的 `src/ux/states.ts`，**不是** `app/contracts/ux.py` 的生成物：
+// 域一旦进生成器就会被逐 def 比对器要求与冻结稿对齐，而冻结稿带比对器不认识的 `note` 关键词
+// （两侧都不许改）⇒ 依卡面第 13 格 ① 转 B。八值与冻结稿逐值同序，由
+// `apps/api/tests/test_ux_states_contract.py` 钉住。
+export type { UxState } from "./ux/states";

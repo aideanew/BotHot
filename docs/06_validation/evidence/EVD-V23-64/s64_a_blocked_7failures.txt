@@ -1,0 +1,200 @@
+...............F........................................................ [ 32%]
+.........FFF...F...............F........................................ [ 64%]
+..................F..................................................... [ 96%]
+.......                                                                  [100%]
+================================== FAILURES ===================================
+_ test_neither_side_uses_a_keyword_the_comparator_does_not_implement[ux-\u7a3f-ux_states.schema.json] _
+
+domain = 'ux', side = '稿'
+path = WindowsPath('D:/Code/AideanBotHot/docs/任务规划V0.12.0/contracts/ux_states.schema.json')
+
+    @pytest.mark.parametrize(
+        "domain,side,path",
+        [
+            (domain, side, path)
+            for domain, (frozen_path, generated_path, _div) in DOMAINS.items()
+            for side, path in (("稿", frozen_path), ("生成物", generated_path))
+        ],
+        ids=lambda v: str(v.name if isinstance(v, Path) else v),
+    )
+    def test_neither_side_uses_a_keyword_the_comparator_does_not_implement(domain: str, side: str, path: Path) -> None:
+        """两侧都查未知关键词：漏一侧 = 那一侧可以随便加约束而门禁不响。"""
+        doc = load_cached(path)
+        defs = _defs_of(doc)
+        excluded = _not_a_shape_names(doc)[0] if side == "稿" else set()
+        problems: list[str] = []
+        for name, node in defs.items():
+            if name in excluded:
+                continue
+            _walk(node, f"{domain}.{side}.{name}", defs, problems, frozenset({name}))
+>       assert not problems, "；".join(problems)
+E       AssertionError: ux.稿.State: 比对器不认识关键词 'note'（要么实现它，要么改一侧——不能忽略）；ux.稿.StateRendering.state->State: 比对器不认识关键词 'note'（要么实现它，要么改一侧——不能忽略）
+E       assert not ["ux.稿.State: 比对器不认识关键词 'note'（要么实现它，要么改一侧——不能忽略）", "ux.稿.StateRendering.state->State: 比对器不认识关键词 'note'（要么实现它，要么改一侧——不能忽略）"]
+
+tests\test_collection_contract.py:1230: AssertionError
+_______________ test_every_domain_has_no_unexplained_divergence _______________
+
+    def test_every_domain_has_no_unexplained_divergence() -> None:
+        """整仓库层面的一次总检查：任一域有未解释差异都算失败，并点名是哪个域。"""
+        report = {domain: compare_defs(domain)[0] for domain in DOMAINS}
+        bad = {k: v for k, v in report.items() if v}
+>       assert not bad, "\n".join(f"[{k}]\n  " + "\n  ".join(v) for k, v in bad.items())
+E       AssertionError: [ux]
+E           ux.稿.State: 比对器不认识关键词 'note'（要么实现它，要么改一侧——不能忽略）
+E           ux.稿.StateRendering.state->State: 比对器不认识关键词 'note'（要么实现它，要么改一侧——不能忽略）
+E       assert not {'ux': ["ux.稿.State: 比对器不认识关键词 'note'（要么实现它，要么改一侧——不能忽略）", "ux.稿.StateRendering.state->State: 比对器不认识关键词 'note'（要么实现它，要么改一侧——不能忽略）"]}
+
+tests\test_collection_contract.py:1244: AssertionError
+_____________ test_normalizations_used_are_all_backed_by_registry _____________
+
+    def test_normalizations_used_are_all_backed_by_registry() -> None:
+        """正向：比对器实际用到的每条归一，都必须有对应 kind 的登记。"""
+        for domain in DOMAINS:
+            _diffs, used = compare_defs(domain)
+            kinds = {d.kind for d in DOMAINS[domain][2]}
+            rules = {d.rule for d in DOMAINS[domain][2]}
+            for rule in used:
+                need = _NORMALIZATION_TO_KIND[rule]
+                # 第六轮验证 T3 的第二半：只查 kind 的话，任何一条 documentation 登记都能替
+                # `strip-title` 这类归一发通行证。必须**按 rule 名**认领。
+>               assert rule in rules, f"{domain}: 归一 {rule} 被用到，但登记表里没有**同名**条目认领它"
+E               AssertionError: ux: 归一 definitions-vs-refs-dialect 被用到，但登记表里没有**同名**条目认领它
+E               assert 'definitions-vs-refs-dialect' in {'ux-extra-key-forbidden'}
+
+tests\test_collection_contract.py:1260: AssertionError
+____________________ test_registry_rules_are_all_consumed _____________________
+
+    def test_registry_rules_are_all_consumed() -> None:
+        """反向：每条登记的 rule 都必须真有人消费——**被比对器当归一用到**，或有断言替它兑现。
+    
+        没有这条，登记表就会长"只有承诺没有实现者"的条目（第三轮验证抓到过三条）。
+    
+        第五轮验证把"解释过一次差异"从消费里剔了出去：`compare_defs` 命中某条登记时会
+        `_note_explainer(hit.rule)`，于是**一条专门用来遮差异的登记会自己给自己发消费者**
+        （验证者演示：塞 `ref="WorkListRow", field="*", kind="structural"` 那条，五类真漂移
+        全被吞，同时它把本测试也刷绿）。归一（`_USED_RULES`）是比对器代码里真在跑的等价处理，
+        算消费；解释（`_USED_EXPLAINERS`）只是"某处差异被放行了"，不算——放行条目必须另有人钉。
+        """
+        module = sys.modules[__name__]
+        for domain, (_f, _g, divergences) in DOMAINS.items():
+            _diffs, used_norms = compare_defs(domain)
+            unclaimed: list[str] = []
+            # 第八轮 D1：一条**蹭名字**的装饰行——rule 与本域真归一同名，于是"被用到"是别人替它挣的。
+            # 归一在一个域里只登记一次；第二条同名行要么是复制粘贴要么是假陈述。
+            seen: dict[str, int] = {}
+            for d in divergences:
+                seen[d.rule] = seen.get(d.rule, 0) + 1
+            dupes = sorted(r for r, c in seen.items() if c > 1)
+            assert not dupes, f"{domain} 登记表里有同名重复行：{dupes}——一条归一只能有人认领一次"
+            for d in divergences:
+                fn_name = RULE_CONSUMERS.get(d.rule)
+                if d.rule not in used_norms and fn_name is None:
+                    unclaimed.append(
+                        f"{d.rule}（{d.ref} / {d.field}）既没被比对器当归一用到，也没登记消费者"
+                        f"（它解释过 {len(_USED_EXPLAINERS & {d.rule})} 处差异，但那不算兑现承诺）"
+                    )
+                    continue
+                # 第八轮验证 D1：反向的门也没关——**蹭**一个真归一的 rule 名、自己从不生效的行，
+                # 在上一版会因为"这名字被用到了"算作已消费。归一行必须在**本域**真的被用到。
+                if d.rule in _NORMALIZATION_TO_KIND and d.rule not in used_norms:
+                    unclaimed.append(
+                        f"{d.rule}（{d.ref}）挂着归一的名字但本域从未用到 ⇒ 装饰行："
+                        "要么删掉，要么它声称的归一确实发生"
+                    )
+                    continue
+                if fn_name is None:
+                    continue
+                fn = getattr(module, fn_name, None)
+                if fn is None:
+                    unclaimed.append(f"{d.rule} 声称由 {fn_name} 兑现，但该函数不存在")
+                    continue
+                # 关键改动：**被比对器用到不等于它的行为承诺成立**。第一版 `continue` 掉了
+                # 这种条目的消费者调用，等于"归一被用了就不用再验它说的事"（第四轮验证点名）。
+>               fn()
+
+tests\test_collection_contract.py:1354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def test_document_root_divergences_are_named() -> None:
+        """兑现 `root-is-a-container`：根层每一处不等价都必须有一条"文档根 + 点名该键"的登记。
+    
+        第六轮验证 G6 之前，比对器只看 `$defs`——往产物根塞 `type: string`、把稿根 `type` 删掉、
+        给稿根加 `additionalProperties: false` 三种改动全部读绿，而且 `$id` 两边本来就不一样却无人记账
+        （实测：collection 稿 `bothot://contracts/collection/v1`、identity/events 稿
+        `https://bothot/contracts/<域>.schema.json`、产物一律 `bothot://contracts/<域>/v1`）。
+        """
+        for domain, (frozen_path, generated_path, divergences) in DOMAINS.items():
+            frozen, generated = load_cached(frozen_path), load_cached(generated_path)
+            for key in _ROOT_VALIDATING_KEYS:
+                fa, fb = frozen.get(key, MISSING), generated.get(key, MISSING)
+                if fa == fb:
+                    continue
+                hit = _explains_root(divergences, key, fa, fb)
+>               assert hit is not None, f"{domain}: 根层 {key} 不等价（稿={fa} 生成={fb}）却没有方向合法的登记"
+E               AssertionError: ux: 根层 type 不等价（稿=object 生成=（无此键））却没有方向合法的登记
+E               assert None is not None
+
+tests\test_collection_contract.py:2225: AssertionError
+_____________ test_every_x_keyword_on_an_absorbed_def_is_claimed ______________
+
+    def test_every_x_keyword_on_an_absorbed_def_is_claimed() -> None:
+        """稿里挂在**已收编 def** 上的 `x-*` 注释必须在登记表里有归宿。
+    
+        范围刻意收窄到"已收编的 def"：没进生成物的 def（别名、纯注释对象）由 `compare_defs`
+        的缺-def 判定负责，在那里重复要求只会让两处门禁互相顶包。
+        """
+        for domain, (frozen_path, generated_path, divergences) in DOMAINS.items():
+            fdefs, gdefs = _defs_of(load_cached(frozen_path)), _defs_of(load_cached(generated_path))
+            claimed = {x.strip() for d in divergences for x in d.field.replace(",", " ").split()}
+            claimed |= {d.rule for d in divergences}
+            for name in set(fdefs) & set(gdefs):
+                for key in [k for k in fdefs[name] if k.startswith("x-")]:
+>                   assert key in claimed, f"{domain}/{name}: 注释键 {key} 在登记表里无人认领"
+E                   AssertionError: ux/State: 注释键 x-required-for-every-core-view 在登记表里无人认领
+E                   assert 'x-required-for-every-core-view' in {'additionalProperties', 'ux-extra-key-forbidden'}
+
+tests\test_collection_contract.py:1432: AssertionError
+___________________ test_comparator_does_not_false_positive ___________________
+
+    def test_comparator_does_not_false_positive() -> None:
+        """对照：什么都没改 ⇒ 每个域都必须 0 条（否则上面那组"红"没有意义）。"""
+>       assert {d: compare_defs(d)[0] for d in DOMAINS} == {d: [] for d in DOMAINS}
+E       assert {'collection'...ces': [], ...} == {'collection'...ces': [], ...}
+E         
+E         Omitting 7 identical items, use -vv to show
+E         Differing items:
+E         {'ux': ["ux.稿.State: 比对器不认识关键词 'note'（要么实现它，要么改一侧——不能忽略）", "ux.稿.StateRendering.state->State: 比对器不认识关键词 'note'（要么实现它，要么改一侧——不能忽略）"]} != {'ux': []}
+E         Use -v to get more diff
+
+tests\test_collection_contract.py:1567: AssertionError
+__________________ test_document_root_divergences_are_named ___________________
+
+    def test_document_root_divergences_are_named() -> None:
+        """兑现 `root-is-a-container`：根层每一处不等价都必须有一条"文档根 + 点名该键"的登记。
+    
+        第六轮验证 G6 之前，比对器只看 `$defs`——往产物根塞 `type: string`、把稿根 `type` 删掉、
+        给稿根加 `additionalProperties: false` 三种改动全部读绿，而且 `$id` 两边本来就不一样却无人记账
+        （实测：collection 稿 `bothot://contracts/collection/v1`、identity/events 稿
+        `https://bothot/contracts/<域>.schema.json`、产物一律 `bothot://contracts/<域>/v1`）。
+        """
+        for domain, (frozen_path, generated_path, divergences) in DOMAINS.items():
+            frozen, generated = load_cached(frozen_path), load_cached(generated_path)
+            for key in _ROOT_VALIDATING_KEYS:
+                fa, fb = frozen.get(key, MISSING), generated.get(key, MISSING)
+                if fa == fb:
+                    continue
+                hit = _explains_root(divergences, key, fa, fb)
+>               assert hit is not None, f"{domain}: 根层 {key} 不等价（稿={fa} 生成={fb}）却没有方向合法的登记"
+E               AssertionError: ux: 根层 type 不等价（稿=object 生成=（无此键））却没有方向合法的登记
+E               assert None is not None
+
+tests\test_collection_contract.py:2225: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_collection_contract.py::test_neither_side_uses_a_keyword_the_comparator_does_not_implement[ux-\u7a3f-ux_states.schema.json]
+FAILED tests/test_collection_contract.py::test_every_domain_has_no_unexplained_divergence
+FAILED tests/test_collection_contract.py::test_normalizations_used_are_all_backed_by_registry
+FAILED tests/test_collection_contract.py::test_registry_rules_are_all_consumed
+FAILED tests/test_collection_contract.py::test_every_x_keyword_on_an_absorbed_def_is_claimed
+FAILED tests/test_collection_contract.py::test_comparator_does_not_false_positive
+FAILED tests/test_collection_contract.py::test_document_root_divergences_are_named
+7 failed, 216 passed in 3.30s

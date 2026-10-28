@@ -1,0 +1,20 @@
+[召回 ok] 八值下限（两侧同步削成 7，等式仍成立）
+          -> 活体锚应为 8 值，实读 7：['initial', 'loading', 'empty', 'success', 'error', 'forbidden', 'unauthenticated']
+[召回 ok] 活体锚缺失
+          -> 八态活体锚缺失：C:\Users\Administrator\AppData\Local\Temp\s64\does_not_exist.ts 不存在
+[召回 ok] 字面量条目换成单引号（不合形）
+          -> UX_STATES 条目不合形（要双引号小写串）："'initial'"
+[召回 ok] 同一文件里两条 UX_STATES（唯一源说不清）
+          -> UX_STATES 字面量应恰好一条，实读 2 条 ⇒ 谁是唯一源说不清了
+[召回 ok] ux 进了 schema 域表
+          -> ux 已进 schema 域表⇒ 方案 B 仍在册却半接了 A：台账 P-142 未解，先红在这里而不是让逐 def 比对器红成一团
+[召回 ok] ux 进了 TS 域表
+          -> ux 已进 TS 域表⇒ 方案 B 仍在册却半接了 A：台账 P-142 未解，先红在这里而不是让逐 def 比对器红成一团
+[召回 ok] 生成物目录里出现手写 ux.schema.json
+          -> 生成物目录里出现了手写的 engine.schema.json ⇒ 那是没有比对行的假产物
+[召回 ok] index.ts 未导出 UxState
+          -> index.ts 未导出 UxState ⇒ 契约包对消费侧等于没接
+[召回 ok] 冻结稿 State 的 note 消失
+          -> 冻结稿 State 的 `note` 不见了 ⇒ A 的堵点可能已解除，回去重跑 S64.0 选路探针（台账 P-142）
+
+全部 9 条召回通过，且还原后四条判据重新为绿。
