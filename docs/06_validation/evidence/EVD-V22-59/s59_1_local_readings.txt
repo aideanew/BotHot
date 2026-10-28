@@ -1,0 +1,121 @@
+STEP-59 交付批的本机读数（逐字记录，2026-10-28 取；改动前基线头 c7c0a07594a17718a554045b841d7299485ec861）
+口径：D-V22-01 与 08 §2 末行"单卡测试"——本机只跑 `bash -n`、`tsc --noEmit` 与两种 `--list`，
+      真后端 e2e 与 seed 生成**不在本机执行**（本机无 Redis：01 F9；且起 :3200 会与共用工作树抢端口）。
+
+== ① 先红（改前字节，project 还不存在）==
+$ git rev-parse HEAD
+c7c0a07594a17718a554045b841d7299485ec861
+
+$ cd apps/web && pnpm exec playwright test --list --project=real
+Error: Project(s) "real" not found. Available projects: ""
+    at Object.filterProjects (D:\Code\AideanBotHot\apps\web\node_modules\.pnpm\playwright@1.63.0\node_modules\playwright\lib\runner\index.js:2170:11)
+    at runTests (D:\Code\AideanBotHot\apps\web\node_modules\.pnpm\playwright@1.63.0\node_modules\playwright\lib\cli\testActions.js:61:30)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at _Command.<anonymous> (D:\Code\AideanBotHot\apps\web\node_modules\.pnpm\playwright@1.63.0\node_modules\playwright\lib\program.js:55:7)
+list_real_rc=1
+
+同批取的 mock 档基线（同一命令不带 --project，改前）：
+  trunk.spec.ts:163:7 › mock 主干回归 › ⑧ 登出 → 回未登录态
+  trunk.spec.ts:170:7 › mock 主干回归 › ⑨ 链接入库主链路：粘贴 → 解析预览 → 确认入库 → 轮询收敛（mock 即 READY）
+Total: 42 tests in 7 files
+list_mock_rc=0
+（42 与 CI 里的 `31 passed` 同形不矛盾：42 条里 11 条在演示态被 skip ⇒ 31 执行。
+ 11 = admin.spec.ts 的⑤⑥⑦ 三条 + r19-chat-stream.spec.ts 的四条。）
+
+== ② 改后本机复跑（同一批字节）==
+$ bash -n scripts/e2e/run_real_backend.sh
+bash_n_rc=0
+
+$ cd apps/web && pnpm exec tsc --noEmit
+tsc_rc=0
+（第一次跑是 **tsc_rc=2**，报 `playwright.config.ts(50,13): error TS2769 ... 'globalSetup' does not
+ exist in type 'Project<...>'`——我把 globalSetup 写进了 project 里。现读
+ `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/types/test.d.ts`：
+ `globalSetup?: string|Array<string>` 在 1336 行，属 `interface TestConfig`（878 行起）区，
+ `interface Project`(760) 继承 `TestProject`(111) 里没有这个键 ⇒ 08 §2 59.3 那句
+ "globalSetup 仅在 E2E_REAL_BACKEND=1 时挂"按 project 级写不进去，改成 config 顶层挂；
+ 真后端档只有一个 project，两者等价，且消掉"per-project 可能被忽略"这一层歧义。
+ 这条改法是**先红逼出来的**，不是事后修饰。）
+
+$ E2E_REAL_BACKEND=1 pnpm exec playwright test --list --project=real
+  [real] › admin.spec.ts:94:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ① 游客访问 /admin 与 /admin/ops：原地渲染统一 AuthGate，不重定向
+  [real] › admin.spec.ts:104:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ② 键盘可达：Tab 到登录按钮、回车登录，落点是权限分层而不是白屏
+  [real] › admin.spec.ts:131:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ③ 非 admin 会话 › ③ 非 admin 的处置：两屏都给出出口链接
+  [real] › admin.spec.ts:146:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ④ 375px：游客卡与权限不足卡的内容区不横向溢出
+  [real] › admin.spec.ts:179:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数
+  [real] › admin.spec.ts:203:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来
+  [real] › admin.spec.ts:213:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑦ 375px 下密钥表横向滚动而不是挤压
+  [real] › r19-chat-stream.spec.ts:48:5 › ① success：一次正常提问出现渐进正文（meta→delta*→done）
+  [real] › r19-chat-stream.spec.ts:56:5 › ② 流式中主动断连：已渲染内容保留，且恢复后可重发
+  [real] › r19-chat-stream.spec.ts:91:5 › ③ unauthenticated：会话失效显示「未登录」，不许显示「权限不足」
+  [real] › r19-chat-stream.spec.ts:100:5 › ④ 八态清单：只有真取到读数的态才算数
+Total: 11 tests in 2 files
+list_real_rc=0
+（r19 那 4 条在 real 档仍会被它自己的文件级闸门 skip：
+ `r19-chat-stream.spec.ts` 顶层的 `test.skip(!REAL_BACKEND || !REAL_LLM, …)`（现读 38-40 行）要求
+ `E2E_REAL_BACKEND=1` **且** `E2E_CHAT_LLM=1`，本卡只给前者。STEP-60 改这个开关。
+ ⇒ 59 档的 CI 命令按卡面第 10 格只跑 admin.spec.ts。）
+
+$ pnpm exec playwright test --list   （改后、不带开关 = 演示档回归面）
+Total: 42 tests in 7 files
+list_mock_rc=0        ⇒ 与改前逐字同数（08 §2 59.3 判据"mock 档 test:e2e 用例数不变"在本机侧成立）
+
+== ③ ci.yml 的本地可证面 ==
+本机没有 actionlint（`which actionlint` 空），也没有 pyyaml ⇒ 用仓库里已有的
+`apps/web/node_modules/.pnpm/js-yaml@4.3.2` 解析（只证明 YAML 语法与结构，不证明 Actions 语义；
+Actions 语义由 workflow-lint job 的 actionlint 1.7.12 判）：
+yaml_ok jobs=workflow-lint,backend,frontend,compose,compose-smoke,e2e-real
+job_keys=concurrency,continue-on-error,defaults,env,needs,runs-on,services,steps,timeout-minutes
+services=postgres,redis redis_ports=["6380:6379"]
+steps=11 names=actions/checkout@v4 | Resolve pnpm version from packageManager | pnpm/action-setup@v4 |
+        actions/setup-node@v4 | actions/setup-python@v5 | Install（后端运行时 + 前端依赖 + chromium） |
+        Generate ephemeral master keys | Start real stack（迁移 → uvicorn:3300 → 探活 → 种子会话 → next:3200） |
+        E2E (real backend, project=real, admin.spec.ts) | Upload report + screenshots（含绿跑…） | Stop stack
+concurrency={"group":"e2e-real-${{ github.ref }}","cancel-in-progress":true}
+needs=["backend","frontend"] coe=true timeout=20
+upload_if="always()"
+
+== ④ seed 行形状核对（**不是**实跑 real.setup.ts）==
+`--list` 不执行 globalSetup（实测：上面两次 --list 都没有打印 `real.setup：…` 那行），
+而带 `-g` 的实跑会先触发 config 里的 webServer 起服占 :3200 ⇒ 本机不取这份读数。
+这里只按 `apps/api/scripts/qa_seed_sessions.py:74` 的 print 模板核对解析正则（形状级，不替代实跑）：
+  hits=[["qa-admin-001","bothot_session","3f2a9c…"],["qa-operator-001","bothot_session","deadbe…"],
+        ["qa-user-001","bothot_session","012345…"]]
+  malformed=["session 拆坏的形: cookie=x"]
+（`user qa-admin-001: id=1 role=admin` 那类行按 `:59` 的第二个 print 存在，被 `startsWith("session ")` 挡掉，
+ 不进 malformed ⇒ 不会因为种子脚本多打一行就误红。）
+
+== ⑤ 环境名对账（防"名字拼错被丢掉"）==
+`app/core/config.py:14` 是 `SettingsConfigDict(..., extra="ignore")` ⇒ 环境变量名写错**不报错、只被丢掉**。
+启动器导出的 11 个名字逐个对到字段行号（大小写不敏感匹配是 pydantic-settings 默认）：
+  app_env :16 ／ database_url :20 ／ redis_url :23 ／ aidean_issuer :30 ／ aidean_public_url :31 ／
+  session_store_backend :55（默认 memory）／ qa_fixture_token_prefix :60 ／
+  embedding_api_base :74 ／ embedding_api_key :75 ／ llm_api_base :80 ／ llm_api_key :81
+另：session_cookie_name :50 = `bothot_session`；session_ttl_seconds :51；session_cookie_secure :52 = False。
+非生产白名单守卫在 `config.py:235-237`（app_env ∈ NON_PRODUCTION_ENVS 直接返回 []）⇒
+本 job 不需要两把主密钥也能起服；仍在 CI 里生成并掩码注入，是为了让⑤的引擎密钥屏不走
+"缺主密钥 ⇒ fail-closed"的降级面，不把环境缺失读成用例失败。
+
+== ⑥ 补：只读复核批读出的问题改掉之后的复跑（同日第二批字节）==
+$ bash -n scripts/e2e/run_real_backend.sh
+bash_n_rc=0
+
+$ bash scripts/e2e/run_real_backend.sh --stop
+没有本脚本起过的进程（pidfile 不存在，三个端口本来就空闲）
+stop_rc=0
+$ command -v pgrep pkill
+（本机 git-bash 两个都没有 ⇒ pkill 特征兜底在本机这一棒是空转，CI 的 ubuntu runner 有；
+  这条读数写下来是为了让"§7 第 7 项里说的兜底"不被读成本机验过它的生效面。
+  本机实跑到的只有"pidfile 不存在 + 三端口空闲 ⇒ 如实播报且 rc=0"这一条分支。）
+
+$ pnpm exec tsc --noEmit                         → tsc_rc=0
+$ E2E_REAL_BACKEND=1 pnpm exec playwright test --list --project=real → Total: 11 tests in 2 files
+$ pnpm exec playwright test --list                → Total: 42 tests in 7 files
+$ node -e "require('js-yaml').load(ci.yml)"       → yaml_ok
+
+这批复跑覆盖的改动是四处静默位与一处死判据（逐条见 `s59_readings.md` §7 第 6～8 项）：
+html reporter 只加在真后端档（演示档仍 `reporter: [["list"]]` ⇒ mock 档产物面不变）、
+前端改成 `exec node ./node_modules/next/dist/bin/next start -p 3200`（PID 就是监听者本身）、
+pidfile 增量落盘 + 非零退出即拆 + 端口终检、`/ready` 按 {200,503} 判定用独立 rc=8、
+seed 解析前 `tr -d '\r'`。
+

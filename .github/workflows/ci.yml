@@ -531,3 +531,134 @@ jobs:
       - name: Dump compose logs on failure
         if: failure()
         run: docker compose -f docker/compose.yml -f docker/compose.ci.yml logs --no-color --tail=200
+
+  # ── STEP-59（D-V22-01/02/04/06）：真后端 e2e 骨架档 ──────────────────────────────
+  # 为什么不复用 frontend 里那步 "E2E (real backend, non-blocking)"：那一步的三条前提
+  # （Compose 全栈 / 主平台 OIDC 白名单 / 真实公众号 URL）CI 至今不具备，只能挂在 vars 闸门上
+  # 长期空转；本 job 的前提全部能自己供给——PG + Redis 两个 service、一条迁移、一个种子脚本、
+  # 一次 MOCK=false 构建。会话按 D-V22-02 走测试侧方案：qa_seed_sessions.py 往 Redis 写三条
+  # 角色会话，`qa-fixture-` 令牌在 service.py 里短路，不进主平台 ⇒ **产品代码零改动**，
+  # 验收③要求 `git diff 12c87e9 -- apps/api/app` 为空（读数见 EVD-V22-59）。
+  # continue-on-error 是 D-V22-04「新 job 连续三次绿之前不阻塞主干」的落点，摘除归 STEP-62。
+  e2e-real:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [backend, frontend]
+    continue-on-error: true
+    # 08 §1.1：连推时旧 run 让位（本仓一天十余次 push，排队只会让读数滞后）
+    concurrency:
+      group: e2e-real-${{ github.ref }}
+      cancel-in-progress: true
+    services:
+      # 端口/凭据与 backend job、apps/api/tests/conftest.py 默认 DSN 三方逐字对齐
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: bothot
+          POSTGRES_PASSWORD: bothot
+          POSTGRES_DB: bothot
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U bothot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      # 会话必须落在 Redis：SESSION_STORE_BACKEND 默认 memory 是**进程内**存储，
+      # 种子脚本与 uvicorn 是两个进程，用 memory 只会得到"写成功但看不见"的静默失效。
+      redis:
+        image: redis:7
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+psycopg://bothot:bothot@localhost:5433/bothot
+      REDIS_URL: redis://localhost:6380/0
+      SESSION_STORE_BACKEND: redis
+      # 关闭端口：主平台不可达，用来逼出"会话不依赖主平台"这一读数（S59.0 探针负责判定）
+      AIDEAN_ISSUER: http://127.0.0.1:9
+      APP_ENV: development
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve pnpm version from packageManager
+        id: pnpm
+        shell: bash
+        run: |
+          pm=$(grep -m1 '"packageManager"' "$GITHUB_WORKSPACE/apps/web/package.json" \
+            | sed -E 's/.*"packageManager"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' || true)
+          case "$pm" in
+            pnpm@[0-9]*\.[0-9]*\.[0-9]*)
+              echo "version=${pm#pnpm@}" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "❌ packageManager 必须写成 pnpm@<精确版本>，实际：'${pm:-<缺失>}'"
+              exit 1
+              ;;
+          esac
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ steps.pnpm.outputs.version }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: apps/web/.nvmrc
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install（后端运行时 + 前端依赖 + chromium）
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          (cd "$GITHUB_WORKSPACE/apps/api" && pip install -e .)
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+      - name: Generate ephemeral master keys
+        shell: bash
+        run: |
+          # 与 compose-smoke 同纪律（P-107 / D-V18-03）：先 ::add-mask:: 再写 $GITHUB_ENV，
+          # 顺序反了日志里已经落过明文。两把密钥不参与本卡判据，只是让引擎密钥屏
+          # 不在"缺主密钥 ⇒ fail-closed"的降级面上跑，免得把环境缺失读成用例失败。
+          push_master_key=$(python3 -c 'import base64,os;print(base64.b64encode(os.urandom(32)).decode())')
+          echo "::add-mask::$push_master_key"
+          echo "PUSH_SECRET_MASTER_KEY=$push_master_key" >> "$GITHUB_ENV"
+          engine_master_key=$(python3 -c 'import base64,os;print(base64.b64encode(os.urandom(32)).decode())')
+          echo "::add-mask::$engine_master_key"
+          echo "ENGINE_KEY_MASTER_KEY=$engine_master_key" >> "$GITHUB_ENV"
+      - name: Start real stack（迁移 → uvicorn:3300 → 探活 → 种子会话 → next:3200）
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        env:
+          E2E_SEED_FILE: ${{ runner.temp }}/e2e-real/seed.txt
+        run: bash scripts/e2e/run_real_backend.sh
+      - name: E2E (real backend, project=real, admin.spec.ts)
+        shell: bash
+        env:
+          PORT: "3200"
+          E2E_REAL_BACKEND: "1"
+          E2E_SEED_FILE: ${{ runner.temp }}/e2e-real/seed.txt
+        run: pnpm exec playwright test --project=real e2e/admin.spec.ts
+      - name: Upload report + screenshots（含绿跑：04 §1.1.5 要四屏截图，不能只在失败时留证）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-real-diagnostics
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+            ${{ runner.temp }}/e2e-real/
+          if-no-files-found: warn
+      - name: Stop stack
+        if: always()
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/e2e/run_real_backend.sh --stop || true

@@ -9,6 +9,8 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+# STEP-59：真后端档的三角色 storageState（内含有效会话 id，属凭据，绝不入库）
+e2e/.auth/
 
 # 环境与日志
 *.log

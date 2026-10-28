@@ -11,13 +11,37 @@ import { test, expect, type Page } from "@playwright/test";
  *    后台跨用户读面与部署事实不造样例）。所以**四屏面板与告警状态条在这一档结构上不可达**，
  *    这不是漏写用例，是演示态刻意没有后台数据；四屏的渲染契约（含错误态与"读不到 ⇒ 未知"）
  *    由 `tests/admin-ops-panels.spec.tsx` 无条件执行地锁住。
- * ② 真后端档（`E2E_REAL_BACKEND=1`，CI 非阻塞）——⑤～⑦条。本档在本机与 CI **均未执行过**
- *    （前置三条见 `e2e/real-backend.spec.ts` 头部）；里面的选择器是逐个从组件源码读出来的，
- *    解除闸门时需先复核再采信。
+ * ② 真后端档（`E2E_REAL_BACKEND=1`，CI 非阻塞 job `e2e-real`，STEP-59）——⑤～⑦ 条由 `real`
+ *    project 注入 admin 会话；①③ 在同一档里分别换成**游客态**与 **user 会话**复跑（越权负例，
+ *    只换 storageState，断言一条不加）。② 在真后端档**不可达**：回车触发的是整页跳
+ *    `/api/v1/auth/login`（`lib/api/auth.ts:23-31` 的真实分支，后端 302 去主平台），落点不是
+ *    "权限不足卡"；④ 的前半（游客卡）可达、后半（权限不足卡）要另一种会话，而 `test.use` 的作用域
+ *    是 describe 不是断言段 ⇒ 同一条用例里两种会话不能各管半段。两处都显式 skip 并写明原因，
+ *    不删断言、也不改成"看起来能过"的样子（判据冲突本体见台账 P-131）。
+ *    首次执行读数见 `EVD-V22-59/`。
  */
 
 const MOCK_LOGIN_KEY = "bothot_mock_login";
 const REAL_BACKEND_ENABLED = process.env.E2E_REAL_BACKEND === "1";
+
+/**
+ * 三块 `test.use` 载荷：演示态一律给**空对象**（不注册任何覆盖项），真后端档才换会话。
+ * mock 档因此不改变"跑哪些用例、每条断什么"；要说清一处可见差异：③ 为了按 describe 作用域
+ * 换 `user.json` 被单独包了一层 describe，它在报告里的**完整标题多了一段父级名**（用例数不变）。
+ *
+ * `storageState: undefined` 是"显式退出 project 默认会话"的写法，在 playwright 1.63 的
+ * 源码里核对过生效路径（scope 构建时照登记这个键，contextOptions 组装时见 `undefined` 就不带
+ * storageState）——它不是文档化的惯用法，所以这一处按版本钉住：升级 Playwright 时先看
+ * `--list --project=real` 之后 ① 是否仍以游客态跑，再采信这份读数。
+ * 文件名里的会话由 `e2e/real.setup.ts` 从 Redis 种子生成，不在这里手抄 cookie。
+ */
+const REAL_GUEST_STATE: { storageState?: string } = REAL_BACKEND_ENABLED ? { storageState: undefined } : {};
+const REAL_USER_STATE: { storageState?: string } = REAL_BACKEND_ENABLED
+  ? { storageState: "e2e/.auth/user.json" }
+  : {};
+const REAL_ADMIN_STATE: { storageState?: string } = REAL_BACKEND_ENABLED
+  ? { storageState: "e2e/.auth/admin.json" }
+  : {};
 
 async function mockLogin(page: Page) {
   await page.goto("/");
@@ -47,6 +71,9 @@ async function mainOverflow(page: Page): Promise<{ vw: number; offenders: string
 }
 
 test.describe.serial("管理端 e2e（演示态无条件执行 + 真后端档闸门）", () => {
+  // 真后端档里，直接放在本 describe 的 ①②④ 一律按**游客**跑（project 默认是 admin 会话）
+  test.use(REAL_GUEST_STATE);
+
   let consoleErrors: string[] = [];
 
   test.beforeEach(async ({ page }) => {
@@ -82,6 +109,11 @@ test.describe.serial("管理端 e2e（演示态无条件执行 + 真后端档闸
   });
 
   test("② 键盘可达：Tab 到登录按钮、回车登录，落点是权限分层而不是白屏", async ({ page }) => {
+    test.skip(
+      REAL_BACKEND_ENABLED,
+      "真后端档不可达：回车触发的是 /api/v1/auth/login → 外部主平台跳转，不是演示态那种写本地标记后刷新；" +
+        "落点断言（权限不足卡）在真后端档没有对应流程。08 §2 59.4 的前提冲突已登 P 号交回规划方"
+    );
     await page.goto("/admin");
     // 先等游客卡定型再走 Tab：mock 的 /auth/me 要过 delay()，判定中态与游客态是两个 DOM
     await expect(page.getByText("尚未登录或会话已过期")).toBeVisible();
@@ -98,16 +130,24 @@ test.describe.serial("管理端 e2e（演示态无条件执行 + 真后端档闸
     await expect(page).toHaveURL(/\/admin$/);
   });
 
-  test("③ 非 admin 的处置：两屏都给出出口链接", async ({ page }) => {
-    await mockLogin(page);
+  // ③ 需要"已登录但不是 admin"这一态：演示态用 mockLogin，真后端档换成 user.json 会话。
+  // test.use 只能按 describe 作用域生效，所以这一条单独包一层——断言与选择器一条没动。
+  test.describe("③ 非 admin 会话", () => {
+    test.use(REAL_USER_STATE);
 
-    await page.goto("/admin");
-    await expect(page.getByText("权限不足")).toBeVisible();
-    await expect(page.getByRole("link", { name: "返回空间列表" })).toBeVisible();
+    test("③ 非 admin 的处置：两屏都给出出口链接", async ({ page }) => {
+      if (!REAL_BACKEND_ENABLED) {
+        await mockLogin(page);
+      }
 
-    await page.goto("/admin/ops");
-    await expect(page.getByText("权限不足")).toBeVisible();
-    await expect(page.getByRole("link", { name: "回到首页" })).toBeVisible();
+      await page.goto("/admin");
+      await expect(page.getByText("权限不足")).toBeVisible();
+      await expect(page.getByRole("link", { name: "返回空间列表" })).toBeVisible();
+
+      await page.goto("/admin/ops");
+      await expect(page.getByText("权限不足")).toBeVisible();
+      await expect(page.getByRole("link", { name: "回到首页" })).toBeVisible();
+    });
   });
 
   test("④ 375px：游客卡与权限不足卡的内容区不横向溢出", async ({ page }) => {
@@ -121,14 +161,26 @@ test.describe.serial("管理端 e2e（演示态无条件执行 + 真后端档闸
     expect(guest!.vw).toBeGreaterThan(320);
     expect(guest!.offenders, `越界元素：${guest!.offenders.join(" | ")}`).toEqual([]);
 
-    await mockLogin(page);
-    await page.goto("/admin");
-    const denied = await mainOverflow(page);
-    expect(denied).not.toBeNull();
-    expect(denied!.offenders, `越界元素：${denied!.offenders.join(" | ")}`).toEqual([]);
+    // 后半段"权限不足卡"这一档取不到，原因不是"没有那种会话"而是作用域不够细：
+    // 整条用例挂在游客态（①～④ 直接在本 describe 里，见上面 REAL_GUEST_STATE），
+    // 而 `test.use` 只能按 describe 生效、不能只换后半段；把整条换成 user.json 的话，
+    // 前半段就再也画不出游客卡（`AuthGate.tsx:45-73` 那张卡只在 status==="guest" 渲染），
+    // 于是"两卡都不溢出"降级成"一卡不溢出"。⇒ real 档这一条只证游客卡，
+    //   读数口径按"半段"记，不把没跑的那半算成已过（P-131 记的就是这条判据的粒度问题）。
+    if (!REAL_BACKEND_ENABLED) {
+      await mockLogin(page);
+      await page.goto("/admin");
+      const denied = await mainOverflow(page);
+      expect(denied).not.toBeNull();
+      expect(denied!.offenders, `越界元素：${denied!.offenders.join(" | ")}`).toEqual([]);
+    }
   });
 
   test.describe("四屏主路径（真后端 + operator 会话）", () => {
+    // 标题里的 operator 是 STEP-14b 留下的说法，实际门槛是 admin（/admin/ops 要 is_admin）；
+    // 本卡只接开关与会话，不改标题——改名会动到既有的用例标识，登记为 nit 交回规划方。
+    test.use(REAL_ADMIN_STATE);
+
     test.skip(
       !REAL_BACKEND_ENABLED,
       "需 E2E_REAL_BACKEND=1：演示态里 /api/v1/admin/* 与 /ready 都不造样例，且 mock 会话 is_admin 恒 false"
