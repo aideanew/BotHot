@@ -127,7 +127,7 @@
 | `bash -n` 通过 | rc=0 | ✅ |
 | 起栈后 `/system/health` 的 `langbot` 不再是 `unreachable` | `"langbot":"ok"`（启动器 ④ 行） | ✅（强于下限） |
 | `--stop` 后 3290/3291 均无监听 | 端口终检三行全绿 + `netstat` 全空 | ✅（本机） |
-| `@ci` 的 `Stop stack` 仍 success | 由本卡推送后的 run 读；卡面同轮登记 | ⏳ 提交后读 |
+| `@ci` 的 `Stop stack` 仍 success | run `40701485995` 的 `e2e-real` job 第 14 步 `Stop stack` = completed/success（§9） | ✅ |
 | 本卡不改 `apps/api/app/**` | `git status` 现读：改动只有 `scripts/e2e/**` + 证据目录 | ✅ |
 
 ## 7. 保真度：不可证，不写成"与真实上游一致"
@@ -151,3 +151,49 @@
   直连环境下停止假服务会读到 `unreachable`，本机读到 `unhealthy`。两种都不是 `ok`，
   归因（假服务停掉 ⇒ 不再是 ok）成立，但**本机读不到 `unreachable`** 这一点已写进
   `s72_health_readings.txt` §C，避免后续把本机读数当 CI 读数引用。
+
+## 9. 提交后 @ci 读数（31e19777）
+
+提交 `31e19777`（`feat(STEP-72): 假 LLM 与假 LangBot 两件 + 启动器接线`，父 `aa3a3e9`）推送后**第 1 次**读数
+（D-14 轮次预算：1/2）：**八个 check-run 全 `completed/success`**。
+
+读法三条，写在这里是因为第一次用错了：check-runs 按 commit sha 取（`/commits/{sha}/check-runs`）；
+run id 从 check-run 的 `html_url` 读；`check_suite.id` **不是** Actions run id——拿它打
+`/actions/runs/{id}` 会 404（本次就踩了，日志里留了 `all routes failed: HTTP Error 404`）。
+
+| check-run | status | conclusion | check_suite | Actions run |
+| --- | --- | --- | --- | --- |
+| backend | completed | success | 110322005952 | 40701485995 |
+| compose | completed | success | 110322005952 | 40701485995 |
+| compose-smoke | completed | success | 110322005952 | 40701485995 |
+| e2e-real | completed | success | 110322005952 | 40701485995 |
+| frontend | completed | success | 110322005952 | 40701485995 |
+| workflow-lint | completed | success | 110322005952 | 40701485995 |
+| windows-dev | completed | success | 110322006156 | 40701486088 |
+| 安全扫描（① pip-audit / ② pnpm audit / ③ trivy / ④ gitleaks） | completed | success | 110322006734 | 40701486305 |
+
+三个 run 的结论：`40701485995`（CI，head `31e19777c384`）= success、
+`40701486088`（CI-Windows）= success、`40701486305`（Security）= success。
+
+**§6 第 9 条（`Stop stack` 仍 success）的现读**：CI run `40701485995` 的 `e2e-real` job `steps=20`，
+第 14 步 `Stop stack` 为 `completed/success`；同 job 的 `Reporter 自检`、`Upload report + screenshots`、
+各 `Post …` 与 `Stop containers` 全 success。用例段原文是 `Running 7 tests using 1 worker` →
+`6 passed (3.2s)` + `1 skipped`：第 ② 条「键盘可达」在 real 档按设计 skip（用例自身打印
+「④ real 档只证游客卡…见 P-131」）。**这一条要连 skip 一起读**——job 绿不等于 7 条都真跑了。
+
+**本 head 的 lint/测试门读数（backend job 日志原文）**：
+- `ruff check app tests ../../scripts` → `All checks passed!`（本卡改的 `scripts/e2e/*.py` 正在这个作用域内，
+  这是 `.gitleaksignore` 之外本卡唯一能拿到的"CI 对交付字节本身"的静态判据）
+- `mypy app ../../scripts` → `Success: no issues found in 136 source files`
+- `Tests (pytest) + coverage + skip gate` → `2502 passed, 6 skipped, 4 deselected`、
+  `Total coverage: 88.94%`、`skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0`
+- `Module coverage gate` → `✅ 全部模块与全局达标`
+- `Governance gates (rounds-check + evidence-check)` → `治理门基线：aa3a3e9…（HEAD=31e19777…）`、
+  `rounds-check rc=0 / evidence-check rc=0`、`✅ 治理门通过` ⇒ 本机跑过的两道门在 CI 上对
+  **入库字节**复算了同一结论，不是本机口径的自我转述。
+
+**一处必须分清的口径**：同一 job 的 `health 就绪（3s）` 里读数是
+`"deps":{"postgres":"ok","redis":"ok","langbot":"unreachable"}`。这是**预期**而非回归：本卡没有把
+`--with-fake-langbot` 接进 `ci.yml`（卡面允许修改面只有 `scripts/e2e/**` + 证据目录），CI 的 e2e-real
+不启假上游。所以 §5 那个 `"langbot":"ok"` 是**本机起栈**的读数，这里这个 `unreachable` 是**CI 无上游**的读数，
+两者口径不同、不能互推，也不能拿这一行说"§5 的 ok 被 CI 否掉了"。
