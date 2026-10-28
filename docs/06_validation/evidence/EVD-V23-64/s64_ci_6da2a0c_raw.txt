@@ -1,0 +1,163 @@
+STEP-59 @ci 首跑读数（head 6da2a0c）
+CI run=40633289770 num=364 status=completed conclusion=success created=2026-10-28T04:36:38Z updated=2026-10-28T04:44:49Z
+CI-Windows run=40633289715 num=266 status=completed conclusion=success created=2026-10-28T04:36:38Z updated=2026-10-28T04:58:30Z
+Security run=40633289690 num=360 status=completed conclusion=success created=2026-10-28T04:36:38Z updated=2026-10-28T04:37:42Z
+
+== CI run 的 job 结论（键名 jobs，共 6 个）==
+job=compose                                  conclusion=success   started=2026-10-28T04:36:40Z completed=2026-10-28T04:36:50Z
+    step=Set up job                                           conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Validate compose config                              conclusion=success
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Complete job                                         conclusion=success
+job=backend                                  conclusion=success   started=2026-10-28T04:36:40Z completed=2026-10-28T04:42:15Z
+    step=Set up job                                           conclusion=success
+    step=Initialize containers                                conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Run actions/setup-python@v5                          conclusion=success
+    step=Install                                              conclusion=success
+    step=Tool fingerprint                                     conclusion=success
+    step=Lint (ruff)                                          conclusion=success
+    step=Type check (mypy)                                    conclusion=success
+    step=Migrate schema (alembic upgrade head)                conclusion=success
+    step=Assert single alembic head                           conclusion=success
+    step=Migration roundtrip (upgrade head → downgrade -1 → u conclusion=success
+    step=Contract drift gate (gen_contracts --check)          conclusion=success
+    step=make/entry parity (6 tasks, zero/non-zero)           conclusion=success
+    step=Docs reference consistency gate (check_docs_consiste conclusion=success
+    step=Tests (pytest) + coverage + skip gate                conclusion=success
+    step=Module coverage gate (check_module_coverage)         conclusion=success
+    step=Governance gates (rounds-check + evidence-check)     conclusion=success
+    step=Post Run actions/setup-python@v5                     conclusion=success
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Stop containers                                      conclusion=success
+    step=Complete job                                         conclusion=success
+job=compose-smoke                            conclusion=success   started=2026-10-28T04:36:40Z completed=2026-10-28T04:38:23Z
+    step=Set up job                                           conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Validate compose config                              conclusion=success
+    step=Generate ephemeral master keys                       conclusion=success
+    step=Build backend image                                  conclusion=success
+    step=Start core services                                  conclusion=success
+    step=Smoke (health + scheduler/worker heartbeat)          conclusion=success
+    step=Dump compose logs on failure                         conclusion=skipped
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Complete job                                         conclusion=success
+job=frontend                                 conclusion=success   started=2026-10-28T04:36:40Z completed=2026-10-28T04:40:15Z
+    step=Set up job                                           conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Resolve pnpm version from packageManager             conclusion=success
+    step=Run pnpm/action-setup@v4                             conclusion=success
+    step=Run actions/setup-node@v4                            conclusion=success
+    step=Runtime fingerprint & parity assert                  conclusion=success
+    step=Install                                              conclusion=success
+    step=Type check                                           conclusion=success
+    step=Contracts package strict check (tsc --noEmit)        conclusion=success
+    step=TypeScript strict check (tsc --noEmit)               conclusion=success
+    step=Unit tests (vitest)                                  conclusion=success
+    step=Upload vitest diagnostics on failure                 conclusion=skipped
+    step=Build                                                conclusion=success
+    step=Install Playwright browser (chromium)                conclusion=success
+    step=Build (mock artifact, for UI e2e)                    conclusion=success
+    step=E2E (mock UI)                                        conclusion=success
+    step=E2E (real backend, non-blocking)                     conclusion=skipped
+    step=Upload Playwright diagnostics on failure             conclusion=skipped
+    step=Post Run actions/setup-node@v4                       conclusion=success
+    step=Post Run pnpm/action-setup@v4                        conclusion=success
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Complete job                                         conclusion=success
+job=workflow-lint                            conclusion=success   started=2026-10-28T04:36:40Z completed=2026-10-28T04:36:49Z
+    step=Set up job                                           conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Install actionlint (pinned)                          conclusion=success
+    step=actionlint (all workflows)                           conclusion=success
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Complete job                                         conclusion=success
+job=e2e-real                                 conclusion=failure   started=2026-10-28T04:42:17Z completed=2026-10-28T04:44:48Z
+    step=Set up job                                           conclusion=success
+    step=Initialize containers                                conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Resolve pnpm version from packageManager             conclusion=success
+    step=Run pnpm/action-setup@v4                             conclusion=success
+    step=Run actions/setup-node@v4                            conclusion=success
+    step=Run actions/setup-python@v5                          conclusion=success
+    step=Install（后端运行时 + 前端依赖 + chromium）                     conclusion=success
+    step=Generate ephemeral master keys                       conclusion=success
+    step=Start real stack（迁移 → uvicorn:3300 → 探活 → 种子会话 → nex conclusion=success
+    step=E2E (real backend, project=real, admin.spec.ts)      conclusion=failure
+    step=Reporter 自检（把"上传 playwright-report"这条判据变成可失败的）       conclusion=skipped
+    step=Upload report + screenshots（含绿跑：04 §1.1.5 要四屏截图，不能只在 conclusion=success
+    step=Stop stack                                           conclusion=failure
+    step=Post Run actions/setup-python@v5                     conclusion=skipped
+    step=Post Run actions/setup-node@v4                       conclusion=skipped
+    step=Post Run pnpm/action-setup@v4                        conclusion=success
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Stop containers                                      conclusion=success
+    step=Complete job                                         conclusion=success
+
+== run 级 logs zip：e2e-real job 的日志原文（按步文件）==
+e2e-real 相关日志文件 19 个：0_e2e-real.txt, e2e-real/system.txt, e2e-real/1_Set up job.txt, e2e-real/2_Initialize containers.txt, e2e-real/3_Run actions_checkout@v4.txt, e2e-real/4_Resolve pnpm version from packageManager.txt, e2e-real/5_Run pnpm_action-setup@v4.txt, e2e-real/6_Run actions_setup-node@v4.txt, e2e-real/7_Run actions_setup-python@v5.txt, e2e-real/8_Install（后端运行时 + 前端依赖 + chromium）.txt, e2e-real/9_Generate ephemeral master keys.txt, e2e-real/10_Start real stack（迁移 → uvicorn3300 → 探活 → 种子会话 → next3200）.txt
+0_e2e-real.txt: 2026-10-28T04:42:50.5166514Z     echo "❌ packageManager 必须写成 pnpm@<精确版本>，实际：'${pm:-<缺失>}'"
+0_e2e-real.txt: 2026-10-28T04:43:16.6071044Z Lockfile is up to date, resolution step is skipped
+0_e2e-real.txt: 2026-10-28T04:43:54.0416209Z 端口检查通过（本次要用：3200 3300）
+0_e2e-real.txt: 2026-10-28T04:43:57.2637801Z health 就绪（3s）：{"code":0,"message":"ok","data":{"status":"degraded","app":"BotHot","env":"development","deps":{"postgres":"ok","redis":"ok","langbot":"unreachable"}},"requestId":"eb9279f1-add3-4c99-aa6d
+0_e2e-real.txt: 2026-10-28T04:43:57.2640331Z    （本脚本自己 export 不了调用方的 shell，real.setup.ts 的默认路径与本行同源：${RUNNER_TEMP:-/tmp}/e2e-real/seed.txt）
+0_e2e-real.txt: 2026-10-28T04:43:58.0576931Z seed 写入 /home/runner/work/_temp/e2e-real/seed.txt：session 行 3 条（应为 3），种子脚本 rc=0
+0_e2e-real.txt: 2026-10-28T04:43:58.0578118Z == ⑥ S59.0 先验探针：主平台不可达时，admin 会话能不能进后台 ==
+0_e2e-real.txt: 2026-10-28T04:43:58.1385195Z probe: cookie=bothot_session value_len=32
+0_e2e-real.txt: 2026-10-28T04:43:58.1387907Z probe: GET /auth/me → curl_rc=0 body={"code":0,"message":"ok","data":{"user":{"sub":"qa-admin-001","email":"qa-admin@bothot.local","nickname":"QA管理员","tier":"","role":"admin","is_admin":true},"wallet":
+0_e2e-real.txt: 2026-10-28T04:43:58.1406024Z probe: GET /system/ready → HTTP 200 body={"code":0,"message":"ok","data":{"status":"ready","checks":{"postgres":{"ok":true,"state":"ok"},"redis":{"ok":true,"state":"ok"},"schema":{"ok":true,"state":"ok
+0_e2e-real.txt: 2026-10-28T04:43:58.1424465Z S59.0 绿：方案 A 成立（qa-fixture 短路 + 本地 users 行就够，不进主平台）
+0_e2e-real.txt: 2026-10-28T04:44:27.7805738Z next build（MOCK=false）用时 29s
+0_e2e-real.txt: 2026-10-28T04:44:29.8905979Z == 全部就绪：后端 :3300、前端 :3200、seed=/home/runner/work/_temp/e2e-real/seed.txt、pidfile=/home/runner/work/_temp/e2e-real/pids（2 条）==
+0_e2e-real.txt: 2026-10-28T04:44:31.0288048Z real.setup：由 /home/runner/work/_temp/e2e-real/seed.txt 生成 e2e/.auth/admin.json, e2e/.auth/operator.json, e2e/.auth/user.json（cookie=bothot_session，值不打印）
+0_e2e-real.txt: 2026-10-28T04:44:42.2353357Z     Error: expect(locator).toBeVisible() failed
+0_e2e-real.txt: 2026-10-28T04:44:42.2363618Z     test-results/admin-管理端-e2e（演示态无条件执行-真后端-dc787-in-ops：原地渲染统一-AuthGate，不重定向-real/test-failed-1.png
+0_e2e-real.txt: 2026-10-28T04:44:42.2365883Z   1 failed
+0_e2e-real.txt: 2026-10-28T04:44:42.2826824Z ##[error]Process completed with exit code 1.
+0_e2e-real.txt: 2026-10-28T04:44:42.2905317Z   path: apps/web/playwright-report/
+0_e2e-real.txt: 2026-10-28T04:44:44.1620980Z stopped backend pid=4148
+0_e2e-real.txt: 2026-10-28T04:44:44.2218207Z ❌ 本脚本起过的 backend 还占着端口 3300（没清干净，不静默放过）
+0_e2e-real.txt: 2026-10-28T04:44:44.2225186Z ##[error]Process completed with exit code 1.
+0_e2e-real.txt: 2026-10-28T04:44:44.6634492Z  server stopped
+lve pnpm version from packageManager.txt: 2026-10-28T04:42:50.5166510Z     echo "❌ packageManager 必须写成 pnpm@<精确版本>，实际：'${pm:-<缺失>}'"
+l/8_Install（后端运行时 + 前端依赖 + chromium）.txt: 2026-10-28T04:43:16.6070997Z Lockfile is up to date, resolution step is skipped
+ uvicorn3300 → 探活 → 种子会话 → next3200）.txt: 2026-10-28T04:43:54.0416191Z 端口检查通过（本次要用：3200 3300）
+ uvicorn3300 → 探活 → 种子会话 → next3200）.txt: 2026-10-28T04:43:57.2637751Z health 就绪（3s）：{"code":0,"message":"ok","data":{"status":"degraded","app":"BotHot","env":"development","deps":{"postgres":"ok","redis":"ok","langbot":"unreachable"}},"requestId":"eb9279f1-add3-4c99-aa6d
+ uvicorn3300 → 探活 → 种子会话 → next3200）.txt: 2026-10-28T04:43:57.2640327Z    （本脚本自己 export 不了调用方的 shell，real.setup.ts 的默认路径与本行同源：${RUNNER_TEMP:-/tmp}/e2e-real/seed.txt）
+ uvicorn3300 → 探活 → 种子会话 → next3200）.txt: 2026-10-28T04:43:58.0576882Z seed 写入 /home/runner/work/_temp/e2e-real/seed.txt：session 行 3 条（应为 3），种子脚本 rc=0
+ uvicorn3300 → 探活 → 种子会话 → next3200）.txt: 2026-10-28T04:43:58.0578110Z == ⑥ S59.0 先验探针：主平台不可达时，admin 会话能不能进后台 ==
+ uvicorn3300 → 探活 → 种子会话 → next3200）.txt: 2026-10-28T04:43:58.1385126Z probe: cookie=bothot_session value_len=32
+ uvicorn3300 → 探活 → 种子会话 → next3200）.txt: 2026-10-28T04:43:58.1387857Z probe: GET /auth/me → curl_rc=0 body={"code":0,"message":"ok","data":{"user":{"sub":"qa-admin-001","email":"qa-admin@bothot.local","nickname":"QA管理员","tier":"","role":"admin","is_admin":true},"wallet":
+ uvicorn3300 → 探活 → 种子会话 → next3200）.txt: 2026-10-28T04:43:58.1405991Z probe: GET /system/ready → HTTP 200 body={"code":0,"message":"ok","data":{"status":"ready","checks":{"postgres":{"ok":true,"state":"ok"},"redis":{"ok":true,"state":"ok"},"schema":{"ok":true,"state":"ok
+ uvicorn3300 → 探活 → 种子会话 → next3200）.txt: 2026-10-28T04:43:58.1424449Z S59.0 绿：方案 A 成立（qa-fixture 短路 + 本地 users 行就够，不进主平台）
+ uvicorn3300 → 探活 → 种子会话 → next3200）.txt: 2026-10-28T04:44:27.7805695Z next build（MOCK=false）用时 29s
+ uvicorn3300 → 探活 → 种子会话 → next3200）.txt: 2026-10-28T04:44:29.8905918Z == 全部就绪：后端 :3300、前端 :3200、seed=/home/runner/work/_temp/e2e-real/seed.txt、pidfile=/home/runner/work/_temp/e2e-real/pids（2 条）==
+ackend, project=real, admin.spec.ts).txt: 2026-10-28T04:44:31.0287996Z real.setup：由 /home/runner/work/_temp/e2e-real/seed.txt 生成 e2e/.auth/admin.json, e2e/.auth/operator.json, e2e/.auth/user.json（cookie=bothot_session，值不打印）
+ackend, project=real, admin.spec.ts).txt: 2026-10-28T04:44:42.2353353Z     Error: expect(locator).toBeVisible() failed
+ackend, project=real, admin.spec.ts).txt: 2026-10-28T04:44:42.2363615Z     test-results/admin-管理端-e2e（演示态无条件执行-真后端-dc787-in-ops：原地渲染统一-AuthGate，不重定向-real/test-failed-1.png
+ackend, project=real, admin.spec.ts).txt: 2026-10-28T04:44:42.2365880Z   1 failed
+ackend, project=real, admin.spec.ts).txt: 2026-10-28T04:44:42.2826803Z ##[error]Process completed with exit code 1.
+shots（含绿跑：04 §1.1.5 要四屏截图，不能只在失败时留证）.txt: 2026-10-28T04:44:42.2905312Z   path: apps/web/playwright-report/
+e2e-real/14_Stop stack.txt: 2026-10-28T04:44:44.1620911Z stopped backend pid=4148
+e2e-real/14_Stop stack.txt: 2026-10-28T04:44:44.2218178Z ❌ 本脚本起过的 backend 还占着端口 3300（没清干净，不静默放过）
+e2e-real/14_Stop stack.txt: 2026-10-28T04:44:44.2225175Z ##[error]Process completed with exit code 1.
+e2e-real/28_Stop containers.txt: 2026-10-28T04:44:44.6634490Z  server stopped
+hits=46
+
+== backend/frontend 关键计数 ==
+0_e2e-real.txt: 2026-10-28T04:44:42.2826824Z ##[error]Process completed with exit code 1.
+0_e2e-real.txt: 2026-10-28T04:44:44.2225186Z ##[error]Process completed with exit code 1.
+2_frontend.txt: 2026-10-28T04:37:20.5716215Z  Test Files  53 passed (53)
+2_frontend.txt: 2026-10-28T04:37:20.5718920Z    Duration  15.18s (environment 42%, tests 39%, import 12%, transform 4%, setup 2%, worker 2%)
+2_frontend.txt: 2026-10-28T04:40:12.1954608Z   31 passed (1.4m)
+5_backend.txt: 2026-10-28T04:37:55.2766412Z     print(f"❌ skip 门禁：无法解析 pytest-report.xml（{exc}）")
+5_backend.txt: 2026-10-28T04:37:55.2770014Z print(f"skip 门禁：total_skipped={total} baseline={baseline} pg_unreachable={len(pg_skips)}")
+5_backend.txt: 2026-10-28T04:37:55.2774588Z print("✅ skip 门禁通过：连库用例真实执行，skip 数在基线内")
+5_backend.txt: 2026-10-28T04:42:07.0357672Z Required test coverage of 75% reached. Total coverage: 88.93%
+5_backend.txt: 2026-10-28T04:42:07.0358623Z =========================== short test summary info ============================
+5_backend.txt: 2026-10-28T04:42:07.0364560Z 2502 passed, 6 skipped, 4 deselected, 2 warnings in 249.68s (0:04:09)
+5_backend.txt: 2026-10-28T04:42:09.2690660Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+5_backend.txt: 2026-10-28T04:42:09.2691321Z ✅ skip 门禁通过：连库用例真实执行，skip 数在基线内
+5_backend.txt: 2026-10-28T04:42:09.3382406Z ✅ 全部模块与全局达标
+hits2=14

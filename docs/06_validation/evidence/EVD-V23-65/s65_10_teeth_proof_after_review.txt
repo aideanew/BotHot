@@ -1,0 +1,16 @@
+== 牙齿证明：把两处复核抓到的错退回原状，看新增用例是否真的会红 ==
+-- 变异 1：NotificationBell 的 unavailable 守卫去掉（等于本卡没做 U2 后半句）--
+-- 变异 2：emptyFeedCopy 去掉 error / topicsKnown 两档（等于复核 C(1)(2) 未修）--
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 3 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+[2m Test Files [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m2 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[31m3 failed[39m[22m[2m | [22m[1m[32m21 passed[39m[22m[90m (24)[39m
+
+== 还原后（两处变异都退回交付态）==
+grep 证实：NotificationBell.tsx:260 是 unavailable ? null : (...)，page.tsx:165 是 !topicsKnown 档
+[2m Test Files [22m [1m[32m5 passed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[32m36 passed[39m[22m[90m (36)[39m
+tsc_rc=0
+
+⇒ 三条新增用例都有牙齿：变异下分别红在
+   · offstate「契约后半句：降级态下不得把状态显示成「暂无通知」」（红在守卫被去掉时）
+   · hot-empty「topics 拉失败 ⇒ 不许说聚类未产出」「feed 拉失败 ⇒ 不替它下结论」（红在两档被去掉时）

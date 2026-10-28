@@ -1,0 +1,14 @@
+== 本卡改掉/新增的全部文案，在 e2e 与需求文档里的命中数（逐串穷举，不是抽查）==
+== 用途：给 s65_readings.md §8 那句「e2e 里没有断言被我改掉的文案 ⇒ 低风险」补机械凭据 ==
+== 读法：前两列必须全 0（真消费者）；第三列是 V0.23.0 规划文档自身的引用（08 文案表与卡面），命中是应该的 ==
+暂无内容                 apps/web/e2e=0 docs/02_requirements=0 docs/任务规划V0.23.0=1
+暂无通知                 apps/web/e2e=0 docs/02_requirements=0 docs/任务规划V0.23.0=6
+通知服务暂不可用     apps/web/e2e=0 docs/02_requirements=0 docs/任务规划V0.23.0=2
+实时推送暂不可用     apps/web/e2e=0 docs/02_requirements=0 docs/任务规划V0.23.0=5
+演示数据，未连接实时通道 apps/web/e2e=0 docs/02_requirements=0 docs/任务规划V0.23.0=5
+待评分                    apps/web/e2e=0 docs/02_requirements=0 docs/任务规划V0.23.0=6
+今日暂无热点           apps/web/e2e=0 docs/02_requirements=0 docs/任务规划V0.23.0=6
+聚类未产出              apps/web/e2e=0 docs/02_requirements=0 docs/任务规划V0.23.0=5
+🔥 0.0                     apps/web/e2e=0 docs/02_requirements=0 docs/任务规划V0.23.0=0
+响应较慢                 apps/web/e2e=0 docs/02_requirements=0 docs/任务规划V0.23.0=6
+回答生成失败           apps/web/e2e=0 docs/02_requirements=0 docs/任务规划V0.23.0=1

@@ -49,6 +49,8 @@ export default function HotPage() {
   const { status, me } = useAuth();
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [topics, setTopics] = useState<HotTopic[]>([]);
+  // topics 拉成功过没有：`fetchTopics` 的 catch 是既有静默兜底，它证明不了"没产出"
+  const [topicsKnown, setTopicsKnown] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [filterType, setFilterType] = useState("");
@@ -88,8 +90,11 @@ export default function HotPage() {
         page_size: 10,
       });
       setTopics(res.items || []);
+      setTopicsKnown(true);
     } catch {
-      // 静默失败，Feed 是主内容
+      // 静默失败，Feed 是主内容——但"静默"不等于"可以替它下结论"：
+      // 这里把 topicsKnown 压回 false，让空态那一支不说「聚类未产出」这种它没资格说的话。
+      setTopicsKnown(false);
     }
   }, [topicStatus]);
 
@@ -142,6 +147,25 @@ export default function HotPage() {
 
   // 热度条形可视化基准（4.4b）：以当前展示集的最高分为满格，纯 CSS 宽度比例
   const maxScore = topics.reduce((m, t) => Math.max(m, t.hot_score), 0);
+
+  /**
+   * U3（`ux_states` · empty）空态文案，四档而不是两档。
+   *
+   * 契约给的两条原字各自都断言了一件事实：「聚类未产出」= 从来没聚出过东西，
+   * 「今日暂无热点」= 有产出但这一窗为空。说错任一条都是编造，所以：
+   * ① feed 自己拉失败 ⇒ 页面已有错误横幅，这里不再补一句"空"的因果判断；
+   * ② topics 拉失败（`fetchTopics` 的 catch 是既有静默兜底）⇒ 它证明不了"没产出"；
+   * ③ 只有 topics 拉成功、且没带状态过滤、且真的零条，才敢说「聚类未产出」；
+   * ④ 其余（有产出，或带过滤后为空）落「今日暂无热点」。
+   * 契约那句还带「+ 最近更新时间」：S65.0 探针②现读 `hot.py` 三个响应只有 `created_at`，
+   * 没有可用字段 ⇒ 这一半**不做**，也**不用 `new Date()` 伪造**（缺口登 P-143 + backlog HOT-006）。
+   */
+  const emptyFeedCopy = () => {
+    if (error) return "Feed 没能加载出来，先不判断这里有没有内容";
+    if (!topicsKnown) return "热点列表没能加载，先不判断有没有产出";
+    if (topics.length === 0 && !topicStatus) return "聚类未产出";
+    return "今日暂无热点";
+  };
 
   return (
     <AuthGate>
@@ -229,7 +253,10 @@ export default function HotPage() {
                       >
                         {STATUS_LABELS[t.status] || t.status}
                       </span>
-                      <span>🔥 {t.hot_score.toFixed(1)}</span>
+                      {/* U4（ux_states · success）：0 是评分未回填的占位，不是"热度为零" */}
+                      <span>
+                        {t.hot_score === 0 ? "待评分" : `🔥 ${t.hot_score.toFixed(1)}`}
+                      </span>
                       <span>来源 {t.source_count}</span>
                       <span>文章 {t.article_count}</span>
                       {t.category && <span>· {t.category}</span>}
@@ -292,8 +319,9 @@ export default function HotPage() {
       {loading ? (
         <div className="py-12 text-center text-gray-500">加载中...</div>
       ) : feed.length === 0 ? (
-        <div className="py-12 text-center text-gray-500">
-          暂无内容。触发聚簇或生成日报后，内容会出现在这里。
+        /* 文案由 emptyFeedCopy() 选档（四档的理由与"为什么不写最近更新时间"都在那段的注释里） */
+        <div className="py-12 text-center text-gray-500" role="status">
+          {emptyFeedCopy()}
         </div>
       ) : (
         <div className="space-y-3">

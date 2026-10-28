@@ -197,13 +197,15 @@ describe("NotificationBell", () => {
     expect(titles.slice(0, 2)).toEqual(["第二条", "第一条"]); // 最新在前
   });
 
-  it("后端控制帧 → 下拉展示「通知服务暂不可用」，不崩渲染", async () => {
+  it("后端控制帧 → 下拉展示「实时推送暂不可用，历史仍可查」，不崩渲染", async () => {
     const NotificationBell = (await import("@/components/NotificationBell")).default;
     render(createElement(NotificationBell));
     act(() => latest().emit(JSON.stringify({ type: "service_unavailable", message: "暂不可用" })));
     fireEvent.click(screen.getByRole("button", { name: "通知" }));
-    expect(screen.getByText("通知服务暂不可用，请稍后重试")).toBeTruthy();
-    expect(screen.getByText("暂无通知")).toBeTruthy();
+    // STEP-65 U2：横幅换成 `ux_states` 的原字（旧文案「通知服务暂不可用，请稍后重试」不是契约字），
+    // 且同一句的后半段「不得显示为「无通知」」也一并兑现——降级态下不再渲那句空态标签。
+    expect(screen.getByText("实时推送暂不可用，历史仍可查")).toBeTruthy();
+    expect(screen.queryByText("暂无通知")).toBeNull();
   });
 
   it("卸载即断连（cleanup → EventSource.close）", async () => {

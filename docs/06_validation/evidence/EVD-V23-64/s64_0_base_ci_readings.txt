@@ -16,3 +16,28 @@ job=e2e-real                                 conclusion=failure   started=2026-1
 job=e2e-real                                 conclusion=failure   started=2026-10-28T03:54:00Z completed=2026-10-28T03:56:19Z
 116:0_e2e-real.txt: 2026-10-28T03:56:13.8150851Z   1 failed
 139:ackend, project=real, admin.spec.ts).txt: 2026-10-28T03:56:13.8150847Z   1 failed
+
+== §11 追加（STEP-65 批同批回填）：6da2a0c 的 @ci 读数 ==
+CI run=40633289770 num=364 status=completed conclusion=success created=2026-10-28T04:36:38Z updated=2026-10-28T04:44:49Z
+CI-Windows run=40633289715 num=266 status=completed conclusion=success created=2026-10-28T04:36:38Z updated=2026-10-28T04:58:30Z
+Security run=40633289690 num=360 status=completed conclusion=success created=2026-10-28T04:36:38Z updated=2026-10-28T04:37:42Z
+
+
+job=compose                                  conclusion=success   started=2026-10-28T04:36:40Z completed=2026-10-28T04:36:50Z
+job=backend                                  conclusion=success   started=2026-10-28T04:36:40Z completed=2026-10-28T04:42:15Z
+job=compose-smoke                            conclusion=success   started=2026-10-28T04:36:40Z completed=2026-10-28T04:38:23Z
+job=frontend                                 conclusion=success   started=2026-10-28T04:36:40Z completed=2026-10-28T04:40:15Z
+job=workflow-lint                            conclusion=success   started=2026-10-28T04:36:40Z completed=2026-10-28T04:36:49Z
+job=e2e-real                                 conclusion=failure   started=2026-10-28T04:42:17Z completed=2026-10-28T04:44:48Z
+
+== backend job 关键读数（本卡的 @ci 判据在这三行里）==
+    step=Contract drift gate (gen_contracts --check)          conclusion=success
+5_backend.txt: 2026-10-28T04:37:55.2770014Z print(f"skip 门禁：total_skipped={total} baseline={baseline} pg_unreachable={len(pg_skips)}")
+5_backend.txt: 2026-10-28T04:42:07.0357672Z Required test coverage of 75% reached. Total coverage: 88.93%
+5_backend.txt: 2026-10-28T04:42:07.0364560Z 2502 passed, 6 skipped, 4 deselected, 2 warnings in 249.68s (0:04:09)
+5_backend.txt: 2026-10-28T04:42:09.2690660Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+5_backend.txt: 2026-10-28T04:42:09.3382406Z ✅ 全部模块与全局达标
+
+== 顺带：e2e-real 在第三个头上仍是 1 failed（STEP-59 的后续事实，交回 #107/60）==
+job=e2e-real                                 conclusion=failure   started=2026-10-28T04:42:17Z completed=2026-10-28T04:44:48Z
+0_e2e-real.txt: 2026-10-28T04:44:42.2365883Z   1 failed

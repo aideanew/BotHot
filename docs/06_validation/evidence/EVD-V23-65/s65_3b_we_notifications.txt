@@ -1,0 +1,14 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.0 D:/Code/AideanBotHot/apps/web
+
+ ✓ tests/we-notifications.spec.ts (12 tests) 214ms
+
+ Test Files  1 passed (1)
+      Tests  12 passed (12)
+   Start at  12:51:01
+   Duration  1.65s (environment 58%, import 19%, tests 15%, transform 6%, setup 1%, worker 1%)
+
+JUNIT report written to D:/Code/AideanBotHot/apps/web/vitest-report/junit.xml

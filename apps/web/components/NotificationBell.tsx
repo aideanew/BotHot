@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthContext";
+import { isMockMode } from "@/lib/api/http";
 import {
   connectNotifications,
   fetchHistory,
@@ -235,15 +236,30 @@ export default function NotificationBell() {
             <span className="text-caption font-semibold text-neutral-700">通知</span>
             <span className="text-caption text-neutral-400">{items.length} 条</span>
           </div>
+          {/* U1（ux_states · offstate）：演示态的 connectNotifications 被 isMockMode() 短路，
+              不建 SSE 是正确行为，但"看不到实时通知"必须说出口而不是静默装作正常。 */}
+          {isMockMode() && (
+            <div
+              className="border-b border-neutral-100 bg-neutral-50 px-3 py-2 text-caption text-neutral-500"
+              role="status"
+            >
+              演示数据，未连接实时通道
+            </div>
+          )}
           {unavailable && (
             <div className="border-b border-amber-100 bg-amber-50 px-3 py-2 text-caption text-amber-700">
               {rateLimited
                 ? "请求过于频繁，请稍后再试"
-                : "通知服务暂不可用，请稍后重试"}
+                : "实时推送暂不可用，历史仍可查"}
             </div>
           )}
           {items.length === 0 ? (
-            <div className="px-3 py-8 text-center text-caption text-neutral-400">暂无通知</div>
+            /* U2 的后半句「不得显示为「无通知」」：降级态下看不到条目是"通路没连上"，
+               不是"真的没有通知"。这句会把前者说成后者，所以 unavailable 时直接不渲它，
+               状态说明由上面那条横幅承担。 */
+            unavailable ? null : (
+              <div className="px-3 py-8 text-center text-caption text-neutral-400">暂无通知</div>
+            )
           ) : (
             <ul className="max-h-80 divide-y divide-neutral-100 overflow-y-auto">
               {items.map((it) => (

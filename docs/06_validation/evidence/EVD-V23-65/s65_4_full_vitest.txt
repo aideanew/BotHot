@@ -1,0 +1,123 @@
+[33m(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90mD:/Code/AideanBotHot/apps/web[39m
+
+ [32m✓[39m tests/resolve.spec.ts [2m([22m[2m27 tests[22m[2m)[22m[33m 1923[2mms[22m[39m
+   [32m✓[39m 解析预览数据形态（mock 态契约样例） [2m(4)[22m
+     [33m[2m✓[22m[39m 正常样例：extract 返回 v0.3f 完整形态且高质量通过[33m 417[2mms[22m[39m
+     [33m[2m✓[22m[39m 低质样例（url 含『低质』）：score<30、passed=false、reasons 非空[33m 416[2mms[22m[39m
+     [33m[2m✓[22m[39m resolve 正常样例：契约字段齐全（title/author/publishTime/content/url/biz）[33m 426[2mms[22m[39m
+     [33m[2m✓[22m[39m resolve mock 态非 http 链接 → 10006 链接格式不正确[33m 429[2mms[22m[39m
+ [32m✓[39m tests/w4-hot.spec.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 2020[2mms[22m[39m
+   [32m✓[39m /hot/daily 日报页 [2m(2)[22m
+     [33m[2m✓[22m[39m 以渲染后的 Markdown 展示正文（非源文本直出）[33m 1512[2mms[22m[39m
+ [32m✓[39m tests/mock-routes.spec.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 3348[2mms[22m[39m
+   [32m✓[39m 统一 mock 拦截表 [2m(10)[22m
+     [33m[2m✓[22m[39m 命中表的读接口：零 fetch，且解包管道照跑[33m 762[2mms[22m[39m
+     [33m[2m✓[22m[39m 命中表的写接口：路径参数从表里解出来，body 参与判断[33m 415[2mms[22m[39m
+     [33m[2m✓[22m[39m 演示态切未开放引擎：按真后端口径拒 10004，而不是静默成功[33m 418[2mms[22m[39m
+     [33m[2m✓[22m[39m auth 域迁入后：未登录态在 mock 里也是 10001，且同样零 fetch[33m 845[2mms[22m[39m
+     [33m[2m✓[22m[39m auth 域迁入后：登录标记与 /me 读的是同一把 key[33m 430[2mms[22m[39m
+     [33m[2m✓[22m[39m public-library 域迁入后：解包管道照跑（表存的是 {items}，不是裸数组）[33m 425[2mms[22m[39m
+ [32m✓[39m tests/r043-jobs-page.spec.tsx [2m([22m[2m17 tests[22m[2m)[22m[33m 2709[2mms[22m[39m
+   [32m✓[39m R0.4.3 过滤与分页 [2m(3)[22m
+     [33m[2m✓[22m[39m 加载更多：offset 由已加载条数推导，追加而非替换[33m 1279[2mms[22m[39m
+ [32m✓[39m tests/r013-docs-pagination.spec.tsx [2m([22m[2m10 tests[22m[2m)[22m[33m 3204[2mms[22m[39m
+   [32m✓[39m R0.1.3 服务端分页 [2m(2)[22m
+     [33m[2m✓[22m[39m 首屏只取一页，加载更多以已加载条数为 offset 追加，载完不再出现按钮[33m 1155[2mms[22m[39m
+     [33m[2m✓[22m[39m 加载更多带当前分类过滤（过滤下的分页与全量同一套 offset 语义）[33m 1327[2mms[22m[39m
+ [32m✓[39m tests/r014-large-space-categories.spec.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 4086[2mms[22m[39m
+   [32m✓[39m R0.1.4 大空间分类完整性（F-1 + F-9 原始缺陷形态） [2m(3)[22m
+     [33m[2m✓[22m[39m 150 篇时空下拉仍完整：选项含首页根本没有的分类与未分类[33m 507[2mms[22m[39m
+     [33m[2m✓[22m[39m 加载更多不改变下拉集合，也不重取分类枚举[33m 1160[2mms[22m[39m
+     [33m[2m✓[22m[39m 能选中只存在于第 2 页的分类，offset 归零且返回该分类的行[33m 687[2mms[22m[39m
+   [32m✓[39m R0.1.4 空态不得误报（客户端过滤时代的核心错报） [2m(2)[22m
+     [33m[2m✓[22m[39m 150 篇的空间选了个空的分类 → 指明分类为空，不得报成「该空间还没有文章」[33m 509[2mms[22m[39m
+     [33m[2m✓[22m[39m 过滤清空后回到首屏语义，不残留上一页的累积行[33m 1217[2mms[22m[39m
+ [32m✓[39m tests/r026-doc-batch.spec.tsx [2m([22m[2m7 tests[22m[2m)[22m[33m 6462[2mms[22m[39m
+   [32m✓[39m R0.2.6 批量删除：ids 按 50 上限切片 [2m(1)[22m
+     [33m[2m✓[22m[39m 勾选 51 篇 → 分 2 批请求（50 + 1），顺序与总篇数守恒，成功篇退出选中[33m 1200[2mms[22m[39m
+   [32m✓[39m R0.2.6 批量删除：篇级部分成功 [2m(1)[22m
+     [33m[2m✓[22m[39m 失败篇逐篇列出中文原因、保留在选中态可重试，成功篇即时退出列表[33m 826[2mms[22m[39m
+   [32m✓[39m R0.2.6 批量改分类：整批原子 [2m(2)[22m
+     [33m[2m✓[22m[39m 单批一次请求全成功，报告目标分类并刷新分类集合（分类是资产级属性）[33m 898[2mms[22m[39m
+     [33m[2m✓[22m[39m 跨批执行中某批被整体拒绝：已生效篇如实呈现、被拒批次逐批列出[33m 1128[2mms[22m[39m
+   [32m✓[39m R0.2.6 与 R0.1.3 服务端分页共存：跨页多选 [2m(3)[22m
+     [33m[2m✓[22m[39m 加载更多不丢勾选，「全选已加载」呈半选态[33m 944[2mms[22m[39m
+     [33m[2m✓[22m[39m 全选已加载一次勾选全部已加载行，再次点击全取消[33m 508[2mms[22m[39m
+     [33m[2m✓[22m[39m 切过滤后不可见的行退出选中：批量删除不会命中看不见的文章[33m 951[2mms[22m[39m
+ [32m✓[39m tests/t0263-ingest-status-poll.spec.tsx [2m([22m[2m3 tests[22m[2m)[22m[33m 559[2mms[22m[39m
+   [32m✓[39m 入库状态回写 [2m(3)[22m
+     [33m[2m✓[22m[39m pending 驱动状态查询并刷新列表，转 ready 后显示「已就绪」[33m 417[2mms[22m[39m
+ [32m✓[39m tests/r11-admin-console.spec.tsx [2m([22m[2m10 tests[22m[2m)[22m[33m 1645[2mms[22m[39m
+   [32m✓[39m 后台管理台：批量操作只走 admin 端点 [2m(3)[22m
+     [33m[2m✓[22m[39m 批量删除命中 /admin 变体，绝不落到本人空间端点[33m 327[2mms[22m[39m
+ [32m✓[39m tests/w4-bots-tasks.spec.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 1460[2mms[22m[39m
+   [32m✓[39m /bots 推送任务 Tab [2m(8)[22m
+     [33m[2m✓[22m[39m 切到 Tab 后拉取并渲出任务行[33m 376[2mms[22m[39m
+ [32m✓[39m tests/t0143-sync-visibility-render.spec.tsx [2m([22m[2m9 tests[22m[2m)[22m[33m 885[2mms[22m[39m
+   [32m✓[39m T1.4.3 预计篇数（discoveredCount） [2m(2)[22m
+     [33m[2m✓[22m[39m 有 DISCOVERED 清单 → 渲染「预计篇数：N 篇」[33m 331[2mms[22m[39m
+ [32m✓[39m tests/admin-ops-panels.spec.tsx [2m([22m[2m20 tests[22m[2m)[22m[33m 1418[2mms[22m[39m
+ [32m✓[39m tests/r024-subscription-page-wire.spec.tsx [2m([22m[2m4 tests[22m[2m)[22m[33m 688[2mms[22m[39m
+ [32m✓[39m tests/t0131-subscribe-shortcut.spec.tsx [2m([22m[2m6 tests[22m[2m)[22m[33m 347[2mms[22m[39m
+ [32m✓[39m tests/w9-paged-list.spec.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 840[2mms[22m[39m
+   [32m✓[39m usePagedList [2m(3)[22m
+     [33m[2m✓[22m[39m page 形状：传 page + page_size[33m 811[2mms[22m[39m
+ [32m✓[39m tests/engine-switcher-states.spec.tsx [2m([22m[2m6 tests[22m[2m)[22m[33m 360[2mms[22m[39m
+ [32m✓[39m tests/r024-doc-page-wire.spec.tsx [2m([22m[2m4 tests[22m[2m)[22m[33m 733[2mms[22m[39m
+ [32m✓[39m tests/callback.spec.tsx [2m([22m[2m10 tests[22m[2m)[22m[33m 549[2mms[22m[39m
+ [32m✓[39m tests/r024-subscription-lifecycle.spec.tsx [2m([22m[2m17 tests[22m[2m)[22m[33m 840[2mms[22m[39m
+ [32m✓[39m tests/r062-onboarding-steps.spec.tsx [2m([22m[2m18 tests[22m[2m)[22m[33m 510[2mms[22m[39m
+ [32m✓[39m tests/admin-ops-api.spec.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 224[2mms[22m[39m
+ [32m✓[39m tests/r024-doc-lifecycle.spec.tsx [2m([22m[2m10 tests[22m[2m)[22m[33m 678[2mms[22m[39m
+ [32m✓[39m tests/s48-engine-contract.spec.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 482[2mms[22m[39m
+   [32m✓[39m S48 引擎域 mock 键集合守卫 [2m(2)[22m
+     [33m[2m✓[22m[39m GET /engines 每条样例恰好 10 个键，键集合与契约逐字相同[33m 472[2mms[22m[39m
+ [32m✓[39m tests/r043-spaces-list.spec.tsx [2m([22m[2m4 tests[22m[2m)[22m[33m 316[2mms[22m[39m
+ [32m✓[39m tests/w9-pagination.spec.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 223[2mms[22m[39m
+ [32m✓[39m tests/r054-space-detail-honesty.spec.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 295[2mms[22m[39m
+ [32m✓[39m tests/w9-notification-enhance.spec.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 240[2mms[22m[39m
+ [32m✓[39m tests/ask-sse.spec.ts [2m([22m[2m22 tests[22m[2m)[22m[33m 377[2mms[22m[39m
+ [32m✓[39m tests/we-notifications.spec.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 271[2mms[22m[39m
+ [32m✓[39m tests/r043-jobs-api.spec.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 174[2mms[22m[39m
+ [32m✓[39m tests/topbar-guest-nav.spec.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 241[2mms[22m[39m
+ [32m✓[39m tests/mock-default.spec.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 113[2mms[22m[39m
+ [32m✓[39m tests/hot-empty-states.spec.tsx [2m([22m[2m6 tests[22m[2m)[22m[33m 307[2mms[22m[39m
+ [32m✓[39m tests/r063-batch-ingest.spec.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 200[2mms[22m[39m
+ [32m✓[39m tests/notification-offstate.spec.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 215[2mms[22m[39m
+ [32m✓[39m tests/r024-lifecycle-api.spec.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 152[2mms[22m[39m
+ [32m✓[39m tests/auth-gate.spec.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 153[2mms[22m[39m
+ [32m✓[39m tests/hot-zero-score.spec.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 257[2mms[22m[39m
+ [32m✓[39m tests/r064-panel-error-bubble.spec.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 169[2mms[22m[39m
+ [32m✓[39m tests/ask-sse-degraded.spec.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 179[2mms[22m[39m
+ [32m✓[39m tests/t0143-sync-visibility-api.spec.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 138[2mms[22m[39m
+ [32m✓[39m tests/t0114-citation-engine.spec.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 94[2mms[22m[39m
+ [32m✓[39m tests/t022-fixes.spec.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 104[2mms[22m[39m
+ [32m✓[39m tests/parse-preview-card.spec.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 133[2mms[22m[39m
+ [32m✓[39m tests/t0262-batch-job.spec.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 71[2mms[22m[39m
+ [32m✓[39m tests/page-title-coverage.spec.ts [2m([22m[2m1 test[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32m✓[39m tests/s55-mock-runtime-shape.spec.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 64[2mms[22m[39m
+ [32m✓[39m tests/s52-mock-contract-coverage.spec.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 42[2mms[22m[39m
+ [32m✓[39m tests/page-title.spec.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 79[2mms[22m[39m
+ [32m✓[39m tests/r061-sse-ask.spec.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 133[2mms[22m[39m
+ [32m✓[39m tests/setup-fetch-guard.spec.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m tests/public-library.spec.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/engines.spec.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m tests/me-normalize.spec.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/r026-chunk-doc-ids.spec.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/p5-workbench.spec.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/hit-cache-toast.spec.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m57 passed[39m[22m[90m (57)[39m
+[2m      Tests [22m [1m[32m449 passed[39m[22m[90m (449)[39m
+[2m   Start at [22m 13:22:44
+[2m   Duration [22m 32.71s[2m (environment 57%, tests 21%, import 16%, transform 3%, setup 1%, worker 1%)[22m
+
+[2mEnvironment [22m [33mhappy-dom was created 57 times[39m[2m · 109.22s total, 57% of tracked time[22m
+[2m            [22m [2mcreate it once per worker with [22m[33mpool: 'vmThreads'[39m[2m (keeps per-file isolation) or [22m[33misolate: false[39m[2m (shares it across files)[22m
+[2m            [22m [2mlearn more: https://vitest.dev/guide/improving-performance#test-environments[22m
+
+JUNIT report written to D:/Code/AideanBotHot/apps/web/vitest-report/junit.xml

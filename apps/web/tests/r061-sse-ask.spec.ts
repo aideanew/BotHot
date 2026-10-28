@@ -183,7 +183,11 @@ describe("R0.6.1 失败路径：错误气泡与回落", () => {
   });
 
   it("非会话失效的 ApiError → 错误气泡，保留原问题供重试", async () => {
-    h.askQuestion.mockRejectedValue(new ApiError(30002, "回答生成失败"));
+    // 样本码位从 30002 换成 30001：STEP-65 U5 之后 30002（LANGBOT_API_ERROR）与 50002
+    // 归"引擎不可用"分支，文案由契约给定，不再等于 `err.message`——那条分流由
+    // `tests/ask-sse-degraded.spec.ts` 判；本条要判的是"其余码位仍把 ApiError.message 直通气泡"，
+    // 所以样本必须挑一个不在降级集合里的真实码位（30001 = SPACE_NOT_FOUND）。
+    h.askQuestion.mockRejectedValue(new ApiError(30001, "回答生成失败"));
     const { result } = setup();
     await act(async () => {
       await result.current.ask("重试我");
@@ -192,7 +196,7 @@ describe("R0.6.1 失败路径：错误气泡与回落", () => {
     const m = result.current.messages[1];
     expect(m.content).toBe("");
     expect(m.streaming).toBe(false);
-    expect(m.error).toEqual({ text: "回答生成失败", question: "重试我" });
+    expect(m.error).toEqual({ text: "回答生成失败", question: "重试我", kind: "failed" });
     expect(h.onUnauthorized).not.toHaveBeenCalled();
   });
 

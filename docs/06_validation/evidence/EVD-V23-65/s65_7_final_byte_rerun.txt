@@ -1,0 +1,27 @@
+== 最终字节复跑（提交前最后一次；本文件已剥掉 ANSI 转义，条数不写在标题里以免漂）==
+
+$ vitest run 四个新用例
+ Test Files  4 passed (4)
+      Tests  21 passed (21)
+four_rc=0  ← 这是管道里 grep 的 rc，不是 vitest 的 rc；权威判据是上面两行（Test Files 4 passed / Tests 21 passed）
+
+$ vitest run 卡面 ⑤ 的三个既有 spec
+ Test Files  3 passed (3)
+      Tests  39 passed (39)
+
+$ pnpm exec tsc --noEmit
+tsc_rc=0
+
+$ pnpm exec next lint
+✔ No ESLint warnings or errors
+
+$ pytest 契约面与文档完整性面
+................                                                         [100%]
+304 passed in 16.67s
+
+$ ruff / mypy / gen --check / check_docs_consistency
+All checks passed!
+Success: no issues found in 134 source files
+gen_check_rc=0
+
+[ok] 文档一致性检查通过

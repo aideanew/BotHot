@@ -64,6 +64,12 @@ export default function ChatMessageList({
                 <p className="whitespace-pre-wrap text-base text-neutral-700">
                   {m.content}
                 </p>
+              ) : m.slow ? (
+                /* U5（ux_states · degraded 的"给提示而非静默"那一半）：到首 token 锚点仍无声，
+                   换个说法而不是继续假装在思考——提示不中断流，用户仍可等也可中止。 */
+                <p className="text-base text-amber-600" role="status">
+                  响应较慢，仍在生成…
+                </p>
               ) : (
                 <p className="text-base text-neutral-400">正在思考…</p>
               )}

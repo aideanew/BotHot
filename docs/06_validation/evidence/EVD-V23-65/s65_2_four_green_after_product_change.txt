@@ -1,0 +1,19 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.0 D:/Code/AideanBotHot/apps/web
+
+ ✓ tests/ask-sse-degraded.spec.ts (10 tests) 464ms
+ ✓ tests/notification-offstate.spec.tsx (4 tests) 466ms
+   ✓ U1 演示态必须显式声明（禁止静默装作正常） (2)
+     ✓ mock 态打开面板：出现「演示数据，未连接实时通道」，且它在列表之上 354ms
+ ✓ tests/hot-zero-score.spec.tsx (3 tests) 299ms
+ ✓ tests/hot-empty-states.spec.tsx (4 tests) 378ms
+
+ Test Files  4 passed (4)
+      Tests  21 passed (21)
+   Start at  12:48:23
+   Duration  7.80s (environment 54%, import 28%, transform 9%, tests 6%, setup 1%, worker 1%)
+
+JUNIT report written to D:/Code/AideanBotHot/apps/web/vitest-report/junit.xml

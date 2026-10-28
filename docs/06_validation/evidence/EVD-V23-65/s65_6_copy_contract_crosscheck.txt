@@ -1,0 +1,30 @@
+契约侧 = 冻结稿 `x-core-views[i].states[k]` 里「」包住的字面（现读，逐字）
+产品侧 = 各落点文件剥掉注释后的中文文案串（现读；方法与其局限见本文件头）
+
+| 缺口 | 契约坐标 | 契约原字 | 落点 | 判定 | 产品侧实际串 | 行 |
+|---|---|---|---|---|---|---|
+| U1 | `x-core-views[4].states.offstate` | 「演示数据，未连接实时通道」 | `NotificationBell.tsx` | 精确等于 | 演示数据，未连接实时通道 | 246 |
+| U2 | `x-core-views[4].states.degraded` | 「实时推送暂不可用，历史仍可查」 | `NotificationBell.tsx` | 精确等于 | 实时推送暂不可用，历史仍可查 | 253 |
+| U2 | `x-core-views[4].states.degraded` | 「无通知」 | `NotificationBell.tsx` | 仅作为别的串的片段 ⇒ 未落地 | 暂无通知 | 261 |
+| U4 | `x-core-views[1].states.success` | 「待评分」 | `page.tsx` | 精确等于 | 待评分 | 258 |
+| U4 | `x-core-views[1].states.success` | 「0 分」 | `page.tsx` | 未出现 | — | （无） |
+| U3 | `x-core-views[1].states.empty` | 「今日暂无热点」 | `page.tsx` | 精确等于 | 今日暂无热点 | 167 |
+| U3 | `x-core-views[1].states.empty` | 「聚类未产出」 | `page.tsx` | 精确等于 | 聚类未产出 | 166 |
+| U5 | `x-core-views[2].states.degraded` | 「响应较慢」 | `ChatMessageList.tsx` | 原字前缀（后接说明） | 响应较慢，仍在生成… | 71 |
+
+逐条说明：
+- U1/U2/U4/U3 现在是**精确等于**：产品里那条句子就是契约原字，没有意译后缀。
+  U5 是**原字前缀**——而前缀之后那半句（「，仍在生成…」）正是 `08` §3.2 第 8 行给的原句，
+  所以它不是「本卡自己加的说明」，是两层权威文本的关系；对照表按字面判，不替谁圆场。
+- U1/U2/U5 三条是验收③点名的原字，判定必须能区分「文案在 DOM 里」与「文案只在注释里」。
+- 「0 分」判未出现＝契约要求的**改掉**那一半：产品里不该再有这个写法。
+- 「无通知」这一行**不能只看静态判定**：源码里 `暂无通知` 这个字面仍然存在（非降级时它是对的），
+  但它在 `unavailable` 时被条件掉不渲——这是行为层的命题，静态扫描看不见条件。
+  兑现证据是两条跑出来的用例：`tests/notification-offstate.spec.tsx` 的「契约后半句」那条
+  （先证明非降级时「暂无通知」在，再证明降级后它没了），以及 `tests/we-notifications.spec.ts:208`。
+- 聊天降级句子（「引擎暂不可用，请稍后重试或换个空间」）冻结稿没给原字，由 08 §3.2 第 7 行给定：
+  落点 `useSseAsk.ts` 判定 精确等于，实际串 引擎暂不可用，请稍后重试或换个空间，行 125
+- 慢响应提示不中断流：取消路径只有一条（首个 delta 里 `clearTimeout`，`finally` 再兜一次），
+  计时回调里没有「见过 delta 就不响」的旗标——旗标会让 clearTimeout 变成删掉也测不出的冗余。
+  这条由 `tests/ask-sse-degraded.spec.ts` ② 组判，并有 `s65_9_mutation_cleartimeout.txt` 的变异反证：
+  删掉 delta 回调里的 clearTimeout ⇒ 那条用例红（`expected true to be falsy`），还原 ⇒ 10 passed。

@@ -1,0 +1,29 @@
+== 提交前最后一次全门复跑（权威字节）==
+$ 旧的那份 s65_7 记的是 21 条时点；复核后又加了 3 条，本文件是终态
+
+$ vitest 四个新用例
+[2m Test Files [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[32m24 passed[39m[22m[90m (24)[39m
+$ vitest 卡面 ⑤ 的三个既有 spec
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m39 passed[39m[22m[90m (39)[39m
+$ vitest 全量
+[2m Test Files [22m [1m[32m57 passed[39m[22m[90m (57)[39m
+[2m      Tests [22m [1m[32m449 passed[39m[22m[90m (449)[39m
+$ tsc --noEmit
+tsc_rc=0
+$ next lint
+✔ No ESLint warnings or errors
+
+$ pytest 契约与文档完整性三面
+304 passed in 7.73s
+$ ruff / mypy / gen --check
+All checks passed!
+Success: no issues found in 134 source files
+gen_check_rc=0
+
+$ check_docs_consistency
+[ok] 文档一致性检查通过
+
+$ git diff --quiet -- apps/web/lib/api/ask.ts（验收⑦）
+ask_ts_unchanged_rc=0

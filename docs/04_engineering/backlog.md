@@ -256,6 +256,17 @@ updated: 2026-10-08
   实接顺序（ADR-0004 现写 Coze → Dify → FastGPT，main 另需 `MAIN_KB_API_BASE`）。
 - **完成判据**：实接一家 ⇒ `ENGINE_IMPLEMENTED` 置真、`NotImplementedError` 计数下降、
   `tests/test_engines_capability.py` 里该引擎位在"已开放 + 已登记"时 `reason=ok`。
+### HOT-006：/hot 空态缺「最近更新时间」数据源 ⬜
+- **来源**：STEP-65 S65.0 探针 ②，读数存 `docs/06_validation/evidence/EVD-V23-65/s65_0_probe_readings.txt`
+- **契约**：`ux_states` 冻结稿 `x-core-views[1].states.empty` 要求「今日暂无热点」+ 最近更新时间
+- **现状**：`apps/api/app/api/v1/hot.py` 的 feed / topics / reports 三个响应只带 `created_at`（行入库时间，且可为 null），
+  没有 `updated_at` / `generated_at` / `refreshed_at` 任何一类「数据产出时间」键
+- **本卡处置**：前端只拆两支文案（「聚类未产出」/「今日暂无热点」），**不用 `new Date()` 伪造**时间
+- **出路**：后端补一个产出时间键（聚类任务或日报任务的完成时刻，不是行写入时刻），
+  同步 `app/contracts/shapes.py` 与契约产物；前端那一半等字段到位再接
+- **不做的后果**：契约这句长期只兑现前半个词——界面报「今日暂无热点」，却不报这是什么时候的数据
+
+
 
 ## 🟢 低优先级
 

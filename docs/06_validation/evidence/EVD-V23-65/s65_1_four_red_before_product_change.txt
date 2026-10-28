@@ -1,0 +1,1624 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.0 D:/Code/AideanBotHot/apps/web
+
+ ❯ tests/ask-sse-degraded.spec.ts (10 tests | 8 failed) 628ms
+   ❯ U5 ① 降级码位分流（30002 / 50002） (6)
+     × 30002 ⇒ 契约的不可用文案 + kind="unavailable" 221ms
+     × 50002 ⇒ 契约的不可用文案 + kind="unavailable" 53ms
+     × 其余错误码维持既有文案映射，只补 kind="failed"（不许顺手改码位表） 18ms
+     × 非 ApiError（网络炸/解析错）⇒ 兜底文案 + kind="failed" 42ms
+     ✓ 会话失效仍走回落回调，不得残留错误气泡（既有不变式不许被分流改动破坏） 35ms
+     × kind 在 DOM 上可观测（不是写了没人读的字段） 129ms
+   ❯ U5 ② 首 token 慢：给提示而不是静默 (4)
+     × 到 15s 锚点仍无首个 delta ⇒ slow=true，且流未被中断 41ms
+     ✓ 锚点之前不得出现慢提示（极性：不是把提示常显） 14ms
+     × 首个 delta 到达 ⇒ 撤掉慢提示并清计时器（之后再推进也不许再冒出来） 9ms
+     × 渲染层：slow 的助手消息出「响应较慢，仍在生成…」，不 slow 时出既有占位 55ms
+ ❯ tests/notification-offstate.spec.tsx (4 tests | 2 failed) 749ms
+   ❯ U1 演示态必须显式声明（禁止静默装作正常） (2)
+     × mock 态打开面板：出现「演示数据，未连接实时通道」，且它在列表之上 490ms
+     ✓ 非 mock 态不得出现演示声明（极性：不是把整行常显就交差） 81ms
+   ❯ U2 降级横幅用契约原字 (2)
+     × service_unavailable 帧 ⇒「实时推送暂不可用，历史仍可查」，旧文案不得残留 127ms
+     ✓ 限流分支保留原文案「请求过于频繁，请稍后再试」（契约未给新字，不许换） 31ms
+ ❯ tests/hot-zero-score.spec.tsx (3 tests | 1 failed) 549ms
+   ❯ U4 hot_score 为 0 ⇒ 渲染「待评分」而不是数字 (3)
+     × 0 值：出现「待评分」，且 DOM 里不存在 🔥 0.0 这个形状 396ms
+     ✓ 非 0 值：照旧显示数字且不出现「待评分」（极性：不是把整列改成就写待评分） 84ms
+     ✓ 0 与「真有低分」的分界由 hot_score 本身决定：极小正数仍走数字支 62ms
+ ❯ tests/hot-empty-states.spec.tsx (4 tests | 4 failed) 4472ms
+   ❯ U3 空态拆两支：聚类未产出 ≠ 今日暂无热点 (4)
+     × 从来没聚出东西 ⇒「聚类未产出」，且不出现「今日暂无热点」 1292ms
+     × 有产出但今天空 ⇒「今日暂无热点」，且不出现「聚类未产出」 1113ms
+     × 降级口径的两条硬约束：不写「最近更新时间」，也不许伪造当天日期 1033ms
+     × 两支可区分（同一次渲染里只可能命中一支，不会两句并存也不会两句都不在） 1028ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/ask-sse-degraded.spec.ts > U5 ① 降级码位分流（30002 / 50002） > 30002 ⇒ 契约的不可用文案 + kind="unavailable"
+ FAIL  tests/ask-sse-degraded.spec.ts > U5 ① 降级码位分流（30002 / 50002） > 50002 ⇒ 契约的不可用文案 + kind="unavailable"
+AssertionError: expected '引擎侧炸了' to be '引擎暂不可用，请稍后重试或换个空间' // Object.is equality
+
+Expected: "引擎暂不可用，请稍后重试或换个空间"
+Received: "引擎侧炸了"
+
+ ❯ tests/ask-sse-degraded.spec.ts:84:31
+     82|
+     83|       const msg = assistant(view);
+     84|       expect(msg.error?.text).toBe(DEGRADED_TEXT);
+       |                               ^
+     85|       expect(msg.error?.kind).toBe("unavailable");
+     86|       expect(msg.error?.question).toBe("问题");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  tests/ask-sse-degraded.spec.ts > U5 ① 降级码位分流（30002 / 50002） > 其余错误码维持既有文案映射，只补 kind="failed"（不许顺手改码位表）
+AssertionError: expected undefined to be 'failed' // Object.is equality
+
+- Expected:
+"failed"
+
++ Received:
+undefined
+
+ ❯ tests/ask-sse-degraded.spec.ts:103:29
+    101|     const msg = assistant(view);
+    102|     expect(msg.error?.text).toBe("内部错误，请稍后重试");
+    103|     expect(msg.error?.kind).toBe("failed");
+       |                             ^
+    104|   });
+    105|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  tests/ask-sse-degraded.spec.ts > U5 ① 降级码位分流（30002 / 50002） > 非 ApiError（网络炸/解析错）⇒ 兜底文案 + kind="failed"
+AssertionError: expected undefined to be 'failed' // Object.is equality
+
+- Expected:
+"failed"
+
++ Received:
+undefined
+
+ ❯ tests/ask-sse-degraded.spec.ts:117:29
+    115|     const msg = assistant(view);
+    116|     expect(msg.error?.text).toBe("回答生成失败，请稍后重试");
+    117|     expect(msg.error?.kind).toBe("failed");
+       |                             ^
+    118|   });
+    119|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  tests/ask-sse-degraded.spec.ts > U5 ① 降级码位分流（30002 / 50002） > kind 在 DOM 上可观测（不是写了没人读的字段）
+AssertionError: expected null not to be null
+ ❯ tests/ask-sse-degraded.spec.ts:153:76
+    151|
+    152|     expect(screen.getByText(DEGRADED_TEXT)).toBeTruthy();
+    153|     expect(container.querySelector('[data-error-kind="unavailable"]'))…
+       |                                                                            ^
+    154|   });
+    155| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  tests/ask-sse-degraded.spec.ts > U5 ② 首 token 慢：给提示而不是静默 > 到 15s 锚点仍无首个 delta ⇒ slow=true，且流未被中断
+AssertionError: expected undefined to be true // Object.is equality
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ tests/ask-sse-degraded.spec.ts:170:22
+    168|
+    169|     const msg = assistant(view);
+    170|     expect(msg.slow).toBe(true);
+       |                      ^
+    171|     expect(msg.streaming).toBe(true); // 提示不中断流（契约原字是"给「响应较慢」而非静默"）
+    172|     expect(msg.error).toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  tests/ask-sse-degraded.spec.ts > U5 ② 首 token 慢：给提示而不是静默 > 首个 delta 到达 ⇒ 撤掉慢提示并清计时器（之后再推进也不许再冒出来）
+AssertionError: expected undefined to be true // Object.is equality
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ tests/ask-sse-degraded.spec.ts:205:34
+    203|       vi.advanceTimersByTime(SLOW_ANCHOR_MS);
+    204|     });
+    205|     expect(assistant(view).slow).toBe(true);
+       |                                  ^
+    206|
+    207|     await act(async () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+ FAIL  tests/ask-sse-degraded.spec.ts > U5 ② 首 token 慢：给提示而不是静默 > 渲染层：slow 的助手消息出「响应较慢，仍在生成…」，不 slow 时出既有占位
+TestingLibraryElementError: Unable to find an element with the text: 响应较慢，仍在生成…. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex-1 space-y-4 overflow-y-auto py-6"
+    >
+      <div
+        class="flex justify-start"
+      >
+        <div
+          class="max-w-[85%] rounded-card rounded-bl-sm border border-neutral-200 bg-white px-4 py-3 shadow-card"
+        >
+          <p
+            class="text-base text-neutral-400"
+          >
+            正在思考…
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ tests/ask-sse-degraded.spec.ts:232:19
+    230|       })
+    231|     );
+    232|     expect(screen.getByText("响应较慢，仍在生成…")).toBeTruthy();
+       |                   ^
+    233|     expect(screen.queryByText("正在思考…")).toBeNull();
+    234|     unmount();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯
+
+ FAIL  tests/hot-empty-states.spec.tsx > U3 空态拆两支：聚类未产出 ≠ 今日暂无热点 > 从来没聚出东西 ⇒「聚类未产出」，且不出现「今日暂无热点」
+TestingLibraryElementError: Unable to find an element with the text: /今日暂无热点|聚类未产出|一条 feed/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="mx-auto max-w-4xl p-6"
+    >
+      <div
+        class="mb-6 flex items-start justify-between"
+      >
+        <div>
+          <h1
+            class="text-2xl font-bold"
+          >
+            热点中心
+          </h1>
+          <p
+            class="mt-1 text-sm text-gray-600"
+          >
+            实时热点聚簇、信息流与每日日报
+          </p>
+        </div>
+        <button
+          class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          触发聚簇
+        </button>
+      </div>
+      <div
+        class="mb-4 flex gap-2"
+      >
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-blue-600 text-white"
+        >
+          全部
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          文章
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          热点
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          日报
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          系统
+        </button>
+      </div>
+      <div
+        class="py-12 text-center text-gray-500"
+      >
+        暂无内容。触发聚簇或生成日报后，内容会出现在这里。
+      </div>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<html>
+  <head>
+    <title>
+      热点中心 · BotHot
+    </title>
+  </head>
+  <body>
+    <div>
+      <div
+        class="mx-auto max-w-4xl p-6"
+      >
+        <div
+          class="mb-6 flex items-start justify-between"
+        >
+          <div>
+            <h1
+              class="text-2xl font-bold"
+            >
+              热点中心
+            </h1>
+            <p
+              class="mt-1 text-sm text-gray-600"
+            >
+              实时热点聚簇、信息流与每日日报
+            </p>
+          </div>
+          <button
+            class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            触发聚簇
+          </button>
+        </div>
+        <div
+          class="mb-4 flex gap-2"
+        >
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-blue-600 text-white"
+          >
+            全部
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            文章
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            热点
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            日报
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            系统
+          </button>
+        </div>
+        <div
+          class="py-12 text-center text-gray-500"
+        >
+          暂无内容。触发聚簇或生成日报后，内容会出现在这里。
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+ ❯ Proxy.waitForWrapper node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ renderLoaded tests/hot-empty-states.spec.tsx:85:9
+     83|   await waitFor(() => expect(h.getFeed).toHaveBeenCalled());
+     84|   await waitFor(() => expect(h.listHotTopics).toHaveBeenCalled());
+     85|   await waitFor(() => expect(screen.getByText(/今日暂无热点|聚类未产出|一条 feed/))…
+       |         ^
+     86|   return view.container;
+     87| }
+ ❯ tests/hot-empty-states.spec.tsx:111:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯
+
+ FAIL  tests/hot-empty-states.spec.tsx > U3 空态拆两支：聚类未产出 ≠ 今日暂无热点 > 有产出但今天空 ⇒「今日暂无热点」，且不出现「聚类未产出」
+TestingLibraryElementError: Unable to find an element with the text: /今日暂无热点|聚类未产出|一条 feed/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="mx-auto max-w-4xl p-6"
+    >
+      <div
+        class="mb-6 flex items-start justify-between"
+      >
+        <div>
+          <h1
+            class="text-2xl font-bold"
+          >
+            热点中心
+          </h1>
+          <p
+            class="mt-1 text-sm text-gray-600"
+          >
+            实时热点聚簇、信息流与每日日报
+          </p>
+        </div>
+        <button
+          class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          触发聚簇
+        </button>
+      </div>
+      <div
+        class="mb-6"
+      >
+        <h2
+          class="mb-3 text-sm font-semibold text-gray-700"
+        >
+          🔥 今日热点 TOP 10
+        </h2>
+        <div
+          class="mb-3 flex flex-wrap items-center gap-2"
+        >
+          <button
+            class="rounded px-2.5 py-1 text-xs bg-blue-600 text-white"
+          >
+            全部
+          </button>
+          <button
+            aria-pressed="false"
+            class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-yellow-100 text-yellow-700 hover:opacity-80"
+          >
+            上升中
+          </button>
+          <button
+            aria-pressed="false"
+            class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-red-100 text-red-700 hover:opacity-80"
+          >
+            热门
+          </button>
+          <button
+            aria-pressed="false"
+            class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-blue-100 text-blue-700 hover:opacity-80"
+          >
+            降温中
+          </button>
+          <button
+            aria-pressed="false"
+            class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-gray-100 text-gray-500 hover:opacity-80"
+          >
+            已归档
+          </button>
+        </div>
+        <div
+          class="grid gap-3 sm:grid-cols-2"
+        >
+          <div
+            class="rounded-lg border border-gray-200 p-4 hover:shadow-md"
+          >
+            <div
+              class="flex items-start justify-between"
+            >
+              <span
+                class="mr-2 text-lg font-bold text-gray-400"
+              >
+                #
+                1
+              </span>
+              <div
+                class="flex-1"
+              >
+                <h3
+                  class="font-medium text-gray-900"
+                >
+                  昨天聚出来的热点
+                </h3>
+                <p
+                  class="mt-1 line-clamp-2 text-sm text-gray-600"
+                >
+                  概述
+                </p>
+                <div
+                  class="mt-2 flex items-center gap-3 text-xs text-gray-500"
+                >
+                  <span
+                    class="rounded px-1.5 py-0.5 bg-blue-100 text-blue-700"
+                  >
+                    降温中
+                  </span>
+                  <span>
+                    🔥 
+                    30.0
+                  </span>
+                  <span>
+                    来源 
+                    2
+                  </span>
+                  <span>
+                    文章 
+                    3
+                  </span>
+                  <span>
+                    · 
+                    AI·技术
+                  </span>
+                </div>
+                <div
+                  aria-label="热度"
+                  aria-valuemax="100"
+                  aria-valuemin="0"
+                  aria-valuenow="100"
+                  class="mt-2 h-1.5 w-full rounded bg-gray-100"
+                  role="progressbar"
+                >
+                  <div
+                    class="h-1.5 rounded bg-gradient-to-r from-orange-400 to-red-500"
+                    style="width: 100%;"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div
+        class="mb-4 flex gap-2"
+      >
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-blue-600 text-white"
+        >
+          全部
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          文章
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          热点
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          日报
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          系统
+        </button>
+      </div>
+      <div
+        class="py-12 text-center text-gray-500"
+      >
+        暂无内容。触发聚簇或生成日报后，内容会出现在这里。
+      </div>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<html>
+  <head>
+    <title>
+      热点中心 · BotHot
+    </title>
+  </head>
+  <body>
+    <div>
+      <div
+        class="mx-auto max-w-4xl p-6"
+      >
+        <div
+          class="mb-6 flex items-start justify-between"
+        >
+          <div>
+            <h1
+              class="text-2xl font-bold"
+            >
+              热点中心
+            </h1>
+            <p
+              class="mt-1 text-sm text-gray-600"
+            >
+              实时热点聚簇、信息流与每日日报
+            </p>
+          </div>
+          <button
+            class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            触发聚簇
+          </button>
+        </div>
+        <div
+          class="mb-6"
+        >
+          <h2
+            class="mb-3 text-sm font-semibold text-gray-700"
+          >
+            🔥 今日热点 TOP 10
+          </h2>
+          <div
+            class="mb-3 flex flex-wrap items-center gap-2"
+          >
+            <button
+              class="rounded px-2.5 py-1 text-xs bg-blue-600 text-white"
+            >
+              全部
+            </button>
+            <button
+              aria-pressed="false"
+              class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-yellow-100 text-yellow-700 hover:opacity-80"
+            >
+              上升中
+            </button>
+            <button
+              aria-pressed="false"
+              class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-red-100 text-red-700 hover:opacity-80"
+            >
+              热门
+            </button>
+            <button
+              aria-pressed="false"
+              class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-blue-100 text-blue-700 hover:opacity-80"
+            >
+              降温中
+            </button>
+            <button
+              aria-pressed="false"
+              class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-gray-100 text-gray-500 hover:opacity-80"
+            >
+              已归档
+            </button>
+          </div>
+          <div
+            class="grid gap-3 sm:grid-cols-2"
+          >
+            <div
+              class="rounded-lg border border-gray-200 p-4 hover:shadow-md"
+            >
+              <div
+                class="flex items-start justify-between"
+              >
+                <span
+                  class="mr-2 text-lg font-bold text-gray-400"
+                >
+                  #
+                  1
+                </span>
+                <div
+                  class="flex-1"
+                >
+                  <h3
+                    class="font-medium text-gray-900"
+                  >
+                    昨天聚出来的热点
+                  </h3>
+                  <p
+                    class="mt-1 line-clamp-2 text-sm text-gray-600"
+                  >
+                    概述
+                  </p>
+                  <div
+                    class="mt-2 flex items-center gap-3 text-xs text-gray-500"
+                  >
+                    <span
+                      class="rounded px-1.5 py-0.5 bg-blue-100 text-blue-700"
+                    >
+                      降温中
+                    </span>
+                    <span>
+                      🔥 
+                      30.0
+                    </span>
+                    <span>
+                      来源 
+                      2
+                    </span>
+                    <span>
+                      文章 
+                      3
+                    </span>
+                    <span>
+                      · 
+                      AI·技术
+                    </span>
+                  </div>
+                  <div
+                    aria-label="热度"
+                    aria-valuemax="100"
+                    aria-valuemin="0"
+                    aria-valuenow="100"
+                    class="mt-2 h-1.5 w-full rounded bg-gray-100"
+                    role="progressbar"
+                  >
+                    <div
+                      class="h-1.5 rounded bg-gradient-to-r from-orange-400 to-red-500"
+                      style="width: 100%;"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div
+          class="mb-4 flex gap-2"
+        >
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-blue-600 text-white"
+          >
+            全部
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            文章
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            热点
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            日报
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            系统
+          </button>
+        </div>
+        <div
+          class="py-12 text-center text-gray-500"
+        >
+          暂无内容。触发聚簇或生成日报后，内容会出现在这里。
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+ ❯ Proxy.waitForWrapper node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ renderLoaded tests/hot-empty-states.spec.tsx:85:9
+     83|   await waitFor(() => expect(h.getFeed).toHaveBeenCalled());
+     84|   await waitFor(() => expect(h.listHotTopics).toHaveBeenCalled());
+     85|   await waitFor(() => expect(screen.getByText(/今日暂无热点|聚类未产出|一条 feed/))…
+       |         ^
+     86|   return view.container;
+     87| }
+ ❯ tests/hot-empty-states.spec.tsx:119:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/15]⎯
+
+ FAIL  tests/hot-empty-states.spec.tsx > U3 空态拆两支：聚类未产出 ≠ 今日暂无热点 > 降级口径的两条硬约束：不写「最近更新时间」，也不许伪造当天日期
+TestingLibraryElementError: Unable to find an element with the text: /今日暂无热点|聚类未产出|一条 feed/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="mx-auto max-w-4xl p-6"
+    >
+      <div
+        class="mb-6 flex items-start justify-between"
+      >
+        <div>
+          <h1
+            class="text-2xl font-bold"
+          >
+            热点中心
+          </h1>
+          <p
+            class="mt-1 text-sm text-gray-600"
+          >
+            实时热点聚簇、信息流与每日日报
+          </p>
+        </div>
+        <button
+          class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          触发聚簇
+        </button>
+      </div>
+      <div
+        class="mb-6"
+      >
+        <h2
+          class="mb-3 text-sm font-semibold text-gray-700"
+        >
+          🔥 今日热点 TOP 10
+        </h2>
+        <div
+          class="mb-3 flex flex-wrap items-center gap-2"
+        >
+          <button
+            class="rounded px-2.5 py-1 text-xs bg-blue-600 text-white"
+          >
+            全部
+          </button>
+          <button
+            aria-pressed="false"
+            class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-yellow-100 text-yellow-700 hover:opacity-80"
+          >
+            上升中
+          </button>
+          <button
+            aria-pressed="false"
+            class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-red-100 text-red-700 hover:opacity-80"
+          >
+            热门
+          </button>
+          <button
+            aria-pressed="false"
+            class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-blue-100 text-blue-700 hover:opacity-80"
+          >
+            降温中
+          </button>
+          <button
+            aria-pressed="false"
+            class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-gray-100 text-gray-500 hover:opacity-80"
+          >
+            已归档
+          </button>
+        </div>
+        <div
+          class="grid gap-3 sm:grid-cols-2"
+        >
+          <div
+            class="rounded-lg border border-gray-200 p-4 hover:shadow-md"
+          >
+            <div
+              class="flex items-start justify-between"
+            >
+              <span
+                class="mr-2 text-lg font-bold text-gray-400"
+              >
+                #
+                1
+              </span>
+              <div
+                class="flex-1"
+              >
+                <h3
+                  class="font-medium text-gray-900"
+                >
+                  昨天聚出来的热点
+                </h3>
+                <p
+                  class="mt-1 line-clamp-2 text-sm text-gray-600"
+                >
+                  概述
+                </p>
+                <div
+                  class="mt-2 flex items-center gap-3 text-xs text-gray-500"
+                >
+                  <span
+                    class="rounded px-1.5 py-0.5 bg-blue-100 text-blue-700"
+                  >
+                    降温中
+                  </span>
+                  <span>
+                    🔥 
+                    30.0
+                  </span>
+                  <span>
+                    来源 
+                    2
+                  </span>
+                  <span>
+                    文章 
+                    3
+                  </span>
+                  <span>
+                    · 
+                    AI·技术
+                  </span>
+                </div>
+                <div
+                  aria-label="热度"
+                  aria-valuemax="100"
+                  aria-valuemin="0"
+                  aria-valuenow="100"
+                  class="mt-2 h-1.5 w-full rounded bg-gray-100"
+                  role="progressbar"
+                >
+                  <div
+                    class="h-1.5 rounded bg-gradient-to-r from-orange-400 to-red-500"
+                    style="width: 100%;"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div
+        class="mb-4 flex gap-2"
+      >
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-blue-600 text-white"
+        >
+          全部
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          文章
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          热点
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          日报
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          系统
+        </button>
+      </div>
+      <div
+        class="py-12 text-center text-gray-500"
+      >
+        暂无内容。触发聚簇或生成日报后，内容会出现在这里。
+      </div>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<html>
+  <head>
+    <title>
+      热点中心 · BotHot
+    </title>
+  </head>
+  <body>
+    <div>
+      <div
+        class="mx-auto max-w-4xl p-6"
+      >
+        <div
+          class="mb-6 flex items-start justify-between"
+        >
+          <div>
+            <h1
+              class="text-2xl font-bold"
+            >
+              热点中心
+            </h1>
+            <p
+              class="mt-1 text-sm text-gray-600"
+            >
+              实时热点聚簇、信息流与每日日报
+            </p>
+          </div>
+          <button
+            class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            触发聚簇
+          </button>
+        </div>
+        <div
+          class="mb-6"
+        >
+          <h2
+            class="mb-3 text-sm font-semibold text-gray-700"
+          >
+            🔥 今日热点 TOP 10
+          </h2>
+          <div
+            class="mb-3 flex flex-wrap items-center gap-2"
+          >
+            <button
+              class="rounded px-2.5 py-1 text-xs bg-blue-600 text-white"
+            >
+              全部
+            </button>
+            <button
+              aria-pressed="false"
+              class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-yellow-100 text-yellow-700 hover:opacity-80"
+            >
+              上升中
+            </button>
+            <button
+              aria-pressed="false"
+              class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-red-100 text-red-700 hover:opacity-80"
+            >
+              热门
+            </button>
+            <button
+              aria-pressed="false"
+              class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-blue-100 text-blue-700 hover:opacity-80"
+            >
+              降温中
+            </button>
+            <button
+              aria-pressed="false"
+              class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-gray-100 text-gray-500 hover:opacity-80"
+            >
+              已归档
+            </button>
+          </div>
+          <div
+            class="grid gap-3 sm:grid-cols-2"
+          >
+            <div
+              class="rounded-lg border border-gray-200 p-4 hover:shadow-md"
+            >
+              <div
+                class="flex items-start justify-between"
+              >
+                <span
+                  class="mr-2 text-lg font-bold text-gray-400"
+                >
+                  #
+                  1
+                </span>
+                <div
+                  class="flex-1"
+                >
+                  <h3
+                    class="font-medium text-gray-900"
+                  >
+                    昨天聚出来的热点
+                  </h3>
+                  <p
+                    class="mt-1 line-clamp-2 text-sm text-gray-600"
+                  >
+                    概述
+                  </p>
+                  <div
+                    class="mt-2 flex items-center gap-3 text-xs text-gray-500"
+                  >
+                    <span
+                      class="rounded px-1.5 py-0.5 bg-blue-100 text-blue-700"
+                    >
+                      降温中
+                    </span>
+                    <span>
+                      🔥 
+                      30.0
+                    </span>
+                    <span>
+                      来源 
+                      2
+                    </span>
+                    <span>
+                      文章 
+                      3
+                    </span>
+                    <span>
+                      · 
+                      AI·技术
+                    </span>
+                  </div>
+                  <div
+                    aria-label="热度"
+                    aria-valuemax="100"
+                    aria-valuemin="0"
+                    aria-valuenow="100"
+                    class="mt-2 h-1.5 w-full rounded bg-gray-100"
+                    role="progressbar"
+                  >
+                    <div
+                      class="h-1.5 rounded bg-gradient-to-r from-orange-400 to-red-500"
+                      style="width: 100%;"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div
+          class="mb-4 flex gap-2"
+        >
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-blue-600 text-white"
+          >
+            全部
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            文章
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            热点
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            日报
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            系统
+          </button>
+        </div>
+        <div
+          class="py-12 text-center text-gray-500"
+        >
+          暂无内容。触发聚簇或生成日报后，内容会出现在这里。
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+ ❯ Proxy.waitForWrapper node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ renderLoaded tests/hot-empty-states.spec.tsx:85:9
+     83|   await waitFor(() => expect(h.getFeed).toHaveBeenCalled());
+     84|   await waitFor(() => expect(h.listHotTopics).toHaveBeenCalled());
+     85|   await waitFor(() => expect(screen.getByText(/今日暂无热点|聚类未产出|一条 feed/))…
+       |         ^
+     86|   return view.container;
+     87| }
+ ❯ tests/hot-empty-states.spec.tsx:127:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/15]⎯
+
+ FAIL  tests/hot-empty-states.spec.tsx > U3 空态拆两支：聚类未产出 ≠ 今日暂无热点 > 两支可区分（同一次渲染里只可能命中一支，不会两句并存也不会两句都不在）
+TestingLibraryElementError: Unable to find an element with the text: /今日暂无热点|聚类未产出|一条 feed/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="mx-auto max-w-4xl p-6"
+    >
+      <div
+        class="mb-6 flex items-start justify-between"
+      >
+        <div>
+          <h1
+            class="text-2xl font-bold"
+          >
+            热点中心
+          </h1>
+          <p
+            class="mt-1 text-sm text-gray-600"
+          >
+            实时热点聚簇、信息流与每日日报
+          </p>
+        </div>
+        <button
+          class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          触发聚簇
+        </button>
+      </div>
+      <div
+        class="mb-4 flex gap-2"
+      >
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-blue-600 text-white"
+        >
+          全部
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          文章
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          热点
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          日报
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          系统
+        </button>
+      </div>
+      <div
+        class="py-12 text-center text-gray-500"
+      >
+        暂无内容。触发聚簇或生成日报后，内容会出现在这里。
+      </div>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<html>
+  <head>
+    <title>
+      热点中心 · BotHot
+    </title>
+  </head>
+  <body>
+    <div>
+      <div
+        class="mx-auto max-w-4xl p-6"
+      >
+        <div
+          class="mb-6 flex items-start justify-between"
+        >
+          <div>
+            <h1
+              class="text-2xl font-bold"
+            >
+              热点中心
+            </h1>
+            <p
+              class="mt-1 text-sm text-gray-600"
+            >
+              实时热点聚簇、信息流与每日日报
+            </p>
+          </div>
+          <button
+            class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            触发聚簇
+          </button>
+        </div>
+        <div
+          class="mb-4 flex gap-2"
+        >
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-blue-600 text-white"
+          >
+            全部
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            文章
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            热点
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            日报
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            系统
+          </button>
+        </div>
+        <div
+          class="py-12 text-center text-gray-500"
+        >
+          暂无内容。触发聚簇或生成日报后，内容会出现在这里。
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+ ❯ Proxy.waitForWrapper node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ renderLoaded tests/hot-empty-states.spec.tsx:85:9
+     83|   await waitFor(() => expect(h.getFeed).toHaveBeenCalled());
+     84|   await waitFor(() => expect(h.listHotTopics).toHaveBeenCalled());
+     85|   await waitFor(() => expect(screen.getByText(/今日暂无热点|聚类未产出|一条 feed/))…
+       |         ^
+     86|   return view.container;
+     87| }
+ ❯ tests/hot-empty-states.spec.tsx:138:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/15]⎯
+
+ FAIL  tests/hot-zero-score.spec.tsx > U4 hot_score 为 0 ⇒ 渲染「待评分」而不是数字 > 0 值：出现「待评分」，且 DOM 里不存在 🔥 0.0 这个形状
+TestingLibraryElementError: Unable to find an element with the text: 待评分. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="mx-auto max-w-4xl p-6"
+    >
+      <div
+        class="mb-6 flex items-start justify-between"
+      >
+        <div>
+          <h1
+            class="text-2xl font-bold"
+          >
+            热点中心
+          </h1>
+          <p
+            class="mt-1 text-sm text-gray-600"
+          >
+            实时热点聚簇、信息流与每日日报
+          </p>
+        </div>
+        <button
+          class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          触发聚簇
+        </button>
+      </div>
+      <div
+        class="mb-6"
+      >
+        <h2
+          class="mb-3 text-sm font-semibold text-gray-700"
+        >
+          🔥 今日热点 TOP 10
+        </h2>
+        <div
+          class="mb-3 flex flex-wrap items-center gap-2"
+        >
+          <button
+            class="rounded px-2.5 py-1 text-xs bg-blue-600 text-white"
+          >
+            全部
+          </button>
+          <button
+            aria-pressed="false"
+            class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-yellow-100 text-yellow-700 hover:opacity-80"
+          >
+            上升中
+          </button>
+          <button
+            aria-pressed="false"
+            class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-red-100 text-red-700 hover:opacity-80"
+          >
+            热门
+          </button>
+          <button
+            aria-pressed="false"
+            class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-blue-100 text-blue-700 hover:opacity-80"
+          >
+            降温中
+          </button>
+          <button
+            aria-pressed="false"
+            class="rounded px-2.5 py-1 text-xs ring-1 ring-transparent bg-gray-100 text-gray-500 hover:opacity-80"
+          >
+            已归档
+          </button>
+        </div>
+        <div
+          class="grid gap-3 sm:grid-cols-2"
+        >
+          <div
+            class="rounded-lg border border-gray-200 p-4 hover:shadow-md"
+          >
+            <div
+              class="flex items-start justify-between"
+            >
+              <span
+                class="mr-2 text-lg font-bold text-gray-400"
+              >
+                #
+                1
+              </span>
+              <div
+                class="flex-1"
+              >
+                <h3
+                  class="font-medium text-gray-900"
+                >
+                  评分还没回填的热点
+                </h3>
+                <p
+                  class="mt-1 line-clamp-2 text-sm text-gray-600"
+                >
+                  概述
+                </p>
+                <div
+                  class="mt-2 flex items-center gap-3 text-xs text-gray-500"
+                >
+                  <span
+                    class="rounded px-1.5 py-0.5 bg-yellow-100 text-yellow-700"
+                  >
+                    上升中
+                  </span>
+                  <span>
+                    🔥 
+                    0.0
+                  </span>
+                  <span>
+                    来源 
+                    2
+                  </span>
+                  <span>
+                    文章 
+                    4
+                  </span>
+                  <span>
+                    · 
+                    AI·技术
+                  </span>
+                </div>
+                <div
+                  aria-label="热度"
+                  aria-valuemax="100"
+                  aria-valuemin="0"
+                  aria-valuenow="0"
+                  class="mt-2 h-1.5 w-full rounded bg-gray-100"
+                  role="progressbar"
+                >
+                  <div
+                    class="h-1.5 rounded bg-gradient-to-r from-orange-400 to-red-500"
+                    style="width: 0%;"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div
+        class="mb-4 flex gap-2"
+      >
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-blue-600 text-white"
+        >
+          全部
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          文章
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          热点
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          日报
+        </button>
+        <button
+          class="rounded px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
+        >
+          系统
+        </button>
+      </div>
+      <div
+        class="space-y-3"
+      >
+        <div
+          class="rounded-lg border p-4 hover:shadow-md border-gray-200"
+        >
+          <div
+            class="flex items-start justify-between"
+          >
+            <div
+              class="flex-1"
+            >
+              <span
+                class="mr-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600"
+              >
+                热点
+              </span>
+              <h3
+                class="mt-1 font-medium text-gray-900"
+              >
+                一条正常的 feed 条目
+              </h3>
+              <div
+                class="mt-2 flex items-center gap-3 text-xs text-gray-500"
+              >
+                <span>
+                  来源: 
+                  RSS
+                </span>
+                <span>
+                  🔥 
+                  12.3
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ tests/hot-zero-score.spec.tsx:128:19
+    126|     await waitFor(() => expect(screen.getByText("评分还没回填的热点")).toBeTrut…
+    127|
+    128|     expect(screen.getByText("待评分")).toBeTruthy();
+       |                   ^
+    129|     expect(spanTexts(container)).not.toContain("🔥 0.0");
+    130|     expect(container.textContent).not.toMatch(/🔥\s*0\.0/);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/15]⎯
+
+ FAIL  tests/notification-offstate.spec.tsx > U1 演示态必须显式声明（禁止静默装作正常） > mock 态打开面板：出现「演示数据，未连接实时通道」，且它在列表之上
+TestingLibraryElementError: Unable to find an element with the text: 演示数据，未连接实时通道. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="relative"
+    >
+      <button
+        aria-expanded="true"
+        aria-label="通知"
+        class="relative flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-700"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.8"
+          viewBox="0 0 24 24"
+          width="18"
+        >
+          <path
+            d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"
+          />
+          <path
+            d="M13.73 21a2 2 0 0 1-3.46 0"
+          />
+        </svg>
+      </button>
+      <div
+        class="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-[0_8px_28px_rgba(15,23,42,0.12)]"
+      >
+        <div
+          class="flex items-center justify-between border-b border-neutral-100 px-3 py-2"
+        >
+          <span
+            class="text-caption font-semibold text-neutral-700"
+          >
+            通知
+          </span>
+          <span
+            class="text-caption text-neutral-400"
+          >
+            0
+             条
+          </span>
+        </div>
+        <div
+          class="px-3 py-8 text-center text-caption text-neutral-400"
+        >
+          暂无通知
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ tests/notification-offstate.spec.tsx:107:25
+    105|     openPanel();
+    106|
+    107|     const demo = screen.getByText("演示数据，未连接实时通道");
+       |                         ^
+    108|     const empty = screen.getByText("暂无通知");
+    109|     expect(demo.textContent).toBe("演示数据，未连接实时通道");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/15]⎯
+
+ FAIL  tests/notification-offstate.spec.tsx > U2 降级横幅用契约原字 > service_unavailable 帧 ⇒「实时推送暂不可用，历史仍可查」，旧文案不得残留
+TestingLibraryElementError: Unable to find an element with the text: 实时推送暂不可用，历史仍可查. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="relative"
+    >
+      <button
+        aria-expanded="true"
+        aria-label="通知"
+        class="relative flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-700"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.8"
+          viewBox="0 0 24 24"
+          width="18"
+        >
+          <path
+            d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"
+          />
+          <path
+            d="M13.73 21a2 2 0 0 1-3.46 0"
+          />
+        </svg>
+      </button>
+      <div
+        class="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-[0_8px_28px_rgba(15,23,42,0.12)]"
+      >
+        <div
+          class="flex items-center justify-between border-b border-neutral-100 px-3 py-2"
+        >
+          <span
+            class="text-caption font-semibold text-neutral-700"
+          >
+            通知
+          </span>
+          <span
+            class="text-caption text-neutral-400"
+          >
+            0
+             条
+          </span>
+        </div>
+        <div
+          class="border-b border-amber-100 bg-amber-50 px-3 py-2 text-caption text-amber-700"
+        >
+          通知服务暂不可用，请稍后重试
+        </div>
+        <div
+          class="px-3 py-8 text-center text-caption text-neutral-400"
+        >
+          暂无通知
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ tests/notification-offstate.spec.tsx:133:19
+    131|     });
+    132|
+    133|     expect(screen.getByText("实时推送暂不可用，历史仍可查")).toBeTruthy();
+       |                   ^
+    134|     expect(screen.queryByText("通知服务暂不可用，请稍后重试")).toBeNull();
+    135|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/15]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  15 failed | 6 passed (21)
+   Start at  12:44:32
+   Duration  14.05s (environment 47%, import 27%, tests 17%, transform 8%, setup 1%, worker 1%)
+
+JUNIT report written to D:/Code/AideanBotHot/apps/web/vitest-report/junit.xml

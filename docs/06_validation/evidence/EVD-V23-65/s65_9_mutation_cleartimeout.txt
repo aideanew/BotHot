@@ -1,0 +1,8 @@
+== 反证（变异）：删掉 delta 回调里的 clearTimeout(slowTimer)（只剩 finally 那一处）==
+== 期望：新增那条delta 早于锚点用例必须红——证明它真在判取消，而不是一条不会红的断言 ==
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+[31m[1mAssertionError[22m: expected true to be falsy[39m
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m9 passed[39m[22m[90m (10)[39m
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m10 passed[39m[22m[90m (10)[39m

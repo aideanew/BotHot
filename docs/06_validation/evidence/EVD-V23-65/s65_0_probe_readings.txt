@@ -1,0 +1,28 @@
+== 探针 ①：/spaces 的 degraded（契约原字「当前使用内置引擎」）现状 ==
+  apps/web/app/spaces/page.tsx（291 行）命中 0 处：
+  apps/web/app/spaces/[id]/page.tsx（126 行）命中 0 处：
+  apps/web/components/SpaceHeaderPanel.tsx（64 行）命中 0 处：
+  apps/web/components/EngineSwitcher.tsx（148 行）命中 0 处：
+
+  全仓「当前使用」检索（这是契约给的**原字**，不是近义词）：
+    命中文件 0 个：（无）
+
+  ⇒ 判据（08 §3.1 第 ① 条）：列表页与详情页都**没有**引擎降级文案，「内置」字样只出现在 /engines、首页空间卡、/public、onboarding 的**引擎名标签**上，不是 degraded 提示。
+  ⇒ 结论：/spaces 的 degraded **未落地**。但 `app/spaces/**` 与 `EngineSwitcher.tsx` 都不在 STEP-65 第 6 格允许面内，且 U1～U5 五条里没有它 ⇒ **不在本卡做**，登台账 P-143。
+
+== 探针 ②：/hot 的响应里有没有「最近更新时间」这一类的字段 ==
+  :96  "created_at": t.created_at.isoformat() if t.created_at else None,
+  :138  "created_at": t.created_at.isoformat() if t.created_at else None,
+  :237  "created_at": r.created_at.isoformat() if r.created_at else None,
+  :264  "created_at": r.created_at.isoformat() if r.created_at else None,
+  :330  # 置顶优先，然后按 score 降序，最后按 created_at 降序
+  :334  FeedItem.created_at.desc(),
+  :357  "created_at": f.created_at.isoformat() if f.created_at else None,
+
+  命中的字段名种类：['created_at']
+
+  响应构造里有没有「产出/刷新时间」语义的键（把候选键名逐个搜一遍核对）：
+    （上面若无行，即三个候选键都不存在）
+
+  ⇒ 判据（08 §3.1 第 ② 条）：hot.py 的 feed/topics/reports 三个响应只有 `created_at`（行入库时间，且 topics/feed 的 `created_at` 可为 null），没有任何「最近更新时间/产出时间」语义字段。
+  ⇒ 结论：M4（今日暂无热点 + 最近更新时间）**走降级版**——只拆两支文案，不写时间，**不用 new Date() 伪造**；缺口按 08 §3.1 的要求登记一行进 backlog。

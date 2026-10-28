@@ -250,3 +250,21 @@ P-139 说的是**契约的"稿"住在已归档的版本目录里、测试按硬�
 | `Contract drift gate (gen_contracts --check)` 步绿 | 本机已跑同命令 rc 0，但卡面 10 格的 `@ci` 面是 CI 的步序 | `ci.yml:138-139` |
 | 后端全量 `pytest tests/` 的新总数 | 卡面 6 格只要求单卡面测；全量按 D-V22-01 留到阶段体检/发版 | `04` §6 |
 | CI-Windows skip 基线 | 本卡新增 4 条**全不连库** ⇒ 692 不该动；若动了说明有别的东西进来了 | 台账纪律 |
+
+---
+
+## 11. §10 那三条的 @ci 回填（在 STEP-65 批同批补上，读数原文见 `s64_0_base_ci_readings.txt` 与 `s64_ci_6da2a0c_raw.txt`）
+
+交付头 `6da2a0c` 的三条 workflow 全部 success：CI run 40633289770（#364）、CI-Windows run 40633289715（#266）、
+Security run 40633289690（#360）。逐条对 §10：
+
+| §10 那条 | @ci 读数 | 判定 |
+|---|---|---|
+| `Contract drift gate (gen_contracts --check)` 步绿 | backend job 里该步 `conclusion=success` | ✅ 卡面 10 格的 `@ci` 判据成立 |
+| 后端全量新总数 | `2502 passed, 6 skipped, 4 deselected`、`Total coverage: 88.93%`、`✅ 全部模块与全局达标` | ✅ 计数对得上账：`4530a05` 那跑是 `1 failed, 2497 passed`（⇒ 总 2498），`4ab120d` 修掉那条既有门后转绿 ⇒ 2498，本卡 +4 ⇒ **2502**，无游离增减 |
+| CI-Windows skip 基线 692 不动 | run 结论 `success` ⇒ 那道零余量门过了；但**具体 692 这个数本次没读到**（读数脚本只 grep 了 e2e-real 相关行，没取 Windows 的 `total_skipped`） | ⚠ 部分：门的结论有，数的读数没有。要精确数得再取一次 Windows job 日志——不留"以为取过了"的话在这里 |
+
+顺带取到的 STEP-59 后续事实（**不是本卡判据**，交回任务 #107 与 STEP-60/62）：`e2e-real` job 在
+`4ab120d`、`480c073`、`6da2a0c` 三个头上都读 `conclusion=failure` 且都是 `1 failed`（同一条
+`admin.spec.ts` 的"原地渲染统一 AuthGate"用例），`Stop stack` 步还报"起过的 backend 还占着 3300"。
+该 job 按 D-V22-04 是非阻塞的，所以 CI run 仍绿；但"连续 3 次绿"的前置远未达成，62 去不掉 `continue-on-error`。

@@ -38,6 +38,20 @@ export interface UseSseAskResult {
   reset: () => void;
 }
 
+/**
+ * U5（`ux_states` · /chat degraded）：引擎侧不可用的两个码位。
+ * 30002 LANGBOT_API_ERROR / 50002（后端 `api/v1/chat.py` 的码位表）——这两个码位下
+ * 契约要求"提示不可用"，而其余错误码维持 `lib/api` 的既有文案映射（本卡禁止改那张表）。
+ */
+const DEGRADED_CODES = new Set([30002, 50002]);
+
+/**
+ * 首 token 慢锚点：与后端 `apps/api/app/api/v1/chat.py:59` 的 `LLM_FIRST_TOKEN_TIMEOUT = 15.0` 同数。
+ * 这里是**手抄的第二处**——前端读不到后端运行期常量，而后端的锚是"读超时"、前端的锚是"给用户提示"，
+ * 两者语义不同所以不能合并成一个源；但同数不同源正是会漂的形状 ⇒ 台账 P-143 登记，改后端锚时必须同步这里。
+ */
+const FIRST_TOKEN_SLOW_MS = 15_000;
+
 export function useSseAsk({ spaceId, onUnauthorized }: UseSseAskOptions): UseSseAskResult {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -67,17 +81,25 @@ export function useSseAsk({ spaceId, onUnauthorized }: UseSseAskOptions): UseSse
       // 新请求独立 AbortController；abort 不视为服务器故障，静默收敛
       const ctrl = new AbortController();
       streamAbortRef.current = ctrl;
+      // U5 慢响应锚：到点仍无首个 delta 就给出提示，但绝不断流。
+      // 只留一条取消路径（首个 delta 里 clearTimeout + finally 兜底），不加"已经见过 delta"的旗标——
+      // 旗标会让 clearTimeout 变成删掉也测不出来的冗余守卫（复核抓过一次这种"双重保护＝双重没保护"）。
+      const slowTimer = setTimeout(() => {
+        if (ctrl.signal.aborted) return;
+        patch(answerId, { slow: true });
+      }, FIRST_TOKEN_SLOW_MS);
       try {
         const answer = await askQuestion(
           spaceId,
           question,
           (partial) => {
             if (ctrl.signal.aborted) return; // abort 后不追加新 delta
-            patch(answerId, { content: partial });
+            clearTimeout(slowTimer);
+            patch(answerId, { content: partial, slow: false });
           },
           (cits) => {
             if (ctrl.signal.aborted) return;
-            // meta 帧先发：引用就绪即先渲染来源区
+            // meta 帧先发：引用就绪即先渲染来源区（meta 不算"出声"，慢提示仍可在其后出现）
             patch(answerId, { citations: cits });
           },
           { signal: ctrl.signal }
@@ -89,6 +111,7 @@ export function useSseAsk({ spaceId, onUnauthorized }: UseSseAskOptions): UseSse
           citations: answer.citations,
           error: answer.error ? { text: answer.error.message, question } : undefined,
           streaming: false,
+          slow: false,
         });
       } catch (err) {
         if (ctrl.signal.aborted) return; // 主动取消：不更新已卸载/已清空的消息流
@@ -97,10 +120,20 @@ export function useSseAsk({ spaceId, onUnauthorized }: UseSseAskOptions): UseSse
           onUnauthorized();
           return;
         }
-        const text =
-          err instanceof ApiError ? err.message : "回答生成失败，请稍后重试";
-        patch(answerId, { content: "", streaming: false, error: { text, question } });
+        const degraded = err instanceof ApiError && DEGRADED_CODES.has(err.code);
+        const text = degraded
+          ? "引擎暂不可用，请稍后重试或换个空间"
+          : err instanceof ApiError
+            ? err.message
+            : "回答生成失败，请稍后重试";
+        patch(answerId, {
+          content: "",
+          streaming: false,
+          slow: false,
+          error: { text, question, kind: degraded ? "unavailable" : "failed" },
+        });
       } finally {
+        clearTimeout(slowTimer);
         if (streamAbortRef.current === ctrl) {
           streamAbortRef.current = null;
         }
@@ -135,7 +168,7 @@ export function useSseAsk({ spaceId, onUnauthorized }: UseSseAskOptions): UseSse
       const msg = messages.find((m) => m.id === answerId);
       if (!msg?.error || asking) return; // asking 守卫：防连续重试双发
       const question = msg.error.question;
-      patch(answerId, { error: undefined, content: "", streaming: true });
+      patch(answerId, { error: undefined, content: "", streaming: true, slow: false });
       setAsking(true);
       await runQuestion(answerId, question);
     },
