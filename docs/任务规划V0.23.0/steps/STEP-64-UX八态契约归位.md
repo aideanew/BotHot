@@ -4,7 +4,7 @@
 
 | 字段 | 内容 |
 |---|---|
-| 1 归属 | 规划方（opus 档）｜切片 S-UX-CON｜原子步与判据见 `08-阶段A执行细则.md` §2，冲突以 08 为准 |
+| 1 归属 | 执行助手（opus 档；依 D-V23-07 自规划方改派）｜切片 S-UX-CON｜原子步与判据见 `08-阶段A执行细则.md` §2，冲突以 08 为准 |
 | 2 来源 | P-80（`docs/任务规划V0.12.0/00-README.md:147`，自 V0.12.0 未认领）；P-139（本版新登记，契约锚被硬编码在历史版本目录）；`01` §3 U7 |
 | 3 目标 | 八态枚举有**活体契约源**：`packages/contracts/schemas/` 下存在一份 ux 形状产物，其 `$defs.State.enum` 与冻结稿 `definitions.State.enum` **逐值且同序**相等（8 值） |
 | 4 输出 | ① `apps/api/app/contracts/ux.py`（新增，`State` 8 值 Enum + `StateRendering`，`extra="forbid"`）；② `scripts/gen_contracts.py` 两处域表各加一行；③ `packages/contracts/schemas/ux.schema.json`（新增产物）；④ `packages/contracts/src/ux/dto.ts`（新增产物）；⑤ `packages/contracts/src/index.ts` 导出；⑥ `apps/api/tests/test_contract_jsonschema.py` 的 `DOMAINS` 加一行 + 一条枚举相等断言；⑦ 先红原文入证 |

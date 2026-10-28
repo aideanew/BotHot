@@ -4,7 +4,7 @@
 
 | 字段 | 内容 |
 |---|---|
-| 1 归属 | 规划方（opus 档）｜切片 S-UX-UI｜原子步与判据见 `08-阶段A执行细则.md` §3，冲突以 08 为准 |
+| 1 归属 | 执行助手（opus 档；依 D-V23-07 自规划方改派）｜切片 S-UX-UI｜原子步与判据见 `08-阶段A执行细则.md` §3，冲突以 08 为准 |
 | 2 来源 | `ux_states` 冻结稿 `x-core-views` 五条未兑现项：U1（NotificationBell `offstate`）、U2（NotificationBell `degraded` 文案）、U3（/hot `empty`）、U4（/hot `success` 0 值）、U5（/chat `degraded`）⇒ `01` §3；P-136/137/138 |
 | 3 目标 | 上述五条**逐条**在 DOM 上可观测且与契约文案逐字对齐；四个新用例先红后绿 |
 | 4 输出 | ① `apps/web/tests/notification-offstate.spec.tsx`（新增）；② `apps/web/tests/hot-zero-score.spec.tsx`（新增）；③ `apps/web/tests/hot-empty-states.spec.tsx`（新增）；④ `apps/web/tests/ask-sse-degraded.spec.ts`（新增）；⑤ `apps/web/components/NotificationBell.tsx`（演示态声明 + 降级文案）；⑥ `apps/web/app/hot/page.tsx`（0 值分支 + 空态拆两支）；⑦ `apps/web/components/chat/useSseAsk.ts`（30002/50002 分流 + 慢响应提示）；⑧ 四红四绿原文入证 |
