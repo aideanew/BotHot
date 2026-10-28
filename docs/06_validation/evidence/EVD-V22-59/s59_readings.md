@@ -269,3 +269,23 @@ STEP-60 验收④ 只写「`apps/api/app` 零改动」而没给比较锚点，�
 V0.23.0 的 64/65/66 三张卡都没碰它；而演示态里断言同一句文案的 `trunk.spec.ts:53 ①` 在 CI 是绿的
 （`E2E (mock UI)` 步 success，见 `EVD-V23-66/s66_4_delivery_head_ci.txt`）⇒ 这格红**不是本版引入的**，
 是本卡「骨架档在真后端档下未证伪」留下的那条。台账记 **P-147**，含两条机制候选与一个分辨办法。
+
+---
+
+## 11 第 2 轮（2026-10-28）：P-147 两条红的机制与处置
+
+先说一句归因纪律：这两条红**不是本版（V0.23.0）三张卡造成的**——`AuthGate.tsx` 最近一次改动是 `793288e`，
+而断言同一句文案的演示态用例在 CI 绿。它们是这张骨架档"真后端档从未证伪"留下的洞，只是第一次被 @ci 照出来。
+
+| 红 | 机制（怎么证死的） | 处置 | 本轮能不能本机证 |
+|---|---|---|---|
+| ① `admin.spec.ts:101` | 探针：`test.use({storageState: undefined})` 之后服务器**仍收到** `probe_session=admin-token`；换成 `{cookies: [], origins: []}` 之后 Cookie 头为空。正对照是不覆盖那条（`toContain` 断言通过），所以"空/非空"不是假读数。artifact 的 `error-context.md` 独立画出登录态后台 | 游客态改用文档化清空形式；头注里"1.63 源码核对过生效路径"那句改成带读数的版本 | **不能**（本机无 docker/PG/Redis，真后端档起不来）⇒ 由 @ci 判 |
+| ② `Stop stack` 端口残留 | 同秒两行：`stopped backend pid=3890` → `❌ … 还占着端口 3300`。`kill` 是异步的，终检紧跟其后 | 端口终检加有界宽限（0.2s×30）与占用者读数（`ss` → `lsof` → 如实说取不到）；等满仍占用照红，**不静默放过的语义原样保留** | **不能**，而且原因值得记：git-bash 的 `kill` 按 MSYS pid 发信号，Windows 侧监听者不死，`stopped … pid=` 在这台机上会谎报（我第一次试就在 3300 留下两个孤儿监听者，得用 `netstat -ano` 取 Windows pid 再 `taskkill //PID <n> //F` 清掉） |
+
+演示态这轮**能**证也已经证了：`admin.spec.ts` 在演示态无条件执行，所以改动后按 CI 的两步口径复算
+（mock 产物已在位，spec 不进构建产物）⇒ `31 passed / 0 failed / e2e_rc=0`。
+`auth-gate.spec.ts` 里那条「未登录访问 /admin → AuthGate 统一卡片（原地，不跳转）」同场通过，
+它是同一断言在演示态的独立一份——这恰好说明 ① 的红只在 real 档，与探针结论同向。
+
+本轮终判待 @ci：期望 `e2e-real` 的 E2E 步不再是 ①，`Stop stack` 步绿；
+若 `Stop stack` 仍红，新加的占用者读数就是下一步的输入，不用再猜。

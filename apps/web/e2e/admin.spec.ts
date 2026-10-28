@@ -29,17 +29,27 @@ const REAL_BACKEND_ENABLED = process.env.E2E_REAL_BACKEND === "1";
  * mock 档因此不改变"跑哪些用例、每条断什么"；要说清一处可见差异：③ 为了按 describe 作用域
  * 换 `user.json` 被单独包了一层 describe，它在报告里的**完整标题多了一段父级名**（用例数不变）。
  *
- * `storageState: undefined` 是"显式退出 project 默认会话"的写法，在 playwright 1.63 的
- * 源码里核对过生效路径（scope 构建时照登记这个键，contextOptions 组装时见 `undefined` 就不带
- * storageState）——它不是文档化的惯用法，所以这一处按版本钉住：升级 Playwright 时先看
- * `--list --project=real` 之后 ① 是否仍以游客态跑，再采信这份读数。
+ * 真后端档里"游客态"必须**显式清空** project 默认会话（`playwright.config.ts` 的 real project
+ * 给了 `storageState: e2e/.auth/admin.json`）。这里用的是文档化的清空形式 `{cookies: [], origins: []}`，
+ * **不是** `undefined`——`CI run 40638671189`/`40643109335` 上 ① 一直红，页面快照（artifact
+ * `e2e-real-diagnostics`，`error-context.md`）里画的是 `QA管理员` + `退出` + `ADMIN CONSOLE`，
+ * 也就是浏览器**带着 admin 会话**进了 `/admin`。本机探针把两种写法并排测了一遍（同一份 Playwright 1.63、
+ * 同一个 chromium，判据是测试服务器实际收到的 `Cookie` 头）：`{storageState: undefined}` ⇒ 服务器仍收到
+ * `probe_session=admin-token`（没清掉）；`{storageState: {cookies: [], origins: []}}` ⇒ `Cookie` 头为空。
+ * 早期注释里"已在 1.63 源码核对过生效路径"那句是被否证的旧判断，别再按它写。
  * 文件名里的会话由 `e2e/real.setup.ts` 从 Redis 种子生成，不在这里手抄 cookie。
  */
-const REAL_GUEST_STATE: { storageState?: string } = REAL_BACKEND_ENABLED ? { storageState: undefined } : {};
-const REAL_USER_STATE: { storageState?: string } = REAL_BACKEND_ENABLED
+// `StorageState` 不是 `@playwright/test` 的具名导出（1.63 实测 tsc 报 TS2614），所以这里用结构型：
+// 空数组的元素类型写成 `never[]`，它对 Playwright 的 `Cookie[]`/`Origin[]` 天然可赋值。
+type UseOverride = { storageState?: string | { cookies: never[]; origins: never[] } };
+
+const REAL_GUEST_STATE: UseOverride = REAL_BACKEND_ENABLED
+  ? { storageState: { cookies: [], origins: [] } }
+  : {};
+const REAL_USER_STATE: UseOverride = REAL_BACKEND_ENABLED
   ? { storageState: "e2e/.auth/user.json" }
   : {};
-const REAL_ADMIN_STATE: { storageState?: string } = REAL_BACKEND_ENABLED
+const REAL_ADMIN_STATE: UseOverride = REAL_BACKEND_ENABLED
   ? { storageState: "e2e/.auth/admin.json" }
   : {};
 

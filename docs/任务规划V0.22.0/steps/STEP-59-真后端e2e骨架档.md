@@ -1,6 +1,6 @@
 # STEP-59 真后端 e2e 骨架档（REQ-F-008 四屏）
 
-> 基线 main@12c87e9｜状态：✅ 已交付（real 档首跑读数在 @ci 的 `e2e-real` job；本机侧读数、四处静默失效位的处置与"本机不可证"清单见 `EVD-V22-59/s59_readings.md`；08 §2 59.4 的 ②④ 前提冲突登台账 P-131）｜裁决 D-V22-01/02/04
+> 基线 main@12c87e9｜状态：✅ 已交付（real 档首跑读数在 @ci 的 `e2e-real` job；本机侧读数、四处静默失效位的处置与"本机不可证"清单见 `EVD-V22-59/s59_readings.md`；08 §2 59.4 的 ②④ 前提冲突登台账 P-131。**第 2 轮（2026-10-28，@ci 首跑真读数回来后开的）**：`e2e-real` 首跑（run 40643109335）红两条 ⇒ ① `admin.spec.ts:101 ① 游客访问 /admin 与 /admin/ops`（同 describe 的 ②-⑦ `6 did not run`）、② `Stop stack` 端口残留。① 的机制由探针钉死：`test.use({storageState: undefined})` **清不掉** project 默认会话（判据是测试服务器实际收到的 `Cookie` 头，不是配置回显；探针 B 仍收到 `probe_session=admin-token`，换成文档化的`{cookies: [], origins: []}` 才为空），artifact 的 `error-context.md` 快照画的正是带着 admin 会话的后台（`QA管理员` + `退出` + `ADMIN CONSOLE`）⇒ 原卡面头注那句「在 1.63 源码里核对过生效路径」是被否证的旧判断。② 的依据是同秒两行 `stopped backend pid=3890` 之后紧跟端口红 ⇒ `kill` 异步，终检紧跟其后把 SIGTERM 释放延迟读成泄漏，改为有界宽限 + 占用者读数，**门没放松**。两处都在本卡第 6 格原文内（`admin.spec.ts` 仅开关与 storageState、`scripts/e2e/**`），授权口径见 07 行与 P-147。本机证不了 stop 与 ① 的真读数（无 docker/PG/Redis，且 git-bash 的 `kill` 按 MSYS pid 发信号、Windows 监听者不死 ⇒ `stopped … pid=` 在本机会谎报），所以这一轮的终判以 @ci 为准；演示态可本机复算且已复算：mock e2e `31 passed / 0 failed`。凭据 `EVD-V22-59/s59_6_round2_storagestate_probe.txt`｜裁决 D-V22-01/02/04
 
 | 字段 | 内容 |
 |---|---|

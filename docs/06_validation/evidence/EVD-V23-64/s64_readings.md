@@ -268,3 +268,17 @@ Security run 40633289690（#360）。逐条对 §10：
 `4ab120d`、`480c073`、`6da2a0c` 三个头上都读 `conclusion=failure` 且都是 `1 failed`（同一条
 `admin.spec.ts` 的"原地渲染统一 AuthGate"用例），`Stop stack` 步还报"起过的 backend 还占着 3300"。
 该 job 按 D-V22-04 是非阻塞的，所以 CI run 仍绿；但"连续 3 次绿"的前置远未达成，62 去不掉 `continue-on-error`。
+
+### 11.1 §11 第三行那句"数的读数没有"后来补上了（2026-10-28，run 40633289715 复取）
+
+上一行原样留着——它当时的确没读到，写"已读到"就是虚报。补取的读数（run 级 logs zip 里 `0_windows-dev.txt`）：
+
+```
+1816 passed, 692 skipped, 4 deselected, 2 warnings in 1158.33s (0:19:18)
+windows 门禁：failed=0 total_skipped=692 baseline=692
+ Test Files  53 passed (53)
+      Tests  425 passed (425)
+```
+
+⇒ §11 那一格现在四条全齐：`total_skipped=692 baseline=692` 精确成立，本卡新增的 4 条用例全不连库，
+   skip 基线零余量未被抬动（同文件的 vitest 面仍是 `53/425`，即 STEP-65 之前的基线）。

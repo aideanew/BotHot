@@ -1,0 +1,79 @@
+== P-147 那条红的机制探针：`test.use({storageState: undefined})` 到底清不清得掉 project 默认会话 ==
+== 判据不是配置回显，也不是 Playwright 的日志，而是**测试服务器实际收到的 Cookie 头** ==
+== 探针落在仓外（%USERPROFILE%/AppData/Local/Temp/s59/spw/），三个文件：playwright.config.ts / probe.spec.ts / server.mjs ==
+== 用的是本仓 apps/web/node_modules 里那份 @playwright/test（^1.63.0）与本机已装的 chromium； ==
+== 与 BotHot 的产品代码、后端、Redis 都无关，所以它能在没有 docker/PG 的本机跑出来 ==
+
+配置要点（就是 `playwright.config.ts` 里 real project 那个形状）：
+  projects: [{ name: "probe", use: { storageState: "state.json" } }]
+  state.json 里一条 cookie：probe_session=admin-token（domain 127.0.0.1）
+  server.mjs 把 req.headers.cookie 原样包进 COOKIE::<...>::END 吐回去
+
+三条用例与读数（原文）：
+
+  Running 3 tests using 1 worker
+  PROBE_B_COOKIE=[probe_session=admin-token]
+  PROBE_C_COOKIE=[]
+    3 passed (4.7s)
+
+逐条含义：
+  A「不覆盖」是正对照，它用 expect(header).toContain("probe_session=admin-token") 断言并通过
+    （`3 passed` 里含它）⇒ 证明"服务器能看见 cookie"这条观测通道本身是活的，B/C 的空与非空才不是假读数。
+  B `test.use({storageState: undefined})` —— **admin.spec.ts 当时用的就是这个写法** ——
+    服务器仍收到 `probe_session=admin-token` ⇒ **没有清掉**。
+  C `test.use({storageState: {cookies: [], origins: []}})` —— 文档化的清空写法 ——
+    服务器收到空 Cookie 头 ⇒ **清掉了**。
+
+结论：P-147 里那两条机制候选，①成立、②排除。这条不是推定，是上面 4 行读数。
+
+== 与 CI 现场的对账（artifact 12796557530，run 40643109335）==
+① 失败时 Playwright 的页面快照 `error-context.md` 里画的是登录态后台，原文片段：
+
+  - text: QA管理员
+  - button "退出"
+  - text: 真实后端
+  - paragraph: ADMIN CONSOLE
+  Locator: getByText('尚未登录或会话已过期')
+  Error: element(s) not found
+
+⇒ 浏览器带着 admin 会话进了 /admin，与探针 B 那条完全一致；
+   所以红不是"文案不对"也不是"重定向"，而是**游客态压根没生效**。
+
+== 处置（STEP-59 第 2 轮，用户 2026-10-28 授权；两处都在 59 第 6 格原文内）==
+`apps/web/e2e/admin.spec.ts`：三块 `test.use` 载荷的类型放宽，游客态从 `undefined` 换成空 cookies 形式；
+文件头注里那句"在 playwright 1.63 的源码里核对过生效路径"是**被本探针否证的旧判断**，注释已改成带读数的版本，
+别再按它写。演示态不受影响（`REAL_BACKEND_ENABLED` 为假时三块都是空对象）。
+
+`scripts/e2e/run_real_backend.sh`：端口终检加有界宽限（0.2s × 30 ≈ 6s）与占用者读数（`ss` → `lsof` → 如实说取不到），
+`bash -n` 过。这条的依据是 CI 同一秒内的两行：
+
+  stopped backend pid=3890
+  ❌ 本脚本起过的 backend 还占着端口 3300（没清干净，不静默放过）
+
+——`kill` 是异步的，原来的终检紧跟其后，把 SIGTERM 的释放延迟读成了泄漏。**门没有放松**：等满宽限期仍占用照红，
+且多打一行占用者，下一次进来不用猜。
+
+== 本机证不了的那一半，写清楚而不是不说 ==
+本机跑不了 stop 路径的真读数：git-bash 的 `kill` 按 MSYS pid 发信号，Windows 侧监听进程根本不死，
+`stopped … pid=` 这句在这台机上会谎报（我第一次试的时候 3300 上留下两个孤儿监听者，
+得用 `netstat -ano` 拿到 Windows pid 再 `taskkill //PID <n> //F` 才清掉，复 check 已空闲）。
+⇒ stop 那条改动的**真实读数只能在 @ci（ubuntu runner，SIGTERM 直达）取**：
+   期望看到 `端口 3300 在第 N 次轮询…后才空闲——SIGTERM 的释放延迟，不是泄漏`，
+   或干脆不出现这行（第一次轮询就空闲）；两种都算过，出现"等满 6s"才算真泄漏。
+① 那条同理：本机没有 docker/PG/Redis ⇒ 真后端档跑不起来，只能由 @ci 的 `e2e-real` job 证。
+
+== 演示态回归复算（这条本机可证，也确实跑了）==
+`admin.spec.ts` 在演示态是无条件执行的，所以改动必须在 mock 档复算一次。口径同 CI 的 `E2E (mock UI)` 步：
+
+  ok  1 e2e\admin.spec.ts:111:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ① 游客访问 /admin 与 /admin/ops：原地渲染统一 AuthGate，不重定向 (2.5s)
+  ok  2 e2e\admin.spec.ts:121:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ② 键盘可达：Tab 到登录按钮、回车登录，落点是权限分层而不是白屏 (2.5s)
+  ok  3 e2e\admin.spec.ts:148:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ③ 非 admin 会话 › ③ 非 admin 的处置：两屏都给出出口链接 (4.2s)
+  ok  4 e2e\admin.spec.ts:163:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ④ 375px：游客卡与权限不足卡的内容区不横向溢出 (2.3s)
+  -   5 e2e\admin.spec.ts:205:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数
+  -   6 e2e\admin.spec.ts:229:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来
+  -   7 e2e\admin.spec.ts:239:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑦ 375px 下密钥表横向滚动而不是挤压
+  ok 16 e2e\auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /admin → AuthGate 统一卡片（原地，不跳转） (1.2s)
+  ok 39 e2e\trunk.spec.ts:122:7 › mock 主干回归 › ⑥ 错误态 + 重试 (7.3s)
+  11 skipped
+  31 passed (1.6m)
+e2e_rc=0

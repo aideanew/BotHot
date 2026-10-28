@@ -43,13 +43,24 @@ mkdir -p "$RUN_DIR"
 
 port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 
+# 端口终检失败时把占用者打出来。两个工具都没有就如实说"取不到"，不假装读过。
+port_owner() {
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnp 2>/dev/null | grep ":$1 " | head -2
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | tail -2
+  else
+    echo "(本机没有 ss 也没有 lsof ⇒ 占用者取不到)"
+  fi
+}
+
 # 停：先按 pidfile 逐个 kill，再用命令行特征兜一遍。
 # 为什么两层都要：记录到的 PID 未必是真正的监听者——`pnpm exec next start` 里 pnpm 会派生
 # node 子进程，只 kill 包装进程会把服务留在端口上，而脚本照样打印"stopped frontend"。
 # 前端那一处已改成直接 `exec node ./node_modules/next/dist/bin/next`（PID 就是服务本身），
 # 兜底留着是因为端口残留的失败形态最难读（下一次进来只看到 rc=2"端口被占"）。
 stop_all() {
-  local stopped_any=0 had_pidfile=0 name pid pat port cmdline
+  local stopped_any=0 had_pidfile=0 name pid pat port cmdline grace
   # 先把"本脚本起过哪些角色"抄下来：下面要 rm pidfile，终检得在文件还在的时候判。
   local started=""
   local have_ps=0
@@ -91,6 +102,10 @@ stop_all() {
   fi
   # 端口终检只判"本脚本确实起过的那几个"：把别人的栈读成本脚本没清干净是误判
   # （--stop 或 --no-frontend 时，3200 上很可能是 compose 的前端，与我们无关）。
+  # 为什么要有界地等：`kill` 是异步的——SIGTERM 发出去到内核释放监听端口之间有几十到几百毫秒，
+  # 原来的终检紧跟在 kill 之后，把这段延迟读成"没清干净"（CI 实证：同一秒内先打
+  # `stopped backend pid=3890` 再报端口红，而那进程确实是被本脚本杀的那个）。
+  # 宽限期用尽仍占用才算红，并把占用者打出来——**仍然不静默放过**，只是不再把延迟当泄漏。
   for name in backend frontend fake_llm; do
     port=""
     case "$name" in
@@ -99,9 +114,18 @@ stop_all() {
       fake_llm) port=3290 ;;
     esac
     printf '%s\n' "$started" | grep -qx "$name" || continue
-    if port_open "$port"; then
-      echo "❌ 本脚本起过的 $name 还占着端口 $port（没清干净，不静默放过）" >&2
-      return 1
+    grace=0
+    while port_open "$port"; do
+      grace=$((grace + 1))
+      if [ "$grace" -gt 30 ]; then
+        echo "❌ 本脚本起过的 $name 还占着端口 $port（kill 后等满 6s 仍未释放，不静默放过）" >&2
+        echo "   占用者读数：$(port_owner "$port")" >&2
+        return 1
+      fi
+      sleep 0.2
+    done
+    if [ "$grace" -gt 0 ]; then
+      echo "端口 $port 在第 ${grace} 次轮询（约 $((grace * 200))ms）后才空闲——SIGTERM 的释放延迟，不是泄漏"
     fi
   done
   if [ "$stopped_any" != 1 ]; then
