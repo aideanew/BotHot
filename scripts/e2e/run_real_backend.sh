@@ -19,6 +19,7 @@
 #   8 /ready 返回码不在 {200,503}        9 终态自检：pidfile 里的进程已经不在了
 #   10 探针没取到响应（curl 缺失或超时）⇒ 不判 S59.0，别把它读成"要走方案 B"
 #   11 --with-fake-langbot 但 fake_langbot.py 还没有
+#   12 ⑤b /chat 种子不合格（缺 seed_chat_space.py / 脚本非零 / 取不到 space_id）
 #   64 未知参数（连"该起什么"都没说清，不做默认猜测）
 # 环境变量（CI 与本机共用，全部给默认值）：
 #   DATABASE_URL REDIS_URL AIDEAN_ISSUER E2E_RUN_DIR E2E_SEED_FILE APP_ENV E2E_SKIP_MIGRATE
@@ -342,6 +343,28 @@ if [ "$n_session" != "3" ] || [ "$SEED_RC" != "0" ]; then
   cat "$SEED_LF" >&2
   exit 5
 fi
+
+echo "== ⑤b /chat 可检索种子（STEP-73：直写表是测试夹具，不是产品路径，D-V24-12）=="
+# 为什么单独一棒：`chat.py:83-96` 的候选集合取自本空间的 `langbot_file_id`，集合为空时
+# 假 LangBot 返回的那条会被整体过滤掉，`ask` 表现为"检索到了但上下文为空"。
+SPACE_OUT="$RUN_DIR/seed_chat_space.out"
+if [ ! -f "$REPO_ROOT/scripts/e2e/seed_chat_space.py" ]; then
+  echo "❌ ⑤b 需要 scripts/e2e/seed_chat_space.py（STEP-73 交付），该文件现在不存在" >&2
+  exit 12
+fi
+# 同 ⑤ 的写法：`|| SPACE_RC=$?` 让失败时的输出照样落进 SPACE_OUT，判定放在下面按字段做
+# （直接跑在 `set -e` 下会先死在赋值那一行，日志里只剩 rc，没有脚本自己的诊断）。
+(cd "$REPO_ROOT/apps/api" && python ../scripts/e2e/seed_chat_space.py) > "$SPACE_OUT" 2>&1 || SPACE_RC=$?
+SPACE_RC=${SPACE_RC:-0}
+sed 's/^/    /' "$SPACE_OUT"
+# 尾 `\r` 一并剥掉：win 上 python 可能写 CRLF（理由同 ⑤ 的 SEED_LF 那段）。
+SPACE_ID="$(sed -n 's/^space_id=\([0-9a-fA-F-]*\)\r\{0,1\}$/\1/p' "$SPACE_OUT" | tail -n 1)"
+if [ "$SPACE_RC" != "0" ] || [ -z "$SPACE_ID" ]; then
+  echo "❌ /chat 种子不合格（脚本 rc=$SPACE_RC、space_id 取到 '${SPACE_ID}'）；输出见上，不猜" >&2
+  exit 12
+fi
+printf 'space %s\n' "$SPACE_ID" >> "$SEED_FILE"
+echo "seed 追加：space $SPACE_ID → $SEED_FILE（real.setup.ts 只解析 ^session 行，多这一行不影响它）"
 
 echo "== ⑥ S59.0 先验探针：主平台不可达时，admin 会话能不能进后台 =="
 ADMIN_COOKIE_LINE="$(grep '^session qa-admin-001' "$SEED_LF" | tail -n 1)"

@@ -1,0 +1,64 @@
+
+── 0 环境与基线 ──
+Python 3.12.10
+20ee48c2d4b910188beedb5023cd93295ae5af65
+20ee48c docs(STEP-72 记录修正): 时间戳自曝补齐 22:05 那一行
+ M scripts/e2e/run_real_backend.sh
+?? docs/06_validation/evidence/EVD-V24-73/
+?? scripts/e2e/seed_chat_space.py
+
+── 1 卡面 §6 第 1 条：ast.parse ──
+ok
+rc=0
+
+── 2 卡面 §7 第 2 条：两侧 file_name / langbot_file_id 逐字相同 ──
+scripts/e2e/seed_chat_space.py:64:FILE_ID = "fake-doc-1"
+scripts/e2e/seed_chat_space.py:67:ASSET_EXTERNAL_ID = "r24-fake-doc-1"
+scripts/e2e/fake_langbot.py:16:- `file_name` **必须**是 `fake-doc-1`：`chat.py:83-96` 的 `_filter_by_allowed` 只保留
+scripts/e2e/fake_langbot.py:36:FILE_NAME = "fake-doc-1"
+grep_rc=0
+
+── 3 ruff（CI 同一条命令：从 apps/api 跑 app tests ../../scripts） ──
+All checks passed!
+rc=0
+
+── 4 mypy（CI 同一条命令） ──
+Success: no issues found in 137 source files
+rc=0
+
+── 5 bash -n（启动器语法） ──
+rc=0
+
+── 6 S73.1「不另建用户体系」的静态面：User 只出现在 select 里，没有任何 User(...) 构造 ──
+52:    User,
+233:            user = (await session.execute(select(User).where(User.sub == sub))).scalar_one_or_none()
+-- 构造点（应为 0 行）--
+(0 行)
+
+── 7 启动器接线点（⑤b 调用 + seed 追加 + 退出码 12 文档） ──
+22:#   12 ⑤b /chat 种子不合格（缺 seed_chat_space.py / 脚本非零 / 取不到 space_id）
+350:SPACE_OUT="$RUN_DIR/seed_chat_space.out"
+351:if [ ! -f "$REPO_ROOT/scripts/e2e/seed_chat_space.py" ]; then
+352:  echo "❌ ⑤b 需要 scripts/e2e/seed_chat_space.py（STEP-73 交付），该文件现在不存在" >&2
+357:(cd "$REPO_ROOT/apps/api" && python ../scripts/e2e/seed_chat_space.py) > "$SPACE_OUT" 2>&1 || SPACE_RC=$?
+366:printf 'space %s\n' "$SPACE_ID" >> "$SEED_FILE"
+
+── 8 real.setup.ts 只认 ^session 行（多一行 space 不破坏解析） ──
+34:const SEED_LINE = /^session (\S+): cookie=(\S+) value=(\S+)$/;
+59:    if (!raw.startsWith("session ")) continue;
+60:    const m = SEED_LINE.exec(raw.trim());
+
+── 9 幂等键与卡面实体的对应（四张表的唯一键） ──
+96:                select(KnowledgeSpace).where(
+113:                select(Source).where(Source.type == SOURCE_TYPE, Source.external_id == SOURCE_EXTERNAL_ID)
+126:                select(ContentAsset).where(
+145:                select(KnowledgeDocument).where(
+196:            await session.execute(select(KnowledgeSpace).where(KnowledgeSpace.id == space_id))
+200:                select(Source).where(Source.type == SOURCE_TYPE, Source.external_id == SOURCE_EXTERNAL_ID)
+205:                select(ContentAsset).where(
+212:                select(KnowledgeDocument).where(
+
+── 10 行数 ──
+  264 scripts/e2e/seed_chat_space.py
+  453 scripts/e2e/run_real_backend.sh
+  717 total

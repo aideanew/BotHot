@@ -29,14 +29,14 @@
 
 ## 5. Execution Steps
 
-1. [ ] **S73.1** 读 `apps/api/scripts/qa_seed_sessions.py`，复用它建出的用户（取 `users` 表里 `is_admin` 的那位，或 `E2E_SEED_FILE` 里给的那位），**不另建用户体系**
-2. [ ] **S73.2** 写 `seed_chat_space.py`（异步 SQLAlchemy，复用 `apps/api/app/models/entities.py` 与 `app.core.db` 的 session 工厂）：
+1. [x] **S73.1** 读 `apps/api/scripts/qa_seed_sessions.py`，复用它建出的用户（取 `users` 表里 `is_admin` 的那位，或 `E2E_SEED_FILE` 里给的那位），**不另建用户体系**
+2. [x] **S73.2** 写 `seed_chat_space.py`（异步 SQLAlchemy，复用 `apps/api/app/models/entities.py` 与 `app.core.db` 的 session 工厂）：
    - `KnowledgeSpace`：`name="R24 流式验收空间"`、`langbot_kb_uuid="fake-kb-1"`、`engine="builtin"`、`engine_kb_id="fake-kb-1"`
    - `ContentAsset`：`title="R24 假文章"`、`url="http://127.0.0.1:3291/fake-article"`、`content_hash=<64 位固定串>`、`content_markdown="<固定正文>"`
    - `KnowledgeDocument`：`langbot_file_id="fake-doc-1"`、`status="READY"`、`content_hash` 同上
    - 幂等：按 `(user_id, name)` 查，已存在则复用并修正 `langbot_kb_uuid` / `status` / `langbot_file_id`，**不重复插**
    - 最后 `print(space_id)` 到 stdout
-3. [ ] **S73.3** 启动器在 `qa_seed_sessions.py` 之后调用本脚本，把 space id 追加进 `$SEED_FILE`（供 Playwright 通过环境变量读）
+3. [x] **S73.3** 启动器在 `qa_seed_sessions.py` 之后调用本脚本，把 space id 追加进 `$SEED_FILE`（供 Playwright 通过环境变量读）
 4. [ ] 自测：
 
    ```bash

@@ -1,0 +1,49 @@
+被测段：/d/Code/AideanBotHot/scripts/e2e/run_real_backend.sh 第 347 行起，到第 369 行（不含）止
+截取命令：sed -n '/^echo "== ⑤b/,/^echo "== ⑥/p' | sed '$d'
+
+── 用例 A_happy（STUB_MODE=ok, REPO_ROOT=/d/Code/AideanBotHot）──
+harness rc=0
+输出（前 6 行）：
+  | == ⑤b /chat 可检索种子（STEP-73：直写表是测试夹具，不是产品路径，D-V24-12）==
+  |     pass0 noise
+  |     space_id=11111111-2222-3333-4444-555555555555
+  |     pass1 counts: spaces=1 sources=1 assets=1 documents=1
+  |     pass2 counts: spaces=1 sources=1 assets=1 documents=1
+  | seed 追加：space 11111111-2222-3333-4444-555555555555 → /tmp/s73_branch/A_happy/seed.txt（real.setup.ts 只解析 ^session 行，多这一行不影响它）
+seed.txt 内容（cat -A，行尾 CR 会显示为 ^M）：
+  | space 11111111-2222-3333-4444-555555555555$
+
+── 用例 B_missing_script（STUB_MODE=ok, REPO_ROOT=/tmp/s73_branch/fake）──
+harness rc=12
+输出（前 6 行）：
+  | == ⑤b /chat 可检索种子（STEP-73：直写表是测试夹具，不是产品路径，D-V24-12）==
+  | ❌ ⑤b 需要 scripts/e2e/seed_chat_space.py（STEP-73 交付），该文件现在不存在
+seed.txt 内容（cat -A，行尾 CR 会显示为 ^M）：
+  | (空)
+
+── 用例 C_script_rc3（STUB_MODE=fail, REPO_ROOT=/d/Code/AideanBotHot）──
+harness rc=12
+输出（前 6 行）：
+  | == ⑤b /chat 可检索种子（STEP-73：直写表是测试夹具，不是产品路径，D-V24-12）==
+  |     ❌ users 表里没有 sub=qa-admin-001
+  | ❌ /chat 种子不合格（脚本 rc=3、space_id 取到 ''）；输出见上，不猜
+seed.txt 内容（cat -A，行尾 CR 会显示为 ^M）：
+  | (空)
+
+── 用例 D_no_space_id（STUB_MODE=junk, REPO_ROOT=/d/Code/AideanBotHot）──
+harness rc=12
+输出（前 6 行）：
+  | == ⑤b /chat 可检索种子（STEP-73：直写表是测试夹具，不是产品路径，D-V24-12）==
+  |     hello
+  |     world
+  | ❌ /chat 种子不合格（脚本 rc=0、space_id 取到 ''）；输出见上，不猜
+seed.txt 内容（cat -A，行尾 CR 会显示为 ^M）：
+  | (空)
+
+── 判据汇总（期望 vs 实测）──
+A_happy: seed 行数=1，含 CR 的行数=0
+B_missing_script: seed 行数=0，含 CR 的行数=0
+C_script_rc3: seed 行数=0，含 CR 的行数=0
+D_no_space_id: seed 行数=0，含 CR 的行数=0
+
+A 期望：rc=0、seed 里恰好 1 行 space、无 CR；B/C/D 期望：rc=12、seed 0 行、无追加
