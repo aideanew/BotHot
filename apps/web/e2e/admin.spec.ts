@@ -268,7 +268,7 @@ test.describe.serial("管理端 e2e（演示态无条件执行 + 真后端档闸
       await expect(bar.getByText(/告警未启用|告警已启用|依赖未就绪|未知/)).toBeVisible();
       // 点「重读」再取一次：本条不轮询，新读数必须是显式动作
       await bar.getByRole("button", { name: "重读" }).click();
-      await expect(bar.getByText(/告警|依赖未就绪|未知/)).toBeVisible();
+      await expect(bar.getByText(/告警未启用|告警已启用|依赖未就绪|未知/)).toBeVisible();
     });
 
     test("⑦ 375px 下密钥表横向滚动而不是挤压", async ({ page }) => {
