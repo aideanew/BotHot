@@ -44,6 +44,11 @@ DOMAIN_ENTITIES: dict[str, tuple[str, list[str]]] = {
     "knowledge": ("entities", ["KnowledgeSpace"]),
     "subscription": ("entities", ["Source", "SourceSubscription", "SourceIdentifier"]),
     "ingest": ("entities", ["Job", "JobItem"]),
+    # STEP-66（P-82 余项 / U6）：identity 域的实体镜像。刻意**只进 TS 面**——identity 的
+    # schema 产物由 `app/contracts/identity.py` 那组 Pydantic 生成，这里加的是"库里的 users 表
+    # 长什么样"的第二类产物（与 bot/hot/knowledge 同一形态）。为了产物好看去改列名或加
+    # `__contract__` 之类是被明令禁止的（08 §4.1：那会把库形状变成"为契约而生的形状"）。
+    "identity": ("entities", ["User"]),
 }
 
 # 域 → OpenAPI components.schemas 中的请求模型（Pydantic 请求体）

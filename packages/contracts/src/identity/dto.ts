@@ -1,0 +1,17 @@
+/**
+ * identity 域 — 契约 DTO
+ *
+ * 由 scripts/gen_contracts.py 自动生成，请勿手动修改（--check 幂等门禁）
+ * 源：apps/api/app/models/entities.py（SQLAlchemy 模型内省）
+ */
+
+export interface User {
+  id: string;
+  sub: string;
+  email: string;
+  nickname: string;
+  status: string;
+  role: string;
+  created_at: string;
+  updated_at: string;
+}

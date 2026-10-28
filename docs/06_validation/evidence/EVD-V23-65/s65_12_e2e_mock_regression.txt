@@ -1,0 +1,351 @@
+== STEP-65 第 2 轮：mock e2e 那一条红的三段凭据 ==
+== (1) @ci 原文读数（head 5b1a78d，三条 workflow）==
+
+STEP-66 开工前置读数（head 5b1a78d = STEP-65 交付头）
+CI run=40638671189 num=365 status=completed conclusion=failure created=2026-10-28T05:33:21Z updated=2026-10-28T05:38:34Z
+CI-Windows run=40638672168 num=267 status=completed conclusion=success created=2026-10-28T05:33:22Z updated=2026-10-28T05:55:58Z
+Security run=40638671261 num=361 status=completed conclusion=success created=2026-10-28T05:33:21Z updated=2026-10-28T05:34:19Z
+
+== CI run 的 job 结论（共 6 个）==
+job=compose-smoke                            conclusion=success   started=2026-10-28T05:33:23Z completed=2026-10-28T05:38:33Z
+    step=Set up job                                           conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Validate compose config                              conclusion=success
+    step=Generate ephemeral master keys                       conclusion=success
+    step=Build backend image                                  conclusion=success
+    step=Start core services                                  conclusion=success
+    step=Smoke (health + scheduler/worker heartbeat)          conclusion=success
+    step=Dump compose logs on failure                         conclusion=skipped
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Complete job                                         conclusion=success
+job=frontend                                 conclusion=failure   started=2026-10-28T05:33:24Z completed=2026-10-28T05:36:53Z
+    step=Set up job                                           conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Resolve pnpm version from packageManager             conclusion=success
+    step=Run pnpm/action-setup@v4                             conclusion=success
+    step=Run actions/setup-node@v4                            conclusion=success
+    step=Runtime fingerprint & parity assert                  conclusion=success
+    step=Install                                              conclusion=success
+    step=Type check                                           conclusion=success
+    step=Contracts package strict check (tsc --noEmit)        conclusion=success
+    step=TypeScript strict check (tsc --noEmit)               conclusion=success
+    step=Unit tests (vitest)                                  conclusion=success
+    step=Upload vitest diagnostics on failure                 conclusion=skipped
+    step=Build                                                conclusion=success
+    step=Install Playwright browser (chromium)                conclusion=success
+    step=Build (mock artifact, for UI e2e)                    conclusion=success
+    step=E2E (mock UI)                                        conclusion=failure
+    step=E2E (real backend, non-blocking)                     conclusion=skipped
+    step=Upload Playwright diagnostics on failure             conclusion=success
+    step=Post Run actions/setup-node@v4                       conclusion=skipped
+    step=Post Run pnpm/action-setup@v4                        conclusion=success
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Complete job                                         conclusion=success
+job=compose                                  conclusion=success   started=2026-10-28T05:33:24Z completed=2026-10-28T05:33:32Z
+    step=Set up job                                           conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Validate compose config                              conclusion=success
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Complete job                                         conclusion=success
+job=workflow-lint                            conclusion=success   started=2026-10-28T05:33:24Z completed=2026-10-28T05:33:33Z
+    step=Set up job                                           conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Install actionlint (pinned)                          conclusion=success
+    step=actionlint (all workflows)                           conclusion=success
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Complete job                                         conclusion=success
+job=backend                                  conclusion=success   started=2026-10-28T05:33:23Z completed=2026-10-28T05:37:39Z
+    step=Set up job                                           conclusion=success
+    step=Initialize containers                                conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Run actions/setup-python@v5                          conclusion=success
+    step=Install                                              conclusion=success
+    step=Tool fingerprint                                     conclusion=success
+    step=Lint (ruff)                                          conclusion=success
+    step=Type check (mypy)                                    conclusion=success
+    step=Migrate schema (alembic upgrade head)                conclusion=success
+    step=Assert single alembic head                           conclusion=success
+    step=Migration roundtrip (upgrade head → downgrade -1 → u conclusion=success
+    step=Contract drift gate (gen_contracts --check)          conclusion=success
+    step=make/entry parity (6 tasks, zero/non-zero)           conclusion=success
+    step=Docs reference consistency gate (check_docs_consiste conclusion=success
+    step=Tests (pytest) + coverage + skip gate                conclusion=success
+    step=Module coverage gate (check_module_coverage)         conclusion=success
+    step=Governance gates (rounds-check + evidence-check)     conclusion=success
+    step=Post Run actions/setup-python@v5                     conclusion=success
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Stop containers                                      conclusion=success
+    step=Complete job                                         conclusion=success
+job=e2e-real                                 conclusion=skipped   started=2026-10-28T05:37:39Z completed=2026-10-28T05:37:39Z
+
+== run 级 logs zip：backend/frontend 关键计数 ==
+2_backend.txt: 2026-10-28T05:34:32.8526464Z [36;1m    print(f"❌ skip 门禁：无法解析 pytest-report.xml（{exc}）")[0m
+2_backend.txt: 2026-10-28T05:34:32.8530506Z [36;1mprint(f"skip 门禁：total_skipped={total} baseline={baseline} pg_unreachable={len(pg_skips)}")[0m
+2_backend.txt: 2026-10-28T05:34:32.8535487Z [36;1mprint("✅ skip 门禁通过：连库用例真实执行，skip 数在基线内")[0m
+2_backend.txt: 2026-10-28T05:37:32.7238936Z Required test coverage of 75% reached. Total coverage: 88.92%
+2_backend.txt: 2026-10-28T05:37:32.7239301Z =========================== short test summary info ============================
+2_backend.txt: 2026-10-28T05:37:32.7242504Z 2502 passed, 6 skipped, 4 deselected, 2 warnings in 178.24s (0:02:58)
+2_backend.txt: 2026-10-28T05:37:34.4097057Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+2_backend.txt: 2026-10-28T05:37:34.4097497Z ✅ skip 门禁通过：连库用例真实执行，skip 数在基线内
+2_backend.txt: 2026-10-28T05:37:34.4545670Z ✅ 全部模块与全局达标
+4_frontend.txt: 2026-10-28T05:34:08.1452858Z [2m Test Files [22m [1m[32m57 passed[39m[22m[90m (57)[39m
+4_frontend.txt: 2026-10-28T05:34:08.1462524Z [2m   Duration [22m 17.40s[2m (environment 44%, tests 36%, import 12%, transform 4%, setup 2%, worker 2%)[22m
+4_frontend.txt: 2026-10-28T05:36:49.4010235Z ##[error]Process completed with exit code 1.
+hits=12
+
+== CI-Windows job 结论与 skip 基线 ==
+job=windows-dev                              conclusion=success
+0_windows-dev.txt: 2026-10-28T05:33:26.8588992Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:33:35.9745141Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:33:38.4789712Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:33:42.3735200Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:33:50.7123155Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:34:12.3795086Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:34:13.7183964Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:34:48.7548118Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:34:55.4064260Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:34:55.5388258Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:34:55.7796943Z All checks passed!
+0_windows-dev.txt: 2026-10-28T05:34:55.8126769Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:35:11.5807836Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:54:45.5670526Z 1816 passed, 692 skipped, 4 deselected, 2 warnings in 1171.77s (0:19:31)
+0_windows-dev.txt: 2026-10-28T05:54:45.5867455Z [36;1mbaseline = int(os.environ.get("SKIP_BASELINE_WIN", "0"))[0m
+0_windows-dev.txt: 2026-10-28T05:54:45.5870585Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+0_windows-dev.txt: 2026-10-28T05:54:45.5875166Z [36;1mif len(skips) > baseline:[0m
+0_windows-dev.txt: 2026-10-28T05:54:45.5875592Z [36;1m    print(f"❌ skip 数 {len(skips)} 超阈值 {baseline}——新增的连库用例必须显式把阈值抬到测量值，"[0m
+0_windows-dev.txt: 2026-10-28T05:54:45.5920603Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:54:45.6932230Z windows 门禁：failed=0 total_skipped=692 baseline=692
+0_windows-dev.txt: 2026-10-28T05:54:45.7211672Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:54:58.3843226Z      [33m[2m✓[22m[39m 低质样例（url 含『低质』）：score<30、passed=false、reasons 非空[33m 405[2mms[22m[39m
+0_windows-dev.txt: 2026-10-28T05:55:16.9480644Z [2m Test Files [22m [1m[32m57 passed[39m[22m[90m (57)[39m
+0_windows-dev.txt: 2026-10-28T05:55:16.9483222Z [2m      Tests [22m [1m[32m449 passed[39m[22m[90m (449)[39m
+0_windows-dev.txt: 2026-10-28T05:55:17.1713301Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:55:53.3298991Z   SKIP_BASELINE_WIN: 692
+windows-dev/2_Run actions_checkout@v4.txt: 2026-10-28T05:33:26.8588989Z   SKIP_BASELINE_WIN: 692
+3_Resolve pnpm version from packageManager.txt: 2026-10-28T05:33:35.9745138Z   SKIP_BASELINE_WIN: 692
+windows-dev/4_Run pnpm_action-setup@v4.txt: 2026-10-28T05:33:38.4789710Z   SKIP_BASELINE_WIN: 692
+windows-dev/5_Run actions_setup-python@v5.txt: 2026-10-28T05:33:42.3735198Z   SKIP_BASELINE_WIN: 692
+windows-dev/6_Run actions_setup-node@v4.txt: 2026-10-28T05:33:50.7123153Z   SKIP_BASELINE_WIN: 692
+s-dev/7_Tool fingerprint（Windows 侧实际装到了什么）.txt: 2026-10-28T05:34:12.3795082Z   SKIP_BASELINE_WIN: 692
+eps（与 backend job 同口径 .[dev] + pytest-cov）.txt: 2026-10-28T05:34:13.7183962Z   SKIP_BASELINE_WIN: 692
+v/9_Install frontend deps（frozen lockfile）.txt: 2026-10-28T05:34:48.7548115Z   SKIP_BASELINE_WIN: 692
+windows-dev/10_entry.py 与 Makefile 目标面一致性.txt: 2026-10-28T05:34:55.4064258Z   SKIP_BASELINE_WIN: 692
+nt backend（ruff check app tests + scripts）.txt: 2026-10-28T05:34:55.5388255Z   SKIP_BASELINE_WIN: 692
+nt backend（ruff check app tests + scripts）.txt: 2026-10-28T05:34:55.7796901Z All checks passed!
+/12_Type check backend（mypy app + scripts）.txt: 2026-10-28T05:34:55.8126765Z   SKIP_BASELINE_WIN: 692
+ev/13_Backend tests（连库用例在本平台会 skip，只记账不主张）.txt: 2026-10-28T05:35:11.5807834Z   SKIP_BASELINE_WIN: 692
+ev/13_Backend tests（连库用例在本平台会 skip，只记账不主张）.txt: 2026-10-28T05:54:45.5670524Z 1816 passed, 692 skipped, 4 deselected, 2 warnings in 1171.77s (0:19:31)
+ws-dev/14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt: 2026-10-28T05:54:45.5867453Z [36;1mbaseline = int(os.environ.get("SKIP_BASELINE_WIN", "0"))[0m
+ws-dev/14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt: 2026-10-28T05:54:45.5870551Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+ws-dev/14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt: 2026-10-28T05:54:45.5875164Z [36;1mif len(skips) > baseline:[0m
+ws-dev/14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt: 2026-10-28T05:54:45.5875589Z [36;1m    print(f"❌ skip 数 {len(skips)} 超阈值 {baseline}——新增的连库用例必须显式把阈值抬到测量值，"[0m
+ws-dev/14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt: 2026-10-28T05:54:45.5920599Z   SKIP_BASELINE_WIN: 692
+ws-dev/14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt: 2026-10-28T05:54:45.6932203Z windows 门禁：failed=0 total_skipped=692 baseline=692
+s-dev/15_Frontend typecheck + unit（vitest）.txt: 2026-10-28T05:54:45.7211670Z   SKIP_BASELINE_WIN: 692
+s-dev/15_Frontend typecheck + unit（vitest）.txt: 2026-10-28T05:54:58.3843214Z      [33m[2m✓[22m[39m 低质样例（url 含『低质』）：score<30、passed=false、reasons 非空[33m 405[2mms[22m[39m
+s-dev/15_Frontend typecheck + unit（vitest）.txt: 2026-10-28T05:55:16.9480626Z [2m Test Files [22m [1m[32m57 passed[39m[22m[90m (57)[39m
+s-dev/15_Frontend typecheck + unit（vitest）.txt: 2026-10-28T05:55:16.9483214Z [2m      Tests [22m [1m[32m449 passed[39m[22m[90m (449)[39m
+build（NEXT_PUBLIC_API_MOCK=false 是生产守卫硬要求）.txt: 2026-10-28T05:55:17.1713299Z   SKIP_BASELINE_WIN: 692
+取证行（D-V6-02：run id + head_sha + 结论要能被下游引用）.txt: 2026-10-28T05:55:53.3298990Z   SKIP_BASELINE_WIN: 692
+hits_win=52
+
+
+== (2) 失败块逐字（run 40638671189 / step 16_E2E (mock UI)）==
+
+target=4_frontend.txt step_file=['frontend/16_E2E (mock UI).txt']
+file=frontend/16_E2E (mock UI).txt lines=128
+
+    0| ﻿2026-10-28T05:35:29.2361230Z ##[group]Run pnpm run test:e2e
+    1| 2026-10-28T05:35:29.2361596Z [36;1mpnpm run test:e2e[0m
+    2| 2026-10-28T05:35:29.2424535Z shell: /usr/bin/bash -e {0}
+    3| 2026-10-28T05:35:29.2424824Z env:
+    4| 2026-10-28T05:35:29.2425088Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+    5| 2026-10-28T05:35:29.2425415Z   PORT: 3456
+    6| 2026-10-28T05:35:29.2425610Z ##[endgroup]
+    7| 2026-10-28T05:35:29.6377848Z
+    8| 2026-10-28T05:35:29.6378696Z > bothot-frontend@0.1.0 test:e2e /home/runner/work/BotHot/BotHot/apps/web
+    9| 2026-10-28T05:35:29.6379513Z > playwright test
+   10| 2026-10-28T05:35:29.6379755Z
+   11| 2026-10-28T05:35:32.5326826Z
+   12| 2026-10-28T05:35:32.5327512Z Running 42 tests using 1 worker
+   13| 2026-10-28T05:35:32.5327894Z
+   14| 2026-10-28T05:35:35.2311262Z   ✓   1 e2e/admin.spec.ts:101:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ① 游客访问 /admin 与 /admin/ops：原地渲染统一 AuthGate，不重定向 (2.0s)
+   15| 2026-10-28T05:35:37.1874066Z   ✓   2 e2e/admin.spec.ts:111:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ② 键盘可达：Tab 到登录按钮、回车登录，落点是权限分层而不是白屏 (1.9s)
+   16| 2026-10-28T05:35:40.8904344Z   ✓   3 e2e/admin.spec.ts:138:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ③ 非 admin 会话 › ③ 非 admin 的处置：两屏都给出出口链接 (3.7s)
+   17| 2026-10-28T05:35:42.8449874Z   ✓   4 e2e/admin.spec.ts:153:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ④ 375px：游客卡与权限不足卡的内容区不横向溢出 (1.9s)
+   18| 2026-10-28T05:35:42.8451722Z   -   5 e2e/admin.spec.ts:195:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数
+   19| 2026-10-28T05:35:42.8454105Z   -   6 e2e/admin.spec.ts:219:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来
+   20| 2026-10-28T05:35:42.8458744Z   -   7 e2e/admin.spec.ts:229:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑦ 375px 下密钥表横向滚动而不是挤压
+   21| 2026-10-28T05:35:43.8913103Z   ✓   8 e2e/auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /spaces → AuthGate 统一卡片（原地，不跳转） (1.0s)
+   22| 2026-10-28T05:35:44.9272341Z   ✓   9 e2e/auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /subscriptions → AuthGate 统一卡片（原地，不跳转） (1.0s)
+   23| 2026-10-28T05:35:45.9717851Z   ✓  10 e2e/auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /jobs → AuthGate 统一卡片（原地，不跳转） (1.0s)
+   24| 2026-10-28T05:35:47.0010220Z   ✓  11 e2e/auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /public → AuthGate 统一卡片（原地，不跳转） (1.0s)
+   25| 2026-10-28T05:35:48.0636589Z   ✓  12 e2e/auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /engines → AuthGate 统一卡片（原地，不跳转） (1.0s)
+   26| 2026-10-28T05:35:49.1159706Z   ✓  13 e2e/auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /chat → AuthGate 统一卡片（原地，不跳转） (1.0s)
+   27| 2026-10-28T05:35:50.1669037Z   ✓  14 e2e/auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /onboarding → AuthGate 统一卡片（原地，不跳转） (1.0s)
+   28| 2026-10-28T05:35:51.2157123Z   ✓  15 e2e/auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /bots → AuthGate 统一卡片（原地，不跳转） (1.0s)
+   29| 2026-10-28T05:35:52.2508407Z   ✓  16 e2e/auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /admin → AuthGate 统一卡片（原地，不跳转） (1.0s)
+   30| 2026-10-28T05:35:52.5066126Z   ✓  17 e2e/auth-gate.spec.ts:51:7 › AuthGate 未登录统一守卫矩阵 › 未登录访问无效地址 → 404 兜底页（非 AuthGate 域，锁定不混淆） (243ms)
+   31| 2026-10-28T05:35:54.8452525Z [WebServer] Failed to proxy http://localhost:3300/api/v1/bots?page=1&page_size=20 [AggregateError: ] { code: 'ECONNREFUSED' }
+   32| 2026-10-28T05:35:54.8456515Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   33| 2026-10-28T05:35:54.8567331Z [WebServer] Failed to proxy http://localhost:3300/api/v1/bots/channels [AggregateError: ] { code: 'ECONNREFUSED' }
+   34| 2026-10-28T05:35:54.8579689Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   35| 2026-10-28T05:35:55.5485046Z [WebServer] Failed to proxy http://localhost:3300/api/v1/bots/tasks?page=1&page_size=20 [AggregateError: ] { code: 'ECONNREFUSED' }
+   36| 2026-10-28T05:35:55.5486385Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   37| 2026-10-28T05:35:55.5508634Z [WebServer] Failed to proxy http://localhost:3300/api/v1/bots?status=active&page=1&page_size=100 [AggregateError: ] { code: 'ECONNREFUSED' }
+   38| 2026-10-28T05:35:55.5513279Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   39| 2026-10-28T05:35:56.0464126Z   ✓  18 e2e/bots-tasks.spec.ts:32:7 › /bots 推送任务 e2e › ① 渠道列表渲染 + 切换到推送任务 Tab (3.5s)
+   40| 2026-10-28T05:35:58.3611361Z [WebServer] Failed to proxy http://localhost:3300/api/v1/bots?page=1&page_size=20 [AggregateError: ] { code: 'ECONNREFUSED' }
+   41| 2026-10-28T05:35:58.3635710Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   42| 2026-10-28T05:35:58.3650689Z [WebServer] Failed to proxy http://localhost:3300/api/v1/bots/channels [AggregateError: ] { code: 'ECONNREFUSED' }
+   43| 2026-10-28T05:35:58.3653770Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   44| 2026-10-28T05:35:59.0836218Z [WebServer] Failed to proxy http://localhost:3300/api/v1/bots/tasks?page=1&page_size=20 [AggregateError: ] { code: 'ECONNREFUSED' }
+   45| 2026-10-28T05:35:59.0841362Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   46| 2026-10-28T05:35:59.0860702Z [WebServer] Failed to proxy http://localhost:3300/api/v1/bots?status=active&page=1&page_size=100 [AggregateError: ] { code: 'ECONNREFUSED' }
+   47| 2026-10-28T05:35:59.0863570Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   48| 2026-10-28T05:35:59.6551485Z   ✓  19 e2e/bots-tasks.spec.ts:47:7 › /bots 推送任务 e2e › ② 新建推送任务——Cron 编辑器联动 (3.6s)
+   49| 2026-10-28T05:36:02.0004055Z [WebServer] Failed to proxy http://localhost:3300/api/v1/bots?page=1&page_size=20 [AggregateError: ] { code: 'ECONNREFUSED' }
+   50| 2026-10-28T05:36:02.0029429Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   51| 2026-10-28T05:36:02.0038274Z [WebServer] Failed to proxy http://localhost:3300/api/v1/bots/channels [AggregateError: ] { code: 'ECONNREFUSED' }
+   52| 2026-10-28T05:36:02.0046308Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   53| 2026-10-28T05:36:02.4286721Z   ✓  20 e2e/bots-tasks.spec.ts:69:7 › /bots 推送任务 e2e › ③ 任务日志弹窗打开与关闭 (2.8s)
+   54| 2026-10-28T05:36:04.7425728Z [WebServer] Failed to proxy http://localhost:3300/api/v1/bots?page=1&page_size=20 [AggregateError: ] { code: 'ECONNREFUSED' }
+   55| 2026-10-28T05:36:04.7427136Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   56| 2026-10-28T05:36:04.7534210Z [WebServer] Failed to proxy http://localhost:3300/api/v1/bots/channels [AggregateError: ] { code: 'ECONNREFUSED' }
+   57| 2026-10-28T05:36:04.7547803Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   58| 2026-10-28T05:36:05.1745317Z   ✓  21 e2e/bots-tasks.spec.ts:84:7 › /bots 推送任务 e2e › ④ 分页组件：多页时显示 Pagination (2.7s)
+   59| 2026-10-28T05:36:07.0830984Z [WebServer] Failed to proxy http://localhost:3300/api/v1/hot/feed?page=1&page_size=20 [AggregateError: ] { code: 'ECONNREFUSED' }
+   60| 2026-10-28T05:36:07.0839355Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   61| 2026-10-28T05:36:07.0857132Z [WebServer] Failed to proxy http://localhost:3300/api/v1/hot/topics?page=1&page_size=10 [AggregateError: ] { code: 'ECONNREFUSED' }
+   62| 2026-10-28T05:36:07.0880887Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   63| 2026-10-28T05:36:07.9254233Z [WebServer] Failed to proxy http://localhost:3300/api/v1/hot/feed?item_type=article&page=1&page_size=20 [AggregateError: ] { code: 'ECONNREFUSED' }
+   64| 2026-10-28T05:36:07.9259227Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   65| 2026-10-28T05:36:07.9403735Z   ✓  22 e2e/hot.spec.ts:32:7 › /hot 热点中心 e2e › ① Feed 流渲染 + 类型筛选切换 (2.8s)
+   66| 2026-10-28T05:36:09.8834017Z [WebServer] Failed to proxy http://localhost:3300/api/v1/hot/feed?page=1&page_size=20 [AggregateError: ] { code: 'ECONNREFUSED' }
+   67| 2026-10-28T05:36:09.8836208Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   68| 2026-10-28T05:36:09.8903976Z [WebServer] Failed to proxy http://localhost:3300/api/v1/hot/topics?page=1&page_size=10 [AggregateError: ] { code: 'ECONNREFUSED' }
+   69| 2026-10-28T05:36:09.8906978Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   70| 2026-10-28T05:36:10.7035263Z   ✓  23 e2e/hot.spec.ts:52:7 › /hot 热点中心 e2e › ② 热度条形进度条存在 (2.8s)
+   71| 2026-10-28T05:36:12.6379420Z [WebServer] Failed to proxy http://localhost:3300/api/v1/hot/daily/reports?page=1&page_size=10 [AggregateError: ] { code: 'ECONNREFUSED' }
+   72| 2026-10-28T05:36:12.6383210Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   73| 2026-10-28T05:36:13.4739488Z   ✓  24 e2e/hot.spec.ts:69:7 › /hot 热点中心 e2e › ③ 日报页：列表 + Markdown 渲染 (2.8s)
+   74| 2026-10-28T05:36:15.3844226Z [WebServer] Failed to proxy http://localhost:3300/api/v1/hot/daily/reports?page=1&page_size=10 [AggregateError: ] { code: 'ECONNREFUSED' }
+   75| 2026-10-28T05:36:15.3845970Z [WebServer] [AggregateError: ] { code: 'ECONNREFUSED' }
+   76| 2026-10-28T05:36:16.2155085Z   ✓  25 e2e/hot.spec.ts:86:7 › /hot 热点中心 e2e › ④ 日报翻页：Pagination 可点击 (2.7s)
+   77| 2026-10-28T05:36:16.2156827Z   -  26 e2e/r19-chat-stream.spec.ts:48:5 › ① success：一次正常提问出现渐进正文（meta→delta*→done）
+   78| 2026-10-28T05:36:16.2169901Z   -  27 e2e/r19-chat-stream.spec.ts:56:5 › ② 流式中主动断连：已渲染内容保留，且恢复后可重发
+   79| 2026-10-28T05:36:16.2170987Z   -  28 e2e/r19-chat-stream.spec.ts:91:5 › ③ unauthenticated：会话失效显示「未登录」，不许显示「权限不足」
+   80| 2026-10-28T05:36:16.2172277Z   -  29 e2e/r19-chat-stream.spec.ts:100:5 › ④ 八态清单：只有真取到读数的态才算数
+   81| 2026-10-28T05:36:16.2173204Z   -  30 e2e/real-backend.spec.ts:40:7 › 真实后端 e2e › ① SSO 登录 → 进入已登录态
+   82| 2026-10-28T05:36:16.2174050Z   -  31 e2e/real-backend.spec.ts:48:7 › 真实后端 e2e › ② 创建知识空间
+   83| 2026-10-28T05:36:16.2174934Z   -  32 e2e/real-backend.spec.ts:56:7 › 真实后端 e2e › ③ 粘贴公众号文章链接并入库
+   84| 2026-10-28T05:36:16.2175484Z   -  33 e2e/real-backend.spec.ts:65:7 › 真实后端 e2e › ④ 查看文章列表并显示状态
+   85| 2026-10-28T05:36:18.1233621Z   ✓  34 e2e/trunk.spec.ts:53:7 › mock 主干回归 › ① 未登录访问受保护页显示统一 AuthGate 卡片 (1.9s)
+   86| 2026-10-28T05:36:20.0230731Z   ✓  35 e2e/trunk.spec.ts:66:7 › mock 主干回归 › ② 登录 → 首页已登录（昵称 + 退出） (1.9s)
+   87| 2026-10-28T05:36:24.6486136Z   ✓  36 e2e/trunk.spec.ts:73:7 › mock 主干回归 › ③ 首页搜索 → /chat 自动首问（流式 + 引用） (4.6s)
+   88| 2026-10-28T05:36:30.6952468Z   ✓  37 e2e/trunk.spec.ts:89:7 › mock 主干回归 › ④ 第二轮追问（多轮并存） (6.0s)
+   89| 2026-10-28T05:36:34.4743987Z   ✓  38 e2e/trunk.spec.ts:104:7 › mock 主干回归 › ⑤ 切换空间：确认模态 + 清空会话 (3.8s)
+   90| 2026-10-28T05:36:49.3196761Z   ✘  39 e2e/trunk.spec.ts:122:7 › mock 主干回归 › ⑥ 错误态 + 重试 (14.8s)
+   91| 2026-10-28T05:36:49.3198866Z   -  40 e2e/trunk.spec.ts:140:7 › mock 主干回归 › ⑦ 空间列表 / 详情 / 无效 id 空态
+   92| 2026-10-28T05:36:49.3200110Z   -  41 e2e/trunk.spec.ts:163:7 › mock 主干回归 › ⑧ 登出 → 回未登录态
+   93| 2026-10-28T05:36:49.3201459Z   -  42 e2e/trunk.spec.ts:170:7 › mock 主干回归 › ⑨ 链接入库主链路：粘贴 → 解析预览 → 确认入库 → 轮询收敛（mock 即 READY）
+   94| 2026-10-28T05:36:49.3580740Z
+   95| 2026-10-28T05:36:49.3586754Z
+   96| 2026-10-28T05:36:49.3596612Z   1) e2e/trunk.spec.ts:122:7 › mock 主干回归 › ⑥ 错误态 + 重试 ──────────────────────────────────────────────
+   97| 2026-10-28T05:36:49.3597341Z
+   98| 2026-10-28T05:36:49.3597659Z     Error: expect(locator).toBeVisible() failed
+   99| 2026-10-28T05:36:49.3598084Z
+  100| 2026-10-28T05:36:49.3598525Z     Locator: getByText('机器人服务异常，请稍后重试')
+  101| 2026-10-28T05:36:49.3599130Z     Expected: visible
+  102| 2026-10-28T05:36:49.3599549Z     Timeout: 10000ms
+  103| 2026-10-28T05:36:49.3600007Z     Error: element(s) not found
+  104| 2026-10-28T05:36:49.3600376Z
+  105| 2026-10-28T05:36:49.3600544Z     Call log:
+  106| 2026-10-28T05:36:49.3601413Z       - Expect "toBeVisible" getByText('机器人服务异常，请稍后重试') with timeout 10000ms
+  107| 2026-10-28T05:36:49.3602645Z       - waiting for getByText('机器人服务异常，请稍后重试')
+  108| 2026-10-28T05:36:49.3603027Z
+  109| 2026-10-28T05:36:49.3603042Z
+  110| 2026-10-28T05:36:49.3603385Z       129 |     await input.fill(`${FAIL_TRIGGER}的提问`);
+  111| 2026-10-28T05:36:49.3604446Z       130 |     await page.getByRole("button", { name: "发送", exact: true }).click();
+  112| 2026-10-28T05:36:49.3605825Z     > 131 |     await expect(page.getByText("机器人服务异常，请稍后重试")).toBeVisible({ timeout: 10_000 });
+  113| 2026-10-28T05:36:49.3606769Z           |                                                   ^
+  114| 2026-10-28T05:36:49.3607318Z       132 |
+  115| 2026-10-28T05:36:49.3607921Z       133 |     // 重试放行 → 回答 + 引用，错误消失
+  116| 2026-10-28T05:36:49.3609185Z       134 |     await page.getByRole("button", { name: "重试" }).click();
+  117| 2026-10-28T05:36:49.3610174Z         at /home/runner/work/BotHot/BotHot/apps/web/e2e/trunk.spec.ts:131:51
+  118| 2026-10-28T05:36:49.3610732Z
+  119| 2026-10-28T05:36:49.3613631Z     Error Context: test-results/trunk-mock-主干回归-⑥-错误态-重试/error-context.md
+  120| 2026-10-28T05:36:49.3614223Z
+  121| 2026-10-28T05:36:49.3614403Z   1 failed
+  122| 2026-10-28T05:36:49.3615309Z     e2e/trunk.spec.ts:122:7 › mock 主干回归 › ⑥ 错误态 + 重试 ───────────────────────────────────────────────
+  123| 2026-10-28T05:36:49.3615768Z   11 skipped
+  124| 2026-10-28T05:36:49.3615981Z   3 did not run
+  125| 2026-10-28T05:36:49.3616199Z   27 passed (1.3m)
+  126| 2026-10-28T05:36:49.3783160Z  ELIFECYCLE  Command failed with exit code 1.
+  127| 2026-10-28T05:36:49.4010215Z ##[error]Process completed with exit code 1.
+
+
+== (3) 本机先红复现（未改 e2e 字节，`bash Temp/s59/run_mock_e2e.sh r1_hong`）==
+== 口径 = CI frontend job 两步：`rm -rf .next && NEXT_PUBLIC_API_MOCK=true pnpm exec next build` ==
+==            → `PORT=3456 pnpm run test:e2e`（playwright.config.ts 头注的 ① MOCK 态）==
+（原文第 86 行起）
+  1) e2e\trunk.spec.ts:122:7 › mock 主干回归 › ⑥ 错误态 + 重试 ──────────────────────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('机器人服务异常，请稍后重试')
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByText('机器人服务异常，请稍后重试') with timeout 10000ms
+      - waiting for getByText('机器人服务异常，请稍后重试')
+
+
+…（逐条 ok 行省略，只留 trunk 四条与末段计数）
+  ok 34 e2e\trunk.spec.ts:53:7 › mock 主干回归 › ① 未登录访问受保护页显示统一 AuthGate 卡片 (2.1s)
+  ok 35 e2e\trunk.spec.ts:66:7 › mock 主干回归 › ② 登录 → 首页已登录（昵称 + 退出） (2.2s)
+  ok 36 e2e\trunk.spec.ts:73:7 › mock 主干回归 › ③ 首页搜索 → /chat 自动首问（流式 + 引用） (5.1s)
+  ok 37 e2e\trunk.spec.ts:89:7 › mock 主干回归 › ④ 第二轮追问（多轮并存） (6.6s)
+  ok 38 e2e\trunk.spec.ts:104:7 › mock 主干回归 › ⑤ 切换空间：确认模态 + 清空会话 (5.3s)
+    Error: expect(locator).toBeVisible() failed
+  1 failed
+  11 skipped
+  3 did not run
+  27 passed (1.5m)
+ ELIFECYCLE  Command failed with exit code 1.
+e2e_rc=1
+
+== (4) 本机复绿（只把 :131/:135 两句期望换成契约降级原字，产品字节零改动）==
+== 改动面：`git diff --stat -- apps/web/e2e/trunk.spec.ts` = 1 file changed, 3 insertions(+), 3 deletions(-) ==
+== （第三行是 :127 那条注释：旧注释写「首轮 30002 错误气泡」已经不真）==
+== .next 复用 (3) 那次的产物：spec 文件不参与 next build，所以不必重构建 ==
+（原文第 58 行起）
+  11 skipped
+  31 passed (1.6m)
+e2e_rc=0
+…（逐条 ok 行省略，只留 trunk 四条与末段计数）
+  ok 34 e2e\trunk.spec.ts:53:7 › mock 主干回归 › ① 未登录访问受保护页显示统一 AuthGate 卡片 (2.2s)
+  ok 35 e2e\trunk.spec.ts:66:7 › mock 主干回归 › ② 登录 → 首页已登录（昵称 + 退出） (2.2s)
+  ok 36 e2e\trunk.spec.ts:73:7 › mock 主干回归 › ③ 首页搜索 → /chat 自动首问（流式 + 引用） (5.0s)
+  ok 37 e2e\trunk.spec.ts:89:7 › mock 主干回归 › ④ 第二轮追问（多轮并存） (7.1s)
+  ok 38 e2e\trunk.spec.ts:104:7 › mock 主干回归 › ⑤ 切换空间：确认模态 + 清空会话 (5.2s)
+  ok 39 e2e\trunk.spec.ts:122:7 › mock 主干回归 › ⑥ 错误态 + 重试 (6.7s)
+  ok 40 e2e\trunk.spec.ts:140:7 › mock 主干回归 › ⑦ 空间列表 / 详情 / 无效 id 空态 (6.5s)
+  ok 41 e2e\trunk.spec.ts:163:7 › mock 主干回归 › ⑧ 登出 → 回未登录态 (3.1s)
+  ok 42 e2e\trunk.spec.ts:170:7 › mock 主干回归 › ⑨ 链接入库主链路：粘贴 → 解析预览 → 确认入库 → 轮询收敛（mock 即 READY） (6.2s)
+  11 skipped
+  31 passed (1.6m)
+e2e_rc=0
+
+== (5) 两次跑的对账（为什么这次不能只信「绿了」）==
+红跑：`1 failed / 27 passed / 11 skipped / 3 did not run` = 42 条被收集。
+绿跑：`31 passed / 11 skipped` = 42 条。**总数一致 ⇒ 没有用例被静默摘除**；
+差的 4 条正是 `did not run` 的 trunk ⑥⑦⑧⑨ 里除 ⑥ 之外那三条（serial describe 被 ⑥ 的红卡住，
+**它们此前从未在含 U5 改动的字节上真跑过**），本批第一次跑到且全 ok：
+⑦ 空间列表 / 详情 / 无效 id 空态、⑧ 登出 → 回未登录态、⑨ 链接入库主链路。
+⇒ 「复绿」在这里的含义是 42 条同集复算，不是「那一条不红了」。
+另一条如实记录：外层包装脚本先返回了 rc，内层 playwright 仍在跑（3456 还在 LISTENING）——
+读数是以文件里出现 `e2e_rc=` 为准取的，不是以工具的任务完成通知为准（同族病史见 memory：
+停后台任务不会停内层脚本）。收尾复查 `netstat` 无 3456/3300 残留监听。

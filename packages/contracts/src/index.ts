@@ -14,7 +14,10 @@
  *
  * 域 DTO（S3.4 接线，2026-10-08 起 index.ts 导出）：
  * - 已导出：bot / hot / ingest / knowledge / push_event / subscription（6 域，模型内省生成）
- * - 保持骨架：identity / chat（`.gitkeep`，待后端对应模型纳入生成器后接线）
+ * - 保持骨架：chat（`.gitkeep`）。identity 已在 STEP-66 出实体镜像 `identity/dto.ts`（`User`）；
+ *   chat 仍缺不是"忘了接"，而是它的载荷是 SSE 聚合形、没有任何端点把它当信封 `data` 整体吐出，
+ *   而孤儿守卫不收「无真端点反向核」的 def（实测红字见 `EVD-V23-66/s66_chat_defs_orphan_red.txt`）
+ *   ⇒ 口径问题交回台账 P-144，不由本包自行放宽。
  *
  * API 响应形状（STEP-46 起，D-V21-01，解 P-82）：从 `app/contracts/<域>.py` → schema → TS
  * 一条链派生，**是**线上 `data` 形状，可直接用于 `satisfies`：
@@ -105,3 +108,11 @@ export type {
 // （两侧都不许改）⇒ 依卡面第 13 格 ① 转 B。八值与冻结稿逐值同序，由
 // `apps/api/tests/test_ux_states_contract.py` 钉住。
 export type { UxState } from "./ux/states";
+
+// ── identity 域（STEP-66，P-82 余项 / U6）──
+// **两类产物要分清**（这是 identity↔shapes 的分工，也是本行注释存在的理由）：
+// - `identity/dto.ts` 的 `User` 是**持久层实体镜像**（SQLAlchemy 内省 `app/models/entities.py`），
+//   用来看"库里的 users 行长什么样"，不是任何一个端点的响应形；
+// - 线上 `GET /auth/me` 的 `data` 形状在 **shapes** 域（`MeView` / `MeUser` / `MeWallet`），
+//   前端要"这个端点吐什么"时读那一侧，不要把 `User` 当响应形用。
+export type { User } from "./identity/dto";

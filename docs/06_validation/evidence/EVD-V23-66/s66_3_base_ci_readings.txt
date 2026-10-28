@@ -1,0 +1,151 @@
+== STEP-66 开工前置读数：head 5b1a78d（STEP-65 交付头）三条 workflow 的 @ci 结论 ==
+== 取数时刻晚于本卡字节交付（程序错，已在 s66_readings.md §6 自曝）；命令口径 = run 级 logs zip，==
+== 本机 per-job 日志端点 403（见 memory: GitHub CI readings on this box）。不回显任何凭据。==
+
+STEP-66 开工前置读数（head 5b1a78d = STEP-65 交付头）
+CI run=40638671189 num=365 status=completed conclusion=failure created=2026-10-28T05:33:21Z updated=2026-10-28T05:38:34Z
+CI-Windows run=40638672168 num=267 status=completed conclusion=success created=2026-10-28T05:33:22Z updated=2026-10-28T05:55:58Z
+Security run=40638671261 num=361 status=completed conclusion=success created=2026-10-28T05:33:21Z updated=2026-10-28T05:34:19Z
+
+== CI run 的 job 结论（共 6 个）==
+job=compose-smoke                            conclusion=success   started=2026-10-28T05:33:23Z completed=2026-10-28T05:38:33Z
+    step=Set up job                                           conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Validate compose config                              conclusion=success
+    step=Generate ephemeral master keys                       conclusion=success
+    step=Build backend image                                  conclusion=success
+    step=Start core services                                  conclusion=success
+    step=Smoke (health + scheduler/worker heartbeat)          conclusion=success
+    step=Dump compose logs on failure                         conclusion=skipped
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Complete job                                         conclusion=success
+job=frontend                                 conclusion=failure   started=2026-10-28T05:33:24Z completed=2026-10-28T05:36:53Z
+    step=Set up job                                           conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Resolve pnpm version from packageManager             conclusion=success
+    step=Run pnpm/action-setup@v4                             conclusion=success
+    step=Run actions/setup-node@v4                            conclusion=success
+    step=Runtime fingerprint & parity assert                  conclusion=success
+    step=Install                                              conclusion=success
+    step=Type check                                           conclusion=success
+    step=Contracts package strict check (tsc --noEmit)        conclusion=success
+    step=TypeScript strict check (tsc --noEmit)               conclusion=success
+    step=Unit tests (vitest)                                  conclusion=success
+    step=Upload vitest diagnostics on failure                 conclusion=skipped
+    step=Build                                                conclusion=success
+    step=Install Playwright browser (chromium)                conclusion=success
+    step=Build (mock artifact, for UI e2e)                    conclusion=success
+    step=E2E (mock UI)                                        conclusion=failure
+    step=E2E (real backend, non-blocking)                     conclusion=skipped
+    step=Upload Playwright diagnostics on failure             conclusion=success
+    step=Post Run actions/setup-node@v4                       conclusion=skipped
+    step=Post Run pnpm/action-setup@v4                        conclusion=success
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Complete job                                         conclusion=success
+job=compose                                  conclusion=success   started=2026-10-28T05:33:24Z completed=2026-10-28T05:33:32Z
+    step=Set up job                                           conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Validate compose config                              conclusion=success
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Complete job                                         conclusion=success
+job=workflow-lint                            conclusion=success   started=2026-10-28T05:33:24Z completed=2026-10-28T05:33:33Z
+    step=Set up job                                           conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Install actionlint (pinned)                          conclusion=success
+    step=actionlint (all workflows)                           conclusion=success
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Complete job                                         conclusion=success
+job=backend                                  conclusion=success   started=2026-10-28T05:33:23Z completed=2026-10-28T05:37:39Z
+    step=Set up job                                           conclusion=success
+    step=Initialize containers                                conclusion=success
+    step=Run actions/checkout@v4                              conclusion=success
+    step=Run actions/setup-python@v5                          conclusion=success
+    step=Install                                              conclusion=success
+    step=Tool fingerprint                                     conclusion=success
+    step=Lint (ruff)                                          conclusion=success
+    step=Type check (mypy)                                    conclusion=success
+    step=Migrate schema (alembic upgrade head)                conclusion=success
+    step=Assert single alembic head                           conclusion=success
+    step=Migration roundtrip (upgrade head → downgrade -1 → u conclusion=success
+    step=Contract drift gate (gen_contracts --check)          conclusion=success
+    step=make/entry parity (6 tasks, zero/non-zero)           conclusion=success
+    step=Docs reference consistency gate (check_docs_consiste conclusion=success
+    step=Tests (pytest) + coverage + skip gate                conclusion=success
+    step=Module coverage gate (check_module_coverage)         conclusion=success
+    step=Governance gates (rounds-check + evidence-check)     conclusion=success
+    step=Post Run actions/setup-python@v5                     conclusion=success
+    step=Post Run actions/checkout@v4                         conclusion=success
+    step=Stop containers                                      conclusion=success
+    step=Complete job                                         conclusion=success
+job=e2e-real                                 conclusion=skipped   started=2026-10-28T05:37:39Z completed=2026-10-28T05:37:39Z
+
+== run 级 logs zip：backend/frontend 关键计数 ==
+2_backend.txt: 2026-10-28T05:34:32.8526464Z [36;1m    print(f"❌ skip 门禁：无法解析 pytest-report.xml（{exc}）")[0m
+2_backend.txt: 2026-10-28T05:34:32.8530506Z [36;1mprint(f"skip 门禁：total_skipped={total} baseline={baseline} pg_unreachable={len(pg_skips)}")[0m
+2_backend.txt: 2026-10-28T05:34:32.8535487Z [36;1mprint("✅ skip 门禁通过：连库用例真实执行，skip 数在基线内")[0m
+2_backend.txt: 2026-10-28T05:37:32.7238936Z Required test coverage of 75% reached. Total coverage: 88.92%
+2_backend.txt: 2026-10-28T05:37:32.7239301Z =========================== short test summary info ============================
+2_backend.txt: 2026-10-28T05:37:32.7242504Z 2502 passed, 6 skipped, 4 deselected, 2 warnings in 178.24s (0:02:58)
+2_backend.txt: 2026-10-28T05:37:34.4097057Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+2_backend.txt: 2026-10-28T05:37:34.4097497Z ✅ skip 门禁通过：连库用例真实执行，skip 数在基线内
+2_backend.txt: 2026-10-28T05:37:34.4545670Z ✅ 全部模块与全局达标
+4_frontend.txt: 2026-10-28T05:34:08.1452858Z [2m Test Files [22m [1m[32m57 passed[39m[22m[90m (57)[39m
+4_frontend.txt: 2026-10-28T05:34:08.1462524Z [2m   Duration [22m 17.40s[2m (environment 44%, tests 36%, import 12%, transform 4%, setup 2%, worker 2%)[22m
+4_frontend.txt: 2026-10-28T05:36:49.4010235Z ##[error]Process completed with exit code 1.
+hits=12
+
+== CI-Windows job 结论与 skip 基线 ==
+job=windows-dev                              conclusion=success
+0_windows-dev.txt: 2026-10-28T05:33:26.8588992Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:33:35.9745141Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:33:38.4789712Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:33:42.3735200Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:33:50.7123155Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:34:12.3795086Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:34:13.7183964Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:34:48.7548118Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:34:55.4064260Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:34:55.5388258Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:34:55.7796943Z All checks passed!
+0_windows-dev.txt: 2026-10-28T05:34:55.8126769Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:35:11.5807836Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:54:45.5670526Z 1816 passed, 692 skipped, 4 deselected, 2 warnings in 1171.77s (0:19:31)
+0_windows-dev.txt: 2026-10-28T05:54:45.5867455Z [36;1mbaseline = int(os.environ.get("SKIP_BASELINE_WIN", "0"))[0m
+0_windows-dev.txt: 2026-10-28T05:54:45.5870585Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+0_windows-dev.txt: 2026-10-28T05:54:45.5875166Z [36;1mif len(skips) > baseline:[0m
+0_windows-dev.txt: 2026-10-28T05:54:45.5875592Z [36;1m    print(f"❌ skip 数 {len(skips)} 超阈值 {baseline}——新增的连库用例必须显式把阈值抬到测量值，"[0m
+0_windows-dev.txt: 2026-10-28T05:54:45.5920603Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:54:45.6932230Z windows 门禁：failed=0 total_skipped=692 baseline=692
+0_windows-dev.txt: 2026-10-28T05:54:45.7211672Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:54:58.3843226Z      [33m[2m✓[22m[39m 低质样例（url 含『低质』）：score<30、passed=false、reasons 非空[33m 405[2mms[22m[39m
+0_windows-dev.txt: 2026-10-28T05:55:16.9480644Z [2m Test Files [22m [1m[32m57 passed[39m[22m[90m (57)[39m
+0_windows-dev.txt: 2026-10-28T05:55:16.9483222Z [2m      Tests [22m [1m[32m449 passed[39m[22m[90m (449)[39m
+0_windows-dev.txt: 2026-10-28T05:55:17.1713301Z   SKIP_BASELINE_WIN: 692
+0_windows-dev.txt: 2026-10-28T05:55:53.3298991Z   SKIP_BASELINE_WIN: 692
+windows-dev/2_Run actions_checkout@v4.txt: 2026-10-28T05:33:26.8588989Z   SKIP_BASELINE_WIN: 692
+3_Resolve pnpm version from packageManager.txt: 2026-10-28T05:33:35.9745138Z   SKIP_BASELINE_WIN: 692
+windows-dev/4_Run pnpm_action-setup@v4.txt: 2026-10-28T05:33:38.4789710Z   SKIP_BASELINE_WIN: 692
+windows-dev/5_Run actions_setup-python@v5.txt: 2026-10-28T05:33:42.3735198Z   SKIP_BASELINE_WIN: 692
+windows-dev/6_Run actions_setup-node@v4.txt: 2026-10-28T05:33:50.7123153Z   SKIP_BASELINE_WIN: 692
+s-dev/7_Tool fingerprint（Windows 侧实际装到了什么）.txt: 2026-10-28T05:34:12.3795082Z   SKIP_BASELINE_WIN: 692
+eps（与 backend job 同口径 .[dev] + pytest-cov）.txt: 2026-10-28T05:34:13.7183962Z   SKIP_BASELINE_WIN: 692
+v/9_Install frontend deps（frozen lockfile）.txt: 2026-10-28T05:34:48.7548115Z   SKIP_BASELINE_WIN: 692
+windows-dev/10_entry.py 与 Makefile 目标面一致性.txt: 2026-10-28T05:34:55.4064258Z   SKIP_BASELINE_WIN: 692
+nt backend（ruff check app tests + scripts）.txt: 2026-10-28T05:34:55.5388255Z   SKIP_BASELINE_WIN: 692
+nt backend（ruff check app tests + scripts）.txt: 2026-10-28T05:34:55.7796901Z All checks passed!
+/12_Type check backend（mypy app + scripts）.txt: 2026-10-28T05:34:55.8126765Z   SKIP_BASELINE_WIN: 692
+ev/13_Backend tests（连库用例在本平台会 skip，只记账不主张）.txt: 2026-10-28T05:35:11.5807834Z   SKIP_BASELINE_WIN: 692
+ev/13_Backend tests（连库用例在本平台会 skip，只记账不主张）.txt: 2026-10-28T05:54:45.5670524Z 1816 passed, 692 skipped, 4 deselected, 2 warnings in 1171.77s (0:19:31)
+ws-dev/14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt: 2026-10-28T05:54:45.5867453Z [36;1mbaseline = int(os.environ.get("SKIP_BASELINE_WIN", "0"))[0m
+ws-dev/14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt: 2026-10-28T05:54:45.5870551Z [36;1mprint(f"windows 门禁：failed={failed} total_skipped={len(skips)} baseline={baseline}")[0m
+ws-dev/14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt: 2026-10-28T05:54:45.5875164Z [36;1mif len(skips) > baseline:[0m
+ws-dev/14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt: 2026-10-28T05:54:45.5875589Z [36;1m    print(f"❌ skip 数 {len(skips)} 超阈值 {baseline}——新增的连库用例必须显式把阈值抬到测量值，"[0m
+ws-dev/14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt: 2026-10-28T05:54:45.5920599Z   SKIP_BASELINE_WIN: 692
+ws-dev/14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt: 2026-10-28T05:54:45.6932203Z windows 门禁：failed=0 total_skipped=692 baseline=692
+s-dev/15_Frontend typecheck + unit（vitest）.txt: 2026-10-28T05:54:45.7211670Z   SKIP_BASELINE_WIN: 692
+s-dev/15_Frontend typecheck + unit（vitest）.txt: 2026-10-28T05:54:58.3843214Z      [33m[2m✓[22m[39m 低质样例（url 含『低质』）：score<30、passed=false、reasons 非空[33m 405[2mms[22m[39m
+s-dev/15_Frontend typecheck + unit（vitest）.txt: 2026-10-28T05:55:16.9480626Z [2m Test Files [22m [1m[32m57 passed[39m[22m[90m (57)[39m
+s-dev/15_Frontend typecheck + unit（vitest）.txt: 2026-10-28T05:55:16.9483214Z [2m      Tests [22m [1m[32m449 passed[39m[22m[90m (449)[39m
+build（NEXT_PUBLIC_API_MOCK=false 是生产守卫硬要求）.txt: 2026-10-28T05:55:17.1713299Z   SKIP_BASELINE_WIN: 692
+取证行（D-V6-02：run id + head_sha + 结论要能被下游引用）.txt: 2026-10-28T05:55:53.3298990Z   SKIP_BASELINE_WIN: 692
+hits_win=52

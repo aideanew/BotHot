@@ -11,32 +11,25 @@ import type * as Shapes from "@bothot/contracts";
 export type { Envelope };
 
 /**
- * GET /api/v1/auth/me → data（C-T7 真实态适配）。
+ * GET /api/v1/auth/me → 归一化后的对外形（C-T7 真实态适配）。
  * 真实后端载荷为嵌套形态：{ user: {sub,email,nickname,tier,role}, wallet: {balanceYuan,...,currency} }；
  * mock/旧契约为扁平形态：{ sub,email,nickname,tier, wallet: "¥128.50" }。
  * 对外统一归一化为 MeData（wallet 已格式化为展示字符串），调用方零适配。
+ *
+ * STEP-66（P-82 余项）：字段清单不再手写——`sub/email/nickname/tier/is_admin` 直接从
+ * `app/contracts/shapes.py` 的 `MeUser` 经 `Pick` 取（`role` 刻意不取：它是**主平台** userinfo 的
+ * 大写枚举，与本地授权阶梯不同源不同形，拿它门禁会与后端 10004 双向分歧；`is_admin` 才是
+ * admin 面的唯一门禁依据，且字段名保持 wire 形态）。
+ * 剩下两个键是**归一化产物**，wire 上没有同名键，因此只能在这里写：
+ * - `wallet`：`MeWallet` 的金额对象格式化成的展示串（如 "¥0.00"）；
+ * - `providerUnreachable`：主平台 userinfo/wallet 不可达、后端已用本地 users 行降级回填资料。
+ *   会话本身有效（其余域接口不受影响）——UI 据此提示「余额暂不可查」，
+ *   而非渲染成 ¥0.00 让用户误以为余额清零。
  */
-export interface MeData {
-  sub: string;
-  email: string;
-  nickname: string;
-  tier: string;
-  /** 归一化后的余额展示串（如 "¥0.00"） */
+export type MeData = Pick<Shapes.MeUser, "sub" | "email" | "nickname" | "tier" | "is_admin"> & {
   wallet: string;
-  /**
-   * SPEC-M3 批次 2：是否具备 admin 秩（后端本地 users.role 判定的同源回显）。
-   * 这是 admin 面的唯一门禁依据——真实载荷里的 `user.role` 是**主平台** userinfo
-   * 的大写枚举（如 "USER"），与本地授权阶梯（user/operator/admin）不同源不同形，
-   * 拿它门禁会与后端 10004 双向分歧。字段名保持 wire 形态 `is_admin`。
-   */
-  is_admin: boolean;
-  /**
-   * 主平台 userinfo/wallet 不可达、后端已用本地 users 行降级回填资料。
-   * 会话本身有效（其余域接口不受影响）——UI 据此提示「余额暂不可查」，
-   * 而非渲染成 ¥0.00 让用户误以为余额清零。
-   */
   providerUnreachable: boolean;
-}
+};
 
 /**
  * 真实 /me 的钱包对象（B-T5 契约：金额为字符串保留两位）。

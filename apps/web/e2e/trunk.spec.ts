@@ -124,15 +124,15 @@ test.describe.serial("mock 主干回归", () => {
     await topbarSearch(page, "测试问题");
     await expect(page.getByText("来源文章").first()).toBeVisible({ timeout: 20_000 });
 
-    // 触发词提问 → 首轮 30002 错误气泡
+    // 触发词提问 → 首轮 30002 走 /chat 的 degraded 支（STEP-65 U5：30002/50002 不再吐通用码位文案）
     const input = page.getByPlaceholder(/输入问题/);
     await input.fill(`${FAIL_TRIGGER}的提问`);
     await page.getByRole("button", { name: "发送", exact: true }).click();
-    await expect(page.getByText("机器人服务异常，请稍后重试")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("引擎暂不可用，请稍后重试或换个空间")).toBeVisible({ timeout: 10_000 });
 
     // 重试放行 → 回答 + 引用，错误消失
     await page.getByRole("button", { name: "重试" }).click();
-    await expect(page.getByText("机器人服务异常，请稍后重试")).toHaveCount(0, { timeout: 20_000 });
+    await expect(page.getByText("引擎暂不可用，请稍后重试或换个空间")).toHaveCount(0, { timeout: 20_000 });
     await expect(page.getByText("来源文章")).toHaveCount(2, { timeout: 20_000 });
     await expect(page.getByRole("button", { name: "重试" })).toHaveCount(0);
   });

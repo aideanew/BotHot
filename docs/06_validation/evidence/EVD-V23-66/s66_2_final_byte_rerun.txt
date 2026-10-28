@@ -1,0 +1,44 @@
+== 卡面 10 格 @win 命令，按序（最终字节）==
+
+$ python scripts/gen_contracts.py --check
+[ok] packages\contracts\schemas\engine.schema.json 幂等一致
+[ok] packages\contracts\schemas\shapes.schema.json 幂等一致
+gen_check_rc=0
+
+$ pytest 三文件 -q
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+103 passed, 7 skipped, 1 warning in 34.19s
+
+$ 再加跑 identity 侧的两面（逐 def 比对门 + 生成物一致门）
+219 passed in 2.95s
+
+$ cd apps/web && pnpm exec tsc --noEmit → rc 0（见下条命令同源复跑）
+tsc_web_rc=0
+tsc_contracts_rc=0
+$ vitest me-normalize / mock-default / s52 三文件 → 3 files / 15 passed
+$ vitest 全量 → 57 files / 449 passed（与 STEP-65 终态同数 ⇒ 本卡零新增用例）
+$ next lint → No ESLint warnings or errors
+
+$ ruff / mypy / check_docs_consistency
+All checks passed!
+mypy（同一批字节，CI 与 Makefile 的口径 cd apps/api && mypy app ../../scripts）= Success: no issues found in 134 source files
+[ok] 文档一致性检查通过
+
+== 交付面（全部非证据改动）==
+ M apps/web/lib/api/types.ts
+D  packages/contracts/src/identity/.gitkeep
+ M packages/contracts/src/index.ts
+ M scripts/gen_contracts.py
+?? packages/contracts/src/identity/
+
+== 口径澄清（这一条差点被我记成「本卡弄红了 mypy」）==
+第一版跑的是「在仓库根执行 mypy apps/api/app scripts」，读回 Found 3 errors in 2 files，
+但那 3 条全是 import-not-found，落在两个本卡从未碰过的文件：
+  apps/api/app/services/cron_expr.py:20   缺 types-croniter 桩
+  scripts/perf_baseline.py:99/101         sys.path 不含 apps/api/tests，
+                                          于是找不到 fixtures.wechat_urls / test_p0_asset_cache
+CI 与本仓 Makefile 的口径都是「cd apps/api 后执行 mypy app ../../scripts」
+（读 apps/api/pyproject.toml 的 [tool.mypy]）。同一批字节在该口径下现读复跑：
+  Success: no issues found in 134 source files   ← 已替进上表那一行
+结论：仓库根那 3 条是**调用口径**的产物、早于本卡存在、不是交付缺陷；
+本卡不为它改任何文件，两侧读数都留在这里，免得下一次复核只看到"全绿"两个字。

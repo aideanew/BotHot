@@ -1,0 +1,20 @@
+== 验收②的两侧读数（先红一侧＝HEAD 字节，交付一侧＝工作树）==
+HEAD 版 types.ts 里 is_admin: boolean 命中 = 1
+交付版 types.ts 里 is_admin: boolean 命中 = 0
+
+== HEAD 版是否有 identity/dto.ts 与 User 接口 ==
+  packages/contracts/src/identity/.gitkeep
+  （上面只有 .gitkeep ⇒ identity 域此前无产物）
+
+== 交付版 ==
+dto.ts
+
+== 验收⑥：models 必须零改动 ==
+  （无行即零改动）
+  （空即零改动）
+
+== 生成器与产物面（本轮全部非文档改动）==
+ M apps/web/lib/api/types.ts
+ M packages/contracts/src/index.ts
+ M scripts/gen_contracts.py
+?? packages/contracts/src/identity/dto.ts
