@@ -8,8 +8,8 @@
     "State": {
       "type": "string",
       "enum": ["initial", "loading", "empty", "success", "error", "forbidden", "unauthenticated", "degraded"],
-      "x-required-for-every-core-view": true,
-      "note": "8 态而非 5 态：unauthenticated(10001/401) 与 forbidden(10004/403) 必须分开——前端把 401 当「权限不足」显示是本项目已确认的分歧点（identity.schema.json：授权缺 users 行也抛 10001）。degraded 承接 503/依赖不可达（Redis 缺失时 SSE 走 service_unavailable 帧而非报错）。"
+      "x-required-for-every-core-view": false,
+      "note": "8 值是全局词表，不是每个视图的必交清单：每个视图真正要交的是它在 x-core-views[].states 里列出的那些键——现读 6 个视图分别为 7/5/5/6/5/2 个键，没有任何视图是 8 个。x-required-for-every-core-view 置 false 就是这条的机器可读形式（台账 P-147）。8 值的分工：initial=首帧未定、loading=请求在途、empty=请求成功但零条、success=有数据、error=失败、forbidden=403/10004、unauthenticated=401/10001、degraded=依赖不可达或降级。unauthenticated 与 forbidden 必须分开：identity.schema.json 里授权缺 users 行也抛 10001，把 401 当「权限不足」显示是本项目已确认的分歧点。degraded 承接 503/依赖不可达（Redis 缺失时 SSE 走 service_unavailable 帧而非报错）。"
     },
     "StateRendering": {
       "type": "object",
@@ -34,7 +34,7 @@
         "success": "空间卡列表；卡片不得显示 content_markdown",
         "error": "LoadingErrorShell + 重试（5xx retryable=true）",
         "forbidden": "「无权限访问该空间」，不显示资源是否存在（防枚举）",
-        "unauthenticated": "AuthGate 拦截 → 跳主平台 SSO，不得停留在空白页",
+        "unauthenticated": "未登录访问必须满足四条不变量，落点允许按构建不同：① 不渲染任何受保护内容（空间名、文章标题、条数一律不出现）② 存在唯一登录入口 ③ 不出现 10004/「权限不足」 ④ 不出现 5xx 或白屏。真构建现落 middleware.ts 的 307 → `/`（首页有登录入口），演示构建现落原地 AuthGate——两档差异是已登记的构建差异（台账 P-150），不视为违反。",
         "degraded": "引擎不可用时显示「当前使用内置引擎」，不隐藏既有内容"
       }
     },
@@ -59,7 +59,7 @@
         "loading": "首 Token 前显示「思考中…」占位 + 可中断按钮",
         "success": "增量渲染，含引用来源列表",
         "error": "流中断必须保留已渲染内容 + 「连接中断，可重试」，禁止清空重页",
-        "unauthenticated": "跳登录，保留提问草稿",
+        "unauthenticated": "未登录或会话失效必须满足四条不变量，落点允许按构建不同：① 不渲染任何受保护内容（历史问答一律不出现）② 存在唯一登录入口 ③ 不出现 10004/「权限不足」 ④ 不出现 5xx 或白屏。另：尚未发出的提问草稿不得因会话失效而丢失（已兑现：会话失效走 onUnauthorized，不触发 reset，输入框状态保持；useSseAsk.ts:152 的清空只发生在主动发送时）。",
         "degraded": "30002 LANGBOT_API_ERROR / 50002 ⇒ 回落非流式或提示不可用；超时锚 LLM_FIRST_TOKEN_TIMEOUT 触发时给「响应较慢」而非静默"
       },
       "x-baseline-gap": "REQ-NF-001 要求「首 Token <3s」，实测无任何度量锚（coverage §3）⇒ 本卡只定 UI 态，性能数字待 STEP-18 建基线后才允许出现「优化」任务。"
@@ -69,7 +69,7 @@
       "reqId": "REQ-F-008",
       "boundaryFiles": ["app/admin/error.tsx", "app/admin/loading.tsx"],
       "states": {
-        "unauthenticated": "重定向登录",
+        "unauthenticated": "未登录访问必须满足四条不变量，落点允许按构建不同：① 不渲染任何管理数据（密钥、引擎、运维读数一律不出现）② 存在唯一登录入口 ③ 不出现 10004/「权限不足」 ④ 不出现 5xx 或白屏。真构建现落 307 → `/`，演示构建现落原地 AuthGate（台账 P-150）。",
         "forbidden": "「需要管理员权限」+ 不渲染任何管理数据（rank<2）",
         "empty": "「未登记任何引擎密钥」+ 入口按钮",
         "success": "密钥只显示掩码与「是否已配置」（resources.schema.json#ChannelSecret.x-api-surface）",
@@ -87,8 +87,10 @@
         "empty": "「暂无通知」",
         "success": "列表 + 未读点；5s 去重（NotificationBell.tsx:137-148）",
         "error": "SSE CLOSED → 指数退避重连（:157-164），卸载时清理（:167-170）",
-        "degraded": "Redis 缺失 ⇒ service_unavailable 帧 ⇒ 显示「实时推送暂不可用，历史仍可查」，不得显示为「无通知」",
-        "offstate": "⚠ MOCK_ENABLED 时 notifications.ts:103 直接不连接 ⇒ 默认演示态看不到实时通知。契约要求：演示态必须显式显示「演示数据，未连接实时通道」，禁止静默装作正常。"
+        "degraded": "Redis 缺失 ⇒ service_unavailable 帧 ⇒ 显示「实时推送暂不可用，历史仍可查」，不得显示为「无通知」"
+      },
+      "x-build-mode-notes": {
+        "offstate": "【构建态注记，不是 State 枚举值】⚠ MOCK_ENABLED 时 notifications.ts:103 直接不连接 ⇒ 默认演示态看不到实时通知。契约要求：演示态必须显式显示「演示数据，未连接实时通道」，禁止静默装作正常。本键不在 definitions.State.enum 内，不参与逐视图键集比对（P-147）。"
       }
     },
     {
@@ -105,7 +107,7 @@
     "任何界面不得把 forbidden 与 empty 合并（既是体验问题也是枚举面问题）。",
     "错误呈现必须带 requestId（api.envelope.schema.json#requestId），且 requestId 可一键复制。",
     "重试按钮的显隐由错误码的 retryable 决定，不由组件自行判断。",
-    "新增核心 view 必须一次交齐 8 态并附对应 vitest 用例；只交 success 态的 PR 不予合并（STEP-15 门禁）。",
+    "新增核心 view 必须在 x-core-views 里逐个列出它实际具备的态（可少于 8 个），并为每个列出的态附一条可执行用例；只交 success 态、或把某个列出的态留成「未测」的 PR 不予合并（STEP-15 门禁）。原文「一次交齐 8 态」与各视图 5–7 键、与 NotificationBell 的 offstate 三处互斥，按台账 P-147 改为逐视图口径。",
     "三态承载一律复用 LoadingErrorShell.tsx，不得另起一套 loading/error UI（该组件 :6-7 的立项理由就是消除 5+ 页重复）。"
   ]
 }

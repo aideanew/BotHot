@@ -1,0 +1,111 @@
+── 0 环境与基线 ──
+Python 3.12.10
+HEAD=bdf3a0f
+before_sha256=818fa1c807e2e736a2beca6b4aecd94ee93ceae14c1aa87e2b2fd87a6ac484bc
+after_sha256=2511aff55a10649f979398a7016f54bd9aad82de55eebcc9b8190d2d77d2954d
+docs/任务规划V0.12.0/contracts/ux_states.schema.json: JSON text data
+
+── 1 先红：未改字节的读数 ──
+target=docs/06_validation/evidence/EVD-V24-70/ux_states.before.json
+enum_count=8
+x_required=True
+note_len=202
+universal_rule5_len=69
+view_count=6
+view_keys=7 subset=True extra=[] view=REQ-F-003
+view_keys=5 subset=True extra=[] view=REQ-F-002
+view_keys=5 subset=True extra=[] view=REQ-F-005
+view_keys=6 subset=True extra=[] view=REQ-F-008
+view_keys=6 subset=False extra=['offstate'] view=REQ-F-001
+view_keys=2 subset=True extra=[] view=REQ-F-008
+subset_fail_views=1
+unauth_len=31 reqId=REQ-F-003
+unauth_len=10 reqId=REQ-F-005
+unauth_len=5 reqId=REQ-F-008
+bell_states=['degraded', 'empty', 'error', 'loading', 'offstate', 'success']
+bell_build_notes_keys=None
+
+── 2 改后读数（同一条探针，同一个脚本） ──
+target=docs/任务规划V0.12.0/contracts/ux_states.schema.json
+enum_count=8
+x_required=False
+note_len=464
+universal_rule5_len=191
+view_count=6
+view_keys=7 subset=True extra=[] view=REQ-F-003
+view_keys=5 subset=True extra=[] view=REQ-F-002
+view_keys=5 subset=True extra=[] view=REQ-F-005
+view_keys=6 subset=True extra=[] view=REQ-F-008
+view_keys=5 subset=True extra=[] view=REQ-F-001
+view_keys=2 subset=True extra=[] view=REQ-F-008
+subset_fail_views=0
+unauth_len=189 reqId=REQ-F-003
+unauth_len=191 reqId=REQ-F-005
+unauth_len=141 reqId=REQ-F-008
+bell_states=['degraded', 'empty', 'error', 'loading', 'success']
+bell_build_notes_keys=['offstate']
+
+── 3 复现：从 before 拷贝重放同一组替换，与在库字节逐字节比对 ──
+replay_bytes=9873 live_bytes=9873
+replay_identical=True
+replay_json_loadable=True
+replay_rc=0
+
+── 4 逐项校验（25 条） ──
+S70.1 value is false               PASS  False
+S70.2 note == 03 new (bytes)       PASS  len=464
+S70.3 rule5 == 03 new (bytes)      PASS  len=191
+S70.4a == 03 new (bytes)           PASS  len=189
+S70.4b == 03 new (bytes)           PASS  len=191
+S70.4c == 03 new (bytes)           PASS  len=141
+S70.5 offstate out of states       PASS  ['degraded', 'empty', 'error', 'loading', 'success']
+S70.5 x-build-mode-notes.offstate == 03 new PASS  len=165
+S70.5 notes is an object, single key PASS  ['offstate']
+enum unchanged (8, same order)     PASS  ['initial', 'loading', 'empty', 'success', 'error', 'forbidden', 'unauthenticated', 'degraded']
+State keeps both keys              PASS  ['enum', 'note', 'type', 'x-required-for-every-core-view']
+6/6 view key sets are enum subsets PASS  fails=[]
+view key counts == note 7/5/5/6/5/2 PASS  [7, 5, 5, 6, 5, 2]
+note states those counts           PASS  contains 7/5/5/6/5/2
+all five old strings absent        PASS  still present=0
+x-universal-rules still 6          PASS  6
+other 5 rules byte-identical       PASS  compared 5
+title/description unchanged        PASS  len=334
+top-level key order unchanged      PASS  ['$schema', '$id', 'title', 'description', 'type', 'definitions', 'x-core-views', 'x-universal-rules']
+view order unchanged               PASS  6 views
+non-chat states untouched          PASS  5 views compared
+utf-8 decodes cleanly              PASS  sha256=2511aff55a10649f979398a7016f54bd9aad82de55eebcc9b8190d2d77d2954d
+no BOM                             PASS  first=b'{\n '
+no CRLF introduced                 PASS  crlf=0
+ends with newline                  PASS  b'}\n'
+SUMMARY total=25 pass=25 fail=0
+
+── 5 卡面 §7 的 json / grep 判据 ──
+false_count=1
+true_count=0
+json_load=ok
+
+── 6 pytest（卡面 §5 步 8、§6 末二条） ──
+....                                                                     [100%]
+4 passed in 0.11s
+── 6b 同批跑最可能被牵连的治理门 test_collection_contract.py ──
+........................................................................ [ 98%]
+...                                                                      [100%]
+219 passed in 3.48s
+
+── 7 变更面（卡面 §6 末条） ──
+ .../contracts/ux_states.schema.json"                   | 18 ++++++++++--------
+ 1 file changed, 10 insertions(+), 8 deletions(-)
+10	8	"docs/\344\273\273\345\212\241\350\247\204\345\210\222V0.12.0/contracts/ux_states.schema.json"
+porcelain_lines=2
+ M "docs/\344\273\273\345\212\241\350\247\204\345\210\222V0.12.0/contracts/ux_states.schema.json"
+?? docs/06_validation/evidence/EVD-V24-70/
+
+── 8 不改面核对（enum / 其余 5 条 rule / 其余视图态） ──
+enum_same=True
+rules_6=6 rules_other5_same=True
+REQ-F-003 states_minus_unauth_same=True
+REQ-F-002 states_minus_unauth_same=True
+REQ-F-005 states_minus_unauth_same=True
+REQ-F-008 states_minus_unauth_same=True
+REQ-F-001 states_diff_removed=['offstate'] states_diff_added=[] (S70.5 target)
+REQ-F-008 states_minus_unauth_same=True

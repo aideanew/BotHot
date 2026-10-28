@@ -1,0 +1,50 @@
+{
+  "target": "docs/任务规划V0.12.0/contracts/ux_states.schema.json",
+  "source_of_new_texts": "docs/任务规划V0.24.0/03-裁决与契约增量.md §2（围栏块逐字抽取，非手抄）",
+  "before_sha256": "818fa1c807e2e736a2beca6b4aecd94ee93ceae14c1aa87e2b2fd87a6ac484bc",
+  "after_sha256": "2511aff55a10649f979398a7016f54bd9aad82de55eebcc9b8190d2d77d2954d",
+  "changes": [
+    {
+      "id": "S70.1",
+      "old": "\"x-required-for-every-core-view\": true",
+      "new": "\"x-required-for-every-core-view\": false",
+      "occurrences": 1
+    },
+    {
+      "id": "S70.2",
+      "old": "8 态而非 5 态：unauthenticated(10001/401) 与 forbidden(10004/403) 必须分开——前端把 401 当「权限不足」显示是本项目已确认的分歧点（identity.schema.json：授权缺 users 行也抛 10001）。degraded 承接 503/依赖不可达（Redis 缺失时 SSE 走 service_unavailable 帧而非报错）。",
+      "new": "8 值是全局词表，不是每个视图的必交清单：每个视图真正要交的是它在 x-core-views[].states 里列出的那些键——现读 6 个视图分别为 7/5/5/6/5/2 个键，没有任何视图是 8 个。x-required-for-every-core-view 置 false 就是这条的机器可读形式（台账 P-147）。8 值的分工：initial=首帧未定、loading=请求在途、empty=请求成功但零条、success=有数据、error=失败、forbidden=403/10004、unauthenticated=401/10001、degraded=依赖不可达或降级。unauthenticated 与 forbidden 必须分开：identity.schema.json 里授权缺 users 行也抛 10001，把 401 当「权限不足」显示是本项目已确认的分歧点。degraded 承接 503/依赖不可达（Redis 缺失时 SSE 走 service_unavailable 帧而非报错）。",
+      "occurrences": 1
+    },
+    {
+      "id": "S70.3",
+      "old": "新增核心 view 必须一次交齐 8 态并附对应 vitest 用例；只交 success 态的 PR 不予合并（STEP-15 门禁）。",
+      "new": "新增核心 view 必须在 x-core-views 里逐个列出它实际具备的态（可少于 8 个），并为每个列出的态附一条可执行用例；只交 success 态、或把某个列出的态留成「未测」的 PR 不予合并（STEP-15 门禁）。原文「一次交齐 8 态」与各视图 5–7 键、与 NotificationBell 的 offstate 三处互斥，按台账 P-147 改为逐视图口径。",
+      "occurrences": 1
+    },
+    {
+      "id": "S70.4a",
+      "old": "AuthGate 拦截 → 跳主平台 SSO，不得停留在空白页",
+      "new": "未登录访问必须满足四条不变量，落点允许按构建不同：① 不渲染任何受保护内容（空间名、文章标题、条数一律不出现）② 存在唯一登录入口 ③ 不出现 10004/「权限不足」 ④ 不出现 5xx 或白屏。真构建现落 middleware.ts 的 307 → `/`（首页有登录入口），演示构建现落原地 AuthGate——两档差异是已登记的构建差异（台账 P-150），不视为违反。",
+      "occurrences": 1
+    },
+    {
+      "id": "S70.4b",
+      "old": "跳登录，保留提问草稿",
+      "new": "未登录或会话失效必须满足四条不变量，落点允许按构建不同：① 不渲染任何受保护内容（历史问答一律不出现）② 存在唯一登录入口 ③ 不出现 10004/「权限不足」 ④ 不出现 5xx 或白屏。另：尚未发出的提问草稿不得因会话失效而丢失（已兑现：会话失效走 onUnauthorized，不触发 reset，输入框状态保持；useSseAsk.ts:152 的清空只发生在主动发送时）。",
+      "occurrences": 1
+    },
+    {
+      "id": "S70.4c",
+      "old": "重定向登录",
+      "new": "未登录访问必须满足四条不变量，落点允许按构建不同：① 不渲染任何管理数据（密钥、引擎、运维读数一律不出现）② 存在唯一登录入口 ③ 不出现 10004/「权限不足」 ④ 不出现 5xx 或白屏。真构建现落 307 → `/`，演示构建现落原地 AuthGate（台账 P-150）。",
+      "occurrences": 1
+    },
+    {
+      "id": "S70.5",
+      "old": ",\n        \"offstate\": \"⚠ MOCK_ENABLED 时 notifications.ts:103 直接不连接 ⇒ 默认演示态看不到实时通知。契约要求：演示态必须显式显示「演示数据，未连接实时通道」，禁止静默装作正常。\"\n      }\n    },",
+      "new": "\n      },\n      \"x-build-mode-notes\": {\n        \"offstate\": \"【构建态注记，不是 State 枚举值】⚠ MOCK_ENABLED 时 notifications.ts:103 直接不连接 ⇒ 默认演示态看不到实时通知。契约要求：演示态必须显式显示「演示数据，未连接实时通道」，禁止静默装作正常。本键不在 definitions.State.enum 内，不参与逐视图键集比对（P-147）。\"\n      }\n    },",
+      "occurrences": 1
+    }
+  ]
+}

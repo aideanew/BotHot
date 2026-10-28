@@ -23,31 +23,31 @@
 - 修改：`docs/任务规划V0.12.0/contracts/ux_states.schema.json`（五处，见 S70.1～S70.5）
 - 新增：`docs/06_validation/evidence/EVD-V24-70/before_after.json`（五处替换的前后原文）
 - 修改：`docs/06_validation/evidence/EVD-V24-70/readings.md`（pytest 输出原文）
-- 修改：`docs/任务规划V0.12.0/00-README.md`（P 表新增 P-153）
+- 修改：`docs/任务规划V0.12.0/00-README.md`（P 表新增一行；实际落 **P-160**——P-153 已被占用，见 `EVD-V24-70/readings.md` §4 第 1 行）
 
 ## 5. Execution Steps
 
-1. [ ] 先 `cp` 一份原文件到 `EVD-V24-70/ux_states.before.json`（供 before/after 对照）
-2. [ ] **S70.1** `definitions.State` 的 `"x-required-for-every-core-view": true` → `false`（只改值）
-3. [ ] **S70.2** `definitions.State` 的 `note` 整串替换为 `03` §2.2 的新串（逐字，不得增删标点）
-4. [ ] **S70.3** `x-universal-rules` 数组第 5 项（下标 4）整串替换为 `03` §2.3 的新串
-5. [ ] **S70.4** 三处 `unauthenticated` 整串替换为 `03` §2.4 的 (a)(b)(c)
-6. [ ] **S70.5** 把 `NotificationBell` 视图 `states` 里的 `"offstate": "..."` 整项**剪切**，作为该视图新增键 `x-build-mode-notes` 下的 `offstate`，值改为 `03` §2.5 给的新串
-7. [ ] `python -c "import json;json.load(open(...,encoding='utf-8'))"` 校验可解析
-8. [ ] 跑 `pytest tests/test_ux_states_contract.py -q`，四条全绿
-9. [ ] 写 `before_after.json`（五处 old/new 原文）与 `readings.md`
-10. [ ] 本卡单独提交并推送，核验远端包含该提交
+1. [x] 先 `cp` 一份原文件到 `EVD-V24-70/ux_states.before.json`（供 before/after 对照）
+2. [x] **S70.1** `definitions.State` 的 `"x-required-for-every-core-view": true` → `false`（只改值）
+3. [x] **S70.2** `definitions.State` 的 `note` 整串替换为 `03` §2.2 的新串（逐字，不得增删标点）
+4. [x] **S70.3** `x-universal-rules` 数组第 5 项（下标 4）整串替换为 `03` §2.3 的新串
+5. [x] **S70.4** 三处 `unauthenticated` 整串替换为 `03` §2.4 的 (a)(b)(c)
+6. [x] **S70.5** 把 `NotificationBell` 视图 `states` 里的 `"offstate": "..."` 整项**剪切**，作为该视图新增键 `x-build-mode-notes` 下的 `offstate`，值改为 `03` §2.5 给的新串
+7. [x] `python -c "import json;json.load(open(...,encoding='utf-8'))"` 校验可解析
+8. [x] 跑 `pytest tests/test_ux_states_contract.py -q`，四条全绿
+9. [x] 写 `before_after.json`（五处 old/new 原文）与 `readings.md`
+10. [x] 本卡单独提交并推送，核验远端包含该提交
 
 ## 6. 验收标准
 
-- [ ] `python -c` 能 `json.load` 该文件（语法有效）
-- [ ] `grep -c '"x-required-for-every-core-view": false'` = 1
-- [ ] `definitions.State.enum` 仍恰 8 值且顺序未变（`test_ux_states_literal_equals_frozen_draft_enum` 绿）
-- [ ] `note` 与 `x-required-for-every-core-view` 两个**键**仍存在（`test_frozen_draft_is_read_only_for_this_card` 绿）
-- [ ] `NotificationBell.states` 的键集 = `{loading,empty,success,error,degraded}`（5 个，无 `offstate`）
-- [ ] 每个视图的 `states` 键集都是 `definitions.State.enum` 的子集（6/6 视图）
-- [ ] `pytest tests/test_ux_states_contract.py` 4 passed
-- [ ] `git diff --stat` 只含本卡第 4 节列出的文件
+- [x] `python -c` 能 `json.load` 该文件（语法有效）
+- [x] `grep -c '"x-required-for-every-core-view": false'` = 1
+- [x] `definitions.State.enum` 仍恰 8 值且顺序未变（`test_ux_states_literal_equals_frozen_draft_enum` 绿）
+- [x] `note` 与 `x-required-for-every-core-view` 两个**键**仍存在（`test_frozen_draft_is_read_only_for_this_card` 绿）
+- [x] `NotificationBell.states` 的键集 = `{loading,empty,success,error,degraded}`（5 个，无 `offstate`）
+- [x] 每个视图的 `states` 键集都是 `definitions.State.enum` 的子集（6/6 视图）
+- [x] `pytest tests/test_ux_states_contract.py` 4 passed
+- [x] `git diff --stat` 只含本卡第 4 节列出的文件
 
 ## 7. 验证命令
 
@@ -73,7 +73,7 @@ cd apps/api && python -m pytest tests/test_ux_states_contract.py -q
 
 - `docs/任务规划V0.12.0/contracts/ux_states.schema.json`
 - `docs/06_validation/evidence/EVD-V24-70/**`
-- `docs/任务规划V0.12.0/00-README.md`（仅追加 P-153 一行）
+- `docs/任务规划V0.12.0/00-README.md`（仅追加台账一行；实际为 P-160，同 §4）
 
 ## 10. 禁止修改
 
