@@ -79,6 +79,17 @@ exit=0
 
 ## 6. @ci 读数
 
-待填（本卡提交后 `e2e-real` job 的 `Stop stack` 步结论 + `E2E` 步结论见 `s71_ci.txt`）。
+原文见 `s71_ci.txt`（before `fe46206` / after `a1ef93a`，均 run 级 jobs API + logs zip 现取）。
 
-**判据**：`Stop stack` = success；`E2E` 步结论与改动前**相同**（本卡不得改变 e2e 结果）。改动前（`fe46206`）的 `E2E` 步结论见 `s71_ci.txt` 的 before 段。
+| 项 | before（`fe46206`，CI run `40689977731`） | after（`a1ef93a`，CI run `40691241415`） | 判据 |
+|---|---|---|---|
+| `e2e-real` job | `failure` | `failure` | — |
+| `E2E (real backend, project=real, admin.spec.ts)` | `failure` | `failure` | **与改动前相同**⇒ 通过 |
+| `Stop stack` | `success` | `success` | 仍 success ⇒ 通过 |
+| `Stop containers` | `success` | `success` | 未受影响 |
+| 停止动作日志 | — | `stopped backend pid=3814` / `stopped frontend pid=4119` / 两条 `端口终检 … 空闲；占用者读数：(空)` | 收严后**未**把正常停机变 no-op |
+| 拒杀行出现次数 | — | **0**（日志里零条 `跳过 … 的监听者是`） | 正常路径不误触拒杀 |
+
+失败形也未变（同一 ⑥、同一 strict mode 双命中，逐字见 `s71_ci.txt`）⇒ 本卡没有改变 e2e 结果，改的只是拒绝侧的分支顺序。
+
+**判据**：`Stop stack` = success；`E2E` 步结论与改动前**相同**（本卡不得改变 e2e 结果）。两条均满足。

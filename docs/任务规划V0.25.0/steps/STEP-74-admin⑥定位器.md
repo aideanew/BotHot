@@ -46,6 +46,9 @@
 > 阻塞条件不成立（本机无 Redis/无 docker，`real` project 起不来），改用 Playwright 引擎 + 逐字 DOM 复算
 > 四种状态的命中数做反证（宽 2 / 窄 1，见 `EVD-V25-74/s74_readings.md` §3）；S74.7～S74.8 等提交后的 @ci。
 >
+> @ci 回读（head `299b220`，run `40692846396`）：`E2E` 步 **success**、⑥ `✓ 476ms`、⑦ `✓ 403ms`、`6 passed / 1 skipped`，
+> `e2e-real` job = success（原文 `EVD-V25-74/s74_ci.txt`）。
+>
 1. [x] **S74.1** 取先红：读 `EVD-V23-67/s67_7_test6_error.txt` 原文，确认失败点是 `:271` 的 strict mode（不是 `:268`）。若现场已漂移 ⇒ 停手，先补一条新读数。
 2. [x] **S74.2** 记 before：`sed -n '264,272p' apps/web/e2e/admin.spec.ts` 原样落 `s74_before_after.txt`。
 3. [x] **S74.3** 把 `:271` 的 `/告警|依赖未就绪|未知/` 换成与 `:268` **逐字相同**的窄式：
@@ -59,8 +62,8 @@
    > 为什么必须做：如果反过来（改完就绿、改回也绿），说明变绿的原因不是这次修改，而是环境变了。
    > 反向验证是「这条断言还活着」的唯一凭证。
 6. [x] **S74.6** 本机跑一次（若本机已具备真档前提）：见 §7 第 1 条。若本机起不了全栈 ⇒ 跳过，只写 `@ci` 读数（§7 第 2 条）。
-7. [ ] **S74.7** 提交（卡面勾选 + 证据 + 代码同一个提交），推送，读 `@ci` 的 `E2E (real backend, project=real, admin.spec.ts)` 步。
-8. [ ] **S74.8** 把该步的 `⑥ … ✓` 行与 `⑦ 不再 did not run` 落 `s74_ci.txt`。
+7. [x] **S74.7** 提交（卡面勾选 + 证据 + 代码同一个提交），推送，读 `@ci` 的 `E2E (real backend, project=real, admin.spec.ts)` 步。
+8. [x] **S74.8** 把该步的 `⑥ … ✓` 行与 `⑦ 不再 did not run` 落 `s74_ci.txt`。
 
 ## 6. 验收标准
 

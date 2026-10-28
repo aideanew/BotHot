@@ -75,4 +75,16 @@ $ grep -n "first()" apps/web/e2e/admin.spec.ts
 
 ## 6. @ci 读数（S74.7 / S74.8）
 
-待填（本卡提交后的 `E2E (real backend, project=real, admin.spec.ts)` 步原文见 `s74_ci.txt`）。
+原文见 `s74_ci.txt`（head `299b220`，CI run `40692846396`）。
+
+| 项 | 改动前（`a1ef93a`） | 本卡提交后（`299b220`） |
+|---|---|---|
+| `E2E (real backend, project=real, admin.spec.ts)` | `failure` | **`success`** |
+| ⑥ | `✘` strict mode 2 命中 | **`✓` 476ms** |
+| ⑦ | `did not run` | **`✓` 403ms** |
+| 计数 | `1 failed / 1 skipped / 1 did not run / 4 passed` | `6 passed / 1 skipped` |
+| `e2e-real` job | `failure` | **`success`** |
+| `Stop stack` | `success` | `success` |
+
+⇒ 卡面 §6 的两条 @ci 判据（⑥ 通过、⑦ 出现）都满足；`.first()` 未使用（`grep -c` 仍为 `:253` 那一处，本卡 +0）。
+

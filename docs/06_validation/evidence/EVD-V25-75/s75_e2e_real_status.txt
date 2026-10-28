@@ -1,0 +1,33 @@
+EVD-V25-75 · `e2e-real` 的 job status / conclusion / steps 数（head 299b220d14e4af23db55357531f8b4c9ee7bc00f）
+
+run=40692846396 wf=CI
+  job=e2e-real status=completed conclusion=success
+  steps=20（全部 completed/success）
+
+steps 逐条（jobs API 现取，顺序即实际执行顺序）：
+   1 Set up job                                       completed/success
+   2 Initialize containers                            completed/success
+   3 Run actions/checkout@v4                          completed/success
+   4 Resolve pnpm version from packageManager         completed/success
+   5 Run pnpm/action-setup@v4                         completed/success
+   6 Run actions/setup-node@v4                        completed/success
+   7 Run actions/setup-python@v5                      completed/success
+   8 Install（后端运行时 + 前端依赖 + chromium）        completed/success
+   9 Generate ephemeral master keys                   completed/success
+  10 Start real stack（迁移 → uvicorn:3300 → 探活 → 种子会话 → next:3200） completed/success
+  11 E2E (real backend, project=real, admin.spec.ts)   completed/success
+  12 Reporter 自检（把"上传 playwright-report"这条判据变成可失败的） completed/success
+  13 Upload report + screenshots（含绿跑：04 §1.1.5 要四屏截图，不能只在失败时留证） completed/success
+  14 Stop stack                                       completed/success
+  15 Post Run actions/setup-python@v5                 completed/success
+  16 Post Run actions/setup-node@v4                   completed/success
+  17 Post Run pnpm/action-setup@v4                    completed/success
+  18 Post Run actions/checkout@v4                     completed/success
+  19 Stop containers                                  completed/success
+  20 Complete job                                     completed/success
+
+判据：`e2e-real` 的 conclusion **≠ `skipped`**（此读数为 `success`）   ⇒ 本卡 S75.5 通过
+      卡面只要求「≠ skipped，failure 也可接受」；这里是更强的结果：`success`。
+
+对照（本卡之前的状态，来自 P-159 登记行）：
+  run 40673181463（head 5002410）job=e2e-real conclusion=skipped（`ci.yml:546 needs: [backend, frontend]` 连坐）

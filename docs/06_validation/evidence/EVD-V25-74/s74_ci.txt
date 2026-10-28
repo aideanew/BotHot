@@ -1,0 +1,33 @@
+EVD-V25-74 的 @ci 读数（head 299b220d14e4af23db55357531f8b4c9ee7bc00f，CI run 40692846396）
+
+一、job 与步骤（jobs API 现取）
+  run=40692846396 wf=CI status=completed conclusion=success started=2026-10-28T13:02:25Z
+    job=e2e-real status=completed conclusion=success
+      step=Start real stack（迁移 → uvicorn:3300 → 探活 → 种子会话 → next:3200） status=completed conclusion=success
+      step=E2E (real backend, project=real, admin.spec.ts) status=completed conclusion=success
+      step=Reporter 自检（把"上传 playwright-report"这条判据变成可失败的） status=completed conclusion=success
+      step=Upload report + screenshots（含绿跑：04 §1.1.5 要四屏截图，不能只在失败时留证） status=completed conclusion=success
+      step=Stop stack status=completed conclusion=success
+      step=Stop containers status=completed conclusion=success
+
+二、E2E 步原文（run 级 logs zip，条目 `11_E2E (real backend, project=real, admin.spec.ts).txt`）
+  ✓  1 [real] › e2e/admin.spec.ts:147:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ① 游客访问 /admin 与 /admin/ops：未登录守卫给出可判定的落点（两档按不变量，D-V23-15） (516ms)
+  ✓  3 [real] › e2e/admin.spec.ts:179:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ③ 非 admin 会话 › ③ 非 admin 的处置：两屏都给出出口链接 (525ms)
+  ✓  4 [real] › e2e/admin.spec.ts:194:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ④ 375px：游客卡与权限不足卡的内容区不横向溢出 (281ms)
+  ✓  5 [real] › e2e/admin.spec.ts:236:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数 (802ms)
+  ✓  6 [real] › e2e/admin.spec.ts:264:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来 (476ms)
+  ✓  7 [real] › e2e/admin.spec.ts:274:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑦ 375px 下密钥表横向滚动而不是挤压 (403ms)
+    1 skipped
+    6 passed (4.3s)
+
+三、判据核对
+  - ⑥ **通过**（`✓ 6 …`），不再是 `strict mode violation`             ⇒ 通过
+  - ⑦ **出现在输出里**且 `✓`（不再 `did not run`）                     ⇒ 通过
+  - 该 `E2E` 步整体 `success`，job `e2e-real` = success                ⇒ 通过
+  - `Stop stack` 仍 success、`stopped backend pid=4084` / `stopped frontend pid=4432`（条目 `14_Stop stack.txt`）⇒ 通过
+
+四、与改动前的对照（同一台 job 的两个 head）
+  | head | E2E 步 | ⑥ | ⑦ | job |
+  |---|---|---|---|---|
+  | `a1ef93a`（本卡改动前） | failure | ✘ strict mode 2 命中 | did not run | failure |
+  | `299b220`（本卡改动后） | success | ✓ 476ms | ✓ 403ms | success |

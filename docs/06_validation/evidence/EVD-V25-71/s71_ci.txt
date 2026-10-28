@@ -1,0 +1,37 @@
+EVD-V25-71 的 @ci 读数（before / after，均为 run 级 logs zip + jobs API 现取）
+
+改前（before）：head fe46206，CI run 40689977731
+  head=fe46206f6829c553d705ccbbd975787a68aa6e07
+  run=40689977731 wf=CI status=completed conclusion=success
+  job=e2e-real status=completed conclusion=failure
+    step=E2E (real backend, project=real, admin.spec.ts) status=completed conclusion=failure
+    step=Reporter 自检（把"上传 playwright-report"这条判据变成可失败的） status=completed conclusion=skipped
+    step=Stop stack status=completed conclusion=success
+    step=Stop containers status=completed conclusion=success
+
+改后（after）：head a1ef93a，CI run 40691241415
+  head=a1ef93a4ac272f6f3e29f2c833998e55b213ee60
+  run=40691241415 wf=CI status=completed conclusion=success
+  job=e2e-real status=completed conclusion=failure
+    step=E2E (real backend, project=real, admin.spec.ts) status=completed conclusion=failure
+    step=Reporter 自检（把"上传 playwright-report"这条判据变成可失败的） status=completed conclusion=skipped
+    step=Stop stack status=completed conclusion=success
+    step=Stop containers status=completed conclusion=success
+
+判据核对：
+  ① Stop stack = success（before 与 after 同）                        ⇒ 通过
+  ② E2E 步结论与改动前相同：failure（before）/ failure（after）      ⇒ 通过
+  ③ 失败形未变（同一 ⑥ 用例、同一 strict mode 双命中），逐字：
+     ✘  6 [real] › e2e/admin.spec.ts:264:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来 (443ms)
+     Error: strict mode violation: getByRole('status').getByText(/告警|依赖未就绪|未知/) resolved to 2 elements:
+     1 did not run
+
+停止动作的逐字读数（run 40691241415 的日志 zip，条目 `14_Stop stack.txt`）：
+  stopped backend pid=3814
+  stopped frontend pid=4119
+  端口终检 backend :3300 空闲；占用者读数：(空)
+  端口终检 frontend :3200 空闲；占用者读数：(空)
+
+  ⇒ CI（ubuntu，`have_ps=1`）上这两条命中的是「pidfile 里的 PID 就是端口属主」的正常分支，
+    收严后的拒杀分支**没有**被误触发（日志里零条 `跳过 … 的监听者是`），
+    也就是说 甲案没有把正常停机变成 no-op；本卡的反证（非属主时拒杀）由 `s71_readings.md` §3 的桩台给出。

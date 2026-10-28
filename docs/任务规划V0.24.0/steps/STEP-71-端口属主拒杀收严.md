@@ -62,8 +62,8 @@
 4. [x] **S71.3** `占用者读数` 那行日志**不得删**（P-148 的自证行，是本卡唯一的现场证据来源）
 5. [x] `bash -n scripts/e2e/run_real_backend.sh` 语法检查（`syntax ok`）
 6. [x] 本机跑一次 `bash scripts/e2e/run_real_backend.sh --stop`（无栈时也应正常退出，不得报错）
-7. [ ] 本卡单独提交并推送；`@ci` 的 `Stop stack` 步必须仍 success
-8. [ ] 写证据：before/after 的 `sed -n '118,140p'` 原文 + `Stop stack` 步的 @ci 日志片段
+7. [x] 本卡单独提交并推送；`@ci` 的 `Stop stack` 步必须仍 success
+8. [x] 写证据：before/after 的 `sed -n '118,140p'` 原文 + `Stop stack` 步的 @ci 日志片段
 
 ## 6. 验收标准
 

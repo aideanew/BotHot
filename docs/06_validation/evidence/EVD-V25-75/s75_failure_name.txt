@@ -1,0 +1,31 @@
+失败用例原文名（逐字，来源 run 40673181463 的 `backend` job 运行级日志 zip，条目 `1_backend.txt`）
+
+------------------------------------------------------------------
+___________________ test_decision_log_tables_are_well_formed ___________________
+
+    def test_decision_log_tables_are_well_formed() -> None:
+        """台账必须渲染得出来：行内不许有未转义的竖线、表格中间不许夹空行、第一格必须是裸号。
+...
+        problems = _ledger_table_problems(_ledger_lines())
+>       assert not problems, "台账表格有问题：\n" + "\n".join(problems)
+E       AssertionError: 台账表格有问题：
+E         第 183–183 行是空行（1 行），夹在表格中间 ⇒ 其后各行脱离表格（前一行：| D-V23-21 | V0.23.0 剩余队…）
+E       assert not ['第 183–183 行是空行（1 行），夹在表格中间 ⇒ 其后各行脱离表格（前一行：| D-V23-21 | V0.23.0 剩余队…）']
+
+tests/test_collection_contract.py:3433: AssertionError
+================================================================================
+
+同 run 的收尾计数行（逐字）：
+1 failed, 2501 passed, 6 skipped, 4 deselected, 2 warnings in 220.81s (0:03:40)
+
+------------------------------------------------------------------
+节点 id（由上面两行逐字拼出，与 P-159 登记的一致）：
+tests/test_collection_contract.py::test_decision_log_tables_are_well_formed
+
+取数口径说明（不许含糊）：
+- 该 run 的日志里**没有** `FAILED tests/…::…` 那一行——`short test summary info` 段只列了 6 条
+  `SKIPPED` 与收尾计数，失败条目只以 traceback 头 + 节点路径 + 断言段出现。
+  故本文件不用「pytest 失败」这类概称，而是把 traceback 头与 `…:3433: AssertionError` 两行原样贴出。
+- 同一失败在 CI-Windows（run 40673181460）同名出现——这一条是 P-159 登记行里的读数
+  （`docs/任务规划V0.12.0/00-README.md` 的 P-159 行），本文件**没有**重新下载 40673181460 的 zip 复核；
+  要独立复核请按同一口径取那次 run 的 `windows-dev` 日志。两条合计 ⇒ 双平台确定性红，不是抖动。
