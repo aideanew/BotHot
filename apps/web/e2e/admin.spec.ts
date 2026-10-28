@@ -248,11 +248,15 @@ test.describe.serial("管理端 e2e（演示态无条件执行 + 真后端档闸
       await expect(page.getByText("推送通道")).toBeVisible();
 
       await page.getByRole("button", { name: "引擎密钥" }).click();
-      await expect(page.getByRole("button", { name: "登记" })).toBeVisible();
+      // 引擎密钥屏按 provider 行渲染，「登记」一枚一行（CI 实证 4 个元素 ⇒ strict mode
+      // violation，P-152）；这里只主张"屏里登记入口可见"，取第一枚。
+      await expect(page.getByRole("button", { name: "登记" }).first()).toBeVisible();
 
       // 采集配置屏（STEP-14b 余项）：兜底默认关 ⇒ 保存按钮可用且没有拦截文案
       await page.getByRole("button", { name: "采集配置" }).click();
-      await expect(page.getByText("分类清单")).toBeVisible();
+      // exact:true：按钮「保存分类清单」（CollectionConfigPanel.tsx 的保存钮）含同一子串，
+      // 子串匹配会双命中标题与按钮 ⇒ strict mode violation（P-152 同源）。
+      await expect(page.getByText("分类清单", { exact: true })).toBeVisible();
       await expect(page.getByText("付费详情兜底")).toBeVisible();
       await expect(page.getByRole("button", { name: "保存分类清单" })).toBeVisible();
     });

@@ -1,0 +1,187 @@
+== STEP-67 交付头 4160b81 的 @ci 第 1 轮读数（run 40658539918，attempt 1）==
+== 来源：REST /actions/runs + /actions/jobs/122717742308/logs（job 日志直取，110412 字节）==
+
+-- 三个 workflow 结论 --
+CI run=40658539918 num=372 status=completed conclusion=success created=2026-10-28T08:40:54Z updated=2026-10-28T08:48:55Z
+CI-Windows run=40658539937 num=274 status=completed conclusion=success created=2026-10-28T08:40:54Z updated=2026-10-28T09:02:11Z
+Security run=40658539915 num=368 status=completed conclusion=success created=2026-10-28T08:40:54Z updated=2026-10-28T08:42:02Z
+
+-- e2e-real 六个 job 结论 --
+job=compose                                    conclusion=success   started=2026-10-28T08:40:56Z completed=2026-10-28T08:41:03Z
+job=backend                                    conclusion=success   started=2026-10-28T08:40:56Z completed=2026-10-28T08:46:37Z
+job=compose-smoke                              conclusion=success   started=2026-10-28T08:40:56Z completed=2026-10-28T08:48:54Z
+job=workflow-lint                              conclusion=success   started=2026-10-28T08:40:57Z completed=2026-10-28T08:41:06Z
+job=frontend                                   conclusion=success   started=2026-10-28T08:40:56Z completed=2026-10-28T08:44:31Z
+job=e2e-real                                   conclusion=failure   started=2026-10-28T08:46:40Z completed=2026-10-28T08:48:48Z
+job=windows-dev                                conclusion=success
+
+-- e2e-real 判据步结论 --
+step=Start real stack（迁移 → uvicorn:3300 → 探活 → 种子会话 → next:3200 conclusion=success  <== 判据步
+step=E2E (real backend, project=real, admin.spec.ts)            conclusion=failure  <== 判据步
+step=Reporter 自检（把"上传 playwright-report"这条判据变成可失败的）             conclusion=skipped  <== 判据步
+step=Stop stack                                                 conclusion=failure  <== 判据步
+
+-- backend / @win 计数（验收④）--
+2026-10-28T08:46:29.9593548Z Required test coverage of 75% reached. Total coverage: 88.91%
+2026-10-28T08:46:29.9600169Z 2502 passed, 6 skipped, 4 deselected, 2 warnings in 259.73s (0:04:19)
+2026-10-28T08:46:32.4107723Z skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0
+0_windows-dev.txt: 2026-10-28T09:01:24.9097520Z 1816 passed, 692 skipped, 4 deselected, 2 warnings in 1152.34s (0:19:12)
+0_windows-dev.txt: 2026-10-28T09:01:25.8847129Z windows 门禁：failed=0 total_skipped=692 baseline=692
+ev/13_Backend tests（连库用例在本平台会 skip，只记账不主张）.txt: 2026-10-28T09:01:24.9097491Z 1816 passed, 692 skipped, 4 deselected, 2 warnings in 1152.34s (0:19:12)
+ws-dev/14_Windows skip 门禁（阈值与 ubuntu 分开设定）.txt: 2026-10-28T09:01:25.8847082Z windows 门禁：failed=0 total_skipped=692 baseline=692
+
+-- ⑤ 的失败块逐字（首次在 real 档被执行：① 曾红时 describe.serial 让 ⑤ 一直 did not run）--
+===== ⑤ 命中行 [976, 981, 1014] =====
+✓  3 [real] › e2e/admin.spec.ts:179:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ③ 非 admin 会话 › ③ 非 admin 的处置：两屏都给出出口链接 (570ms)
+④ real 档只证游客卡；权限不足卡那一半未执行（原因：test.use 作用域是 describe，见 P-131）
+✓  4 [real] › e2e/admin.spec.ts:194:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ④ 375px：游客卡与权限不足卡的内容区不横向溢出 (297ms)
+✘  5 [real] › e2e/admin.spec.ts:236:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数 (809ms)
+-  6 [real] › e2e/admin.spec.ts:260:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来
+-  7 [real] › e2e/admin.spec.ts:270:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑦ 375px 下密钥表横向滚动而不是挤压
+
+
+1) [real] › e2e/admin.spec.ts:236:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数 
+
+Error: expect(locator).toBeVisible() failed
+
+Locator: getByRole('button', { name: '登记' })
+Expected: visible
+Error: strict mode violation: getByRole('button', { name: '登记' }) resolved to 4 elements:
+1) <button type="button" class="rounded-input border border-neutral-300 px-2 py-1 text-caption hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50">登记</button> aka getByRole('button', { name: '登记' }).first()
+2) <button type="button" class="rounded-input border border-neutral-300 px-2 py-1 text-caption hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50">登记</button> aka getByRole('button', { name: '登记' }).nth(1)
+3) <button type="button" class="rounded-input border border-neutral-300 px-2 py-1 text-caption hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50">登记</button> aka getByRole('button', { name: '登记' }).nth(2)
+4) <button type="button" class="rounded-input border border-neutral-300 px-2 py-1 text-caption hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50">登记</button> aka getByRole('button', { name: '登记' }).nth(3)
+
+Call log:
+- Expect "toBeVisible" getByRole('button', { name: '登记' }) with timeout 10000ms
+- waiting for getByRole('button', { name: '登记' })
+
+
+249 |
+250 |       await page.getByRole("button", { name: "引擎密钥" }).click();
+> 251 |       await expect(page.getByRole("button", { name: "登记" })).toBeVisible();
+|                                                              ^
+252 |
+253 |       // 采集配置屏（STEP-14b 余项）：兜底默认关 ⇒ 保存按钮可用且没有拦截文案
+254 |       await page.getByRole("button", { name: "采集配置" }).click();
+at /home/runner/work/BotHot/BotHot/apps/web/e2e/admin.spec.ts:251:62
+
+attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+test-results/admin-管理端-e2e（演示态无条件执行-真后端-6c9e0-⑤-五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数-real/test-failed-1.png
+────────────────────────────────────────────────────────────────────────────────────────────────
+
+Error Context: test-results/admin-管理端-e2e（演示态无条件执行-真后端-6c9e0-⑤-五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数-real/error-context.md
+
+1 failed
+[real] › e2e/admin.spec.ts:236:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数 
+1 skipped
+2 did not run
+3 passed (3.4s)
+##[error]Process completed with exit code 1.
+##[group]Run actions/upload-artifact@v4
+with:
+-----
+-  7 [real] › e2e/admin.spec.ts:270:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑦ 375px 下密钥表横向滚动而不是挤压
+
+
+1) [real] › e2e/admin.spec.ts:236:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数 
+
+Error: expect(locator).toBeVisible() failed
+
+Locator: getByRole('button', { name: '登记' })
+Expected: visible
+Error: strict mode violation: getByRole('button', { name: '登记' }) resolved to 4 elements:
+1) <button type="button" class="rounded-input border border-neutral-300 px-2 py-1 text-caption hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50">登记</button> aka getByRole('button', { name: '登记' }).first()
+2) <button type="button" class="rounded-input border border-neutral-300 px-2 py-1 text-caption hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50">登记</button> aka getByRole('button', { name: '登记' }).nth(1)
+3) <button type="button" class="rounded-input border border-neutral-300 px-2 py-1 text-caption hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50">登记</button> aka getByRole('button', { name: '登记' }).nth(2)
+4) <button type="button" class="rounded-input border border-neutral-300 px-2 py-1 text-caption hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50">登记</button> aka getByRole('button', { name: '登记' }).nth(3)
+
+Call log:
+- Expect "toBeVisible" getByRole('button', { name: '登记' }) with timeout 10000ms
+- waiting for getByRole('button', { name: '登记' })
+
+
+249 |
+250 |       await page.getByRole("button", { name: "引擎密钥" }).click();
+> 251 |       await expect(page.getByRole("button", { name: "登记" })).toBeVisible();
+|                                                              ^
+252 |
+253 |       // 采集配置屏（STEP-14b 余项）：兜底默认关 ⇒ 保存按钮可用且没有拦截文案
+254 |       await page.getByRole("button", { name: "采集配置" }).click();
+at /home/runner/work/BotHot/BotHot/apps/web/e2e/admin.spec.ts:251:62
+
+attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+test-results/admin-管理端-e2e（演示态无条件执行-真后端-6c9e0-⑤-五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数-real/test-failed-1.png
+────────────────────────────────────────────────────────────────────────────────────────────────
+
+Error Context: test-results/admin-管理端-e2e（演示态无条件执行-真后端-6c9e0-⑤-五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数-real/error-context.md
+
+1 failed
+[real] › e2e/admin.spec.ts:236:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数 
+1 skipped
+2 did not run
+3 passed (3.4s)
+##[error]Process completed with exit code 1.
+##[group]Run actions/upload-artifact@v4
+with:
+name: e2e-real-diagnostics
+path: apps/web/playwright-report/
+apps/web/test-results/
+/home/runner/work/_temp/e2e-real/
+
+-----
+Error Context: test-results/admin-管理端-e2e（演示态无条件执行-真后端-6c9e0-⑤-五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数-real/error-context.md
+
+1 failed
+[real] › e2e/admin.spec.ts:236:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数 
+1 skipped
+2 did not run
+3 passed (3.4s)
+##[error]Process completed with exit code 1.
+##[group]Run actions/upload-artifact@v4
+with:
+name: e2e-real-diagnostics
+path: apps/web/playwright-report/
+apps/web/test-results/
+/home/runner/work/_temp/e2e-real/
+
+if-no-files-found: warn
+compression-level: 6
+overwrite: false
+include-hidden-files: false
+env:
+DATABASE_URL: ***localhost:5433/bothot
+REDIS_URL: redis://localhost:6380/0
+SESSION_STORE_BACKEND: redis
+AIDEAN_ISSUER: http://127.0.0.1:9
+APP_ENV: development
+PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+PUSH_SECRET_MASTER_KEY: ***
+ENGINE_KEY_MASTER_KEY: ***
+##[endgroup]
+(node:4740) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Multiple search paths detected. Calculating the least common ancestor of all paths
+The least common ancestor is /home/runner/work. This will be the root directory of the artifact
+With the provided path, there will be 19 files uploaded
+Artifact name is valid!
+Root directory input is valid!
+Beginning upload of artifact content to blob storage
+(node:4740) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+Uploaded bytes 899028
+Finished uploading artifact content to blob storage!
+SHA256 digest of uploaded artifact zip is 6b1ecc7afadfc94d11d0f0a923f042c1c0cfacca684fa45a10a6a7e71b561fcc
+Finalizing artifact upload
+-----
+
+-- Stop stack 步的 stdout 逐字（判据② 的反证：两行 stopped 后零终检输出、退出 1）--
+##[endgroup]
+stopped backend pid=4147
+stopped frontend pid=4537
+##[error]Process completed with exit code 1.

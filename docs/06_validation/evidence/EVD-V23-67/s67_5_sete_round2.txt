@@ -1,0 +1,61 @@
+== STEP-67 第 2 轮：`Stop stack` 红因的本机复现（ss 桩）与修复三发 ==
+== 机制：`set -euo pipefail`（run_real_backend.sh:24）+ `ownp="$(port_owner …)"`（:186）；
+==    端口空闲时 port_owner 的 `ss | grep :端口 | head -2` 无命中 ⇒ grep rc=1 ⇒ pipefail ⇒ 函数 rc=1 ⇒ 赋值 rc=1 ⇒ set -e 中止。
+==    本机没有 ss/lsof，port_owner 走的是 else 分支（rc=0）⇒ 复现必须喂一个假 ss。桩放在 PATH 最前：
+
+-- stub bin/ss 源码 --
+#!/bin/sh
+# ubuntu 的 `ss -ltnp` 桩：只造两个与 3290 无关的监听行，
+# 让 `grep ":$port "` 在端口空闲时**无命中**（这正是 CI 上 Stop stack 的形态）。
+echo "LISTEN 0      128        127.0.0.1:5432       0.0.0.0:*    users:(((\"postgres\",pid=71,fd=5)))"
+echo "LISTEN 0      128            [::1]:6379          [::]:*    users:((\"redis-server\",pid=72,fd=6))"
+exit 0
+
+-- 发一（修复前，未改字节 4160b81）：rc=1、终检零输出、静默终止——与 CI 形态一致 --
+note: 本机 ps 不支持 -o args=（或未取到输出）⇒ 认领只能靠端口属主，命令行特征这一层跳过
+note: fake_llm pid=999999 无端口属主证据也无 ps 能力 ⇒ 按 PID 直杀（本机能力受限，非静默）
+already gone fake_llm pid=999999
+note: 本机没有 pgrep/pkill ⇒ 跳过命令行特征兜底（CI 的 ubuntu runner 有）
+
+-- 发二（修复后，port_owner 末尾 return 0）：rc=0、终检行出现、占用者读数=(空) --
+note: 本机 ps 不支持 -o args=（或未取到输出）⇒ 认领只能靠端口属主，命令行特征这一层跳过
+note: fake_llm pid=999999 无端口属主证据也无 ps 能力 ⇒ 按 PID 直杀（本机能力受限，非静默）
+already gone fake_llm pid=999999
+note: 本机没有 pgrep/pkill ⇒ 跳过命令行特征兜底（CI 的 ubuntu runner 有）
+端口终检 fake_llm :3290 空闲；占用者读数：(空)
+本脚本记过的进程都不在了（pidfile 已删除）；端口占用与否只对起过的角色判
+
+-- 发三（修复后，真占用 + ss 桩）：红路没有被洗软，❌ 与 rc=1 都在 --
+note: 本机 ps 不支持 -o args=（或未取到输出）⇒ 认领只能靠端口属主，命令行特征这一层跳过
+note: fake_llm pid=999999 无端口属主证据也无 ps 能力 ⇒ 按 PID 直杀（本机能力受限，非静默）
+already gone fake_llm pid=999999
+note: 本机没有 pgrep/pkill ⇒ 跳过命令行特征兜底（CI 的 ubuntu runner 有）
+❌ 本脚本起过的 fake_llm 还占着端口 3290（kill 后等满 6s 仍未释放，不静默放过）
+   占用者读数：
+注：发三的「占用者读数：」后面是空的——桩的输出里刻意没有 :3290 的行，grep 过滤后为空；
+    这是桩的保真度边界（它谎报了 3290 空闲），不是脚本缺陷：真占用读数在发一前的 s67_1 二发已证。
+
+-- 修复 diff（唯一字节改动：port_owner 末尾 + 注释）--
+diff --git a/scripts/e2e/run_real_backend.sh b/scripts/e2e/run_real_backend.sh
+index 13df931..9d1c21e 100644
+--- a/scripts/e2e/run_real_backend.sh
++++ b/scripts/e2e/run_real_backend.sh
+@@ -44,6 +44,10 @@ mkdir -p "$RUN_DIR"
+ port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+ 
+ # 端口终检失败时把占用者打出来。两个工具都没有就如实说"取不到"，不假装读过。
++# 末尾必须 return 0：空闲时 `ss | grep` 无命中返回 1，而 `ownp="$(port_owner …)"`
++# 这条赋值在 `set -euo pipefail` 下会把 1 变成脚本中止（CI 实证 4160b81：两行
++# `stopped …` 之后零输出退出 1，`端口终检` 一行都没打出来）——读数函数的契约是
++# "永远成功、如实打印读到了什么"，失败语义交给调用方的端口判定，不归它。
+ port_owner() {
+   if command -v ss >/dev/null 2>&1; then
+     ss -ltnp 2>/dev/null | grep ":$1 " | head -2
+@@ -52,6 +56,7 @@ port_owner() {
+   else
+     echo "(本机没有 ss 也没有 lsof ⇒ 占用者取不到)"
+   fi
++  return 0
+ }
+ 
+ # D-V23-16：认领"该不该给这个 PID 发信号"的**主判据**——它是不是该端口的监听者。

@@ -44,6 +44,10 @@ mkdir -p "$RUN_DIR"
 port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 
 # 端口终检失败时把占用者打出来。两个工具都没有就如实说"取不到"，不假装读过。
+# 末尾必须 return 0：空闲时 `ss | grep` 无命中返回 1，而 `ownp="$(port_owner …)"`
+# 这条赋值在 `set -euo pipefail` 下会把 1 变成脚本中止（CI 实证 4160b81：两行
+# `stopped …` 之后零输出退出 1，`端口终检` 一行都没打出来）——读数函数的契约是
+# "永远成功、如实打印读到了什么"，失败语义交给调用方的端口判定，不归它。
 port_owner() {
   if command -v ss >/dev/null 2>&1; then
     ss -ltnp 2>/dev/null | grep ":$1 " | head -2
@@ -52,6 +56,7 @@ port_owner() {
   else
     echo "(本机没有 ss 也没有 lsof ⇒ 占用者取不到)"
   fi
+  return 0
 }
 
 # D-V23-16：认领"该不该给这个 PID 发信号"的**主判据**——它是不是该端口的监听者。

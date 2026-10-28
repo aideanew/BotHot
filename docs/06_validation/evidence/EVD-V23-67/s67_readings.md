@@ -74,3 +74,116 @@ mock 落的是**原地卡片**。而且「跳登录」在 CI 里根本不可达�
 一条自查：上一段那个"三处"是**数出来的**，而且这次用视图键枚举而非子串计数——
 因为 P-145 的教训就是"子串计数会数出不存在的东西"（同一文件里 `unauthenticated` 这个字面串其实出现 5 次：
 3 处视图 + `State` 枚举 + 一处描述）。写"三处"的凭据是上表那三行，不是 `grep -c`。
+
+---
+
+## 7 只读复核批的处置（四条接受、一条部分接受、零驳回）
+
+复核员看的是**提交后的字节**，不是我的转述。下面每条都标了"我原判/复核发现/对字节复算后的处置"。
+
+| # | 复核发现 | 我对字节复算 | 处置 |
+|---|---|---|---|
+| 1 | §1/§2 与 commit message 里那句「端口终检**无条件**落一行属主读数」不成立 | 成立的那半是 `占用者读数` 两条路径都出现；不成立的那半是 `端口终检 … 空闲；占用者读数：` 这一整行——它在 `scripts/e2e/run_real_backend.sh:187`，位于 `while port_open` 循环**之后**，而红路在 `:175-177` 打完 `❌` + 缩进的 `占用者读数：` 就 `return 1`，永不触及 `:187`；且 `return 1` 会**中断整个角色循环**，排在后面的角色连终检都不做 | **接受并订正措辞**。判据② 仍然可满足（success 那一路确实会打出 `端口终检 … 占用者读数：(空)`，这一行是本批新加的），但"无条件"三个字是我把"读数两路都留"说成了"这一行每次都打" ⇒ 属**申报失真**，§1/§2 的原文不回改，以本节为准 |
+| 2 | `s67_2` 是 `grep` 滤后的摘录（只有 18 条 ok），而卡面第 9 格拿 `trunk.spec.ts:53` 当升级锚 ⇒ 判据③"无误伤"从存证**复算不出来** | 复算成立：`s67_2` 全文只 3 条 trunk 行、`:53` 那条不在里面 | **接受并补证**：新增 `s67_3_mock_e2e_full_listing.txt`（未加滤网的 `--reporter=list` 原始 86 行）。现读 `Running 42 tests` / `ok`=31 / `-`=11 / `x`=0 / `e2e_rc=0`；`trunk.spec.ts:53` = `ok 34`（文件第 75 行），trunk 九条为 ok 34–42 全在通过集 |
+| 3 | `s67_1:25` 那句"期望日志有『占用者读数：(空)』"与 §3 记录的实测读数（`(本机没有 ss 也没有 lsof ⇒ 占用者取不到)`）不符 | 复算成立：`${ownp:-(空)}` 的 `(空)` 只在**有** ss 或 lsof 且无人监听时才出现；本机两个都没有 ⇒ 走"取不到"文案 ⇒ 本机**永远不可能**打出 `(空)` | **接受**：不改 `s67_1` 的脚本抬头（那是当时的期望），在此标注口径——`(空)` 是 @ci（ubuntu 有 `ss`）才能取到的读数，本机那条只证明"终检留了行"，不证明留的是 `(空)` |
+| 4 | `admin.spec.ts:133` 本批**新引入**一处产品文案字面量 `"使用主平台账号登录"`，与 D-V23-19（spec 不得硬编码产品文案）相对 | **有一半要还回去**：这个模式不是本批开创的——同一文件改前就已硬编码该串三处（`:65` 点登录、`:165`/`:167` 键盘可达），产品侧两处（`app/page.tsx:77`、`components/AuthGate.tsx:62`，另 `:71` 是正文句）。本批把该 spec 的实例数从 **3 抬到 4**，EVD 里此前对 `D-V23-19`/`硬编码` 零命中这一条复算成立 | **接受登记、驳回"新违反者"定性**：本卡不改（改成 import 要触第 7 格禁止面 `apps/web/components/**`），且 decision-log 里 D-V23-19 行末明文"不由 67 执行、归 69"⇒ 第 4 处随 69 的白名单/导入化一起收；P-146 已把"同一规则在我之前就失真"记在案，本行只是把计数从 3 更新到 4。mock 分支那句 `"尚未登录或会话已过期"` 是**旧断言原样搬运**、非本批新增 |
+| 5 | kill 的分层里，**拒绝侧**被命令行特征覆盖了：`have_ps=1` 时（ubuntu 恰好如此）即便 `ownp` 非空且不含该 PID，代码仍进 cmdline 分支，碰巧匹配 `*"next-server"*` 就照杀；我的属主反证分支 `:129-132` 位于 `elif` ⇒ 在**唯一有属主证据的平台上不可达** | 复算成立（见上面的分支顺序）。复核员说"反证本批未交付"这半我要还一句：本机无 `ss`/`lsof` ⇒ `ownp` 恒空，二发（pid=999999）走的是 `kill` 失败后的 `already gone`，**属主反证在结构上只能在 @ci 取**，这一点 §3 已自陈 | **部分接受 ⇒ 登 P-151 交回，不在本卡第 2 轮改**：把它改严（"有属主证据且非属主 ⇒ 一律拒杀，不看命令行"）是字面合 D-V23-16 的，但风险真实——`next start` 的监听者若是被派生的子 PID，父 PID 就会被拒杀而端口仍被占 ⇒ `Stop stack` 红，这恰好是 67 要修的那个 bug 的反面。要改严需先量 CI 上 `ownp` 里到底有没有父 PID ⇒ 属设计取舍，归规划方；本卡先让第 1 轮读数落地 |
+
+一处附带申报（复核员判"需规划方追认"）：卡面第 6 格字面列了 5 类去处，本批还写了 `docs/03_solution/decisions/decision-log.md`（+7 行，D-V23-15…21 代录）与
+`docs/任务规划V0.23.0/07-执行过程记录.md`（+1 行）。两者都是治理面的既定惯例（裁决定期要入档、每卡要在 07 记一行），
+但**字面确实越了第 6 格** ⇒ 在此明写，不当作"卡面本来就允许"混过去；台账行的越面同批申报。
+
+复核员给的"另：卡面状态不得先写 ✅"我接受——本批提交时状态是 `🔄 在跑`，判据①② 没读 @ci 之前不动它。
+
+---
+
+## 8 第 1 轮 @ci 读数（head `4160b81`，run `40658539918`，原始存证 `s67_4_ci_round1_readings.txt`）
+
+三条 workflow：CI `success`、CI-Windows `success`、Security `success`；CI 内 job：backend / frontend /
+compose / compose-smoke / workflow-lint 全 success，**`e2e-real` = failure**（该 job `continue-on-error`
+⇒ workflow 结论仍绿，所以三绿不等于判据过——判据要下钻到 job）。
+
+### 判据① （E2E 步 success）— 第 1 轮**未过**，根因钉到字节
+
+| 测试 | 读数 |
+|---|---|
+| ① 游客落点 | `✓ 1 [real] › e2e/admin.spec.ts:147:7`（**real 档首次跑通**——第 0 轮它从未执行过） |
+| ②③④ | ✓ 2 / ✓ 3 / ✓ 4 |
+| ⑤ 五屏切换 | `✘ 5 [real] › e2e/admin.spec.ts:236:9 (809ms)`，原文两行：`Error: strict mode violation: getByRole('button', { name: '登记' }) resolved to 4 elements:` |
+| 汇总 | `1 skipped` + `3 passed (3.4s)` + `##[error]Process completed with exit code 1.` |
+
+⑤ 是**被 ① 的成功第一次揭开面**：`describe.serial` 里 ① 前几轮恒红 ⇒ ⑤ 从来没真正执行过（P-145
+同族——"老红遮着的东西，红第二次才看得清"）。逐字错文见 `s67_4:49`（错误块完整存证）。
+处置 ⇒ 登 **P-152**：`admin.spec.ts:251` 的 `getByRole("button", { name: "登记" })` 在引擎密钥屏按
+provider 行渲染、每行一枚 ⇒ 4 枚；改法属越面（spec 侧范围收窄），按用户批令执行（§9）。
+
+### 判据② （Stop stack = success + 占用者读数行）— 第 1 轮**未过**，根因是本批新读数行自己触发了 `set -euo pipefail`
+
+`s67_4:183-186` 的 Stop stack stdout 逐字：`stopped backend pid=4147` / `stopped frontend pid=4537`，
+**两行之后零输出、退出 1**——终检循环一行都没打。机制：`scripts/e2e/run_real_backend.sh:24` 的
+`set -euo pipefail` 下，`:186` 的 `ownp="$(port_owner "$port")"` 是个赋值——`port_owner` 末一条管道
+`ss | grep | head` 在**端口空闲**时 grep 无命中 ⇒ 管道 rc=1（pipefail）⇒ 赋值 rc=1 ⇒ `set -e` 把整个
+脚本就地中止。也就是说：**修掉的第 0 轮 bug（红路径永看不到读数行）被换成了"绿路径直接死"**——
+读数行自己成了新故障点。本机当时不可能复现：无 `ss`/`lsof` ⇒ `port_owner` 恒走"取不到"分支（echo，
+rc=0），只有 ubuntu（CI）才走得到 ss 分支。
+
+### 三个计数不变（判据③④）
+
+backend `2502 passed, 6 skipped, 4 deselected` + `Total coverage: 88.91%` + `skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0`；
+CI-Windows `1816 passed, 692 skipped` + `failed=0 total_skipped=692 baseline=692`；
+frontend job success（mock e2e 同数 31/11）⇒ ③④ 无误伤。
+
+### 两轮纪律说明
+
+判据①② 各第 1 次 FAIL；第 2 轮已修（§9）。若第 2 轮再红同一判据 ⇒ 按 D-14 熔断登 P 交回。
+
+---
+
+## 9 第 2 轮：两处修 + 本机可证面
+
+### 9.1 `run_real_backend.sh`（卡面第 6 格内）
+
+修法是给读函数定契约：**`port_owner()` 永远成功、如实打印读到了什么**；失败语义归调用方的端口检查。
+具体 = 末尾加 `return 0`（附注引 CI `4160b81` 的读数：两行 stopped 后静默 exit 1）：
+
+```bash
+port_owner() {
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnp 2>/dev/null | grep ":$1 " | head -2
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | tail -2
+  else
+    echo "(本机没有 ss 也没有 lsof ⇒ 占用者取不到)"
+  fi
+  return 0
+}
+```
+
+**先红**（未改字节）：本机无 `ss` ⇒ 用假 `ss` 桩（`Temp/s59/stubbin/ss`：吐两行无关 LISTEN 后对目标端口
+零输出、rc=0）前置 PATH 复现 ubuntu 形状——`--stop` 得 `stop_rc=1`、两行 stopped 后静默，与 CI 逐字同病。
+**修后三发**（存证 `s67_5_sete_round2.txt`）：绿发 `stop_rc=0` + `端口终检 … 占用者读数：(空)`；
+牙齿发（端口被别人占 + pidfile 是不存在 PID）`stop_rc=1` + `❌ 本脚本起过的 fake_llm 还占着端口 3290`
+⇒ 宽限期没把门洗软。
+
+### 9.2 `admin.spec.ts` ⑤ 两处定位器（**越面**，用户批令）
+
+用户批令原文：**「授权甲，第 2 轮顺带改（推荐）」**——甲 = spec 侧范围收窄，不改产品语义；与 9.1 同批。
+
+| 行 | 改前 | 改后 | 凭据 |
+|---|---|---|---|
+| `:251` | `getByRole("button", { name: "登记" })` → strict mode violation（4 枚） | `.first()`（断言改为"屏里登记入口可见"，不主张唯一） | CI `40658539918` 的 ✘ 5 原文 `resolved to 4 elements`；引擎密钥屏按 provider 行渲染、每行一枚登记钮 |
+| `:255` | `getByText("分类清单")` → **潜伏同源雷**：`getByText` 是子串匹配，引擎标题 `分类清单`（`CollectionConfigPanel.tsx:177`）与保存钮 `保存分类清单`（`:269`）双命中 ⇒ 同型 strict violation | `{ exact: true }` | 修前对组件字节复核过才动手：`:177` `<p>分类清单</p>`、`:269` 按钮文本 `保存分类清单`。不改它就是把最后一轮赌在未验证的断言上 |
+
+越面申报：第 6 格字面只列 `run_real_backend.sh` 与 `admin.spec.ts` 的 ①——② 的两行在 ⑤ 的测试体内，
+属第 6 格未列的字节。按批令执行、在此明写，不当作"本来就允许"。
+
+### 9.3 本地复验（改后字节）
+
+`bash -n` 通过；`pnpm exec tsc --noEmit` rc 0；mock 档全量 `--reporter=list` 重跑
+`31 passed / 11 skipped / e2e_rc=0`，42 条收集、`trunk.spec.ts:53` = `ok 34` 仍在通过集
+（⑤ 在 mock 档本就 skipped，mock 计数不动是预期；实跑结果与预期一致）。
+
+### 9.4 第 2 轮判据自陈（不预先声明完成）
+
+判据①（E2E 步 success）与 ②（Stop stack = success + 日志可见 `占用者读数` 行）要等第 2 轮 @ci 才能判；
+本机可证面到此为止——属主主判据的"是属主 ⇒ 放行"支、以及 ⑤ real 档全文，都只能在 CI 上第一次真跑。
