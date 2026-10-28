@@ -1,0 +1,59 @@
+P-140 的三条读数（2026-10-28，本机 @win，head cdb19f6 起算；只读，未改任何字节）
+
+== ① 台账行数与最大 P 号 ==
+$ grep -cE '^\| P-[0-9]+ \|' docs/任务规划V0.12.0/00-README.md
+167
+$ grep -oE '^\| P-[0-9]+' … | sort -n | tail -3
+137
+138
+139
+$ grep -oE '^\| P-13[0-9] ' … 每号计数
+      1 | P-130 
+      1 | P-131 
+      1 | P-132 
+      1 | P-133 
+      1 | P-134 
+      1 | P-135 
+      1 | P-136 
+      1 | P-137 
+      1 | P-138 
+      1 | P-139 
+
+== ② 索引那三行的原文 ==
+|---|---|---|---|---|
+| **P** | `P-<n>` | 发现问题即登记，**新号从 P-134 起**；同号补登用新行不改旧行 | 到 P-139 | `docs/任务规划V0.12.0/00-README.md`（P 表） |
+| **EVD** | `EVD-V<主><次>-<STEP 号>/` | 一卡一目录；内部文件按 `s<卡号>_<序>_<内容>.txt/md` | 到 `EVD-V23-66` | `docs/06_validation/evidence/` |
+
+== ③ EVD 目录现读 ==
+$ ls docs/06_validation/evidence/ | grep EVD-V23
+EVD-V23-00
+$ ls … | grep -E 'EVD-V2[23]' | sort | tail -4
+EVD-V22-59
+EVD-V22-61
+EVD-V23-00
+
+== ④ 被引行号的现读 ==
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+DRAFT_DIR = REPO_ROOT / "docs" / "任务规划V0.12.0" / "contracts"
+/usr/bin/bash: line 1: DRAFT_DIR: command not found
+/usr/bin/bash: line 1: :45: command not found
+（ 在 :44， 是 SCHEMA_DIR）
+
+== ⑤ 本版卡表现读（六行状态）==
+| STEP-64 | S-UX-CON | **规划方**（核心） | — | 小-中（≈0.5 人日） | opus | ⬜ |
+| STEP-65 | S-UX-UI | **规划方**（UI） | 64 | 中（≈1 人日） | opus | ⬜ |
+| STEP-66 | S-CON-2 | 执行助手 | 64（同改 `gen_contracts.py` 与 `index.ts`） | 小（≈0.4 人日） | sonnet | ⬜ |
+| STEP-60 | S-E2E-2 | 执行助手 | 64、65 | 中（≈1 人日） | opus | ⬜ |
+| STEP-62 | S-DOC | 执行助手 | 60 | 小 | sonnet | ⬜ |
+| STEP-63 | 发版 | 执行助手 | 62 | 小 | sonnet | ⬜ |
+| STEP-41 | 真源 | 规划方 | 用户授权 | — | — | ⏸ |
+
+== ⑥ 其它可数断言的核对结果（都成立，登记时不列错）==
+版本目录数 = 23（索引称 23）
+卡面文件数 = 330（索引称约 330）
+D-V 裁决行数 = 125（索引称 125）
+D-V23 序列 = | D-V23-01 | D-V23-02 | D-V23-03 | D-V23-04 | D-V23-05 | D-V23-06 （索引称到 D-V23-06 ⇒ 成立）
+最大卡号 = STEP-66（索引称到 STEP-66 ⇒ 成立）
+P-80 是否存在 = 1（索引 §5 行 4 引用它 ⇒ 成立）
+packages/contracts/schemas 下 ux.schema.json = 0（64 未开工 ⇒ 应为 0）
