@@ -1,11 +1,21 @@
+STEP-73 本机静态读数（scripts/e2e/seed_chat_space.py + 启动器 ⑤b）
+
+【第 2 轮：本文件已按修复后的字节整体重采，行号一律以现读为准】
+第 1 轮的 e2e-real（run 40708063479，head 0e53199）在 ⑤b 红：
+    python: can't open file '/home/runner/work/BotHot/BotHot/apps/api/../scripts/e2e/seed_chat_space.py'
+原因是启动器先 `cd "$REPO_ROOT/apps/api"`（距仓根两级），而调用写成 `../scripts/e2e/…`，
+落到 `apps/scripts/`。修复 = 改成 `../../scripts/e2e/…` 并在上方留一行说明两者的绑定关系。
+第 11、12 节就是这一条的账：第 11 节按同一 cwd 量出 fixed=True / old=False，
+第 12 节真跑一次，证明确实越过了路径与导入、只停在"本机没有 PG"。
+
+采集脚本：$TEMP/s73/run_static.sh（只读；本节起以下全部为它的原始输出，未手改）
+
 
 ── 0 环境与基线 ──
 Python 3.12.10
-20ee48c2d4b910188beedb5023cd93295ae5af65
-20ee48c docs(STEP-72 记录修正): 时间戳自曝补齐 22:05 那一行
+0e53199e1e5f5d8bcb81a02dac9ed3c7cb1ef0e9
+0e53199 feat(STEP-73): /chat 可检索种子（四表幂等 upsert + 启动器 ⑤b）
  M scripts/e2e/run_real_backend.sh
-?? docs/06_validation/evidence/EVD-V24-73/
-?? scripts/e2e/seed_chat_space.py
 
 ── 1 卡面 §6 第 1 条：ast.parse ──
 ok
@@ -40,8 +50,8 @@ rc=0
 350:SPACE_OUT="$RUN_DIR/seed_chat_space.out"
 351:if [ ! -f "$REPO_ROOT/scripts/e2e/seed_chat_space.py" ]; then
 352:  echo "❌ ⑤b 需要 scripts/e2e/seed_chat_space.py（STEP-73 交付），该文件现在不存在" >&2
-357:(cd "$REPO_ROOT/apps/api" && python ../scripts/e2e/seed_chat_space.py) > "$SPACE_OUT" 2>&1 || SPACE_RC=$?
-366:printf 'space %s\n' "$SPACE_ID" >> "$SEED_FILE"
+359:(cd "$REPO_ROOT/apps/api" && python ../../scripts/e2e/seed_chat_space.py) > "$SPACE_OUT" 2>&1 || SPACE_RC=$?
+368:printf 'space %s\n' "$SPACE_ID" >> "$SEED_FILE"
 
 ── 8 real.setup.ts 只认 ^session 行（多一行 space 不破坏解析） ──
 34:const SEED_LINE = /^session (\S+): cookie=(\S+) value=(\S+)$/;
@@ -60,5 +70,19 @@ rc=0
 
 ── 10 行数 ──
   264 scripts/e2e/seed_chat_space.py
-  453 scripts/e2e/run_real_backend.sh
-  717 total
+  455 scripts/e2e/run_real_backend.sh
+  719 total
+
+── 11 第 2 轮：⑤b 的脚本路径按「cd 进 apps/api」解析（固定为 ../../ 之后） ──
+  期望：fixed=True（第 2 轮写法）、old=False（第 1 轮写法，落到 apps/scripts/）
+cwd    = D:\Code\AideanBotHot\apps\api
+fixed  = True
+old    = False
+rc=0
+
+── 12 第 2 轮：真跑一次（本机无 PG ⇒ 必须止于 DB 不可达，而不是路径/导入） ──
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: 5432, hostaddr: '::1': connection timeout expired
+- host: 'localhost', port: 5432, hostaddr: '127.0.0.1': connection timeout expired
+(Background on this error at: https://sqlalche.me/e/21/e3q8)
+（期望末两行是 psycopg ConnectionTimeout / sqlalchemy OperationalError；本机 5547/5433/5432 均无监听）

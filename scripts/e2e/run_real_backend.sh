@@ -354,7 +354,9 @@ if [ ! -f "$REPO_ROOT/scripts/e2e/seed_chat_space.py" ]; then
 fi
 # 同 ⑤ 的写法：`|| SPACE_RC=$?` 让失败时的输出照样落进 SPACE_OUT，判定放在下面按字段做
 # （直接跑在 `set -e` 下会先死在赋值那一行，日志里只剩 rc，没有脚本自己的诊断）。
-(cd "$REPO_ROOT/apps/api" && python ../scripts/e2e/seed_chat_space.py) > "$SPACE_OUT" 2>&1 || SPACE_RC=$?
+# 路径里的 `../../` 与 cwd 是同一个约定：cd 进了 `apps/api`（同 ⑤，为了 app.* 可导入与 .env 口径），
+# 距仓根两级 ⇒ 写成 `../scripts/...` 会落到 `apps/scripts/`（2026-10-28 的 e2e-real rc=12 就是这个）。
+(cd "$REPO_ROOT/apps/api" && python ../../scripts/e2e/seed_chat_space.py) > "$SPACE_OUT" 2>&1 || SPACE_RC=$?
 SPACE_RC=${SPACE_RC:-0}
 sed 's/^/    /' "$SPACE_OUT"
 # 尾 `\r` 一并剥掉：win 上 python 可能写 CRLF（理由同 ⑤ 的 SEED_LF 那段）。

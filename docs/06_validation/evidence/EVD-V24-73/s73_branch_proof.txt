@@ -1,7 +1,26 @@
-被测段：/d/Code/AideanBotHot/scripts/e2e/run_real_backend.sh 第 347 行起，到第 369 行（不含）止
+STEP-73 ⑤b 分支取证（第 2 版：把「路径解析得到真文件」变成判据）
+
+【第 1 版为什么失效】第 1 版把 `python` 整体换成一个不校验参数的桩，于是
+`../scripts/e2e/seed_chat_space.py`（少一级）在桩下面照样"成功"——而 e2e-real
+（run 40708063479，head 0e53199）上它是 rc=12。教训：桩替换掉了解释器，
+就等于把"解释器能不能找到这个文件"一起替换掉了。
+
+【第 2 版改了什么】
+1) 桩先断两件事：cwd 的 basename 必须是 `api`（否则 rc=67）；最后一个参数按该 cwd
+   解析必须是真文件（否则 rc=66）。`${!#}` 取的就是 `python` 的最后一个实参。
+2) 新增 E 用例：把被测段的字节用 sed 变异回 `../scripts`（不是手抄副本），期望它必须红。
+   当前字节绿 + 变异红，这一对才叫证明；只有绿不算。
+3) 布局也不再是平的：`$TMPD/repo/{apps/api,scripts/e2e}` 两级，和真仓同形。
+
+【被测代码不是副本】每一段都是用 sed 从 `scripts/e2e/run_real_backend.sh` 的现读字节里截出来的
+（从 `^echo "== ⑤b` 起到 `^echo "== ⑥` 前一行），截取命令与行号见下方输出。
+
+采集脚本：$TEMP/s73/branch_proof.sh（只读，除临时目录外不写仓内文件）
+
+被测段：/d/Code/AideanBotHot/scripts/e2e/run_real_backend.sh 第 347 行起，到第 371 行（不含）止
 截取命令：sed -n '/^echo "== ⑤b/,/^echo "== ⑥/p' | sed '$d'
 
-── 用例 A_happy（STUB_MODE=ok, REPO_ROOT=/d/Code/AideanBotHot）──
+── 用例 A_happy（REPO_ROOT=/tmp/s73_branch/repo, STUB_MODE=ok, mutate=none）──
 harness rc=0
 输出（前 6 行）：
   | == ⑤b /chat 可检索种子（STEP-73：直写表是测试夹具，不是产品路径，D-V24-12）==
@@ -9,41 +28,52 @@ harness rc=0
   |     space_id=11111111-2222-3333-4444-555555555555
   |     pass1 counts: spaces=1 sources=1 assets=1 documents=1
   |     pass2 counts: spaces=1 sources=1 assets=1 documents=1
-  | seed 追加：space 11111111-2222-3333-4444-555555555555 → /tmp/s73_branch/A_happy/seed.txt（real.setup.ts 只解析 ^session 行，多这一行不影响它）
-seed.txt 内容（cat -A，行尾 CR 会显示为 ^M）：
+  | seed 追加：space 11111111-2222-3333-4444-555555555555 → /tmp/s73_branch/case_A_happy/seed.txt（real.setup.ts 只解析 ^session 行，多这一行不影响它）
+seed.txt（cat -A，行尾 CR 显示为 ^M）：
   | space 11111111-2222-3333-4444-555555555555$
 
-── 用例 B_missing_script（STUB_MODE=ok, REPO_ROOT=/tmp/s73_branch/fake）──
+── 用例 B_missing_script（REPO_ROOT=/tmp/s73_branch/fake, STUB_MODE=ok, mutate=none）──
 harness rc=12
 输出（前 6 行）：
   | == ⑤b /chat 可检索种子（STEP-73：直写表是测试夹具，不是产品路径，D-V24-12）==
   | ❌ ⑤b 需要 scripts/e2e/seed_chat_space.py（STEP-73 交付），该文件现在不存在
-seed.txt 内容（cat -A，行尾 CR 会显示为 ^M）：
+seed.txt（cat -A，行尾 CR 显示为 ^M）：
   | (空)
 
-── 用例 C_script_rc3（STUB_MODE=fail, REPO_ROOT=/d/Code/AideanBotHot）──
+── 用例 C_script_rc3（REPO_ROOT=/tmp/s73_branch/repo, STUB_MODE=fail, mutate=none）──
 harness rc=12
 输出（前 6 行）：
   | == ⑤b /chat 可检索种子（STEP-73：直写表是测试夹具，不是产品路径，D-V24-12）==
   |     ❌ users 表里没有 sub=qa-admin-001
   | ❌ /chat 种子不合格（脚本 rc=3、space_id 取到 ''）；输出见上，不猜
-seed.txt 内容（cat -A，行尾 CR 会显示为 ^M）：
+seed.txt（cat -A，行尾 CR 显示为 ^M）：
   | (空)
 
-── 用例 D_no_space_id（STUB_MODE=junk, REPO_ROOT=/d/Code/AideanBotHot）──
+── 用例 D_no_space_id（REPO_ROOT=/tmp/s73_branch/repo, STUB_MODE=junk, mutate=none）──
 harness rc=12
 输出（前 6 行）：
   | == ⑤b /chat 可检索种子（STEP-73：直写表是测试夹具，不是产品路径，D-V24-12）==
   |     hello
   |     world
   | ❌ /chat 种子不合格（脚本 rc=0、space_id 取到 ''）；输出见上，不猜
-seed.txt 内容（cat -A，行尾 CR 会显示为 ^M）：
+seed.txt（cat -A，行尾 CR 显示为 ^M）：
+  | (空)
+
+── 用例 E_old_relpath（REPO_ROOT=/tmp/s73_branch/repo, STUB_MODE=ok, mutate=old_relpath）──
+harness rc=12
+输出（前 6 行）：
+  | == ⑤b /chat 可检索种子（STEP-73：直写表是测试夹具，不是产品路径，D-V24-12）==
+  |     stub: 脚本路径按 cwd 解析不到真文件：cwd=/tmp/s73_branch/repo/apps/api 参数=../scripts/e2e/seed_chat_space.py
+  | ❌ /chat 种子不合格（脚本 rc=66、space_id 取到 ''）；输出见上，不猜
+seed.txt（cat -A，行尾 CR 显示为 ^M）：
   | (空)
 
 ── 判据汇总（期望 vs 实测）──
-A_happy: seed 行数=1，含 CR 的行数=0
-B_missing_script: seed 行数=0，含 CR 的行数=0
-C_script_rc3: seed 行数=0，含 CR 的行数=0
-D_no_space_id: seed 行数=0，含 CR 的行数=0
+A_happy: seed 行数=1，含 CR 的字节数=0
+B_missing_script: seed 行数=0，含 CR 的字节数=0
+C_script_rc3: seed 行数=0，含 CR 的字节数=0
+D_no_space_id: seed 行数=0，含 CR 的字节数=0
+E_old_relpath: seed 行数=0，含 CR 的字节数=0
 
-A 期望：rc=0、seed 里恰好 1 行 space、无 CR；B/C/D 期望：rc=12、seed 0 行、无追加
+A 期望：rc=0、seed 恰好 1 行 space、CR 0；B/C/D 期望：rc=12、seed 0 行（D 另需日志有 rc=0）
+E 期望：rc=12、seed 0 行、日志含 rc=66（变异后路径解析不到 ⇒ 本套用例能抓少一级的 ../）

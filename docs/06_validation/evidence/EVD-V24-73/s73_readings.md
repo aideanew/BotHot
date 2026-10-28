@@ -34,8 +34,8 @@
 1. **§5 步 4 与 §7 的路径**写的是 `cd apps/api && python scripts/seed_chat_space.py`，而 §4/§6/§9 写的是
    `scripts/e2e/seed_chat_space.py`。按 §9「允许修改」落笔的是后者（`apps/api/scripts/` 下没有该文件，
    且该目录被 §10 列为"复用不改"的一面）。启动器因此用 `(cd "$REPO_ROOT/apps/api" && python
-   ../scripts/e2e/seed_chat_space.py)`——cwd 留在 `apps/api` 是为了 `import app.*`，脚本自己又把
-   `apps/api` 插进 `sys.path`，所以直接把 cwd 换掉也能跑。
+   ../../scripts/e2e/seed_chat_space.py)`——cwd 留在 `apps/api`（同 ⑤，为了 `import app.*` 与 `.env`
+   口径）。**第 1 轮曾写成 `../scripts/…`，在 e2e-real 上 rc=12**，详见 §5.1。
 2. **§5 步 2 的 `app.core.db`**：现读的会话工厂在 `app/db.py`（`create_engine_and_session`），
    `app/core/` 下没有 `db` 模块。按现读的模块落笔。
 3. **§4 的"在 `:299` 的种子步骤之后"**：行号已漂——`:299` 现在是 ②b 假 LangBot 段的末行；真正的种子
@@ -55,14 +55,43 @@
   区别只是共用同一个进程与连接池。这条差别不改"第二次没有新增行"这个判据，但引用时不要把前者写成
   后者（证据里 §5 的读数是**一次** CI 跑的两次 apply，不是两次 CI 跑）。
 - **脚本的两条 fail-closed 分支（rc=3 无用户 / rc=4 幂等破了）本机未执行**——它们都要真库才能触发。
-  rc=12 那侧（启动器 ⑤b 的四个入口）已逐条取证，见 `s73_branch_proof.txt`。
+  rc=12 那侧（启动器 ⑤b 的入口）已逐条取证，见 `s73_branch_proof.txt`（第 2 版五个用例，含"变异回
+  `../scripts` 必须红"那一条）。
+- **第 2 轮本机真跑过一次**（venv 解释器、`cd apps/api`、`../../scripts/e2e/seed_chat_space.py`）：
+  越过路径与导入，止于 `psycopg.errors.ConnectionTimeout` / `sqlalchemy.exc.OperationalError`
+  （`localhost:5432` 无监听）。原文见 `s73_static_checks.txt` §12——它证明"本机唯一缺的是库"，
+  不证明脚本对真库的行为。
 
 ## 5. 真库读数（CI `e2e-real` job）
 
-待本提交的 @ci 回填。
+### 5.1 第 1 轮红（head `0e53199`，run `40708063479`，job `e2e-real` id `122888809302`）
+
+⑤b 打印的原文（来自该 job 的 `10_Start real stack…` 步骤日志）：
+
+```
+== ⑤b /chat 可检索种子（STEP-73：直写表是测试夹具，不是产品路径，D-V24-12）==
+    python: can't open file '/home/runner/work/BotHot/BotHot/apps/api/../scripts/e2e/seed_chat_space.py': [Errno 2] No such file or directory
+❌ /chat 种子不合格（脚本 rc=2、space_id 取到 ''）；输出见上，不猜
+== 失败退出 rc=12：拆除本脚本起过的进程 ==
+```
+
+根因：启动器先 `cd "$REPO_ROOT/apps/api"`（距仓根**两**级），调用却写成 `../scripts/e2e/…`，
+解析到 `apps/scripts/`（不存在）。rc=2 是 `python` 打不开文件的退出码，不是脚本自己的返回码。
+
+为什么第 1 轮的取证没拦住：`s73_branch_proof.txt` 第 1 版把 `python` 整体换成不校验参数的桩，
+等于把"解释器能不能找到这个文件"一起替换掉了。第 2 版已把 cwd 与参数解析做成断言（桩 rc=67 / rc=66），
+并加了 E 变异用例——当前字节绿、变异红，两者对照才算证明。
+
+修复：`../scripts/e2e/…` → `../../scripts/e2e/…`，并在该行上方留一句说明"`../../` 与 cwd 是同一个约定"。
+
+### 5.2 第 2 轮（修复后）真库读数
+
+待本提交的 @ci 回填：从 `e2e-real` job 的 `10_Start real stack…` 步骤日志里取 ⑤b 的
+`space_id=` / `pass1 counts:` / `pass2 counts:` 与四行 `space:/source:/asset:/document:` 读数。
 
 ## 6. 证据文件
 
-- `s73_static_checks.txt`：ast / 两侧 grep / ruff / mypy / `bash -n` / 不建用户的静态面 / 接线点 / 行数
-- `s73_branch_proof.txt`：⑤b 新增段的四分支取证（happy / 缺脚本 / 脚本非零 / 取不到 space_id），
-  被测字节由 `sed` 从启动器现读截取，不是手抄副本
+- `s73_static_checks.txt`：ast / 两侧 grep / ruff / mypy / `bash -n` / 不建用户的静态面 / 接线点 /
+  行数 / **路径按 `cd apps/api` 解析（fixed=True、old=False）** / 本机真跑止于 DB 不可达
+- `s73_branch_proof.txt`：⑤b 新增段的五分支取证（happy / 缺脚本 / 脚本非零 / 取不到 space_id /
+  **变异回 `../scripts` 必须红**），被测字节由 `sed` 从启动器现读截取，不是手抄副本
