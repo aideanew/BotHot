@@ -49,3 +49,25 @@
 - 未动 `apps/api/tests/test_ux_states_contract.py`
 - 未加 retry / `--reruns`，未用 `-k "not …"` 摘用例
 - 未改 `apps/api/app/**`
+
+## 6. 收口批 `e80d65f` 的 @ci 读数（S75.7）
+
+`GET /repos/aideanew/BotHot/commits/e80d65f/check-runs` 现取，八个 check-run 逐条：
+
+| check-run | status | conclusion | 所属 run |
+| --- | --- | --- | --- |
+| `backend` | completed | success | `40695323133` |
+| `frontend` | completed | success | `40695323133` |
+| `compose` | completed | success | `40695323133` |
+| `compose-smoke` | completed | success | `40695323133` |
+| `workflow-lint` | completed | success | `40695323133` |
+| `e2e-real` | completed | success | `40695323133` |
+| `windows-dev` | completed | success | `40695323265` |
+| `安全扫描（① pip-audit / ② pnpm audit / ③ trivy / ④ gitleaks）` | completed | success | `40695323416` |
+
+判据：S75.7 要求「本轮改动没引入新红」。`e80d65f` 的 14 个文件全在 `docs/**`（零 `apps/**`、
+零 `.github/**`），控制面未变；`backend` 是本版第 4 次连绿（§1 表三次 + 本次），`e2e-real` 第 2 次连绿。
+⇒ 无新红，S75.7 成立。
+
+⚠ 口径限制：本条只读 job 级 `conclusion`，未下载 run 级日志 zip 复核逐条用例计数——
+本批零代码，计数变动无从发生；要独立复核请按 `run id` 取日志。
