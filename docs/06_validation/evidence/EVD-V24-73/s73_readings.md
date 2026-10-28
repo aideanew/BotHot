@@ -22,9 +22,9 @@
 | 卡面验收 | 读数 | 结论 |
 | --- | --- | --- |
 | `ast.parse` 通过 | `s73_static_checks.txt` §1：`ok` / rc=0 | ✅ |
-| 连跑两次：第二次不新增行 | 脚本进程内两遍 apply + 两遍行数打印（`_apply` → `_counts` → `_apply` → `_counts`），不一致即 rc=4；**真库读数见 §5（CI）** | ⏳ 待 §5 |
-| `select langbot_file_id, status … where space_id=<id>` 得 `fake-doc-1` / `READY` | 脚本末尾打印 `document: … langbot_file_id='fake-doc-1' status='READY'`；**真库读数见 §5** | ⏳ 待 §5 |
-| `select langbot_kb_uuid from knowledge_spaces where id=<id>` 非空 | 打印 `space: … langbot_kb_uuid='fake-kb-1'`；**真库读数见 §5** | ⏳ 待 §5 |
+| 连跑两次：第二次不新增行 | CI 真库（§5.2）：`pass1 counts: spaces=1 sources=1 assets=1 documents=1` 与 `pass2 counts:` 逐字相同 ⇒ 第二遍 0 新增；脚本自身不一致即 rc=4 | ✅ |
+| `select langbot_file_id, status … where space_id=<id>` 得 `fake-doc-1` / `READY` | CI 真库（§5.2）：`document: … langbot_file_id='fake-doc-1' status='READY' content_hash=f695ff7d…` | ✅ |
+| `select langbot_kb_uuid from knowledge_spaces where id=<id>` 非空 | CI 真库（§5.2）：`space: id=58362bde… langbot_kb_uuid='fake-kb-1' … status='ACTIVE'` | ✅ |
 | 假 LangBot 的 `file_name` 与种子 `langbot_file_id` 逐字相同 | `s73_static_checks.txt` §2：`seed_chat_space.py:64 FILE_ID = "fake-doc-1"` / `fake_langbot.py:36 FILE_NAME = "fake-doc-1"` | ✅ |
 | `ask` 的 SSE 里出现 `delta` 帧（不是 `error` 30002） | **本卡未证**：需要「真库 + 假 LLM + 假 LangBot + uvicorn」四件同时在跑并发一次 SSE；本机无库（见 §4），CI 的 e2e-real 也不启假上游。归 STEP-60 的验收 | ⏳ 归 STEP-60 |
 | 不改 `apps/api/app/**`、不改 `models/entities.py` | `s73_static_checks.txt` §0 的 `git status`：改动只有 `scripts/e2e/` 两个文件 + 本证据目录 | ✅ |
@@ -86,8 +86,64 @@
 
 ### 5.2 第 2 轮（修复后）真库读数
 
-待本提交的 @ci 回填：从 `e2e-real` job 的 `10_Start real stack…` 步骤日志里取 ⑤b 的
-`space_id=` / `pass1 counts:` / `pass2 counts:` 与四行 `space:/source:/asset:/document:` 读数。
+head `7853517`，CI run `40710695630`，job `e2e-real` id `122897048364`，`completed/success`。
+⑤b 的原文（同一 job 的 `10_Start real stack…` 步骤日志，从 `== ⑤b` 到 `== ⑥` 之间逐字摘录）：
+
+```
+== ⑤b /chat 可检索种子（STEP-73：直写表是测试夹具，不是产品路径，D-V24-12）==
+    space_id=58362bde-d8da-4082-902c-91e32b65af65
+    pass1 counts: spaces=1 sources=1 assets=1 documents=1
+    pass2 counts: spaces=1 sources=1 assets=1 documents=1
+    space: id=58362bde-d8da-4082-902c-91e32b65af65 name='R24 流式验收空间' langbot_kb_uuid='fake-kb-1' engine='builtin' engine_kb_id='fake-kb-1' status='ACTIVE'
+    source: id=14e42048-4164-4ea0-8ed7-4d10d03ac780 type='web' external_id='r24-fake-source'
+    asset: id=24caadf8-d5fe-4c12-ac72-66a3c4f4775b external_id='r24-fake-doc-1' title='R24 假文章' content_hash=f695ff7d742b1680f75cb41ffdc425e86b7e6ca0e2394ab3b8b4fc238b6aaa61 status='READY'
+    document: id=f5e92857-4674-460b-92be-49da5bc752c4 space_id=58362bde-d8da-4082-902c-91e32b65af65 langbot_file_id='fake-doc-1' status='READY' content_hash=f695ff7d742b1680f75cb41ffdc425e86b7e6ca0e2394ab3b8b4fc238b6aaa61
+seed 追加：space 58362bde-d8da-4082-902c-91e32b65af65 → /home/runner/work/_temp/e2e-real/seed.txt（real.setup.ts 只解析 ^session 行，多这一行不影响它）
+```
+
+读法（写清每个数证的是哪一条）：
+
+- `pass1 counts` = `pass2 counts` ⇒ 第二遍 apply 0 新增，幂等成立（卡面第 2 条）。
+- `document: langbot_file_id='fake-doc-1' status='READY'` ⇒ 卡面第 3 条。
+- `space: langbot_kb_uuid='fake-kb-1'` 非空 ⇒ 卡面第 4 条。
+- asset 与 document 的 `content_hash` 逐字相同，且等于脚本里 `sha256(MARKDOWN)` 的十六进制值
+  （`scripts/e2e/seed_chat_space.py` 的 `CONTENT_HASH`）——这证明 doc 的指纹确实取自同一条资产，
+  不是两处各写一个常量。
+- `seed 追加` 那一行是启动器写的，说明 `$SEED_FILE` 里多了 `space <id>` 行；
+  `real.setup.ts` 只认 `^session` 行（静态面见 `s73_static_checks.txt` §8），故对 Playwright 无影响。
+
+同一 run 的其余读数（不是本卡判据，只用来钉住这一跑可信）：
+
+| 项 | 读数 |
+| --- | --- |
+| `e2e-real` 用例段 | `Running 7 tests using 1 worker` → `1 skipped` / `6 passed (2.9s)` |
+| `backend` | `2502 passed, 6 skipped, 4 deselected`、`Total coverage: 88.91%`、`✅ 全部模块与全局达标` |
+| 治理门 | `治理门基线：0e53199…（HEAD=7853517…）`、`rounds-check rc=0 / evidence-check rc=0`、`✅ 治理门通过` |
+| `frontend`（mock e2e） | `Running 42 tests using 1 worker` → `11 skipped` / `31 passed` |
+
+**仍未由本卡证**：卡面第 6 条（`ask` 的 SSE 出现 `delta` 帧）——CI 的 `e2e-real` 不启假上游，
+本机无库；归 STEP-60，§2 那一行已写「归 STEP-60」。
+
+### 5.3 八 check-run 汇总（head `7853517`）
+
+| run | 内容 | 结论 |
+| --- | --- | --- |
+| `40710695630` | `backend` / `compose` / `compose-smoke` / `e2e-real`（id `122897048364`）/ `frontend` / `workflow-lint` | 六项全 `completed/success` |
+| `40710695632` | `windows-dev`（id `122894848141`） | `completed/success` |
+| `40710695640` | 安全扫描（pip-audit / pnpm audit / trivy / gitleaks） | `completed/success` |
+
+`windows-dev` 的读数行（本卡不改 Python 源码，但新脚本在它的 ruff/mypy 作用域内，故一并读）：
+
+```
+All checks passed!
+Success: no issues found in 137 source files
+1816 passed, 692 skipped, 4 deselected, 2 warnings in 1171.80s (0:19:31)
+windows 门禁：failed=0 total_skipped=692 baseline=692
+Test Files  57 passed (57)
+     Tests  449 passed (449)
+```
+
+`total_skipped=692 baseline=692` 与既有 @win 基线一致（零余量，D-V10-11 口径），本卡没有新增连库用例。
 
 ## 6. 证据文件
 

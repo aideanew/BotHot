@@ -37,23 +37,28 @@
    - 幂等：按 `(user_id, name)` 查，已存在则复用并修正 `langbot_kb_uuid` / `status` / `langbot_file_id`，**不重复插**
    - 最后 `print(space_id)` 到 stdout
 3. [x] **S73.3** 启动器在 `qa_seed_sessions.py` 之后调用本脚本，把 space id 追加进 `$SEED_FILE`（供 Playwright 通过环境变量读）
-4. [ ] 自测：
+4. [x] 自测：
 
    ```bash
    cd apps/api && python scripts/seed_chat_space.py   # 打印 space id
    ```
 
-5. [ ] 本卡单独提交并推送
+   实做路径按 §9 落 `scripts/e2e/seed_chat_space.py`（见 `EVD-V24-73/s73_readings.md` §3.1），故命令是
+   `cd apps/api && python ../../scripts/e2e/seed_chat_space.py`。本机无 PG ⇒ 真库读数取自 CI 的
+   `e2e-real`（`7853517` / run `40710695630` / job `122897048364`），`space_id=58362bde…` 与两遍计数见
+   `s73_readings.md` §5.2。
+
+5. [x] 本卡单独提交并推送
 
 ## 6. 验收标准
 
-- [ ] `python -c "import ast;ast.parse(open('scripts/e2e/seed_chat_space.py').read())"` 通过
-- [ ] 连跑两次：第二次不新增行（`select count(*)` 前后相同）
-- [ ] 跑完后 `select langbot_file_id, status from knowledge_documents where space_id=<id>` 得 `fake-doc-1 | READY`
-- [ ] 跑完后 `select langbot_kb_uuid from knowledge_spaces where id=<id>` 非空
-- [ ] 假 LangBot 的 `file_name` 与种子 `langbot_file_id` **逐字相同**（`grep` 两侧）
-- [ ] `ask` 的 SSE 里出现 `delta` 帧（不是 `error` 30002）
-- [ ] 本卡不改 `apps/api/app/**`、不改 `models/entities.py`
+- [x] `python -c "import ast;ast.parse(open('scripts/e2e/seed_chat_space.py').read())"` 通过
+- [x] 连跑两次：第二次不新增行（`select count(*)` 前后相同）
+- [x] 跑完后 `select langbot_file_id, status from knowledge_documents where space_id=<id>` 得 `fake-doc-1 | READY`
+- [x] 跑完后 `select langbot_kb_uuid from knowledge_spaces where id=<id>` 非空
+- [x] 假 LangBot 的 `file_name` 与种子 `langbot_file_id` **逐字相同**（`grep` 两侧）
+- [ ] `ask` 的 SSE 里出现 `delta` 帧（不是 `error` 30002）——未证：需真库 + 假上游同时在跑，归 STEP-60（见 `EVD-V24-73/s73_readings.md` §2 该行）
+- [x] 本卡不改 `apps/api/app/**`、不改 `models/entities.py`
 
 ## 7. 验证命令
 
