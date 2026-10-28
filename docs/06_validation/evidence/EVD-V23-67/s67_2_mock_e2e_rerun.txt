@@ -1,0 +1,24 @@
+== STEP-67 mock 档复算（口径同 CI frontend job 的 E2E (mock UI) 步）==
+== .next 是 NEXT_PUBLIC_API_MOCK=true 那次构建的产物；spec 不进构建产物，故只重跑测试 ==
+
+  ok  1 e2e\admin.spec.ts:147:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ① 游客访问 /admin 与 /admin/ops：未登录守卫给出可判定的落点（两档按不变量，D-V23-15） (3.5s)
+  ok  2 e2e\admin.spec.ts:152:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ② 键盘可达：Tab 到登录按钮、回车登录，落点是权限分层而不是白屏 (1.9s)
+  ok  3 e2e\admin.spec.ts:179:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ③ 非 admin 会话 › ③ 非 admin 的处置：两屏都给出出口链接 (3.3s)
+  ok  4 e2e\admin.spec.ts:194:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ④ 375px：游客卡与权限不足卡的内容区不横向溢出 (2.3s)
+  -   5 e2e\admin.spec.ts:236:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数
+  -   6 e2e\admin.spec.ts:260:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来
+  -   7 e2e\admin.spec.ts:270:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑦ 375px 下密钥表横向滚动而不是挤压
+  ok  8 e2e\auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /spaces → AuthGate 统一卡片（原地，不跳转） (873ms)
+  ok  9 e2e\auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /subscriptions → AuthGate 统一卡片（原地，不跳转） (1.3s)
+  ok 10 e2e\auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /jobs → AuthGate 统一卡片（原地，不跳转） (793ms)
+  ok 11 e2e\auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /public → AuthGate 统一卡片（原地，不跳转） (1.2s)
+  ok 12 e2e\auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /engines → AuthGate 统一卡片（原地，不跳转） (1.3s)
+  ok 13 e2e\auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /chat → AuthGate 统一卡片（原地，不跳转） (770ms)
+  ok 14 e2e\auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /onboarding → AuthGate 统一卡片（原地，不跳转） (1.2s)
+  ok 15 e2e\auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /bots → AuthGate 统一卡片（原地，不跳转） (1.2s)
+  ok 16 e2e\auth-gate.spec.ts:39:9 › AuthGate 未登录统一守卫矩阵 › 未登录访问 /admin → AuthGate 统一卡片（原地，不跳转） (773ms)
+  ok 17 e2e\auth-gate.spec.ts:51:7 › AuthGate 未登录统一守卫矩阵 › 未登录访问无效地址 → 404 兜底页（非 AuthGate 域，锁定不混淆） (393ms)
+  ok 39 e2e\trunk.spec.ts:122:7 › mock 主干回归 › ⑥ 错误态 + 重试 (9.1s)
+  11 skipped
+  31 passed (1.6m)
+e2e_rc=0

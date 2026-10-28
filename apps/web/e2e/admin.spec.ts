@@ -19,6 +19,13 @@ import { test, expect, type Page } from "@playwright/test";
  *    是 describe 不是断言段 ⇒ 同一条用例里两种会话不能各管半段。两处都显式 skip 并写明原因，
  *    不删断言、也不改成"看起来能过"的样子（判据冲突本体见台账 P-131）。
  *    首次执行读数见 `EVD-V22-59/`。
+ *
+ * ① 在两种构建下**落点不同**，这是已登记的构建差异而不是断言放宽（D-V23-15 / 台账 P-150）：
+ *    mock 档 `middleware.ts:24-29` 的 `MOCK_BUILD` 短路不查 cookie ⇒ 原地渲染统一 AuthGate；
+ *    real 档 `middleware.ts:38-46` 无 `bothot_session` 一律 307 到 `/` ⇒ 落点是首页。
+ *    共同判据是四条不变量（不渲染受保护内容 / 唯一登录入口 / 不出现 10004·权限不足 / 不白屏），
+ *    落点本身不进判据；real 分支另附 landing 物证（`guest-landing-*.txt`）以自证 307 确实发生。
+ *    这个差异就是 `e2e-real` 红了五轮才被看清的根因——同一句断言在两档下含义不同。
  */
 
 const MOCK_LOGIN_KEY = "bothot_mock_login";
@@ -108,14 +115,38 @@ test.describe.serial("管理端 e2e（演示态无条件执行 + 真后端档闸
     expect(consoleErrors, "console 不应出现 error").toEqual([]);
   });
 
-  test("① 游客访问 /admin 与 /admin/ops：原地渲染统一 AuthGate，不重定向", async ({ page }) => {
-    await page.goto("/admin");
-    await expect(page.getByText("尚未登录或会话已过期")).toBeVisible();
-    await expect(page).toHaveURL(/\/admin$/);
+  // ① 的"未登录访问受保护页"落点**按档不同**，这是已登记的构建差异（D-V23-15 / P-150），不是断言放宽：
+  //   mock 档 `middleware.ts:24-29` 的 MOCK_BUILD 短路不查 cookie ⇒ 原地渲染统一 AuthGate（下面 mock 分支一字未改）；
+  //   real 档 `middleware.ts:38-46` 无 bothot_session 一律 307 → `/` ⇒ 落点是首页。
+  // 两档共同的判据是四条不变量（D-V23-15）：不渲染受保护内容 / 有唯一登录入口 / 不出现 10004·权限不足 / 不白屏。
+  // real 分支**必须附 landing 物证**（URL + 顶栏文本），否则"绿"无法与"断言写松了凑巧通过"区分开。
+  async function expectGuestLanding(page: Page, path: string): Promise<void> {
+    await page.goto(path);
+    if (!REAL_BACKEND_ENABLED) {
+      await expect(page.getByText("尚未登录或会话已过期")).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+      return;
+    }
+    // 落点：被 307 到首页（`/`，可能带 query）
+    await expect(page).toHaveURL(/\/(\?|$)/);
+    // 不变量②：唯一登录入口（首页引导卡的按钮，`page.tsx:77`；顶栏那个是 `登录`，不同名）
+    await expect(page.getByRole("button", { name: "使用主平台账号登录" })).toHaveCount(1);
+    // 不变量①：不渲染任何受保护内容
+    const body = await page.locator("body").innerText();
+    expect(body).not.toContain("ADMIN CONSOLE");
+    // 不变量③：不许把"未登录"说成"权限不足"
+    expect(body).not.toMatch(/10004|权限不足/);
+    // 物证：这一发的 URL 与顶栏文本，进 artifact（run 成功后 artifact 仍由 if: always() 步上传）
+    // 断言在上面的 expect(...) 里已经钉死（顶栏出现"未登录"、首页出现引导卡），这里再留一份人读快照。
+    await test.info().attach(`guest-landing-${path.slice(1)}.txt`, {
+      body: `URL=${page.url()}\nBODY_HEAD=${body.slice(0, 400)}\n`,
+      contentType: "text/plain",
+    });
+  }
 
-    await page.goto("/admin/ops");
-    await expect(page.getByText("尚未登录或会话已过期")).toBeVisible();
-    await expect(page).toHaveURL(/\/admin\/ops$/);
+  test("① 游客访问 /admin 与 /admin/ops：未登录守卫给出可判定的落点（两档按不变量，D-V23-15）", async ({ page }) => {
+    await expectGuestLanding(page, "/admin");
+    await expectGuestLanding(page, "/admin/ops");
   });
 
   test("② 键盘可达：Tab 到登录按钮、回车登录，落点是权限分层而不是白屏", async ({ page }) => {

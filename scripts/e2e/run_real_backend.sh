@@ -54,31 +54,85 @@ port_owner() {
   fi
 }
 
+# D-V23-16：认领"该不该给这个 PID 发信号"的**主判据**——它是不是该端口的监听者。
+# 原来的唯一判据是命令行特征，而 `next start` 会把进程标题改写成 `next-server (v15.x)`，
+# `ps -o args=` 就再也看不到 `next/dist/bin/next` ⇒ 白名单不匹配 ⇒ 不发信号 ⇒ 端口一直被占
+# （CI 实证：同屏 `跳过 frontend pid=4426：命令行对不上` + `占用者读数：…("next-server (v1"...)`）。
+# 端口属主是 OS 给的事实、不受标题改写影响；取不到属主时**不**当作"不是它"，仍退回命令行特征判定。
+port_owner_pids() {
+  local port="$1" line
+  if command -v ss >/dev/null 2>&1; then
+    while IFS= read -r line; do
+      case "$line" in
+        *":$port "*) printf '%s\n' "$line" | grep -o 'pid=[0-9][0-9]*' | sed 's/^pid=//' ;;
+      esac
+    done < <(ss -ltnp 2>/dev/null)
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null
+  fi
+  return 0
+}
+
+role_port() {
+  case "$1" in
+    backend) echo 3300 ;;
+    frontend) echo 3200 ;;
+    fake_llm) echo 3290 ;;
+    *) echo "" ;;
+  esac
+}
+
 # 停：先按 pidfile 逐个 kill，再用命令行特征兜一遍。
 # 为什么两层都要：记录到的 PID 未必是真正的监听者——`pnpm exec next start` 里 pnpm 会派生
 # node 子进程，只 kill 包装进程会把服务留在端口上，而脚本照样打印"stopped frontend"。
 # 前端那一处已改成直接 `exec node ./node_modules/next/dist/bin/next`（PID 就是服务本身），
 # 兜底留着是因为端口残留的失败形态最难读（下一次进来只看到 rc=2"端口被占"）。
 stop_all() {
-  local stopped_any=0 had_pidfile=0 name pid pat port cmdline grace
+  local stopped_any=0 had_pidfile=0 name pid pat port cmdline grace ownp owns have_ps=0 have_ps_out
+  # `command -v ps` 只证明"有个叫 ps 的程序"，不证明它支持 `-p … -o args=`：git-bash 的 ps 就是这种
+  # （文件头注写的"退化成按 PID 直杀并说明原因"当时并未真的发生——have_ps 被置成 1、cmdline 取空、
+  # 于是每个 PID 都走"命令行对不上"分支被跳过）。这里改成**探能力**而不是探存在，并把探测结果打出来。
+  have_ps=0
+  have_ps_out="$(ps -p 1 -o args= 2>/dev/null || true)"
+  if [ -n "${have_ps_out// /}" ]; then
+    have_ps=1
+  else
+    echo "note: 本机 ps 不支持 -o args=（或未取到输出）⇒ 认领只能靠端口属主，命令行特征这一层跳过"
+  fi
   # 先把"本脚本起过哪些角色"抄下来：下面要 rm pidfile，终检得在文件还在的时候判。
   local started=""
-  local have_ps=0
-  command -v ps >/dev/null 2>&1 && have_ps=1
   if [ -f "$PIDS_FILE" ]; then
     had_pidfile=1
     started="$(cut -d' ' -f1 < "$PIDS_FILE" 2>/dev/null || true)"
     while read -r name pid; do
       [ -n "${pid:-}" ] || continue
-      # 只给"命令行确实是本脚本那一类进程"的 PID 发信号：开发机上 PID 会复用，
+      # 只给"确属本脚本那一类"的 PID 发信号：开发机上 PID 会复用，
       # 裸 `kill` 可能打死一个早已占坑的无关进程，而日志照样写 "stopped frontend"。
-      # 本机 git-bash 没有 `ps -o args=`（实测），那里退化成按 PID 直杀并说明原因。
-      if [ "$have_ps" = 1 ]; then
-        cmdline="$(ps -p "$pid" -o args= 2>/dev/null || true)"
-        case "$cmdline" in
-          *"uvicorn app.main:app --host 127.0.0.1 --port 3300"* | *"next/dist/bin/next"* | *"scripts/e2e/fake_llm.py"*) ;;
-          *) echo "跳过 $name pid=$pid：命令行对不上（PID 可能已被复用，不发信号）"; continue ;;
-        esac
+      # 主判据（D-V23-16）= 它是不是该角色的端口的监听者；端口属主不受进程标题改写影响。
+      # 取不到属主（本机没有 ss 也没有 lsof）时**不**把"取不到"当成"不是它"，退回命令行特征判定。
+      port="$(role_port "$name")"
+      owns=0
+      ownp=""
+      if [ -n "$port" ]; then
+        ownp="$(port_owner_pids "$port")"
+      fi
+      if [ -n "${ownp// /}" ] && printf '%s\n' "$ownp" | grep -qx "$pid"; then
+        owns=1
+      fi
+      if [ "$owns" != 1 ]; then
+        if [ "$have_ps" = 1 ]; then
+          cmdline="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+          case "$cmdline" in
+            *"uvicorn app.main:app --host 127.0.0.1 --port 3300"* | *"next/dist/bin/next"* | *"next-server"* | *"scripts/e2e/fake_llm.py"*) ;;
+            *) echo "跳过 $name pid=$pid：既不是端口 :${port:-?} 的监听者、命令行也对不上（PID 可能已被复用，不发信号）"; continue ;;
+          esac
+        elif [ -n "${ownp// /}" ]; then
+          # 端口上确有别人在听，且不是这个 PID ⇒ 它已被复用，不发信号（这条是反证走的分支）
+          echo "跳过 $name pid=$pid：端口 :$port 的监听者是 $ownp，不是它（不发信号）"
+          continue
+        else
+          echo "note: $name pid=$pid 无端口属主证据也无 ps 能力 ⇒ 按 PID 直杀（本机能力受限，非静默）"
+        fi
       fi
       if kill "$pid" 2>/dev/null; then echo "stopped $name pid=$pid"; stopped_any=1
       else echo "already gone $name pid=$pid"; fi
@@ -127,6 +181,10 @@ stop_all() {
     if [ "$grace" -gt 0 ]; then
       echo "端口 $port 在第 ${grace} 次轮询（约 $((grace * 200))ms）后才空闲——SIGTERM 的释放延迟，不是泄漏"
     fi
+    # 空闲时也把属主读一遍并落一行：STEP-67 验收 ② 要能事后证明"这段读数没被删"，
+    # 只在红路径打印就等于"绿了就没有物证"——那正是本文件一直在反对的那类静默。
+    ownp="$(port_owner "$port")"
+    echo "端口终检 $name :$port 空闲；占用者读数：${ownp:-(空)}"
   done
   if [ "$stopped_any" != 1 ]; then
     # 这句以前固定写"pidfile 不存在"，可在 `already gone` 那条路径上 pidfile 明明存在 ⇒ 谎报。

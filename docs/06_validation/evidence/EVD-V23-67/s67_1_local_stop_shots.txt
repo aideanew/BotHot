@@ -1,0 +1,45 @@
+== STEP-67 本机停路径两发（脚本 Temp/s59/test67_stop.sh，用 3290 这个 fake_llm 角色口避开业务口 3200/3300）==
+== 一发：正常认领并停干净（期望 rc=0 且终检留属主读数行）；二发：端口真被占着不放（期望门仍红）==
+== 两发的 stdout 判读写在 s67_readings.md §3；这里放脚本本体，便于任何人复跑同两发 ==
+
+-- 脚本本体 --
+
+#!/bin/bash
+# STEP-67 本机可证的两发：①"认领→杀→终检空闲+属主读数(空)"这条成功路径现在会留物证
+#                    ②端口真被占着不放时，门仍然红（牙齿没被宽限期洗掉）
+# 用 3290（fake_llm 角色口），避开业务口 3200/3300。
+set -u
+REPO=/d/Code/AideanBotHot
+RUN=/c/Users/Administrator/AppData/Local/Temp/s59/stoprun67
+PY="$REPO/apps/api/.venv/Scripts/python.exe"
+rm -rf "$RUN"; mkdir -p "$RUN"
+
+listener() { # $1=ignore_term
+  "$PY" -X utf8 -c "import signal,sys,http.server; signal.signal(signal.SIGTERM, signal.SIG_IGN) if sys.argv[1]=='1' else None; http.server.HTTPServer(('127.0.0.1',3290), http.server.SimpleHTTPRequestHandler).serve_forever()" "$1" &
+}
+
+wait_open() { for _ in $(seq 1 30); do (exec 3<>/dev/tcp/127.0.0.1/3290) 2>/dev/null && return 0; sleep 0.2; done; return 1; }
+
+win_pid_of_3290() { netstat -ano | grep ":3290" | grep LISTENING | head -1 | awk '{print $NF}'; }
+
+echo "===== 一发：正常认领并停干净（期望 rc=0，且日志有『占用者读数：(空)』）====="
+listener 0; LP=$!
+wait_open || { echo "前置失败：没起来"; exit 9; }
+printf 'fake_llm %s\n' "$LP" > "$RUN/pids"
+E2E_RUN_DIR="$RUN" bash "$REPO/scripts/e2e/run_real_backend.sh" --stop 2>&1 | grep -vE "^\s*$" | tail -8
+echo "stop_rc=${PIPESTATUS[0]}"
+sleep 0.5
+WP=$(win_pid_of_3290); [ -n "$WP" ] && { taskkill //PID "$WP" //F >/dev/null 2>&1; echo "（收尾 taskkill $WP）"; }
+
+echo
+echo "===== 二发：监听者活着但 pidfile 里没有它（期望端口终检红、rc=1）====="
+listener 1; LP2=$!
+wait_open || { echo "前置失败：没起来"; exit 9; }
+printf 'fake_llm %s\n' "999999" > "$RUN/pids"   # 一个不存在的 PID：端口上确实有别人在听
+E2E_RUN_DIR="$RUN" bash "$REPO/scripts/e2e/run_real_backend.sh" --stop 2>&1 | grep -vE "^\s*$" | tail -6
+echo "stop_rc=${PIPESTATUS[0]}"
+WP=$(win_pid_of_3290); [ -n "$WP" ] && { taskkill //PID "$WP" //F >/dev/null 2>&1; echo "（收尾 taskkill $WP）"; }
+sleep 1
+echo
+echo -n "收尾：3290 是否仍监听："
+(exec 3<>/dev/tcp/127.0.0.1/3290) 2>/dev/null && echo "仍监听(需人工看)" || echo "已空闲"
