@@ -119,3 +119,69 @@ html reporter 只加在真后端档（演示档仍 `reporter: [["list"]]` ⇒ mo
 pidfile 增量落盘 + 非零退出即拆 + 端口终检、`/ready` 按 {200,503} 判定用独立 rc=8、
 seed 解析前 `tr -d '\r'`。
 
+
+== ⑦ 第二批：只读复核的处置与它自己读错的那一条（同日第三批字节）==
+
+$ bash -n scripts/e2e/run_real_backend.sh
+bash_n_rc=0
+
+$ bash scripts/e2e/run_real_backend.sh --stop
+note: 本机没有 pgrep/pkill ⇒ 跳过命令行特征兜底（CI 的 ubuntu runner 有）
+没有本脚本起过的进程（pidfile 不存在；端口占用与否只对本脚本起过的角色判）
+stop_rc=0
+（上一段 §⑥ 引的 --stop 文字是改端口终检之前的版本，已被这一段取代；两段的差别就是
+ 复核提的那条：`--stop` 不该把别人的 3200 读成本脚本没清干净。本机确实没有 pgrep/pkill。）
+
+rc 捕获惯用法单测（**不是**脚本实跑，只证这套 `set -e` 下的写法能拿到 rc 并继续）：
+$ cat idiom.sh
+set -euo pipefail
+F=$1
+( python -c "import sys; sys.exit(1)" ) > "$F" 2>&1 || RC=$?
+RC=${RC:-0}
+echo "captured_rc=$RC  继续执行到这一行=成立"
+$ bash idiom.sh idiom.out
+captured_rc=1  继续执行到这一行=成立
+idiom_rc=0
+⇒ 复核说"种子脚本非零退出时 rc=5 那条分支不可达"成立（旧写法直接死在 python 的 rc=1），
+  新写法的判定改成 `n_session != 3 或 SEED_RC != 0`，traceback 也随之留在 seed 文件里。
+
+--list 到底跑不跑 globalSetup：**直接探针**（上一段 §⑥ 是从"没打印 console.log"推的，太弱）
+准备一个合法 seed（qa-admin-001 / qa-operator-001 / qa-user-001 三行齐全，cookie=bothot_session）
+和一个不存在的 E2E_AUTH_DIR，然后：
+$ E2E_REAL_BACKEND=1 E2E_SEED_FILE=<合法 seed> E2E_AUTH_DIR=<空目录> \
+    pnpm exec playwright test --list --project=real     → rc=0，Total: 11 tests in 2 files
+$ 同一条不带 --project                                      → rc=0，Total: 11 tests in 2 files
+$ ls <空目录>
+ls: cannot access '…auth2': No such file or directory
+⇒ 两种 --list 都没有创建 storageState 目录 ⇒ 1.63 在本仓的调用形态下 **不执行 globalSetup**，
+  real.setup.ts 的实执行只能等 @ci（或等一次真跑）。复核批里"实测 --list 会执行 globalSetup"
+  这条在本机复现不出来，按上面这份读数为准。
+
+复核批说 html reporter 在本 pnpm 布局里解析不到 @playwright/test、真后端档会在任何用例之前崩——
+这条**反驳**，三条实测：
+$ E2E_REAL_BACKEND=1 pnpm exec playwright test --list --project=real    → rc=0，无 Cannot find module
+$ E2E_REAL_BACKEND=1 … pnpm exec playwright test --project=real --reporter=html --list → rc=0，
+  且 apps/web/playwright-report/ 目录出现（mtime 10:04:56）
+$ node -e "require.resolve('@playwright/test/package.json', {paths:[<reporter 所在目录>]})"
+  resolved: …\.pnpm\@playwright+test@1.63.0\node_modules\@playwright\test\package.json
+$ node -e "require('…/.pnpm/playwright@1.63.0/node_modules/playwright/package.json')"
+  name=playwright version=1.63.0        （不是 playwright-core 的 manifest）
+$ ls .pnpm/playwright@1.63.0/node_modules/playwright/lib/
+  agents cli common errorContext.js globals.js index.js isomorphic.js loader matchers …
+  ⇒ 它引用的 `playwright/lib/reporters/html.js` 在这个安装里根本不存在，那条结论没有出处。
+不过我仍然不赌它：ci.yml 里加了一步 **Reporter 自检**（目录不存在就 exit 1），
+把"上传 playwright-report"从一条可以空过去的判据改成一条会红的判据（job 现 12 步）。
+
+同批另外四处小改动（都在允许面内，无判据影响）：
+- 启动器 `export BACKEND_ORIGIN=${BACKEND_ORIGIN:-http://127.0.0.1:3300}`：让 rewrite 目标与端口预检同源；
+- next 改成绝对路径 `exec node <repo>/apps/web/node_modules/next/dist/bin/next start -p 3200`，
+  同时给 stop_all 的特征兜底一个"只属于本 checkout"的匹配锚（uvicorn 不再按命令行杀，避免误伤别人的 3300）；
+- 种子解析统一走 `tr -d '\r'` 后的副本（`$RUN_DIR/seed.lf.txt`）；
+- `AIDEAN_PUBLIC_URL` 的注释改成实话：它只进登录路由的 authorize 拼装（`app/api/v1/auth.py:63`），
+  第⑥步两个探针都不走登录路由。
+
+复跑面（同一批字节）：`tsc --noEmit` rc=0；`--list --project=real` = 11 tests in 2 files；
+不带开关 = 42 tests in 7 files；`ls apps/web/e2e/.auth` = No such file（本机没有会话文件入库）。
+清理说明：探针期间 apps/web 下生成过 `playwright-report/` 与 `test-results/` 两个忽略目录，
+我在同一批里 `rm -rf` 掉了其中一次探测产物（`test-results/` 里另有一次更早会话留下的空目录，
+`git status --porcelain` 对两者都无输出，因为 `apps/web/.gitignore` 本来就忽略它们）。

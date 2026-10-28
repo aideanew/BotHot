@@ -33,8 +33,12 @@ const SEED_SUB_TO_ROLE: Record<string, string> = {
 /** 行形状由 `qa_seed_sessions.py:74` 的 print 决定：`session <sub>: cookie=<name> value=<id>` */
 const SEED_LINE = /^session (\S+): cookie=(\S+) value=(\S+)$/;
 
+/** 与启动器 `RUN_DIR="${E2E_RUN_DIR:-${RUNNER_TEMP:-/tmp}/e2e-real}"` 同一条式子：
+ *  只认 E2E_SEED_FILE 不认 E2E_RUN_DIR 的话，设了 E2E_RUN_DIR 的那一棒两边会算出不同路径，
+ *  于是 seed 明明写了、这里读不到——又是一个静默失效位。 */
 function defaultSeedFile(): string {
-  return path.join(process.env.RUNNER_TEMP ?? "/tmp", "e2e-real", "seed.txt");
+  const runDir = process.env.E2E_RUN_DIR ?? path.join(process.env.RUNNER_TEMP ?? "/tmp", "e2e-real");
+  return path.join(runDir, "seed.txt");
 }
 
 export default async function realBackendStorageStateSetup(): Promise<void> {
@@ -95,7 +99,9 @@ export default async function realBackendStorageStateSetup(): Promise<void> {
           value: cookie.value,
           domain: "localhost",
           path: "/",
-          expires: -1, // 会话级：随 context 结束，不落长期Cookie jar
+          expires: -1, // 会话级 cookie：随 context 结束即失效。选 -1 而不是换算一个未来时刻，
+                       // 是因为 Playwright 的负数到期时间只接受 -1（`expires === -1 ? void 0 : …`），
+                       // 而这一档的会话本来就不需要跨 run 存活（种子脚本给后端的那份才有 7 天 TTL）。
           httpOnly: true,
           secure: false,
           sameSite: "Lax",

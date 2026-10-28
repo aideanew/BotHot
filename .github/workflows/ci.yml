@@ -647,6 +647,18 @@ jobs:
           E2E_REAL_BACKEND: "1"
           E2E_SEED_FILE: ${{ runner.temp }}/e2e-real/seed.txt
         run: pnpm exec playwright test --project=real e2e/admin.spec.ts
+      - name: Reporter 自检（把"上传 playwright-report"这条判据变成可失败的）
+        shell: bash
+        run: |
+          # 为什么单独一步：08 §2 59.5 要求"失败时上传 playwright-report"，而 config 里加
+          # html reporter 是为了让这个目录真的存在。目录不存在时上传步只会 warn 一声就绿过去，
+          # 判据于是又变成"看着检查了其实没检查"。这一步把它改写成一条会红的判据。
+          if [ -d playwright-report ]; then
+            echo "playwright-report 存在，文件 $(find playwright-report -type f | wc -l) 个；test-results 里 $(find test-results -type f 2>/dev/null | wc -l) 个"
+          else
+            echo "❌ 没有 playwright-report 目录 ⇒ html reporter 没生效（本机 pnpm 解析链与 CI 不同时尤其要看这条），59.5 的上传判据落空" >&2
+            exit 1
+          fi
       - name: Upload report + screenshots（含绿跑：04 §1.1.5 要四屏截图，不能只在失败时留证）
         if: always()
         uses: actions/upload-artifact@v4
@@ -661,4 +673,6 @@ jobs:
         if: always()
         shell: bash
         working-directory: ${{ github.workspace }}
-        run: bash scripts/e2e/run_real_backend.sh --stop || true
+        # 不加 `|| true`：stop_all 在"端口还被自己起过的角色占着"时故意返回 1，
+        # 吞掉它就等于在最该看见残留的地方留了一个静默位（job 仍非阻塞，红在明细里而不是结论里）。
+        run: bash scripts/e2e/run_real_backend.sh --stop

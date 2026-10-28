@@ -17,6 +17,8 @@
 #   4 60s 内 /health 没回 code==0        5 seed 不是 3 条、或 cookie 名/值解析不出来
 #   6 S59.0 探针红 ⇒ 按 02 §5 走方案 B    7 60s 内 :3200 没起来
 #   8 /ready 返回码不在 {200,503}        9 终态自检：pidfile 里的进程已经不在了
+#   10 探针没取到响应（curl 缺失或超时）⇒ 不判 S59.0，别把它读成"要走方案 B"
+#   64 未知参数（连"该起什么"都没说清，不做默认猜测）
 # 环境变量（CI 与本机共用，全部给默认值）：
 #   DATABASE_URL REDIS_URL AIDEAN_ISSUER E2E_RUN_DIR E2E_SEED_FILE APP_ENV E2E_SKIP_MIGRATE
 set -euo pipefail
@@ -47,29 +49,69 @@ port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 # 前端那一处已改成直接 `exec node ./node_modules/next/dist/bin/next`（PID 就是服务本身），
 # 兜底留着是因为端口残留的失败形态最难读（下一次进来只看到 rc=2"端口被占"）。
 stop_all() {
-  local stopped_any=0 name pid pat port
+  local stopped_any=0 had_pidfile=0 name pid pat port cmdline
+  # 先把"本脚本起过哪些角色"抄下来：下面要 rm pidfile，终检得在文件还在的时候判。
+  local started=""
+  local have_ps=0
+  command -v ps >/dev/null 2>&1 && have_ps=1
   if [ -f "$PIDS_FILE" ]; then
+    had_pidfile=1
+    started="$(cut -d' ' -f1 < "$PIDS_FILE" 2>/dev/null || true)"
     while read -r name pid; do
       [ -n "${pid:-}" ] || continue
+      # 只给"命令行确实是本脚本那一类进程"的 PID 发信号：开发机上 PID 会复用，
+      # 裸 `kill` 可能打死一个早已占坑的无关进程，而日志照样写 "stopped frontend"。
+      # 本机 git-bash 没有 `ps -o args=`（实测），那里退化成按 PID 直杀并说明原因。
+      if [ "$have_ps" = 1 ]; then
+        cmdline="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+        case "$cmdline" in
+          *"uvicorn app.main:app --host 127.0.0.1 --port 3300"* | *"next/dist/bin/next"* | *"scripts/e2e/fake_llm.py"*) ;;
+          *) echo "跳过 $name pid=$pid：命令行对不上（PID 可能已被复用，不发信号）"; continue ;;
+        esac
+      fi
       if kill "$pid" 2>/dev/null; then echo "stopped $name pid=$pid"; stopped_any=1
       else echo "already gone $name pid=$pid"; fi
     done < "$PIDS_FILE"
     rm -f "$PIDS_FILE"
   fi
-  for pat in "uvicorn app.main:app --host 127.0.0.1 --port 3300" \
-             "next/dist/bin/next start -p 3200" \
-             "scripts/e2e/fake_llm.py --port 3290"; do
-    if pgrep -f "$pat" >/dev/null 2>&1; then
-      pkill -f "$pat" && { echo "pkill 兜底清掉：$pat"; stopped_any=1; }
-    fi
-  done
-  for port in 3200 3290 3300; do
+  # 特征兜底只用于"本 checkout 绝对路径下"的两条：next 与 fake_llm。
+  # 为什么不再按 cmdline 杀 uvicorn：那条特征（`--port 3300`）在本机共用工作树里会命中
+  # **别人**起的后端（compose 的 backend 也是 3300），一个 rc=2 的早退就把别人的栈杀了；
+  # uvicorn 有 exec 换来的真 PID 在 pidfile 里，按 PID 杀就够。
+  # 本机 git-bash 没有 pgrep/pkill（实测）⇒ 这一层在 win 上是空转，只按 pidfile 走。
+  if ! command -v pgrep >/dev/null 2>&1 || ! command -v pkill >/dev/null 2>&1; then
+    echo "note: 本机没有 pgrep/pkill ⇒ 跳过命令行特征兜底（CI 的 ubuntu runner 有）"
+  else
+    for pat in "$REPO_ROOT/apps/web/node_modules/next/dist/bin/next" \
+               "$REPO_ROOT/scripts/e2e/fake_llm.py"; do
+      if pgrep -f "$pat" >/dev/null 2>&1; then
+        pkill -f "$pat" && { echo "pkill 兜底清掉：$pat"; stopped_any=1; }
+      fi
+    done
+  fi
+  # 端口终检只判"本脚本确实起过的那几个"：把别人的栈读成本脚本没清干净是误判
+  # （--stop 或 --no-frontend 时，3200 上很可能是 compose 的前端，与我们无关）。
+  for name in backend frontend fake_llm; do
+    port=""
+    case "$name" in
+      backend) port=3300 ;;
+      frontend) port=3200 ;;
+      fake_llm) port=3290 ;;
+    esac
+    printf '%s\n' "$started" | grep -qx "$name" || continue
     if port_open "$port"; then
-      echo "❌ 端口 $port 仍被占用：本脚本起过的进程没清干净（不静默放过）" >&2
+      echo "❌ 本脚本起过的 $name 还占着端口 $port（没清干净，不静默放过）" >&2
       return 1
     fi
   done
-  [ "$stopped_any" = 1 ] || echo "没有本脚本起过的进程（pidfile 不存在，三个端口本来就空闲）"
+  if [ "$stopped_any" != 1 ]; then
+    # 这句以前固定写"pidfile 不存在"，可在 `already gone` 那条路径上 pidfile 明明存在 ⇒ 谎报。
+    if [ "$had_pidfile" = 1 ]; then
+      echo "本脚本记过的进程都不在了（pidfile 已删除）；端口占用与否只对起过的角色判"
+    else
+      echo "没有本脚本起过的进程（pidfile 不存在）"
+    fi
+  fi
   return 0
 }
 
@@ -84,10 +126,16 @@ fi
 export DATABASE_URL REDIS_URL AIDEAN_ISSUER
 export SESSION_STORE_BACKEND=redis
 export QA_FIXTURE_TOKEN_PREFIX="qa-fixture-"
-export AIDEAN_PUBLIC_URL="$AIDEAN_ISSUER"
-# 守卫口径：`app_env` 默认 development 已在 NON_PRODUCTION_ENVS 白名单里（config.py:10,16），
-# 而 QA fixture 前缀与 memory 会话后端都是"生产拒启"项——这条链只在非生产环境跑，写死而非继承，
-# 免得有人拿 APP_ENV=production 触发这道 e2e 时得到一个"守卫拒启"的假红。
+# 把前端 rewrite 的目标钉死成同一个 3300（`next.config.mjs:9-16` 读 BACKEND_ORIGIN，
+# 缺省值也是 http://localhost:3300）。显式设它不是改默认行为，是让"端口只有一个来源"：
+# 上面那条端口检查用的 3300 与浏览器实际打的 3300 从此是同一个数，不会一处改了两处没改。
+export BACKEND_ORIGIN="${BACKEND_ORIGIN:-http://127.0.0.1:3300}"
+export AIDEAN_PUBLIC_URL="${AIDEAN_PUBLIC_URL:-$AIDEAN_ISSUER}"
+# 注：`AIDEAN_PUBLIC_URL` 只被登录路由拿去拼 authorize 跳转（`app/api/v1/auth.py:63` 的
+# `public_base_url=settings.aidean_public_url or None`，字段默认空串见 `config.py:31`），
+# 而第⑥步那两个探针（/auth/me 与 /system/ready）都不走登录路由——所以它不在这条探针链上。
+# 把它跟着 issuer 设，是为了让"这一档没有可用的外部登录"这件事在配置里也是显式的，
+# 而不是靠留空偶然得到。
 export APP_ENV="${APP_ENV:-development}"
 
 # 只检查"这一次真的要用"的端口：以前 3200 无条件检查，于是 `--no-frontend`（说明写着
@@ -98,7 +146,8 @@ ports_to_check="3300"
 for port in $ports_to_check; do
   if port_open "$port"; then
     echo "❌ 端口 $port 已被占用：本脚本不换口（D-V4-02），请先停掉占用者" >&2
-    echo "   只跑后端与种子可以加 --no-frontend（就不检查 3200 了）" >&2
+    echo "   注意 --no-frontend 只是不起前端，后端(uvicorn)每次都新起一个 ⇒ 3300 仍要空闲；" \
+         "要复用已在跑的整套栈就别跑本脚本，直接给 Playwright 备好 E2E_SEED_FILE" >&2
     exit 2
   fi
 done
@@ -163,16 +212,20 @@ fi
 echo "== ⑤ 种子会话（qa_seed_sessions.py 收编，不另写一份）=="
 echo "   给 Playwright 的接法：那一步要显式带 E2E_SEED_FILE=$SEED_FILE"
 echo "   （本脚本自己 export 不了调用方的 shell，real.setup.ts 的默认路径与本行同源：\${RUNNER_TEMP:-/tmp}/e2e-real/seed.txt）"
-(cd "$REPO_ROOT/apps/api" && python scripts/qa_seed_sessions.py) > "$SEED_FILE" 2>&1
+# `|| true` 是必须的：python 非零退出时它打的行照样有诊断价值，而直接跑在 `set -e` 下
+# 会先让脚本死在 1（旧写法就是这样，rc=5 那条"seed 不是 3 条"的分支根本走不到，
+# 日志里只剩一条 traceback）。真正的判定在下面按行数做。
+(cd "$REPO_ROOT/apps/api" && python scripts/qa_seed_sessions.py) > "$SEED_FILE" 2>&1 || SEED_RC=$?
+SEED_RC=${SEED_RC:-0}
 # 统一去掉 CR：win 上跑这一步时 python 可能写 CRLF，而 `$(...)` 只剥尾换行不剥尾 CR，
 # 于是第 ⑥ 步从行尾取到的 COOKIE_VALUE 会带一个 \r，curl 的请求头随之畸形——
 # 那种红会被读成"S59.0 不成立 ⇒ 走方案 B"，实际是行尾。real.setup.ts 侧本来就按 /\r?\n/ 解析。
 SEED_LF="$RUN_DIR/seed.lf.txt"
 tr -d '\r' < "$SEED_FILE" > "$SEED_LF"
 n_session=$(grep -c '^session ' "$SEED_LF" || true)
-echo "seed 写入 $SEED_FILE：session 行 $n_session 条（应为 3）"
-if [ "$n_session" != "3" ]; then
-  echo "❌ 种子会话不是 3 条；seed 内容：" >&2
+echo "seed 写入 $SEED_FILE：session 行 $n_session 条（应为 3），种子脚本 rc=$SEED_RC"
+if [ "$n_session" != "3" ] || [ "$SEED_RC" != "0" ]; then
+  echo "❌ 种子不合格（session 行 $n_session 条 / 脚本 rc=$SEED_RC）；seed 内容：" >&2
   cat "$SEED_LF" >&2
   exit 5
 fi
@@ -185,12 +238,19 @@ if [ -z "$COOKIE_NAME" ] || [ -z "$COOKIE_VALUE" ]; then
   echo "❌ 没能从 seed 行里解析出 cookie 名与值（不猜，停下）：$ADMIN_COOKIE_LINE" >&2
   exit 5
 fi
-ME_JSON="$(curl -fsS --max-time 10 -H "Cookie: $COOKIE_NAME=$COOKIE_VALUE" http://127.0.0.1:3300/api/v1/auth/me || true)"
+ME_CURL_RC=0
+ME_JSON="$(curl -fsS --max-time 10 -H "Cookie: $COOKIE_NAME=$COOKIE_VALUE" http://127.0.0.1:3300/api/v1/auth/me 2>/dev/null)" || ME_CURL_RC=$?
 READY_CODE="$(curl -s -o "$RUN_DIR/ready.json" -w '%{http_code}' --max-time 10 http://127.0.0.1:3300/api/v1/system/ready || true)"
 echo "probe: cookie=$COOKIE_NAME value_len=${#COOKIE_VALUE}"
-echo "probe: GET /auth/me → $ME_JSON"
+echo "probe: GET /auth/me → curl_rc=$ME_CURL_RC body=$ME_JSON"
 echo "probe: GET /system/ready → HTTP $READY_CODE body=$(cat "$RUN_DIR/ready.json" 2>/dev/null || echo '<无>')"
 
+# rc=6 只该说"S59.0 这条前提不成立"，不该顺带把"curl 根本没跑成"也算进去——
+# 否则一次 curl 缺失/超时会把结论指到方案 B，而真问题是这一棒的工具或端口。
+if [ "$ME_CURL_RC" != 0 ]; then
+  echo "❌ 探针没能取到 /auth/me 的响应（curl rc=$ME_CURL_RC）：这是工具或连通性问题，不判 S59.0 的结论" >&2
+  exit 10
+fi
 if ! printf '%s' "$ME_JSON" | grep -q '"is_admin"[[:space:]]*:[[:space:]]*true'; then
   echo "❌ S59.0 红：主平台不可达时 admin 会话没有拿到 is_admin=true ⇒ 按 02 §5 走方案 B" \
        "（e2e 档起本地假主平台），不改产品代码、不需用户裁决" >&2
@@ -218,10 +278,11 @@ BUILD_T0=$SECONDS
 (cd "$REPO_ROOT/apps/web" && rm -rf .next && NEXT_PUBLIC_API_MOCK=false pnpm exec next build \
   > "$RUN_DIR/next_build.log" 2>&1)
 echo "next build（MOCK=false）用时 $((SECONDS - BUILD_T0))s"
-# 直接 exec node 打 next 的 bin，而不是 `pnpm exec next start`：后者 PID 是 pnpm，
+# 直接 exec node 打 next 的 bin（绝对路径），而不是 `pnpm exec next start`：后者 PID 是 pnpm，
 # 真监听者（node）是它的子进程 ⇒ pidfile 记的是包装进程，`--stop` 只 kill 得到包装进程，
-# 服务还占在 3200 上而日志照样打印 "stopped frontend"。
-nohup sh -c "cd '$REPO_ROOT/apps/web' && exec node ./node_modules/next/dist/bin/next start -p 3200" \
+# 服务还占在 3200 上而日志照样打印 "stopped frontend"。绝对路径同时给 stop_all 的
+# 特征兜底当一个"只属于本 checkout"的匹配锚。
+nohup sh -c "cd '$REPO_ROOT/apps/web' && exec node '$REPO_ROOT/apps/web/node_modules/next/dist/bin/next' start -p 3200" \
   > "$RUN_DIR/next_start.log" 2>&1 &
 NEXT_PID=$!
 record_pid frontend "$NEXT_PID"

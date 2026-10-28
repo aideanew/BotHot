@@ -166,19 +166,25 @@ test.describe.serial("管理端 e2e（演示态无条件执行 + 真后端档闸
     // 而 `test.use` 只能按 describe 生效、不能只换后半段；把整条换成 user.json 的话，
     // 前半段就再也画不出游客卡（`AuthGate.tsx:45-73` 那张卡只在 status==="guest" 渲染），
     // 于是"两卡都不溢出"降级成"一卡不溢出"。⇒ real 档这一条只证游客卡，
-    //   读数口径按"半段"记，不把没跑的那半算成已过（P-131 记的就是这条判据的粒度问题）。
+    //   读数口径按"半段"记（下面的 else 分支把这件事写进 stdout，报告里看得见），
+    //   冲突本体与两种可两全的出路都登在台账 P-131，不由本卡自取。
     if (!REAL_BACKEND_ENABLED) {
       await mockLogin(page);
       await page.goto("/admin");
       const denied = await mainOverflow(page);
       expect(denied).not.toBeNull();
       expect(denied!.offenders, `越界元素：${denied!.offenders.join(" | ")}`).toEqual([]);
+    } else {
+      // 一条"没执行的半段"必须留下可见痕迹，否则报告里 ④ 只是 passed，谁看不出少了一半。
+      // 这不是断言，是把 skip 的成因写进这份用例的 stdout（P-131 记的就是这条判据的粒度问题）。
+      console.log("④ real 档只证游客卡；权限不足卡那一半未执行（原因：test.use 作用域是 describe，见 P-131）");
     }
   });
 
   test.describe("四屏主路径（真后端 + operator 会话）", () => {
-    // 标题里的 operator 是 STEP-14b 留下的说法，实际门槛是 admin（/admin/ops 要 is_admin）；
-    // 本卡只接开关与会话，不改标题——改名会动到既有的用例标识，登记为 nit 交回规划方。
+    // 标题里的 operator 是 STEP-14b 留下的说法，实际门槛是 admin（/admin/ops 要 is_admin，
+    // 08 §2 59.4 也让本组挂 admin.json）；本卡只接开关与会话，不改标题——改名会动到既有
+    // 用例标识，这条已登台账 P-133 交回规划方。
     test.use(REAL_ADMIN_STATE);
 
     test.skip(
