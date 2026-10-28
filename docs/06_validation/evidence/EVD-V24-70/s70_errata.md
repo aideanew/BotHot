@@ -64,3 +64,42 @@ print(len(old),len(new), old in new)
 
 `c46679f` 只动 `docs/**`，但 `ci.yml` 的 `backend` job 不按路径过滤 ⇒ 四条用例在 CI 上真执行。
 CI 结论记在 `07` 的单独一行（本文件不预判）。
+
+## E-7（第二轮自审：E-1～E-5 的四条订正，仍属只增不改）
+
+独立校验方对 `8b695ce` 的八项判据全 PASS，但指出四处描述失准。以下为上文的**订正**，与上文冲突时以本节为准。
+
+### E-7.1 归属订正：五处 ≠ 全归 D-V24-02
+
+`decision-log.md:184` 的 D-V24-02 原话只含**四处**：「`x-required-for-every-core-view`→false、`note` 重写、`x-universal-rules[4]` 改逐视图口径、`offstate` 从 `states` 移到 `x-build-mode-notes`」；
+三处 `unauthenticated`（本卡 S70.4）属 **D-V24-03**（`docs/任务规划V0.24.0/03-裁决与契约增量.md` §2.4）。
+⇒ E-2 与 P-160 订正行里「D-V24-02 由规划方下发本卡的五处替换」应读作「**五处 = D-V24-02 四处 + D-V24-03 一处**」。
+E-2 的结论（D-V23-02「只读不改」与两条 V24 裁决并存、无「取代」字样）**不变**：`grep -n 取代 decision-log.md` 全文件只在 **158 / 162 / 179 / 181** 四行命中（D-V21-17 行、D-V21-21 的「部分取代 D-V21-17」、D-V23-18、D-V23-20），D-V23-02（`:170`）与 D-V24-02（`:184`）两行均无此字样。
+
+### E-7.2 E-5 对四条用例的描述失准
+
+E-5 写「四条的判据是『8 值同序』与『两个键仍在』」——实际只有第 1、4 条判这两件。四条的真实判据（`apps/api/tests/test_ux_states_contract.py`）：
+
+| # | 用例 | 判据 |
+|---|---|---|
+| 1 | `test_ux_states_literal_equals_frozen_draft_enum` | 活体 `UX_STATES` 与冻结稿 `enum` 逐值同序，且两侧计数 = 8 |
+| 2 | `test_ux_domain_is_not_half_wired_into_the_generator` | `ux` 不在 `CONTRACT_SCHEMA_MODULES` / `CONTRACT_TS_DOMAINS`，且 `ux.schema.json` 产物不存在 |
+| 3 | `test_index_ts_reexports_the_ux_state_type` | `index.ts` 导出 `UxState` |
+| 4 | `test_frozen_draft_is_read_only_for_this_card` | 冻结稿 `State` 的 `note` 与 `x-required-for-every-core-view` 两个**键**仍在（只判存在，不判值） |
+
+⇒ E-5 的**结论**（没有任何一条判「逐视图键集 ⊆ enum」、该守卫归 STEP-68）不变，变的只是「四条的判据是…」这一句概括。
+
+### E-7.3 `136` 不追认「替换跨度」这个解释
+
+E-1 说 136 是含结构字节的替换跨度——**无法复算**。按四种跨度定义实测：`8+12+97+1=118`、`21+97+1=119`、`…+“\”,\n”`=121、`…+CRLF`=122，**没有一种等于 136**。
+⇒ 136 这个数字本身是错的，其来源不追认；正确读数只有 **97 → 165**。
+
+### E-7.4 E-4 措辞收紧：`.staging/` 不是「未跟踪」，是「已忽略」
+
+`.staging/` 被 `.gitignore:22` 整目录忽略（`git check-ignore` 命中、`git ls-files .staging` 0 命中）⇒ 它**永远不会**出现在 `git status` 里，比「未跟踪」更强。
+结论不变（本卡不动它），只是 E-4 的「**未跟踪**的暂存副本」应读作「**被 .gitignore 忽略**的暂存副本（10-16 的旧字节，早于本卡）」。
+
+### E-7.5 CI 面两条口径
+
+- `e2e-real` 的 job 带 `continue-on-error: true`（`.github/workflows/ci.yml:547`）⇒ 它的 success **不是门禁**。`07` 的读数行只说「`e2e-real` 为 `completed/success`（不再被 `needs:` 连坐跳过）」，未称其为门禁，无过称。
+- 第八个 check 的正式名是 `安全扫描（① pip-audit / ② pnpm audit / ③ trivy / ④ gitleaks）`；`07` 行简写为 `安全扫描`，属缩写。
