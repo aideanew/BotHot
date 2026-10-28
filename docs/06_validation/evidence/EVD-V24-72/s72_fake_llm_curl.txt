@@ -1,0 +1,66 @@
+== 假 LLM：POST /v1/chat/completions（默认 normal 模式，curl -s -N 原文）==
+data: {"choices": [{"delta": {"content": "假 LLM 首段：这是来自本机假上游的固定回复。"}}]}
+
+data: {"choices": [{"delta": {"content": "第二段：仅用于验证 SSE 帧能被逐行解析、增量渲染不丢字。"}}]}
+
+data: {"choices": [{"delta": {"content": "第三段：生成结束。"}}]}
+
+data: [DONE]
+
+
+== 假 LLM：?mode=abort（发 1 段后关连接：管道读完的逐行原文 + 是否出现 [DONE]）==
+-- abort 响应体逐行（空行省略）--
+data: {"choices": [{"delta": {"content": "假 LLM 首段：这是来自本机假上游的固定回复。"}}]}
+-- abort 响应体里 [DONE] 出现次数：0（期望 0）--
+== 假 LLM：/v1/embeddings 与 /v1/rerank 的状态码 ==
+embeddings HTTP 404
+rerank HTTP 404
+== 首帧延迟（连接建立到读出第一条 `data: ` 行；探针直接开 TCP，不经产品代码）==
+  normal #1: 0.033s
+  normal #2: 0.015s
+  normal #3: 0.015s
+  slow   #1: 16.015s（设计值 FIRST_TOKEN_DELAY_SLOW=16.0s，> LLM_FIRST_TOKEN_TIMEOUT 15.0s）
+  判据：卡面要求 normal 的首帧在连接后 1s 内发出。三次实测 0.015–0.033s ⇒ 余量约 30 倍。
+  取数方式：临时起 fake_llm.py 在 :3290（脚本自起自停，退出后 netstat 读到 (3290 已释放)），
+  用 http.client 读第一行，计时从上一次 connect 起算。
+
+== lint 后复跑（上面那批读数是在 ruff 修复前取的；这里取的是将要提交的同一批字节）==
+修复内容只有一处会影响本文件：ruff UP009/UP031/E501 —— 删掉 `# -*- coding: utf-8 -*-`、
+把 `"...%s..." % (a,)` 改写成 f-string。响应体的文本一字未变，这一节就是把这一点实测出来，
+而不是靠推理。绑定方式：下面给出两个脚本在本工作树上的 git blob id（`git hash-object`），
+提交后 `git rev-parse HEAD:scripts/e2e/<文件>` 与之一致，即本节读数对应的就是入库字节。
+  scripts/e2e/fake_llm.py      blob f3bf9094fdf6262bee261a8debe9be04cf24e3cc
+  scripts/e2e/fake_langbot.py  blob 884c09fa18f4683701296b84ccb63bb2f378ef52
+  ruff check app tests ../../scripts ⇒ All checks passed!（rc=0）
+  mypy app ../../scripts ⇒ Success: no issues found in 136 source files（rc=0）
+（下面为 curl 原文；起法：`python scripts/e2e/fake_llm.py --port 3290`，进程自起自停）
+== lint 后复跑：假 LLM ==
+-- normal（curl -s -N 原文）--
+data: {"choices": [{"delta": {"content": "假 LLM 首段：这是来自本机假上游的固定回复。"}}]}
+
+data: {"choices": [{"delta": {"content": "第二段：仅用于验证 SSE 帧能被逐行解析、增量渲染不丢字。"}}]}
+
+data: {"choices": [{"delta": {"content": "第三段：生成结束。"}}]}
+
+data: [DONE]
+
+
+-- ?mode=abort（逐行；[DONE] 计数）--
+0
+data: {"choices": [{"delta": {"content": "假 LLM 首段：这是来自本机假上游的固定回复。"}}]}
+
+
+embeddings HTTP 404
+rerank HTTP 404
+
+复跑的首帧延迟（判据仍是「normal 首帧 < 1s」；与上面那批 0.033/0.015/0.015 属同一量级，差异是计时抖动）：
+== 首帧延迟（连接建立到读出第一条 `data: ` 行；探针直接开 TCP，不经产品代码）==
+  normal #1: 0.027s
+  normal #2: 0.015s
+  normal #3: 0.016s
+  slow   #1: 16.017s（设计值 FIRST_TOKEN_DELAY_SLOW=16.0s，> LLM_FIRST_TOKEN_TIMEOUT 15.0s）
+  判据：卡面要求 normal 的首帧在连接后 1s 内发出。
+
+复跑后停服务、再看端口（两台假服务都是自起自停，没有启动器参与）：
+== 停后端口读数 ==
+(3290/3291 均无监听)

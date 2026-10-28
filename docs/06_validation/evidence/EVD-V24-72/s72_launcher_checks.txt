@@ -1,0 +1,60 @@
+STEP-72 S72.4 启动器接线读数（本机 git-bash 现取；仓库 D:/Code/AideanBotHot）
+
+== ⓿ 本机能力（决定哪一层判据在这里能被真的走到）==
+(no ss)
+(no lsof)
+(no pgrep)
+$ ps -p 1 -o args= 2>/dev/null | head -2   ⇒ 无输出（本机 ps 不支持 -o args=）
+⇒ 端口属主（ss/lsof）与命令行特征兜底（pgrep/pkill）本机都取不到 ⇒ D-V23-16 的主判据只能在
+   CI 的 ubuntu runner 上被真正行使（STEP-71 已证）。本机每行都带 note: 说明退到了哪一层，不静默。
+
+== ① 语法：bash -n scripts/e2e/run_real_backend.sh ⇒ rc=0（无输出）==
+
+== ② 未知参数 ⇒ 应 rc=64 ==
+   $ bash scripts/e2e/run_real_backend.sh --bogus
+❌ 未知参数：--bogus（可用：--with-fake-llm --with-fake-langbot --no-frontend --stop）
+   ⇒ rc=64；提示文案已列出 --with-fake-langbot。参数解析在端口预检之前，本步不碰任何端口。
+
+== ③ 端口预检点名 3291（:3291 已被占用 + 带 --with-fake-langbot）==
+   占用者（netstat 逐字）：TCP 127.0.0.1:3291 LISTENING 11208 = python scripts/e2e/fake_langbot.py --port 3291
+   $ E2E_RUN_DIR=D:/Code/tmp_s72/run_pre bash scripts/e2e/run_real_backend.sh --with-fake-langbot --no-frontend
+❌ 端口 3291 已被占用：本脚本不换口（D-V4-02），请先停掉占用者
+   注意 --no-frontend 只是不起前端，后端(uvicorn)每次都新起一个 ⇒ 3300 仍要空闲； 要复用已在跑的整套栈就别跑本脚本，直接给 Playwright 备好 E2E_SEED_FILE
+   ⇒ rc=2。两条事实同时成立：旗标被解析（否则 3291 不在检查集里）、3291 真的进了 ports_to_check。
+   对照方向（不带旗标则不检查 3291）由静态行给出，不另跑——跑下去会真起栈：
+238:ports_to_check="3300"
+239:[ "$WITH_FAKE_LLM" = 1 ] && ports_to_check="3290 $ports_to_check"
+240:[ "$WITH_FAKE_LANGBOT" = 1 ] && ports_to_check="3291 $ports_to_check"
+241:[ "$NO_FRONTEND" = 1 ] || ports_to_check="3200 $ports_to_check"
+
+== ④ 停机终检：fake_langbot 这一支真的被执行（两条路径）==
+   绿路径——pidfile 记的进程被停掉、端口随之空闲（pidfile 里放一个 stand-in 进程，
+   只为走到 role=fake_langbot 的空闲分支；跑的时候 3291 无人监听）：
+   $ E2E_RUN_DIR=D:/Code/tmp_s72/run_stop2 bash scripts/e2e/run_real_backend.sh --stop
+note: 本机 ps 不支持 -o args=（或未取到输出）⇒ 认领只能靠端口属主，命令行特征这一层跳过
+note: fake_langbot pid=2323 无端口属主证据也无 ps 能力 ⇒ 按 PID 直杀（本机能力受限，非静默）
+stopped fake_langbot pid=2323
+note: 本机没有 pgrep/pkill ⇒ 跳过命令行特征兜底（CI 的 ubuntu runner 有）
+端口终检 fake_langbot :3291 空闲；占用者读数：(本机没有 ss 也没有 lsof ⇒ 占用者取不到)
+   ⇒ rc=0。`端口终检 fake_langbot :3291 空闲` 是关键读数：循环名与端口号都来自本卡新增的
+      role_port / 终检 case 两支；绿路径也留物证（只在红路径打印等于绿了没证据，STEP-67 的教训）。
+   红路径——pidfile 里的 pid 与 3291 的真实监听者不是同一个进程（手工造 pidfile 造成）：
+   $ E2E_RUN_DIR=D:/Code/tmp_s72/run_stop bash scripts/e2e/run_real_backend.sh --stop
+note: 本机 ps 不支持 -o args=（或未取到输出）⇒ 认领只能靠端口属主，命令行特征这一层跳过
+note: fake_langbot pid=2209 无端口属主证据也无 ps 能力 ⇒ 按 PID 直杀（本机能力受限，非静默）
+stopped fake_langbot pid=2209
+note: 本机没有 pgrep/pkill ⇒ 跳过命令行特征兜底（CI 的 ubuntu runner 有）
+❌ 本脚本起过的 fake_langbot 还占着端口 3291（kill 后等满 6s 仍未释放，不静默放过）
+   占用者读数：(本机没有 ss 也没有 lsof ⇒ 占用者取不到)
+   ⇒ rc=1。该 pid 被 kill 掉后，真正的监听者仍在 3291 上 ⇒ 终检等满 6s 判红并打印占用者读数。
+      这一支证明的是「kill 返回成功」不被当成「端口已释放」，**不**用于说明启动器起过的进程停不掉；
+      启动器自己起的三个进程能不能停干净，读数在同目录 s72_full_stack_run.txt 末尾（三个都 stopped、
+      3300/3290/3291 端口终检全绿）。
+
+== ⑤ 未执行的分支（如实登记，不做替代性证明）==
+   rc=11（带 --with-fake-langbot 但 fake_langbot.py 不存在）：未执行。触发它必须先把本卡交付的
+   scripts/e2e/fake_langbot.py 挪走——在共享工作树上挪交付物既破坏被测对象，又可能与别会话的改动冲突。
+   静态读：`if [ "$WITH_FAKE_LANGBOT" = 1 ] && [ ! -f "$REPO_ROOT/scripts/e2e/fake_langbot.py" ]; then … exit 11`，
+   与既有 rc=3（fake_llm.py 缺失）同形，usage 第 21 行已写明该退出码。
+   rc=5/6/7/8/9/10：本机无 PG、无 Redis、无 docker ⇒ 起栈链路在 ⑤ 种子这一步就断
+   （读数见 s72_full_stack_run.txt，rc=5 且 traceback 明写 localhost:5433 连接超时）。

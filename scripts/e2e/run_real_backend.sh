@@ -11,13 +11,14 @@
 # 而 memory 是**进程内**存储，另一个进程写不进去，种子会化成"写了但看不见"的静默失效。
 #
 # 用法：
-#   bash scripts/e2e/run_real_backend.sh [--with-fake-llm] [--no-frontend] [--stop]
+#   bash scripts/e2e/run_real_backend.sh [--with-fake-llm] [--with-fake-langbot] [--no-frontend] [--stop]
 # 退出码（读 CI 日志时靠它分辨"哪一环不对"，全靠非零码不行的话就会把环境缺失读成用例失败）：
 #   2 端口被占（只查这一棒要用的那几个） 3 --with-fake-llm 但 fake_llm.py 还没有
 #   4 60s 内 /health 没回 code==0        5 seed 不是 3 条、或 cookie 名/值解析不出来
 #   6 S59.0 探针红 ⇒ 按 02 §5 走方案 B    7 60s 内 :3200 没起来
 #   8 /ready 返回码不在 {200,503}        9 终态自检：pidfile 里的进程已经不在了
 #   10 探针没取到响应（curl 缺失或超时）⇒ 不判 S59.0，别把它读成"要走方案 B"
+#   11 --with-fake-langbot 但 fake_langbot.py 还没有
 #   64 未知参数（连"该起什么"都没说清，不做默认猜测）
 # 环境变量（CI 与本机共用，全部给默认值）：
 #   DATABASE_URL REDIS_URL AIDEAN_ISSUER E2E_RUN_DIR E2E_SEED_FILE APP_ENV E2E_SKIP_MIGRATE
@@ -28,14 +29,16 @@ RUN_DIR="${E2E_RUN_DIR:-${RUNNER_TEMP:-/tmp}/e2e-real}"
 SEED_FILE="${E2E_SEED_FILE:-$RUN_DIR/seed.txt}"
 PIDS_FILE="$RUN_DIR/pids"
 WITH_FAKE_LLM=0
+WITH_FAKE_LANGBOT=0
 NO_FRONTEND=0
 DO_STOP=0
 for arg in "$@"; do
   case "$arg" in
     --with-fake-llm) WITH_FAKE_LLM=1 ;;
+    --with-fake-langbot) WITH_FAKE_LANGBOT=1 ;;
     --no-frontend) NO_FRONTEND=1 ;;
     --stop) DO_STOP=1 ;;
-    *) echo "❌ 未知参数：$arg（可用：--with-fake-llm --no-frontend --stop）" >&2; exit 64 ;;
+    *) echo "❌ 未知参数：$arg（可用：--with-fake-llm --with-fake-langbot --no-frontend --stop）" >&2; exit 64 ;;
   esac
 done
 
@@ -83,6 +86,7 @@ role_port() {
     backend) echo 3300 ;;
     frontend) echo 3200 ;;
     fake_llm) echo 3290 ;;
+    fake_langbot) echo 3291 ;;
     *) echo "" ;;
   esac
 }
@@ -134,7 +138,7 @@ stop_all() {
         if [ "$have_ps" = 1 ]; then
           cmdline="$(ps -p "$pid" -o args= 2>/dev/null || true)"
           case "$cmdline" in
-            *"uvicorn app.main:app --host 127.0.0.1 --port 3300"* | *"next/dist/bin/next"* | *"next-server"* | *"scripts/e2e/fake_llm.py"*) ;;
+            *"uvicorn app.main:app --host 127.0.0.1 --port 3300"* | *"next/dist/bin/next"* | *"next-server"* | *"scripts/e2e/fake_llm.py"* | *"scripts/e2e/fake_langbot.py"*) ;;
             *) echo "跳过 $name pid=$pid：既不是端口 :${port:-?} 的监听者、命令行也对不上（PID 可能已被复用，不发信号）"; continue ;;
           esac
         else
@@ -146,7 +150,7 @@ stop_all() {
     done < "$PIDS_FILE"
     rm -f "$PIDS_FILE"
   fi
-  # 特征兜底只用于"本 checkout 绝对路径下"的两条：next 与 fake_llm。
+  # 特征兜底只用于"本 checkout 绝对路径下"的三条：next、fake_llm、fake_langbot。
   # 为什么不再按 cmdline 杀 uvicorn：那条特征（`--port 3300`）在本机共用工作树里会命中
   # **别人**起的后端（compose 的 backend 也是 3300），一个 rc=2 的早退就把别人的栈杀了；
   # uvicorn 有 exec 换来的真 PID 在 pidfile 里，按 PID 杀就够。
@@ -155,7 +159,8 @@ stop_all() {
     echo "note: 本机没有 pgrep/pkill ⇒ 跳过命令行特征兜底（CI 的 ubuntu runner 有）"
   else
     for pat in "$REPO_ROOT/apps/web/node_modules/next/dist/bin/next" \
-               "$REPO_ROOT/scripts/e2e/fake_llm.py"; do
+               "$REPO_ROOT/scripts/e2e/fake_llm.py" \
+               "$REPO_ROOT/scripts/e2e/fake_langbot.py"; do
       if pgrep -f "$pat" >/dev/null 2>&1; then
         pkill -f "$pat" && { echo "pkill 兜底清掉：$pat"; stopped_any=1; }
       fi
@@ -167,12 +172,13 @@ stop_all() {
   # 原来的终检紧跟在 kill 之后，把这段延迟读成"没清干净"（CI 实证：同一秒内先打
   # `stopped backend pid=3890` 再报端口红，而那进程确实是被本脚本杀的那个）。
   # 宽限期用尽仍占用才算红，并把占用者打出来——**仍然不静默放过**，只是不再把延迟当泄漏。
-  for name in backend frontend fake_llm; do
+  for name in backend frontend fake_llm fake_langbot; do
     port=""
     case "$name" in
       backend) port=3300 ;;
       frontend) port=3200 ;;
       fake_llm) port=3290 ;;
+      fake_langbot) port=3291 ;;
     esac
     printf '%s\n' "$started" | grep -qx "$name" || continue
     grace=0
@@ -231,6 +237,7 @@ export APP_ENV="${APP_ENV:-development}"
 # "复用已有栈时用"）在同一条检查里就撞 rc=2 ——那条旗标永远不可能起到"复用"的作用。
 ports_to_check="3300"
 [ "$WITH_FAKE_LLM" = 1 ] && ports_to_check="3290 $ports_to_check"
+[ "$WITH_FAKE_LANGBOT" = 1 ] && ports_to_check="3291 $ports_to_check"
 [ "$NO_FRONTEND" = 1 ] || ports_to_check="3200 $ports_to_check"
 for port in $ports_to_check; do
   if port_open "$port"; then
@@ -258,6 +265,11 @@ if [ "$WITH_FAKE_LLM" = 1 ] && [ ! -f "$REPO_ROOT/scripts/e2e/fake_llm.py" ]; th
   exit 3
 fi
 
+if [ "$WITH_FAKE_LANGBOT" = 1 ] && [ ! -f "$REPO_ROOT/scripts/e2e/fake_langbot.py" ]; then
+  echo "❌ --with-fake-langbot 需要 scripts/e2e/fake_langbot.py（STEP-72 交付），该文件现在不存在" >&2
+  exit 11
+fi
+
 if [ "${E2E_SKIP_MIGRATE:-0}" != "1" ]; then
   echo "== ① 迁移：alembic upgrade head（$DATABASE_URL）=="
   (cd "$REPO_ROOT/apps/api" && python -m alembic upgrade head)
@@ -272,6 +284,18 @@ if [ "$WITH_FAKE_LLM" = 1 ]; then
   export LLM_API_BASE="http://127.0.0.1:3290/v1"
   export EMBEDDING_API_BASE="http://127.0.0.1:3290/v1"
   export LLM_API_KEY="fake" EMBEDDING_API_KEY="fake"
+fi
+
+# ②b 假 LangBot：只在 uvicorn 之前 export LANGBOT_BASE_URL 才有意义——settings 在进程启动时读 env，
+# 起完再 export 等于没设（`/system/health` 的 langbot 会继续指着缺省 :5300 报 unreachable）。
+# 用户名口令用产品缺省即可：假服务不校验凭据（真实口径见 providers/langbot/client.py:52-68）。
+if [ "$WITH_FAKE_LANGBOT" = 1 ]; then
+  echo "== ②b 假 LangBot 上游 :3291 =="
+  nohup sh -c "cd '$REPO_ROOT' && exec python scripts/e2e/fake_langbot.py --port 3291" \
+    > "$RUN_DIR/fake_langbot.out" 2>&1 &
+  FAKE_LANGBOT_PID=$!
+  record_pid fake_langbot "$FAKE_LANGBOT_PID"
+  export LANGBOT_BASE_URL="http://127.0.0.1:3291"
 fi
 
 echo "== ③ uvicorn :3300 =="

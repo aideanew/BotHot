@@ -31,25 +31,25 @@
 
 ## 5. Execution Steps
 
-1. [ ] **S72.1** `fake_llm.py`：只用标准库（`http.server` + `ThreadingHTTPServer`），**不引新依赖**
+1. [x] **S72.1** `fake_llm.py`：只用标准库（`http.server` + `ThreadingHTTPServer`），**不引新依赖**
    - `POST /v1/chat/completions`：先发 `data: {"choices":[{"delta":{"content":"<首段>"}}]}\n\n`（**立即发，不等**，避免 15s 首 token 超时），随后按 50ms 间隔再发 2–3 段，最后 `data: [DONE]\n\n`
    - 响应头 `Content-Type: text/event-stream`
    - 支持 `?mode=slow`（首 token 延迟 16s，用于 `degraded` 的「响应较慢」分支）与 `?mode=abort`（发 1 段后直接关连接，用于 `error` 的流中断分支）；用环境变量 `FAKE_LLM_MODE` 选择，**默认正常**
    - `POST /v1/embeddings` 与 `POST /v1/rerank` 回 404（`reranker.py:144-145` 会落到同基址；404 安全降级，见 `chat.py:120-123`）
-2. [ ] **S72.2** `fake_langbot.py`：同样只用标准库
+2. [x] **S72.2** `fake_langbot.py`：同样只用标准库
    - `POST /api/v1/user/auth` → `{"code":0,"data":{"token":"fake-token"}}`
    - `POST /api/v1/knowledge/bases/<kb>/retrieve` → `{"code":0,"data":{"results":[{"content":{"text":"<固定正文>","file_name":"fake-doc-1"},"score":0.92,"distance":0.08}]}}`
    - `file_name` 的值**必须**是 `fake-doc-1`（与 STEP-73 种子的 `langbot_file_id` 逐字一致，否则 `chat.py:83-96` 把结果全过滤掉）
    - 其它路径回 404
    - 形状**逐字复用** `apps/api/tests/test_chat_sse.py` 的 `_results()`，不得自创字段
-3. [ ] **S72.3** 启动器接线：
+3. [x] **S72.3** 启动器接线：
    - `--with-fake-langbot` 解析（`:35` 一带）
    - `role_port` 加 `fake_langbot) echo 3291 ;;`（`:85` 一带）
    - 端口预检把 3291 纳入（`WITH_FAKE_LANGBOT=1` 时）
    - 启动顺序：假 LLM → 假 LangBot → 后端（**必须在 uvicorn 之前 export**，`LANGBOT_BASE_URL=http://127.0.0.1:3291`，与 `:270-271` 的 `LLM_API_BASE` 同位置）
    - `stop_all` 的命令行白名单加 `*"scripts/e2e/fake_langbot.py"*`
    - 缺文件时的报错照 `:254-255` 的形写
-4. [ ] **S72.4** 起栈自测（本机无 docker 也要能起，因为两件假服务都是纯 Python）：
+4. [x] **S72.4** 起栈自测（本机无 docker 也要能起，因为两件假服务都是纯 Python）：
 
    ```bash
    bash scripts/e2e/run_real_backend.sh --with-fake-llm --with-fake-langbot --no-frontend
@@ -58,7 +58,7 @@
    bash scripts/e2e/run_real_backend.sh --stop
    ```
 
-5. [ ] 本卡单独提交并推送
+5. [x] 本卡单独提交并推送
 
 ## 6. 验收标准
 

@@ -1,0 +1,233 @@
+STEP-72 S72.4 起栈自测：用启动器本身起「假 LLM :3290 + 假 LangBot :3291 + 后端 :3300」，
+再原样停下。本机无 docker、无 PG、无 Redis，故：
+  · 跳过迁移（E2E_SKIP_MIGRATE=1），迁移步归 CI 的 e2e-real job；
+  · 不拉前端（--no-frontend），前端归 CI 的 e2e-real job；
+  · 第 ⑤ 步（种子会话）需要 PG+Redis ⇒ 本机必然 rc=5，这不是本卡的判据（种子归 STEP-73）。
+
+== 预备：第一次起栈失败在 venv 之外（如实记，不隐瞒）==
+$ E2E_RUN_DIR=D:/Code/tmp_s72/run_full E2E_SKIP_MIGRATE=1 bash scripts/e2e/run_real_backend.sh --with-fake-llm --with-fake-langbot --no-frontend
+rc=4，uvicorn 日志尾部逐字：
+C:\Users\Administrator\AppData\Local\Programs\Python\Python312\python.exe: No module named uvicorn
+⇒ 本机 PATH 上的 python 是不带依赖的 3.12；脚本里 `python -m uvicorn` 因此起不来。
+   这不是脚本缺陷（CI job 里的 python 就是 venv），本机把 venv 放到 PATH 前面即可，下面是第二次运行。
+
+== 正式运行：PATH 前置 apps/api/.venv/Scripts（python 3.12.10 / uvicorn 0.54.0）==
+$ export PATH="/d/Code/AideanBotHot/apps/api/.venv/Scripts:$PATH"
+$ E2E_RUN_DIR=D:/Code/tmp_s72/run_full2 E2E_SKIP_MIGRATE=1 bash scripts/e2e/run_real_backend.sh --with-fake-llm --with-fake-langbot --no-frontend
+
+端口检查通过（本次要用：3291 3290 3300）
+== ② 假 LLM 上游 :3290 ==
+== ②b 假 LangBot 上游 :3291 ==
+== ③ uvicorn :3300 ==
+== ④ 探活：GET /api/v1/system/health 直到 code==0（上限 60s）==
+health 就绪（14s）：{"code":0,"message":"ok","data":{"status":"degraded","app":"BotHot","env":"development","deps":{"postgres":"unreachable","redis":"unreachable","langbot":"ok"}},"requestId":"8bff5755-6286-45b2-8a90-1ede0e0b587d"}
+== ⑤ 种子会话（qa_seed_sessions.py 收编，不另写一份）==
+   给 Playwright 的接法：那一步要显式带 E2E_SEED_FILE=D:/Code/tmp_s72/run_full2/seed.txt
+   （本脚本自己 export 不了调用方的 shell，real.setup.ts 的默认路径与本行同源：${RUNNER_TEMP:-/tmp}/e2e-real/seed.txt）
+seed 写入 D:/Code/tmp_s72/run_full2/seed.txt：session 行 0 条（应为 3），种子脚本 rc=1
+❌ 种子不合格（session 行 0 条 / 脚本 rc=1）；seed 内容：
+Traceback (most recent call last):
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 149, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 3287, in raw_connection
+    return self.pool.connect()
+           ^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 445, in connect
+    return _ConnectionFairy._checkout(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 1303, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 709, in checkout
+    rec = pool._do_get()
+          ^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\impl.py", line 176, in _do_get
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 166, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\impl.py", line 174, in _do_get
+    return self._create_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 386, in _create_connection
+    return _ConnectionRecord(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 671, in __init__
+    self.__connect()
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 906, in __connect
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 166, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 902, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\engine\create.py", line 645, in connect
+    return dialect.connect(*cargs_tup, **cparams)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 869, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\psycopg.py", line 760, in connect
+    return await_(
+           ^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\util\concurrency.py", line 167, in await_
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\util\concurrency.py", line 205, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\connectors\asyncio.py", line 378, in create
+    cls._handle_exception_no_connection(dbapi, error)
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\connectors\asyncio.py", line 409, in _handle_exception_no_connection
+    raise error.with_traceback(exc_info[2])
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\connectors\asyncio.py", line 376, in create
+    connection = await connection_awaitable
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\psycopg\connection_async.py", line 152, in connect
+    raise new_ex.with_traceback(None)
+psycopg.errors.ConnectionTimeout: connection timeout expired
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: 5433, hostaddr: '::1': connection timeout expired
+- host: 'localhost', port: 5433, hostaddr: '127.0.0.1': connection timeout expired
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Code\AideanBotHot\apps\api\scripts\qa_seed_sessions.py", line 79, in <module>
+    asyncio.run(main())
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\scripts\qa_seed_sessions.py", line 50, in main
+    row = (await session.execute(select(User).where(User.sub == sub))).scalar_one_or_none()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 651, in execute
+    result = await greenlet_spawn(
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\util\concurrency.py", line 210, in greenlet_spawn
+    result = context.throw(*sys.exc_info())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2473, in execute
+    return self._execute_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2350, in _execute_internal
+    conn = self._connection_for_bind(bind)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2173, in _connection_for_bind
+    return trans._connection_for_bind(engine, execution_options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<sqlalchemy generated _go() wrapper for sqlalchemy.orm.session.SessionTransaction._connection_for_bind>", line 2, in _connection_for_bind
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 1203, in _connection_for_bind
+    conn = bind.connect()
+           ^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 3263, in connect
+    return self._connection_cls(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 151, in __init__
+    Connection._handle_dbapi_exception_noconnection(
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 2420, in _handle_dbapi_exception_noconnection
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 149, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 3287, in raw_connection
+    return self.pool.connect()
+           ^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 445, in connect
+    return _ConnectionFairy._checkout(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 1303, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 709, in checkout
+    rec = pool._do_get()
+          ^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\impl.py", line 176, in _do_get
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 166, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\impl.py", line 174, in _do_get
+    return self._create_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 386, in _create_connection
+    return _ConnectionRecord(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 671, in __init__
+    self.__connect()
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 906, in __connect
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 166, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 902, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\engine\create.py", line 645, in connect
+    return dialect.connect(*cargs_tup, **cparams)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 869, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\psycopg.py", line 760, in connect
+    return await_(
+           ^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\util\concurrency.py", line 167, in await_
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\util\concurrency.py", line 205, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\connectors\asyncio.py", line 378, in create
+    cls._handle_exception_no_connection(dbapi, error)
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\connectors\asyncio.py", line 409, in _handle_exception_no_connection
+    raise error.with_traceback(exc_info[2])
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\sqlalchemy\connectors\asyncio.py", line 376, in create
+    connection = await connection_awaitable
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Code\AideanBotHot\apps\api\.venv\Lib\site-packages\psycopg\connection_async.py", line 152, in connect
+    raise new_ex.with_traceback(None)
+sqlalchemy.exc.OperationalError: (psycopg.errors.ConnectionTimeout) connection timeout expired
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: 5433, hostaddr: '::1': connection timeout expired
+- host: 'localhost', port: 5433, hostaddr: '127.0.0.1': connection timeout expired
+(Background on this error at: https://sqlalche.me/e/21/e3q8)
+== 失败退出 rc=5：拆除本脚本起过的进程 ==
+note: 本机 ps 不支持 -o args=（或未取到输出）⇒ 认领只能靠端口属主，命令行特征这一层跳过
+note: fake_llm pid=2507 无端口属主证据也无 ps 能力 ⇒ 按 PID 直杀（本机能力受限，非静默）
+stopped fake_llm pid=2507
+note: fake_langbot pid=2508 无端口属主证据也无 ps 能力 ⇒ 按 PID 直杀（本机能力受限，非静默）
+stopped fake_langbot pid=2508
+note: backend pid=2509 无端口属主证据也无 ps 能力 ⇒ 按 PID 直杀（本机能力受限，非静默）
+stopped backend pid=2509
+note: 本机没有 pgrep/pkill ⇒ 跳过命令行特征兜底（CI 的 ubuntu runner 有）
+端口终检 backend :3300 空闲；占用者读数：(本机没有 ss 也没有 lsof ⇒ 占用者取不到)
+端口终检 fake_llm :3290 空闲；占用者读数：(本机没有 ss 也没有 lsof ⇒ 占用者取不到)
+端口终检 fake_langbot :3291 空闲；占用者读数：(本机没有 ss 也没有 lsof ⇒ 占用者取不到)
+
+== 判据对照（逐条指到上面哪一行，不概括）==
+· 端口预检含 3291：第 1 行 `端口检查通过（本次要用：3291 3290 3300）`。
+· 启动顺序 假LLM → 假LangBot → 后端：`== ② 假 LLM 上游 :3290 ==` → `== ②b 假 LangBot 上游 :3291 ==`
+  → `== ③ uvicorn :3300 ==`，顺序与卡面 S72.3 一致。
+· 验收第 7 条（起栈后 /system/health 的 langbot 不再是 unreachable）：
+  `health 就绪（14s）：{…"deps":{"postgres":"unreachable","redis":"unreachable","langbot":"ok"}}`
+  ⇒ 读到的是 `ok` 而不是 `not unreachable` 的下限；postgres/redis 仍 unreachable 是对的（本机就没起）。
+· 验收第 8 条（--stop 后 3290/3291 均无监听）：见本文件末尾的 netstat，三个端口全空；
+  同一次运行的收尾段也逐字打了 `端口终检 backend :3300 空闲` / `fake_llm :3290 空闲` / `fake_langbot :3291 空闲`。
+· 第 ⑤ 步 rc=5 的成因：traceback 末行 `psycopg.errors.ConnectionTimeout`，说明文字 `host: 'localhost', port: 5433`
+  ⇒ 本机没有 PG，属预期；本卡不改种子、不改产品代码。
+
+== 停栈后端口读数（上面那次运行结束、trap 拆栈之后现取）==
+$ netstat -ano | grep -E ':(3290|3291|3300) ' | grep LISTENING
+(3290/3291/3300 均无监听)

@@ -1,0 +1,18 @@
+本机读数（uvicorn 以 LANGBOT_BASE_URL=http://127.0.0.1:3291 启动；PG/Redis 本机均无监听 ⇒ 只读 langbot 这一项）
+
+== A. 假 LangBot 在跑（:3291 有监听）==
+  TCP    127.0.0.1:3291         0.0.0.0:0              LISTENING       14136
+{"code":0,"message":"ok","data":{"status":"degraded","app":"BotHot","env":"development","deps":{"postgres":"unreachable","redis":"unreachable","langbot":"ok"}},"requestId":"af86651a-be5b-4610-8ebf-32de55bf7486"}
+
+== B. 假 LangBot 停掉（:3291 无监听）==
+(3291 无监听)
+{"code":0,"message":"ok","data":{"status":"degraded","app":"BotHot","env":"development","deps":{"postgres":"unreachable","redis":"unreachable","langbot":"unhealthy"}},"requestId":"cb930589-cc5b-4a3c-986c-0c702b4045a5"}
+== C. 本机代理造成的口径差异（如实记）==
+   本机没有 http(s)_proxy 环境变量，但 Python 的 urllib.request.getproxies() 会读 Windows 系统代理，
+   而 httpx 默认 trust_env=True ⇒ 连 127.0.0.1 也会先过系统代理：目标端口没人听时代理回 503，
+   于是 _check_langbot 读到 HTTP 503（非 401）⇒ unhealthy，而不是 unreachable。
+   逐字复现（apps/api 下，:3291 已停）：
+  trust_env=True  → status=503 headers={'connection': 'close', 'proxy-connection': 'close', 'content-length': '0'}
+  trust_env=False → ConnectError: All connection attempts failed
+   ⇒ 直连环境（CI 的 ubuntu runner）上 'B' 会读成 unreachable；本机读成 unhealthy。
+     两种都不是 ok，故「假服务停掉 ⇒ langbot 不再是 ok」这条归因成立；请勿把本机的 unhealthy 当 unreachable 引用。

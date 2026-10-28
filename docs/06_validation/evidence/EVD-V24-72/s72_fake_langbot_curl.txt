@@ -1,0 +1,46 @@
+STEP-72 假 LangBot 的响应原文（本文件记录的是**最终入库字节**的读数）
+
+为什么只有一版：中途该假服务的令牌占位写成了「常量名 + 等号 + 引号字面量」的形状，被 CI 的敏感形门
+（`scripts/guards.py` 的 SECRET_ASSIGN，`.github/workflows/ci.yml:288` 调 `guards.py evidence-check`）
+判成口令赋值形 ⇒ 本批不得入库。按那道门自己列的"占位不算秘密"口径，占位值取模板形即可，于是令牌值
+改成尖括号模板形；旧读数里的那个值已经不存在，并把两版并列留着只会让人以为现值是旧值，故旧版被本版
+取代、不作并列保留。另一处同时作废的是 ruff 修复前取的读数（UP009/UP031/E501，见 `s72_script_checks.txt`）。
+与入库字节的绑定：`git rev-parse HEAD:scripts/e2e/fake_langbot.py` 应等于下面的 blob id。
+  scripts/e2e/fake_langbot.py  blob 884c09fa18f4683701296b84ccb63bb2f378ef52（118 行）
+  ruff check app tests ../../scripts ⇒ All checks passed!（rc=0）
+  mypy app ../../scripts ⇒ Success: no issues found in 136 source files（rc=0）
+
+起法：`python scripts/e2e/fake_langbot.py --port 3291`（自起自停，没有启动器参与）
+== POST /api/v1/user/auth（curl 原文）==
+{"code": 0, "msg": "success", "data": {"token": "<fake-token>"}}
+== POST /api/v1/knowledge/bases/kb-1/retrieve（带 Bearer 头，curl 原文）==
+{"code": 0, "msg": "success", "data": {"results": [{"content": [{"text": "假 LangBot 检索到的固定正文：这是用于验证问答链路的占位内容，不来自任何真实知识库。", "file_name": "fake-doc-1"}], "score": 0.92}]}}
+== 同一路径不带 Authorization 头（期望 401 + 带 code 的信封）==
+HTTP 401
+{"code": 401, "msg": "未登录", "data": null}
+== GET /api/v1/knowledge/engines（/system/health 的 langbot 探针打这条）==
+无 Authorization 头 ⇒ HTTP 401
+{"code": 401, "msg": "未登录", "data": null}
+带 Bearer 头 ⇒ HTTP 200
+{"code": 0, "msg": "success", "data": []}
+== 其它路径（期望 404）==
+GET /api/health ⇒ HTTP 404
+{"code": 404, "msg": "fake langbot 只提供 POST 登录/检索与 GET 引擎清单", "data": null}
+POST /api/v1/knowledge/bases ⇒ HTTP 404
+{"code": 404, "msg": "未知路径 /api/v1/knowledge/bases", "data": null}
+== 形状自检（与 apps/api/tests/test_chat_sse.py 的 _results() 逐字比对）==
+entry_keys= ['content', 'score']
+content_type= list item_keys= ['file_name', 'text']
+file_name= fake-doc-1 | score= 0.92 | code= 0
+== 停后端口读数（本进程自起自停，没有启动器参与）==
+3291 已无监听
+== 服务端访问日志（fake_langbot.out 逐字，供核对上面每个请求都真的到过服务）==
+fake_langbot 监听 http://127.0.0.1:3291（file_name=fake-doc-1）
+fake_langbot: "POST /api/v1/user/auth HTTP/1.1" 200 -
+fake_langbot: "POST /api/v1/knowledge/bases/kb-1/retrieve HTTP/1.1" 200 -
+fake_langbot: "POST /api/v1/knowledge/bases/kb-1/retrieve HTTP/1.1" 401 -
+fake_langbot: "GET /api/v1/knowledge/engines HTTP/1.1" 401 -
+fake_langbot: "GET /api/v1/knowledge/engines HTTP/1.1" 200 -
+fake_langbot: "GET /api/health HTTP/1.1" 404 -
+fake_langbot: "POST /api/v1/knowledge/bases HTTP/1.1" 404 -
+fake_langbot: "POST /api/v1/knowledge/bases/kb-1/retrieve HTTP/1.1" 200 -

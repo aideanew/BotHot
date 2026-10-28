@@ -1,0 +1,58 @@
+STEP-72 脚本层验收读数（本机现取；Python 3.12.10）
+
+== scripts/e2e/fake_llm.py ==
+  行数 133；ast.parse 通过（卡面验收第 1 条）
+  import 去重后：['argparse', 'http', 'json', 'os', 'sys', 'time', 'urllib']
+  非标准库模块：无（按 sys.stdlib_module_names 判）
+  卡面禁用清单交集：无
+  ⇒ 验收第 2 条（零第三方 import）：成立
+
+== scripts/e2e/fake_langbot.py ==
+  行数 116；ast.parse 通过（卡面验收第 1 条）
+  import 去重后：['argparse', 'http', 'json', 're', 'sys']
+  非标准库模块：无（按 sys.stdlib_module_names 判）
+  卡面禁用清单交集：无
+  ⇒ 验收第 2 条（零第三方 import）：成立
+
+== 卡面 §7 的三条验证命令（逐字真跑，rc 与输出原样）==
+  ① $ python -c "import ast;[ast.parse(open(p,encoding='utf-8').read()) for p in ['scripts/e2e/fake_llm.py','scripts/e2e/fake_langbot.py']];print('syntax ok')"
+     rc=0
+     syntax ok
+
+  ② $ grep -nE "^(import|from) (httpx|fastapi|uvicorn|aiohttp|requests)" scripts/e2e/fake_llm.py scripts/e2e/fake_langbot.py || echo "0 第三方（期望）"
+     rc=0
+     0 第三方（期望）
+
+  ③ $ bash -n scripts/e2e/run_real_backend.sh && echo "sh syntax ok"
+     rc=0
+     sh syntax ok
+
+注：① 用的是系统 PATH 上的 python（3.12），两条脚本零第三方依赖 ⇒ 不需要 venv；
+    ② 的 `rc=0` 来自 `|| echo` 分支（grep 自己返回 1）——**判据是那行 `0 第三方（期望）` 输出**，
+       不是 rc；把这条当 rc 门会得出相反结论。
+    ③ 的同一读数在 s72_launcher_checks.txt ① 也有一份（那里是 rc=0 无输出）。在卡面命令里
+       `&& echo` 因此把 sh syntax ok 打出来——两处不矛盾，是同一件事的两种写法。
+
+== lint 后复核（CI 的 lint step 会跑 `ruff check app tests ../../scripts` 与 `mypy app ../../scripts`）==
+  为什么有这一段：CI `.github/workflows/ci.yml:75`/`:79` 把 `../../scripts` 也纳进了 ruff/mypy 的作用域，
+  于是上面这批读数取完后，两台脚本又过了一轮 `ruff check ../../scripts --fix --unsafe-fixes`。
+  命中的规则是 UP009（`# -*- coding: utf-8 -*-` 头行，两台各一处）、UP031（百分号格式化改 f-string）、
+  E501（fake_llm 的启动打印一行 125 列）；最后剩的一处 UP031+E501 同在那一行，手工改成 f-string 并拆行。
+  **行为侧零变化**：响应体、状态码、启动打印的文本一字未改——这一点不是推理，实测在
+  s72_fake_llm_curl.txt / s72_fake_langbot_curl.txt 的「lint 后复跑」段。
+  因此上面两处行数**已被取代**，现行读数（ruff 之后、又经敏感形门一轮，本机现取）：
+    scripts/e2e/fake_llm.py      132 行
+    scripts/e2e/fake_langbot.py  118 行
+  为什么少了 1 行：修复前的字节副本没留在仓库里（两台都是新增文件，git 无基线），所以这里只给结论
+  不给逐行增减明细；可以肯定的是 UP009 那一处删行，其余改写的行数增减未再核对。
+  之后 fake_langbot.py 又从 115 涨到 118：令牌占位被敏感形门判成口令赋值形 ⇒ 改成模板形，
+  并在常量上补了 3 行注释说明为什么不走 `.gitleaksignore`（那一面归 STEP-00S）。读数见
+  s72_fake_langbot_curl.txt 的头段。
+  绑定到入库字节的 blob id（`git hash-object`；提交后 `git rev-parse HEAD:<path>` 应与之相同）：
+    fake_llm.py      f3bf9094fdf6262bee261a8debe9be04cf24e3cc
+    fake_langbot.py  884c09fa18f4683701296b84ccb63bb2f378ef52
+  三条命令在修复后的字节上**重跑**（原样输出，rc 单取，不经管道）：
+  ① syntax ok（rc=0）　② `0 第三方（期望）`（同前：判据是这行输出，不是 grep 的 rc）
+  ③ sh syntax ok（rc=0；run_real_backend.sh 本轮未被 ruff 触碰）
+  ruff：`ruff check app tests ../../scripts` ⇒ All checks passed!（rc=0）
+  mypy：`mypy app ../../scripts` ⇒ Success: no issues found in 136 source files（rc=0）
