@@ -82,6 +82,24 @@ version: 1.2
 
 ---
 
+## 规划体系（2026-10-28 起，V0.23.0 建立）
+
+> 本仓的"当前计划"**不在** `04_planning/current-plan.md`（该文件缺失，见上表），
+> 而在版本化目录 `docs/任务规划V<主>.<次>.<修>/` 里——23 个版本、约 300 张卡。
+
+| 入口 | 用途 |
+|---|---|
+| [任务规划-索引.md](../任务规划-索引.md) | **唯一入口**：当前有效版、23 版台账、卡片状态词表、四套编号规则（STEP/P/D-V/EVD）、未闭合需求总表 |
+| [任务规划-命名规则.md](../任务规划-命名规则.md) | 每版固定 8 文件 + `steps/` + `evidence/` + `contracts/` 的命名纪律（D-V12-17） |
+| [任务规划V0.23.0/](../任务规划V0.23.0/00-README.md) | 当前版 |
+| [03_solution/decisions/decision-log.md](../03_solution/decisions/decision-log.md) | 裁决台账（D-* / D-V*），只登记不签署 |
+| `任务规划V0.12.0/00-README.md` | **P 号台账**（历史形成的位置；索引 §4 已显式登记"权威台账住在已归档版本目录"这一结构问题） |
+| [06_validation/evidence/](../06_validation/evidence/) | 证据目录，一卡一 `EVD-V<主><次>-<STEP 号>/` |
+
+**判"当前版"的机械规则**：`docs/` 下版本号最大者，不靠修改时间、不靠记忆（索引 §1）。
+
+---
+
 ## 快速入口
 
 **我是新人，想了解项目** → 01_product/product-vision.md → 02_requirements/product-requirements.md → 03_solution/architecture.md
@@ -91,6 +109,8 @@ version: 1.2
 **我想看待办** → 04_engineering/backlog.md
 
 **我想看路线图** → 04_engineering/roadmap.md
+
+**我想看当前规划 / 还剩什么没做** → [任务规划-索引.md](../任务规划-索引.md)（先读 §1，再读 §5）
 
 **我想查术语** → 00_governance/glossary.md
 
