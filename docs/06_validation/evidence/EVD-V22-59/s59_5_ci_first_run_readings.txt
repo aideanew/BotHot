@@ -1,0 +1,134 @@
+== STEP-59 的四条 @ci 待证读数（任务 #107 的回填）==
+== 取数时刻：2026-10-28，run 40643109335（head c13dbd4）——这是 `e2e-real` job 第一次真跑，==
+== 前面四次（`4ab120d`/`480c073`/`6da2a0c`/`5b1a78d`）它都被 `needs: [backend, frontend]` 跳过：==
+== 前两因是 P-141 那个断表的空行，第三因是 STEP-65 的 mock e2e 回归（见 EVD-V23-65/s65_12）。==
+== 取法：本机 per-job 日志端点 403 ⇒ run 级 logs zip + /artifacts 端点；不回显任何凭据。==
+
+STEP-59 四条待证读数的回填（run 40643109335 / job e2e-real）
+artifact: name=e2e-real-diagnostics id=12796557530 size=337080 created=2026-10-28T06:26:56Z expired=False digest_count=False
+
+===== 10_Start real stack（迁移 → uvicorn3300 → 探活 → 种子会话 → next3200）.txt (63 行) =====
+SESSION_STORE_BACKEND: redis
+E2E_SEED_FILE: /home/runner/work/_temp/e2e-real/seed.txt
+端口检查通过（本次要用：3200 3300）
+== ① 迁移：alembic upgrade head（***localhost:5433/bothot）==
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 05a5a856c37b, v1 initial schema
+INFO  [alembic.runtime.migration] Running upgrade 05a5a856c37b -> ab1004p0a, AB-P004 P0 资产缓存：content_assets 加 hit_count（复用命中计数）。
+INFO  [alembic.runtime.migration] Running upgrade ab1004p0a -> ab1004p1a, AB-P004 P1 公共库拷贝式：knowledge_spaces 加 is_public/owner_type/engine/engine_kb_id，
+INFO  [alembic.runtime.migration] Running upgrade ab1004p1a -> ab1004d04a, AB-P004 D-04/L-01：short_link_maps 短链→长链 article_key 映射（幂等加列+回滚）。
+INFO  [alembic.runtime.migration] Running upgrade ab1004d04a -> ab1004t32a, T3.2.1（C-8/G6）：content_assets 加 category 分类标签（站内筛选；规则版赋值）。
+INFO  [alembic.runtime.migration] Running upgrade ab1004t32a -> ab1004m5a, R0.5.1（F-4）：knowledge_spaces 加 description 空间简介。
+INFO  [alembic.runtime.migration] Running upgrade ab1004m5a -> ab1004m3a, SPEC-M3 批次 1 / T5.0（D9=a 终底）：users 加 role 列（user/operator/admin 三态）。
+INFO  [alembic.runtime.migration] Running upgrade ab1004m3a -> ab1004m3b, SPEC-M3 批次 3 / T5.4：engine_key_registrations 引擎 Key 登记表（密文落库）。
+INFO  [alembic.runtime.migration] Running upgrade ab1004m3b -> ab1004f11a, R4.4（F-11）：knowledge_documents 加 content_hash——跨空间 stale 判定的内容指纹。
+INFO  [alembic.runtime.migration] Running upgrade ab1004f11a -> ab1004s1a, 需求「每天 10 点整号采集」：source_subscriptions 加固定时点锚 sync_anchor_hour。
+INFO  [alembic.runtime.migration] Running upgrade ab1004s1a -> ab1004h1a, R7.7：process_heartbeats 常驻进程心跳表（scheduler / worker 存活可观测）。
+INFO  [alembic.runtime.migration] Running upgrade ab1004h1a -> ab1004bh01, BotHot 扩展表：多渠道机器人、推送任务/日志、热点聚簇、日报、Feed 流。
+INFO  [alembic.runtime.migration] Running upgrade ab1004bh01 -> ab1004w1a, W1：bot_channels.secret_enc 存量 base64 → AES-256-GCM 重加密。
+INFO  [alembic.runtime.migration] Running upgrade ab1004w1a -> ab1004w2a, W2：feed_items 加 (item_type, ref_id) 唯一约束（upsert 语义基础）。
+INFO  [alembic.runtime.migration] Running upgrade ab1004w2a -> ab1004w3a, push_events outbox 表。
+INFO  [alembic.runtime.migration] Running upgrade ab1004w3a -> ab1004w4a, WB（审查补完）：推送投递重试字段 + 4 个无索引 FK 补索引。
+INFO  [alembic.runtime.migration] Running upgrade ab1004w4a -> ab1005w5a, R1.2a：站内通知持久化底座（离线补投存储层）。
+INFO  [alembic.runtime.migration] Running upgrade ab1005w5a -> ab1005w5b, S2.1：bot_channels.extra_config 明文 JSON → AES-256-GCM 重加密。
+INFO  [alembic.runtime.migration] Running upgrade ab1005w5b -> ab1006c1a, STEP-04 S4.2.1：清单加规范键 `article_key` + JobItem 加关联 `manifest_id`（纯 DDL）。
+INFO  [alembic.runtime.migration] Running upgrade ab1006c1a -> ab1006c4a, STEP-28 S28.1.1：运营可配置项的存储底座 `system_settings`（纯 DDL，不播种）。
+INFO  [alembic.runtime.migration] Running upgrade ab1006c4a -> ab1006c2a, STEP-08 S8.1.1：一源多标识的存储底座 `source_identifiers` + 一次性回填 biz。
+== ③ uvicorn :3300 ==
+== ④ 探活：GET /api/v1/system/health 直到 code==0（上限 60s）==
+health 就绪（4s）：{"code":0,"message":"ok","data":{"status":"degraded","app":"BotHot","env":"development","deps":{"postgres":"ok","redis":"ok","langbot":"unreachable"}},"requestId":"5870e985-676a-42a4-b644-87906a707ac5"}
+== ⑤ 种子会话（qa_seed_sessions.py 收编，不另写一份）==
+给 Playwright 的接法：那一步要显式带 E2E_SEED_FILE=/home/runner/work/_temp/e2e-real/seed.txt
+（本脚本自己 export 不了调用方的 shell，real.setup.ts 的默认路径与本行同源：${RUNNER_TEMP:-/tmp}/e2e-real/seed.txt）
+seed 写入 /home/runner/work/_temp/e2e-real/seed.txt：session 行 3 条（应为 3），种子脚本 rc=0
+== ⑥ S59.0 先验探针：主平台不可达时，admin 会话能不能进后台 ==
+probe: cookie=bothot_session value_len=32
+probe: GET /auth/me → curl_rc=0 body={"code":0,"message":"ok","data":{"user":{"sub":"qa-admin-001","email":"qa-admin@bothot.local","nickname":"QA管理员","tier":"","role":"admin","is_admin":true},"wallet":{"balanceYuan":0,"currency":"CNY","avai
+probe: GET /system/ready → HTTP 200 body={"code":0,"message":"ok","data":{"status":"ready","checks":{"postgres":{"ok":true,"state":"ok"},"redis":{"ok":true,"state":"ok"},"schema":{"ok":true,"state":"ok","current":"ab1006c2a","head":"ab1006c
+S59.0 绿：方案 A 成立（qa-fixture 短路 + 本地 users 行就够，不进主平台）
+probe /ready 判定通过：HTTP 200（503 属合法降级读数）
+== ⑦ 前端 :3200（MOCK=false 构建一次后 next start）==
+next build（MOCK=false）用时 23s
+== 全部就绪：后端 :3300、前端 :3200、seed=/home/runner/work/_temp/e2e-real/seed.txt、pidfile=/home/runner/work/_temp/e2e-real/pids（2 条）==
+（保留 43 行）
+
+===== 13_Upload report + screenshots（含绿跑：04 §1.1.5 要四屏截图，不能只在失败时留证）.txt (43 行) =====
+﻿2026-10-28T06:26:55.3796072Z ##[group]Run actions/upload-artifact@v4
+SESSION_STORE_BACKEND: redis
+The least common ancestor is /home/runner/work. This will be the root directory of the artifact
+Artifact name is valid!
+Beginning upload of artifact content to blob storage
+Finished uploading artifact content to blob storage!
+SHA256 digest of uploaded artifact zip is 52308519ac53084b2bd5731df1a09b413f046965d79f29b20fec03b8e014d873
+Finalizing artifact upload
+Artifact e2e-real-diagnostics.zip successfully finalized. Artifact ID 12796557530
+Artifact e2e-real-diagnostics has been successfully uploaded! Final size is 337080 bytes. Artifact ID is 12796557530
+Artifact download URL: https://github.com/aideanew/BotHot/actions/runs/40643109335/artifacts/12796557530
+（保留 11 行）
+
+
+== job 步序结论与该步的失败原文（同 run，步骤 11 与 14）==
+
+run 40643109335 / e2e-real 相关日志文件 19 个
+清单：0_e2e-real.txt, system.txt, 1_Set up job.txt, 2_Initialize containers.txt, 3_Run actions_checkout@v4.txt, 4_Resolve pnpm version from packageManager.txt, 5_Run pnpm_action-setup@v4.txt, 6_Run actions_setup-node@v4.txt, 7_Run actions_setup-python@v5.txt, 8_Install（后端运行时 + 前端依赖 + chromium）.txt, 9_Generate ephemeral master keys.txt, 10_Start real stack（迁移 → uvicorn3300 → 探活 → 种子会话 → next3200）, 11_E2E (real backend, project=real, admin.spec.ts).txt, 13_Upload report + screenshots（含绿跑：04 §1.1.5 要四屏截图，不能只在失败时留证, 14_Stop stack.txt, 26_Post Run pnpm_action-setup@v4.txt, 27_Post Run actions_checkout@v4.txt, 28_Stop containers.txt, 29_Complete job.txt
+
+===== 11_E2E (real backend, project=real, admin.spec.ts).txt (68 行) =====
+﻿2026-10-28T06:26:42.2981313Z ##[group]Run pnpm exec playwright test --project=real e2e/admin.spec.ts
+2026-10-28T06:26:42.2981975Z [36;1mpnpm exec playwright test --project=real e2e/admin.spec.ts[0m
+2026-10-28T06:26:42.3007232Z   SESSION_STORE_BACKEND: redis
+2026-10-28T06:26:42.3012842Z   PORT: 3200
+2026-10-28T06:26:42.3013472Z   E2E_SEED_FILE: /home/runner/work/_temp/e2e-real/seed.txt
+2026-10-28T06:26:43.1506774Z real.setup：由 /home/runner/work/_temp/e2e-real/seed.txt 生成 e2e/.auth/admin.json, e2e/.auth/operator.json, e2e/.auth/user.json（cookie=bothot_session，值不打印）
+2026-10-28T06:26:43.1885996Z Running 7 tests using 1 worker
+2026-10-28T06:26:55.2466605Z   ✘  1 [real] › e2e/admin.spec.ts:101:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ① 游客访问 /admin 与 /admin/ops：原地渲染统一 AuthGate，不重定向 (10.4s)
+2026-10-28T06:26:55.2471473Z   -  2 [real] › e2e/admin.spec.ts:111:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ② 键盘可达：Tab 到登录按钮、回车登录，落点是权限分层而不是白屏
+2026-10-28T06:26:55.2472258Z   -  3 [real] › e2e/admin.spec.ts:138:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ③ 非 admin 会话 › ③ 非 admin 的处置：两屏都给出出口链接
+2026-10-28T06:26:55.2473035Z   -  4 [real] › e2e/admin.spec.ts:153:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ④ 375px：游客卡与权限不足卡的内容区不横向溢出
+2026-10-28T06:26:55.2473805Z   -  5 [real] › e2e/admin.spec.ts:195:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数
+2026-10-28T06:26:55.2474493Z   -  6 [real] › e2e/admin.spec.ts:219:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来
+2026-10-28T06:26:55.2475190Z   -  7 [real] › e2e/admin.spec.ts:229:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑦ 375px 下密钥表横向滚动而不是挤压
+2026-10-28T06:26:55.2634714Z   1) [real] › e2e/admin.spec.ts:101:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ① 游客访问 /admin 与 /admin/ops：原地渲染统一 AuthGate，不重定向
+2026-10-28T06:26:55.2635567Z     Error: expect(locator).toBeVisible() failed
+2026-10-28T06:26:55.2636353Z     Locator: getByText('尚未登录或会话已过期')
+2026-10-28T06:26:55.2637096Z     Error: element(s) not found
+2026-10-28T06:26:55.2637991Z       - Expect "toBeVisible" getByText('尚未登录或会话已过期') with timeout 10000ms
+2026-10-28T06:26:55.2638858Z       101 |   test("① 游客访问 /admin 与 /admin/ops：原地渲染统一 AuthGate，不重定向", async ({ page }) => {
+2026-10-28T06:26:55.2639248Z       102 |     await page.goto("/admin");
+2026-10-28T06:26:55.2639653Z     > 103 |     await expect(page.getByText("尚未登录或会话已过期")).toBeVisible();
+2026-10-28T06:26:55.2640513Z       104 |     await expect(page).toHaveURL(/\/admin$/);
+2026-10-28T06:26:55.2640985Z       106 |     await page.goto("/admin/ops");
+2026-10-28T06:26:55.2641350Z         at /home/runner/work/BotHot/BotHot/apps/web/e2e/admin.spec.ts:103:48
+2026-10-28T06:26:55.2642825Z     test-results/admin-管理端-e2e（演示态无条件执行-真后端-dc787-in-ops：原地渲染统一-AuthGate，不重定向-real/test-failed-1.png
+2026-10-28T06:26:55.2644016Z     Error Context: test-results/admin-管理端-e2e（演示态无条件执行-真后端-dc787-in-ops：原地渲染统一-AuthGate，不重定向-real/error-context.md
+2026-10-28T06:26:55.2644434Z   1 failed
+2026-10-28T06:26:55.2644889Z     [real] › e2e/admin.spec.ts:101:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ① 游客访问 /admin 与 /admin/ops：原地渲染统一 AuthGate，不重定向
+2026-10-28T06:26:55.2645269Z   6 did not run
+2026-10-28T06:26:55.3049170Z ##[error]Process completed with exit code 1.
+（保留 31 行）
+
+===== 13_Upload report + screenshots（含绿跑：04 §1.1.5 要四屏截图，不能只在失败时留证）.txt (43 行) =====
+2026-10-28T06:26:55.3796940Z   path: apps/web/playwright-report/
+2026-10-28T06:26:55.3799044Z   SESSION_STORE_BACKEND: redis
+2026-10-28T06:26:55.9280820Z (node:4408) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-10-28T06:26:56.4330001Z SHA256 digest of uploaded artifact zip is 52308519ac53084b2bd5731df1a09b413f046965d79f29b20fec03b8e014d873
+（保留 4 行）
+
+===== 14_Stop stack.txt (23 行) =====
+﻿2026-10-28T06:26:56.9492999Z ##[group]Run bash scripts/e2e/run_real_backend.sh --stop
+2026-10-28T06:26:56.9493549Z [36;1mbash scripts/e2e/run_real_backend.sh --stop[0m
+2026-10-28T06:26:56.9517252Z   SESSION_STORE_BACKEND: redis
+2026-10-28T06:26:57.1289703Z stopped backend pid=3890
+2026-10-28T06:26:57.1633737Z ❌ 本脚本起过的 backend 还占着端口 3300（没清干净，不静默放过）
+2026-10-28T06:26:57.1639524Z ##[error]Process completed with exit code 1.
+（保留 6 行）
+
+===== 28_Stop containers.txt (77 行) =====
+2026-10-28T06:26:57.5937516Z  running bootstrap script ... ok
+2026-10-28T06:26:57.5951101Z  server stopped
+2026-10-28T06:26:57.5953707Z  2026-10-28 06:25:01.118 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-10-28T06:26:57.5954085Z  2026-10-28 06:25:01.118 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2026-10-28T06:26:57.5960070Z Stop and remove container: 2398e2c24fe54f4ba04e9d24fbdf2870_postgres16_e95f56
+2026-10-28T06:26:58.1911456Z  1:M 28 Oct 2026 06:25:03.817 * Running mode=standalone, port=6379.
+2026-10-28T06:26:58.1927129Z Stop and remove container: 53811defce604d0f860e126a32766348_redis7_fe3098
+（保留 7 行）

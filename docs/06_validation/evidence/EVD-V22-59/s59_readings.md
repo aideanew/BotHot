@@ -246,3 +246,26 @@ STEP-60 验收④ 只写「`apps/api/app` 零改动」而没给比较锚点，�
 以及复核提的"artifact 里 `${{ runner.temp }}` 在默认 shell 下不可解析"这条与第一批复核的
 "`runner.temp` 在 step 级合法"直接冲突——按 GitHub 的上下文规则取后者（`with:` 是步骤级，允许 `runner`），
 并且这一步本来就 `if: always()` + `if-no-files-found: warn`，不依赖它判定成功。
+
+---
+
+## 10 @ci 首跑回填（2026-10-28，run 40643109335 / head `c13dbd4`；原文读数在 `s59_5_ci_first_run_readings.txt`）
+
+§5 那张「本机不可证清单」逐条结账，**三条取到、一条取不到**，取不到的那条写清楚为什么取不到：
+
+| 待证项 | 读数 | 判定 |
+|---|---|---|
+| S59.0 探针走 A 还是 B | `S59.0 绿：方案 A 成立（qa-fixture 短路 + 本地 users 行就够，不进主平台）`，同段还打出 `probe: cookie=bothot_session value_len=32` 与 `/auth/me` 载荷里的 `is_admin":true` | **取到** |
+| seed 三行实生成、cookie 名实取 | `seed 写入 …/seed.txt：session 行 3 条（应为 3），种子脚本 rc=0` | **取到** |
+| ⑤⑥⑦ 3 passed、①③④ 在 real 档读数 | 该步末行 `1 failed` + `6 did not run`，红的就是 ①（`admin.spec.ts:101`，`getByText('尚未登录或会话已过期')` element(s) not found，`:103:48`）⇒ 同 describe 的 ②-⑦ **从未执行** | **取不到**（不是「0 passed」，是「没跑」——这两句话在别的场合常被混用） |
+| job 是否出现、时长、结论 | `started=2026-10-28T06:24:47Z` → `completed=06:27:01Z`（2m14s）；job `conclusion=failure`，而 run `conclusion=success`（该 job `continue-on-error: true`） | **取到** |
+| 截图产物 | `Artifact e2e-real-diagnostics.zip successfully finalized. Artifact ID 12796557530`、size=337080、`SHA256 … 52308519ac53084b…` | **取到**；但 `Reporter 自检` 那一步 `conclusion=skipped` ⇒ 「上传可失败」这条判据本跑**没有被检验过**，不写成已满足 |
+
+§5 没列而本跑新露出来的一条：`Stop stack` 步也红，原文 `stopped backend pid=3890` 之后紧跟
+`❌ 本脚本起过的 backend 还占着端口 3300（没清干净，不静默放过）`——这是脚本自己写的「不静默放过」生效，
+本身是对的；但它使同一个 job 里并存两个失败步，任何只读「e2e-real 红」的人会把 e2e 那一条当唯一因。
+
+归因（现读，不推定）：`git log --oneline -5 -- apps/web/components/AuthGate.tsx` ⇒ 最近一次改动是 `793288e`，
+V0.23.0 的 64/65/66 三张卡都没碰它；而演示态里断言同一句文案的 `trunk.spec.ts:53 ①` 在 CI 是绿的
+（`E2E (mock UI)` 步 success，见 `EVD-V23-66/s66_4_delivery_head_ci.txt`）⇒ 这格红**不是本版引入的**，
+是本卡「骨架档在真后端档下未证伪」留下的那条。台账记 **P-147**，含两条机制候选与一个分辨办法。
