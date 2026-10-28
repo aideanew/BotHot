@@ -1,0 +1,147 @@
+== STEP-59 第 2 轮 @ci 终判取证（run 40648608511 / head 643440b）==
+== 三条：Stop stack 全文 / E2E 步失败块 / artifact 12799585191 的 error-context.md 快照 ==
+== 关键对照：上一轮快照是登录态后台（QA管理员 + 退出 + ADMIN CONSOLE），本轮是游客顶栏 + 被 307 之后的首页 ==
+
+run 40648608511（head 643440b）三条取证
+
+===== Stop stack 全文（文件 e2e-real/14_Stop stack.txt）=====
+﻿2026-10-28T07:19:18.9055729Z ##[group]Run bash scripts/e2e/run_real_backend.sh --stop
+[36;1mbash scripts/e2e/run_real_backend.sh --stop[0m
+shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+env:
+DATABASE_URL: ***localhost:5433/bothot
+REDIS_URL: redis://localhost:6380/0
+SESSION_STORE_BACKEND: redis
+AIDEAN_ISSUER: http://127.0.0.1:9
+APP_ENV: development
+PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+PUSH_SECRET_MASTER_KEY: ***
+ENGINE_KEY_MASTER_KEY: ***
+##[endgroup]
+stopped backend pid=4080
+跳过 frontend pid=4426：命令行对不上（PID 可能已被复用，不发信号）
+端口 3300 在第 1 次轮询（约 200ms）后才空闲——SIGTERM 的释放延迟，不是泄漏
+❌ 本脚本起过的 frontend 还占着端口 3200（kill 后等满 6s 仍未释放，不静默放过）
+占用者读数：LISTEN 0      511                *:3200            *:*    users:(("next-server (v1",pid=4426,fd=21))
+##[error]Process completed with exit code 1.
+
+===== E2E 步的失败块（文件 e2e-real/11_E2E (real backend, project=real, admin.spec.ts).txt）=====
+✘  1 [real] › e2e/admin.spec.ts:111:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ① 游客访问 /admin 与 /admin/ops：原地渲染统一 AuthGate，不重定向 (10.4s)
+-  2 [real] › e2e/admin.spec.ts:121:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ② 键盘可达：Tab 到登录按钮、回车登录，落点是权限分层而不是白屏
+-  3 [real] › e2e/admin.spec.ts:148:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ③ 非 admin 会话 › ③ 非 admin 的处置：两屏都给出出口链接
+-  4 [real] › e2e/admin.spec.ts:163:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ④ 375px：游客卡与权限不足卡的内容区不横向溢出
+-  5 [real] › e2e/admin.spec.ts:205:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数
+-  6 [real] › e2e/admin.spec.ts:229:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来
+-  7 [real] › e2e/admin.spec.ts:239:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑦ 375px 下密钥表横向滚动而不是挤压
+1) [real] › e2e/admin.spec.ts:111:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ① 游客访问 /admin 与 /admin/ops：原地渲染统一 AuthGate，不重定向
+Error: expect(locator).toBeVisible() failed
+Locator: getByText('尚未登录或会话已过期')
+Error: element(s) not found
+Call log:
+- waiting for getByText('尚未登录或会话已过期')
+> 113 |     await expect(page.getByText("尚未登录或会话已过期")).toBeVisible();
+114 |     await expect(page).toHaveURL(/\/admin$/);
+at /home/runner/work/BotHot/BotHot/apps/web/e2e/admin.spec.ts:113:48
+test-results/admin-管理端-e2e（演示态无条件执行-真后端-dc787-in-ops：原地渲染统一-AuthGate，不重定向-real/test-failed-1.png
+Error Context: test-results/admin-管理端-e2e（演示态无条件执行-真后端-dc787-in-ops：原地渲染统一-AuthGate，不重定向-real/error-context.md
+1 failed
+[real] › e2e/admin.spec.ts:111:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ① 游客访问 /admin 与 /admin/ops：原地渲染统一 AuthGate，不重定向
+6 did not run
+
+== artifacts ==
+artifact name=e2e-real-diagnostics id=12799585191 size=399325 created=2026-10-28T07:19:18Z
+
+== artifact 12799585191 里的 error-context.md：['BotHot/BotHot/apps/web/test-results/admin-管理端-e2e（演示态无条件执行-真后端-dc787-in-ops：原地渲染统一-AuthGate，不重定向-real/error-context.md'] ==
+# Instructions
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+# Test info
+- Name: admin.spec.ts >> 管理端 e2e（演示态无条件执行 + 真后端档闸门） >> ① 游客访问 /admin 与 /admin/ops：原地渲染统一 AuthGate，不重定向
+- Location: e2e/admin.spec.ts:111:7
+# Error details
+```
+Error: expect(locator).toBeVisible() failed
+Locator: getByText('尚未登录或会话已过期')
+Expected: visible
+Timeout: 10000ms
+Error: element(s) not found
+Call log:
+  - Expect "toBeVisible" getByText('尚未登录或会话已过期') with timeout 10000ms
+  - waiting for getByText('尚未登录或会话已过期')
+```
+```yaml
+- banner:
+  - link "返回 BotHot 首页":
+    - /url: /
+    - text: A BotHot
+  - navigation "主导航":
+    - link "空间":
+      - /url: /spaces
+    - button "登录后可见：订阅": 订阅
+    - button "登录后可见：任务": 任务
+    - link "公共库":
+      - /url: /public
+    - link "问答":
+      - /url: /chat
+    - button "登录后可见：引擎": 引擎
+    - button "登录后可见：机器人": 机器人
+    - link "热点":
+      - /url: /hot
+  - text: 全局搜索
+  - searchbox "全局搜索"
+  - text: 未登录
+  - button "登录"
+  - text: 真实后端
+- main:
+  - paragraph: PERSONAL KNOWLEDGE HUB
+  - heading "把好文章，变成真正能回答问题的知识。" [level=1]
+  - paragraph: 从公众号链接开始，建立你的专属知识空间，让每一次提问都有来源、有依据。
+  - text: 01 收藏优质内容 02 自动整理入库 03 基于来源问答
+  - paragraph: 欢迎回来
+  - heading "登录开始构建" [level=2]
+  - paragraph: 使用主平台账号登录，空间和文章会安全地保存在你的账户中。
+  - button "使用主平台账号登录"
+  - paragraph: 统一认证，完成后自动返回 BotHot
+  - text: 数据来自 BotHot
+- alert
+```
+# Test source
+```ts
+  13  |  *    由 `tests/admin-ops-panels.spec.tsx` 无条件执行地锁住。
+  14  |  * ② 真后端档（`E2E_REAL_BACKEND=1`，CI 非阻塞 job `e2e-real`，STEP-59）——⑤～⑦ 条由 `real`
+  15  |  *    project 注入 admin 会话；①③ 在同一档里分别换成**游客态**与 **user 会话**复跑（越权负例，
+  16  |  *    只换 storageState，断言一条不加）。② 在真后端档**不可达**：回车触发的是整页跳
+  17  |  *    `/api/v1/auth/login`（`lib/api/auth.ts:23-31` 的真实分支，后端 302 去主平台），落点不是
+  18  |  *    "权限不足卡"；④ 的前半（游客卡）可达、后半（权限不足卡）要另一种会话，而 `test.use` 的作用域
+  19  |  *    是 describe 不是断言段 ⇒ 同一条用例里两种会话不能各管半段。两处都显式 skip 并写明原因，
+  20  |  *    不删断言、也不改成"看起来能过"的样子（判据冲突本体见台账 P-131）。
+  21  |  *    首次执行读数见 `EVD-V22-59/`。
+  22  |  */
+  23  |
+  24  | const MOCK_LOGIN_KEY = "bothot_mock_login";
+  25  | const REAL_BACKEND_ENABLED = process.env.E2E_REAL_BACKEND === "1";
+  26  |
+  27  | /**
+  28  |  * 三块 `test.use` 载荷：演示态一律给**空对象**（不注册任何覆盖项），真后端档才换会话。
+  29  |  * mock 档因此不改变"跑哪些用例、每条断什么"；要说清一处可见差异：③ 为了按 describe 作用域
+  30  |  * 换 `user.json` 被单独包了一层 describe，它在报告里的**完整标题多了一段父级名**（用例数不变）。
+  31  |  *
+  32  |  * 真后端档里"游客态"必须**显式清空** project 默认会话（`playwright.config.ts` 的 real project
+  33  |  * 给了 `storageState: e2e/.auth/admin.json`）。这里用的是文档化的清空形式 `{cookies: [], origins: []}`，
+  34  |  * **不是** `undefined`——`CI run 40638671189`/`40643109335` 上 ① 一直红，页面快照（artifact
+  35  |  * `e2e-real-diagnostics`，`error-context.md`）里画的是 `QA管理员` + `退出` + `ADMIN CONSOLE`，
+
+
+== 同头三条 workflow 结论（判三绿用）==
+STEP-59 第 2 轮交付头读数（head 643440b）
+CI run=40648608511 num=369 status=completed conclusion=success created=2026-10-28T07:12:43Z updated=2026-10-28T07:19:28Z
+CI-Windows run=40648608514 num=271 status=completed conclusion=success created=2026-10-28T07:12:43Z updated=2026-10-28T07:34:11Z
+Security run=40648608494 num=365 status=completed conclusion=success created=2026-10-28T07:12:43Z updated=2026-10-28T07:13:40Z
+
