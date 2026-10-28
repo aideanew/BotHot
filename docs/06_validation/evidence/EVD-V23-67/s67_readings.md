@@ -187,3 +187,60 @@ port_owner() {
 
 判据①（E2E 步 success）与 ②（Stop stack = success + 日志可见 `占用者读数` 行）要等第 2 轮 @ci 才能判；
 本机可证面到此为止——属主主判据的"是属主 ⇒ 放行"支、以及 ⑤ real 档全文，都只能在 CI 上第一次真跑。
+
+---
+
+## 10 第 2 轮 @ci 终判：② 首次通过、① 第 2 次红 ⇒ D-14 熔断交回（P-158）
+
+head `3c4138d`，run：CI `40668413325`、CI-Windows `40668413716`、Security `40668413241`（原始读数
+已存 `s67_6_ci_round2_readings.txt`；⑥ 逐字错文已存 `s67_7_test6_error.txt`）。
+**编号注记**：本节初稿把登记号拟为 P-153，随后读台账发现 P-153/P-154 已被 V0.24.0 规划方
+（`7c15264`，随 `a8f756b` 入库）占用 ⇒ 熔断登记顺延为 **P-158**，本节各处按 P-158 收口，不静默。
+
+### 三条 workflow 全绿，计数判据 ③④ 全过
+
+backend `2502 passed, 6 skipped, 4 deselected` + `Total coverage: 88.93%` + skip 门禁 6/6；
+CI-Windows `1816 passed, 692 skipped` + `failed=0 total_skipped=692 baseline=692`；frontend success
+（vitest `57 files / 449 passed`）；mock e2e 同数 31/11。
+
+### 判据② — **通过**（本卡第一判据首次成立）
+
+`Stop stack` 步 `conclusion=success`，stdout 逐字：
+
+```
+stopped backend pid=3991
+stopped frontend pid=4314
+端口终检 backend :3300 空闲；占用者读数：(空)
+端口终检 frontend :3200 空闲；占用者读数：(空)
+```
+
+第 1 轮那个"两行 stopped 后零输出退出 1"的静默中止消失；`(空)` 这条 @ci 才能取的读数（§7 处置 3）
+也就此取到——**`port_owner()` 契约修复在 ubuntu 的 ss 分支上真跑通**，且属主读数没有被删。
+
+### 判据① — **第 2 次未过 ⇒ 熔断**
+
+| 测试 | 第 2 轮读数 |
+|---|---|
+| ①-④ | ✓（① 397ms——real 档游客落点第二次跑通） |
+| **⑤** | **✓ 711ms** ——第 1 轮的修复（`.first()` + `exact:true`）在 real 档成立 |
+| **⑥** | **✘ 422ms** ——`admin.spec.ts:271` strict mode violation（P-145 → P-152 之后被 serial 遮蔽揭出的**第三层**；⑥ 自本卡开卡以来从未真跑过） |
+| ⑦ | `did not run`（serial 同挡） |
+
+⑥ 逐字错文：`bar.getByText(/告警|依赖未就绪|未知/)` resolved to **2 elements**——
+① `<span data-tone="degraded">告警未启用</span>`；② `<p>依赖就绪，但告警探测器未启用（ALERTING_ENABLED=false）…</p>`。
+注意红点不在 `:269` 首条断言（窄正则 `/告警未启用|…/` 单命中章），而在 `:271` 点击「重读」后的**宽正则**——
+章与说明段都含「告警」二字 ⇒ 双命中。与 P-152 完全同族（getByText 正则/子串多匹配 ⇒ strict mode violation），
+且 ⑥ 是**旧用例**（本卡第 6 格之外的字节，mock 档 skipped ⇒ 本机结构性复现不了）。
+
+### 熔断判词
+
+卡面第 9 格：「同一判据 2 轮未过 ⇒ 停，登 P 号，不动第 3 轮」。判据① 第 1 轮红在 ⑤、第 2 轮红在 ⑥——
+**判据本身（E2E 步 success）两轮未过**，第 3 轮需规划方带裁决号授权。登 **P-158**；本卡状态按
+D-V24-07（「仍红 ⇒ 登 P 号、标 ❌ 并交回」）标 **❌ 作废（有裁决行）**——本节初稿曾写 `⏸ 挂起`，
+那是按旧词表自造的处置，与裁决行冲突，提交前订正为 ❌，在此如实注明。
+（登记号 P-153/P-154 已被 V0.24.0 规划方占用 ⇒ 顺延 P-158；D-V23-03 词表的"Q 号"在本仓对应 P 号，如实注明不静默）。
+
+若规划方授权第 3 轮，两条预审建议随 P-158 交付：⑥ 的修法候选甲=定位器收窄（同 ⑤ 的授权先例）/
+乙=产品侧"章+说明段同信息双渲染"是否冗余（`components/**` 禁改面之外，需产品裁定）；
+⑦（`:274-281`）没有 getByText 正则（`locator(".card.overflow-x-auto")` + evaluate），不在同族雷上，
+但同样从未真跑过，授权轮开工前应照 P-152 的做法对组件字节预审，避免第四层单层剥。

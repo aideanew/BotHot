@@ -1,0 +1,144 @@
+⑥ 的逐字错文（run 40668413325 的 e2e-real job logs）
+-- 0_e2e-real.txt（1183 行，命中 7）--
+2026-10-28T10:05:30.4927715Z probe: cookie=bothot_session value_len=32
+2026-10-28T10:05:30.4929458Z probe: GET /auth/me → curl_rc=0 body={"code":0,"message":"ok","data":{"user":{"sub":"qa-admin-001","email":"qa-admin@bothot.local","nickname":"QA管理员","tier":"","role":"admin","is_admin":true},"wallet":{"balanceYuan":0,"currency":"CNY","available":false},"providerUnreachable":true,"qaFixture":true},"requestId":"1416f5c7-2be7-4fa9-b4f3-4ad79b458222"}
+2026-10-28T10:05:30.4946176Z probe: GET /system/ready → HTTP 200 body={"code":0,"message":"ok","data":{"status":"ready","checks":{"postgres":{"ok":true,"state":"ok"},"redis":{"ok":true,"state":"ok"},"schema":{"ok":true,"state":"ok","current":"ab1006c2a","head":"ab1006c2a"}},"alerting":"disabled"},"requestId":"f7096c22-a549-4028-8637-d9a42045e379"}
+2026-10-28T10:05:30.4963072Z S59.0 绿：方案 A 成立（qa-fixture 短路 + 本地 users 行就够，不进主平台）
+2026-10-28T10:05:30.4963543Z probe /ready 判定通过：HTTP 200（503 属合法降级读数）
+2026-10-28T10:05:30.4964513Z == ⑦ 前端 :3200（MOCK=false 构建一次后 next start）==
+2026-10-28T10:05:50.9065229Z next build（MOCK=false）用时 20s
+2026-10-28T10:05:52.9764248Z 前端就绪（26s）
+2026-10-28T10:05:52.9782532Z == 全部就绪：后端 :3300、前端 :3200、seed=/home/runner/work/_temp/e2e-real/seed.txt、pidfile=/home/runner/work/_temp/e2e-real/pids（2 条）==
+2026-10-28T10:05:52.9857570Z ##[group]Run pnpm exec playwright test --project=real e2e/admin.spec.ts
+2026-10-28T10:05:52.9858105Z [36;1mpnpm exec playwright test --project=real e2e/admin.spec.ts[0m
+2026-10-28T10:05:52.9917955Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-28T10:05:52.9918168Z env:
+2026-10-28T10:05:52.9918574Z   DATABASE_URL: ***localhost:5433/bothot
+2026-10-28T10:05:52.9918753Z   REDIS_URL: redis://localhost:6380/0
+2026-10-28T10:05:52.9918926Z   SESSION_STORE_BACKEND: redis
+2026-10-28T10:05:52.9919087Z   AIDEAN_ISSUER: http://127.0.0.1:9
+2026-10-28T10:05:52.9919244Z   APP_ENV: development
+2026-10-28T10:05:52.9919443Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-10-28T10:05:52.9919676Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-28T10:05:52.9919924Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-28T10:05:52.9920177Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-28T10:05:52.9920447Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-28T10:05:52.9920674Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-28T10:05:52.9920904Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-28T10:05:52.9921190Z   PUSH_SECRET_MASTER_KEY: ***
+2026-10-28T10:05:52.9921404Z   ENGINE_KEY_MASTER_KEY: ***
+2026-10-28T10:05:55.5842262Z   ✓  4 [real] › e2e/admin.spec.ts:194:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ④ 375px：游客卡与权限不足卡的内容区不横向溢出 (234ms)
+2026-10-28T10:05:56.3052015Z   ✓  5 [real] › e2e/admin.spec.ts:236:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数 (711ms)
+2026-10-28T10:05:56.7626663Z   ✘  6 [real] › e2e/admin.spec.ts:264:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来 (422ms)
+2026-10-28T10:05:56.7629887Z   -  7 [real] › e2e/admin.spec.ts:274:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑦ 375px 下密钥表横向滚动而不是挤压
+2026-10-28T10:05:56.7855677Z 
+2026-10-28T10:05:56.7859117Z 
+2026-10-28T10:05:56.7866276Z   1) [real] › e2e/admin.spec.ts:264:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来 
+2026-10-28T10:05:56.7866645Z 
+2026-10-28T10:05:56.7866938Z     Error: expect(locator).toBeVisible() failed
+2026-10-28T10:05:56.7867154Z 
+2026-10-28T10:05:56.7867477Z     Locator: getByRole('status').getByText(/告警|依赖未就绪|未知/)
+2026-10-28T10:05:56.7867888Z     Expected: visible
+2026-10-28T10:05:56.7868446Z     Error: strict mode violation: getByRole('status').getByText(/告警|依赖未就绪|未知/) resolved to 2 elements:
+2026-10-28T10:05:56.7869857Z         1) <span data-tone="degraded" class="inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-caption font-medium border-amber-300 bg-amber-50 text-amber-900">告警未启用</span> aka getByText('告警未启用')
+2026-10-28T10:05:56.7871858Z         2) <p class="min-w-0 flex-1 basis-48 text-caption text-neutral-800">依赖就绪，但告警探测器未启用（ALERTING_ENABLED=false）：出了故障不会有人收到…</p> aka getByText('依赖就绪，但告警探测器未启用（')
+2026-10-28T10:05:56.7872217Z 
+2026-10-28T10:05:56.7872299Z     Call log:
+2026-10-28T10:05:56.7872633Z       - Expect "toBeVisible" getByRole('status').getByText(/告警|依赖未就绪|未知/) with timeout 10000ms
+2026-10-28T10:05:56.7873054Z       - waiting for getByRole('status').getByText(/告警|依赖未就绪|未知/)
+2026-10-28T10:05:56.7873243Z 
+2026-10-28T10:05:56.7873249Z 
+2026-10-28T10:05:56.7873416Z       269 |       // 点「重读」再取一次：本条不轮询，新读数必须是显式动作
+2026-10-28T10:05:56.7873727Z       270 |       await bar.getByRole("button", { name: "重读" }).click();
+2026-10-28T10:05:56.7874153Z     > 271 |       await expect(bar.getByText(/告警|依赖未就绪|未知/)).toBeVisible();
+2026-10-28T10:05:56.7874463Z           |                                                  ^
+2026-10-28T10:05:56.7874662Z       272 |     });
+2026-10-28T10:05:56.7874814Z       273 |
+2026-10-28T10:05:56.7875079Z       274 |     test("⑦ 375px 下密钥表横向滚动而不是挤压", async ({ page }) => {
+2026-10-28T10:05:56.7875396Z         at /home/runner/work/BotHot/BotHot/apps/web/e2e/admin.spec.ts:271:50
+2026-10-28T10:05:56.7875578Z 
+2026-10-28T10:05:56.7875823Z     attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+2026-10-28T10:05:56.7876595Z     test-results/admin-管理端-e2e（演示态无条件执行-真后端-fd3da-：-ready-的-alerting-读数必须被画出来-real/test-failed-1.png
+2026-10-28T10:05:56.7877163Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+2026-10-28T10:05:56.7877334Z 
+2026-10-28T10:05:56.7877624Z     Error Context: test-results/admin-管理端-e2e（演示态无条件执行-真后端-fd3da-：-ready-的-alerting-读数必须被画出来-real/error-context.md
+2026-10-28T10:05:56.7878054Z 
+2026-10-28T10:05:56.7878106Z   1 failed
+2026-10-28T10:05:56.7878488Z     [real] › e2e/admin.spec.ts:264:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来 
+2026-10-28T10:05:56.7878792Z   1 skipped
+2026-10-28T10:05:56.7878929Z   1 did not run
+2026-10-28T10:05:56.7879073Z   4 passed (3.1s)
+2026-10-28T10:05:56.8267436Z ##[error]Process completed with exit code 1.
+2026-10-28T10:05:56.8319472Z ##[group]Run actions/upload-artifact@v4
+2026-10-28T10:05:56.8319654Z with:
+2026-10-28T10:05:56.8319779Z   name: e2e-real-diagnostics
+2026-10-28T10:05:56.8320026Z   path: apps/web/playwright-report/
+apps/web/test-results/
+/home/runner/work/_temp/e2e-real/
+
+2026-10-28T10:05:56.8320282Z   if-no-files-found: warn
+2026-10-28T10:05:56.8320431Z   compression-level: 6
+2026-10-28T10:05:56.8320560Z   overwrite: false
+2026-10-28T10:05:56.8320693Z   include-hidden-files: false
+2026-10-28T10:05:56.8320832Z env:
+2026-10-28T10:05:56.8321158Z   DATABASE_URL: ***localhost:5433/bothot
+2026-10-28T10:05:56.8321350Z   REDIS_URL: redis://localhost:6380/0
+2026-10-28T10:05:56.8321520Z   SESSION_STORE_BACKEND: redis
+2026-10-28T10:05:56.8321673Z   AIDEAN_ISSUER: http://127.0.0.1:9
+2026-10-28T10:05:56.8321828Z   APP_ENV: development
+2026-10-28T10:05:56.8321987Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-10-28T10:05:56.8322206Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-28T10:05:56.8322475Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+-- e2e-real/10_Start real stack（迁移 → uvicorn3300 → 探活 → 种子会话 → next3200）.txt（63 行，命中 1）--
+2026-10-28T10:05:30.4927659Z probe: cookie=bothot_session value_len=32
+2026-10-28T10:05:30.4929398Z probe: GET /auth/me → curl_rc=0 body={"code":0,"message":"ok","data":{"user":{"sub":"qa-admin-001","email":"qa-admin@bothot.local","nickname":"QA管理员","tier":"","role":"admin","is_admin":true},"wallet":{"balanceYuan":0,"currency":"CNY","available":false},"providerUnreachable":true,"qaFixture":true},"requestId":"1416f5c7-2be7-4fa9-b4f3-4ad79b458222"}
+2026-10-28T10:05:30.4946156Z probe: GET /system/ready → HTTP 200 body={"code":0,"message":"ok","data":{"status":"ready","checks":{"postgres":{"ok":true,"state":"ok"},"redis":{"ok":true,"state":"ok"},"schema":{"ok":true,"state":"ok","current":"ab1006c2a","head":"ab1006c2a"}},"alerting":"disabled"},"requestId":"f7096c22-a549-4028-8637-d9a42045e379"}
+2026-10-28T10:05:30.4963052Z S59.0 绿：方案 A 成立（qa-fixture 短路 + 本地 users 行就够，不进主平台）
+2026-10-28T10:05:30.4963540Z probe /ready 判定通过：HTTP 200（503 属合法降级读数）
+2026-10-28T10:05:30.4964506Z == ⑦ 前端 :3200（MOCK=false 构建一次后 next start）==
+2026-10-28T10:05:50.9065176Z next build（MOCK=false）用时 20s
+2026-10-28T10:05:52.9764190Z 前端就绪（26s）
+2026-10-28T10:05:52.9782460Z == 全部就绪：后端 :3300、前端 :3200、seed=/home/runner/work/_temp/e2e-real/seed.txt、pidfile=/home/runner/work/_temp/e2e-real/pids（2 条）==
+-- e2e-real/11_E2E (real backend, project=real, admin.spec.ts).txt（72 行，命中 6）--
+2026-10-28T10:05:55.5842204Z   ✓  4 [real] › e2e/admin.spec.ts:194:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ④ 375px：游客卡与权限不足卡的内容区不横向溢出 (234ms)
+2026-10-28T10:05:56.3051955Z   ✓  5 [real] › e2e/admin.spec.ts:236:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数 (711ms)
+2026-10-28T10:05:56.7626606Z   ✘  6 [real] › e2e/admin.spec.ts:264:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来 (422ms)
+2026-10-28T10:05:56.7629880Z   -  7 [real] › e2e/admin.spec.ts:274:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑦ 375px 下密钥表横向滚动而不是挤压
+2026-10-28T10:05:56.7855557Z 
+2026-10-28T10:05:56.7859114Z 
+2026-10-28T10:05:56.7866265Z   1) [real] › e2e/admin.spec.ts:264:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来 
+2026-10-28T10:05:56.7866640Z 
+2026-10-28T10:05:56.7866935Z     Error: expect(locator).toBeVisible() failed
+2026-10-28T10:05:56.7867152Z 
+2026-10-28T10:05:56.7867473Z     Locator: getByRole('status').getByText(/告警|依赖未就绪|未知/)
+2026-10-28T10:05:56.7867885Z     Expected: visible
+2026-10-28T10:05:56.7868442Z     Error: strict mode violation: getByRole('status').getByText(/告警|依赖未就绪|未知/) resolved to 2 elements:
+2026-10-28T10:05:56.7869852Z         1) <span data-tone="degraded" class="inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-caption font-medium border-amber-300 bg-amber-50 text-amber-900">告警未启用</span> aka getByText('告警未启用')
+2026-10-28T10:05:56.7871463Z         2) <p class="min-w-0 flex-1 basis-48 text-caption text-neutral-800">依赖就绪，但告警探测器未启用（ALERTING_ENABLED=false）：出了故障不会有人收到…</p> aka getByText('依赖就绪，但告警探测器未启用（')
+2026-10-28T10:05:56.7872215Z 
+2026-10-28T10:05:56.7872297Z     Call log:
+2026-10-28T10:05:56.7872630Z       - Expect "toBeVisible" getByRole('status').getByText(/告警|依赖未就绪|未知/) with timeout 10000ms
+2026-10-28T10:05:56.7873052Z       - waiting for getByRole('status').getByText(/告警|依赖未就绪|未知/)
+2026-10-28T10:05:56.7873239Z 
+2026-10-28T10:05:56.7873247Z 
+2026-10-28T10:05:56.7873414Z       269 |       // 点「重读」再取一次：本条不轮询，新读数必须是显式动作
+2026-10-28T10:05:56.7873724Z       270 |       await bar.getByRole("button", { name: "重读" }).click();
+2026-10-28T10:05:56.7874151Z     > 271 |       await expect(bar.getByText(/告警|依赖未就绪|未知/)).toBeVisible();
+2026-10-28T10:05:56.7874460Z           |                                                  ^
+2026-10-28T10:05:56.7874660Z       272 |     });
+2026-10-28T10:05:56.7874812Z       273 |
+2026-10-28T10:05:56.7875077Z       274 |     test("⑦ 375px 下密钥表横向滚动而不是挤压", async ({ page }) => {
+2026-10-28T10:05:56.7875385Z         at /home/runner/work/BotHot/BotHot/apps/web/e2e/admin.spec.ts:271:50
+2026-10-28T10:05:56.7875577Z 
+2026-10-28T10:05:56.7875819Z     attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+2026-10-28T10:05:56.7876593Z     test-results/admin-管理端-e2e（演示态无条件执行-真后端-fd3da-：-ready-的-alerting-读数必须被画出来-real/test-failed-1.png
+2026-10-28T10:05:56.7877161Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+2026-10-28T10:05:56.7877333Z 
+2026-10-28T10:05:56.7877621Z     Error Context: test-results/admin-管理端-e2e（演示态无条件执行-真后端-fd3da-：-ready-的-alerting-读数必须被画出来-real/error-context.md
+2026-10-28T10:05:56.7878051Z 
+2026-10-28T10:05:56.7878104Z   1 failed
+2026-10-28T10:05:56.7878485Z     [real] › e2e/admin.spec.ts:264:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来 
+2026-10-28T10:05:56.7878791Z   1 skipped
+2026-10-28T10:05:56.7878928Z   1 did not run
+2026-10-28T10:05:56.7879072Z   4 passed (3.1s)
+2026-10-28T10:05:56.8267365Z ##[error]Process completed with exit code 1.
