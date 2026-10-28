@@ -1,0 +1,40 @@
+STEP-59 交付后 @ci 的红：读数、归属与修法（2026-10-28，red-main 订正批）
+
+== ① 读数（REST 直取，无 gh）==
+head 04d50f8（STEP-59 订正批）：
+  run_id=40620497751 num=358 wf=CI          status=completed conclusion=failure created=2026-10-28T02:22:03Z updated=02:26:22Z
+  run_id=40620497822 num=260 wf=CI-Windows status=completed conclusion=failure created=2026-10-28T02:22:03Z updated=02:43:27Z
+  run_id=40620497749 num=354 wf=Security    status=completed conclusion=success
+run 级 logs zip 里的关键行（原文）：
+  4_backend.txt:988: 1 failed, 2497 passed, 6 skipped, 4 deselected, 2 warnings in 183.62s (0:03:03)
+  4_backend.txt:980: Required test coverage of 75% reached. Total coverage: 88.93%
+  4_backend.txt:822: _________ test_deleting_the_mask_lines_from_ci_yml_turns_the_gate_red _________
+  4_backend.txt:989 / 15_Tests….txt:265: ##[error]Process completed with exit code 1.
+⇒ 两个工作流红的是同一条用例；覆盖率与 skip 门禁都没动（88.93 在 P-104 的摆幅内，6/692 基线不变）。
+
+== ② 归属：这条红是本卡造的，不是既有缺陷 ==
+`apps/api/tests/test_guards_ci_secret_mask.py:222-235`（STEP-32 S32.2 落的那条反证）里写死了
+`assert len(v) == 2`，前提是"全仓只有 compose-smoke 一个 job 需要先生成再掩码再写"。
+STEP-59 的 `e2e-real` job 按同纪律加了 2 行 `::add-mask::`（push/engine 那一对），
+于是剥掉掩码行后的违规数从 2 变 4 ⇒ 该断言当场红。
+逐字复现（本机）：`真实掩码登记行数 = 4`，`len(v) = 4`，`assert 4 == 2` 红。
+
+== ③ 修法与"改完还咬得住"的证明 ==
+不删掩码（删了就把 P-107 的纪律在 e2e-real 里破掉，而且 ⑤ 的引擎密钥屏会退回缺主密钥的降级面），
+改的是**那条写死的期望数**：`apps/api/tests/test_guards_ci_secret_mask.py`
+- 期望数由文件导出：`mask_regs = 非注释里含 ::add-mask:: 的行`，断言 `len(v) == len(mask_regs)`；
+- 另加 `len({job}) >= 2`，让反证必须覆盖到**每一个**有掩码面的 job，而不是只测 compose-smoke；
+- 第一版我写成 `text.count("::add-mask::")`，本机跑出 `assert 4 == 6` 红——
+  因为 ci.yml 里另有两处**注释**也写着这个词（compose-smoke 的纪律说明与本卡新加的那句），
+  注释不是掩码面；这条红是改法自己的错，不是原门的错，所以留在这里。
+反证召回复算（同一批字节，两条方向都测）：
+  删掉一行真实掩码登记 ⇒ 掩码面 3、违规 4 ⇒ `len(v) == len(mask_regs)` 红；
+  同一份删掩码的文本直接喂守卫 ⇒ 1 条违规 ⇒ 门本身也红。
+本机复跑：`pytest tests/test_guards_ci_secret_mask.py` → `21 passed in 0.67s`。
+
+== ④ 越界申报 ==
+本批动的文件是 `apps/api/tests/test_guards_ci_secret_mask.py`，**不在 STEP-59 卡面第 6 格内**
+（第 7 格只禁 `apps/api/app/**`、`apps/web/lib/**`、`packages/contracts/**`、迁移、`mock-routes.ts`，
+测试目录没禁）。理由与回滚单位：主线上有一条被本卡改红的既有用例，修测试是回滚本卡影响的**最小面**；
+不接受的话回滚单位就是把这 10 行退回 `222-235` 的原样，代价是 `@ci` 主干继续红。
+按 D-V22-01 本批不跑全量（同判据的红由 CI 自己复算），只跑被改到的那个测试文件。

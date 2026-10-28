@@ -220,19 +220,34 @@ def test_real_workflows_pass_the_gate() -> None:
 
 
 def test_deleting_the_mask_lines_from_ci_yml_turns_the_gate_red() -> None:
-    """卡面指定的反证：把 S32.1 的两行 `::add-mask::` 删掉 ⇒ 守卫必须红。
+    """卡面指定的反证：把 `::add-mask::` 那几行删掉 ⇒ 守卫必须红，且红数由文件本身导出。
 
     这条用例是"门确实咬在修复本身上"的唯一机检：若判据其实没绑定掩码行，
     删掉它照样绿，那这道门就只是把 ci.yml 现在的样子抄了一遍。
+
+    期望值**不写死 2**（原先就写死 2）：全仓有几个 job 需要"先生成再掩码再写"是会随卡增长的，
+    写死之后任何一次合法新增都会把这条反证读成红——STEP-59 的 `e2e-real` job 按 compose-smoke
+    的同纪律多写了两行掩码（push/engine 一对），`@ci` 当场 `1 failed`（run 40620497751，
+    head `04d50f8`）。导出口径 `len(v) == 掩码行数` 依然咬得住：
+    少一行掩码（漏掩）⇒ 违规数 > 掩码行数，红；多一行掩码（掩了不存在的面）⇒ 红。
     """
     text = _CI_YML.read_text(encoding="utf-8")
-    assert text.count("::add-mask::") >= 2, "ci.yml 里掩码行少于 2 行 ⇒ 反证的前提不成立"
+    # 只数"真的登记了一次掩码"的行：ci.yml 里另有两处**注释**里也写着这个词
+    # （compose-smoke 与本卡 e2e-real 各一处"先 ::add-mask:: 再写"的纪律说明），
+    # 它们不是掩码面，按出现次数算会把期望值抬高（本机实测 6 vs 违规 4）。
+    mask_regs = [ln for ln in text.splitlines()
+                 if "::add-mask::" in ln and not ln.strip().startswith("#")]
+    assert len(mask_regs) >= 2, "ci.yml 里掩码行少于 2 行 ⇒ 反证的前提不成立"
     stripped = "\n".join(line for line in text.splitlines() if "::add-mask::" not in line)
     v = guards.ci_mask_violations(stripped, "ci.yml")
-    assert len(v) == 2, v
+    assert len(v) == len(mask_regs), (len(mask_regs), v)
     assert {"push_master_key", "engine_master_key"} <= {
         name for item in v for name in ("push_master_key", "engine_master_key") if name in str(item["why"])
     }
+    # 反证要覆盖到**每一个**带掩码面的 job，而不是只测 compose-smoke：
+    # 今天有两个（compose-smoke 与 e2e-real），用 >= 2 而不是 == 2，再增 job 也不会把它变脆。
+    jobs = {str(item["step"]).split("/")[0] for item in v}
+    assert len(jobs) >= 2, jobs
 
 
 def test_the_old_p107_shape_still_reddens_the_gate() -> None:
