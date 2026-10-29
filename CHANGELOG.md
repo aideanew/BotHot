@@ -10,14 +10,104 @@
 
 ## [Unreleased]
 
-_（空。v1.1.4 于 2026-10-27 发布：`[Unreleased]` 在发布前本就是空的，v1.1.4 段的条目
-按 `git log v1.1.3..HEAD` 区间重新对账写入，来源短 hash 逐个 `git log -1` 复核主语——
+_（空。v1.1.5 于 2026-10-29 发布：`[Unreleased]` 在发布前本就是空的，v1.1.5 段的条目
+按 `git log v1.1.4..HEAD` 区间重新对账写入，来源短 hash 逐个 `git log -1` 复核主语——
 这条口径是 v1.1.0 那次失真教训留下来的，见 `docs/06_validation/evidence/EVD-V17-12/s12_readings.md` §5.1。
-发布说明自己也要吃同一条纪律的两回：v1.1.3 那次是"对外可见变化只有一处"被自己那段推翻，
-v1.1.4 这次是被引用的**行号**会漂（`test_shapes_response_contract.py` 里钉 22 条那句从 `:107` 漂到 `:114`）
-与被引用的**支撑**会失真（`EVD-V21-47/ERRATA.md` 那句"只有一个提交"现读两个）——
-所以本版发布段一律只点名不点行号，失真处当场标注，不装作还能复算。）_
+v1.1.5 又添两条同族教训：**"本机复跑同数"要带上口径**（默认 cp936 码页下同一棵树读
+2500 passed / 3 failed，`PYTHONUTF8=1` 才是 2503 passed，见台账 P-169）；
+**总数会因新增用例而变**（演示态 e2e 从 42 条变 43 条，通过数仍是 31——只抄通过数不会发现）。
+发布说明一律只点名不点行号，失真处当场标注，不装作还能复算。）_
 
+
+## [v1.1.5] - 2026-10-29
+
+> 质量版（真后端 e2e 从"骨架能启动"推到"`/chat` 五态 + 管理端七条真跑" + UX 态契约自洽 + 需求判词纠真）。
+> 区间 `v1.1.4..HEAD` 共 63 个提交（发布批自身 +1 ⇒ tag 指向的提交上是 64）：主语 `feat` 10 个、`fix` 12 个，
+> 其余 38 个是 `docs(...)`（其中 1 个是 `docs+fix(...)` 合批主语）与 3 个 `chore(...)`——四版规划增量
+> （V0.22.0～V0.25.0）与各步的交付/收口记录。
+> **本版零数据库迁移、零新增对外 HTTP 端点**——区间内 `apps/api/app/**` 只动了 `apps/api/app/contracts/shapes.py`
+> 一个文件（`MeWallet` 契约封闭），没有路由、没有模型、没有 `apps/api/migrations/**`。
+> 对外可感的变化集中在前端：`/chat` 多了"停止"与唯一的文案源，热点页与通知铃的空态/降级态按契约原字，
+> 演示态若干文案与状态出口随契约走。
+> 本版新增的东西大多在**测试与 CI 面**：真后端 e2e 有了 `real` project、假上游两件、可检索种子与五态用例，
+> 但 `e2e-real` job 仍是**非阻塞**（`continue-on-error: true`）。"新 job 连续三次绿再转阻塞"的前件
+> 到本版末已成立（`d6d67fc` ✓ / `f536398` ✓ / `6e78dff` ✓），摘除动作**不在本版做**（本版允许面不含 CI），
+> 与 `ci.yml` 里那句"摘除归 STEP-62"的过期注释合并成一卡，登台账 **P-168**。
+> 测试基线（三绿 head `6e78dff`；其后的收口批 `3115532` 与发布批都是零代码文档批）：
+> CI `2503 passed / 6 skipped / 4 deselected`、`Total coverage: 88.93%`、模块覆盖率门
+> `✅ 全部模块与全局达标`、skip 门 `total_skipped=6 baseline=6 pg_unreachable=0`；前端 `57 文件 / 452 passed`；
+> 演示态 e2e `43 条中 31 passed / 12 skipped`（第 43 条是 mock 档跳过的 r19）；`e2e-real` job 内 r19 五条
+> `5 passed (4.9s)` + 守卫步 `ok=5 skipped=0 failed=0` + admin `6 passed / 1 skipped`（② 键盘可达在真后端档按 P-131 跳）；
+> CI-Windows `1817 passed / 692 skipped` 且门禁 `failed=0 total_skipped=692 baseline=692`。
+> 本机全量（本版唯一一次，发布批；隔离 PG16@5547 + `PYTHONUTF8=1`）：`2503 passed / 6 skipped / 4 deselected`
+> （19:39），`Total coverage: 88.90%`，模块门 `✅ 全部模块与全局达标`（TOTAL 88.90% ≥ 79%），
+> skip 门 `total_skipped=6 baseline=6 pg_unreachable=0`。
+> ⚠ **本机口径必须是 UTF-8 模式**：默认 cp936 码页下同一棵树读 `2500 passed / 3 failed`，三条红是同一形状——
+> 父进程用 gbk 解码子进程的 UTF-8 输出 ⇒ `proc.stdout` 为 `None`（`test_health_probe_bounded.py` 两条、
+> `test_security_scan_helper.py` 一条）；Linux CI 与 cp1252 的 CI-Windows 都碰不到，故不在 CI 暴露。
+> 修法（三处 `subprocess.run(text=True)` 补 `encoding="utf-8"`）动的是测试文件、不在发版卡允许面，
+> 登台账 **P-169**。
+> **覆盖率那个数不可当精确判据**：本区间已归档的两个交付读数落在 88.93（`6e78dff` 的 CI）与 88.94（`d6d67fc` 的 CI），
+> 本机这次读 88.90——同族旧账见 AGENTS.md 记的 88.01/87.95/88.00 同树三抖（台账 P-104）。
+
+### Added
+
+- **真后端 e2e 骨架档到能真跑**（STEP-59 / 67）：`apps/web/playwright.config.ts` 只在 `E2E_REAL_BACKEND=1` 时生成
+  `real` project（没有该开关就**不产生 `projects` 键**——Playwright 一见到非空 `projects` 就只跑列出的项目，
+  演示态那 43 条会凭空消失）；`e2e/real.setup.ts` 产出三角色 storageState；
+  `scripts/e2e/run_real_backend.sh` 一条命令把四件事摆好：迁移 → uvicorn(:3300) → 探活 → 种子会话 → next(:3200)。
+  端口被占就退出非零（D-V4-02，绝不静默换口），退出码 2/3/4/5/6/7/8/9/10/11/12 各指一件事，
+  省得把"环境缺失"读成"用例失败"；STEP-67 又补了端口归属判定与游客态 storageState。CI 增 job `e2e-real`
+  （`needs: [backend, frontend]`，非阻塞）。来源 `a31dc42`、`643440b`、`4160b81`、`04d50f8`
+- **假上游两件**（STEP-72）：`scripts/e2e/fake_llm.py`（SiliconFlow 兼容，命令行切换模式）与
+  `scripts/e2e/fake_langbot.py`；启动器 `--with-fake-llm` / `--with-fake-langbot` 接线，
+  缺文件时分别以退出码 3 / 11 说清楚。来源 `31e1977`
+- **`/chat` 的可检索种子**（STEP-73）：`scripts/e2e/seed_chat_space.py` 对四张表做幂等 upsert，
+  启动器 ⑤b 两级调用路径补齐；种子不合格以退出码 12 分辨。来源 `0e53199`、`7853517`
+- **`/chat` 五态真跑用例**（STEP-60）：`apps/web/e2e/r19-chat-stream.spec.ts` 按契约现读重写为五态
+  （`loading` / `success` / `error` / `unauthenticated` / `degraded`，不是早先设想的八态），
+  `unauthenticated` 断言 URL 而非只断文案（middleware 307 到首页会假绿）；
+  CI 增两步：跑 r19（带 `E2E_CHAT_LLM=1`）+ 断言该步 `conclusion !== "skipped"`
+  ——"跑过了"与"被跳过了"在只看 job 绿灯时不可区分。来源 `ca9ba70`、`d6d67fc`
+- **UX 态契约的活体锚与逐视图投影**（STEP-64 / 68 / 70）：`packages/contracts/src/ux/states.ts` 里的
+  `UX_STATES`（8 值全局词表）与 `UX_VIEW_STATES`（六视图投影：`spaces` 7 / `hot` 5 / `chat` 5 /
+  `admin` 6 / `notificationbell` 5 / `onboarding` 2），键序由冻结稿
+  `docs/任务规划V0.12.0/contracts/ux_states.schema.json` 的 `x-core-views[].states` 钉住；
+  同批把契约自洽化——`x-required-for-every-core-view=false`，`offstate` 移到
+  `x-core-views[NotificationBell].x-build-mode-notes`（view 对象的兄弟键，**不在 `states` 里**，
+  所以逐键比对不需要例外分支）。来源 `6da2a0c`、`e675a26`、`c46679f`
+- **`/chat` 的"停止"**（STEP-69）：`useSseAsk` 返回值加 `stop()`——abort 流但不 `setMessages([])`，
+  已渲染正文保留、迟到的 delta 不写入、该条消息标 `stopped` 且仍可重试；`AskInputBar` 在 `asking`
+  时给出可点的「停止」（不是 disabled 的提交按钮）。新增 3 条 vitest（基本 / 空操作 / 停止后可重试）。来源 `8614365`
+
+### Changed
+
+- **`/chat` 的文案有了唯一源**：思考中 / 停止 / 中断（含"已生成内容可能不完整"那一支）/ 降级 / 首 token 慢
+  / 已停止，集中到 `apps/web/lib/chat/copy.ts`，组件与 spec 一律从这里导入；上一轮同一句文案散在三处、
+  改一处漏两处（P-146）。来源 `8614365`
+- **`MeWallet` 契约封闭**（P-121 闭合）：`apps/api/app/contracts/shapes.py` 给它加 `additionalProperties: false`，
+  生成产物与冻结稿同批跟上。v1.1.4 只做了运行时五键白名单投影，本版把"契约声明"那一半补齐——
+  至此该对象不再是 30 个 def 里唯一一个开放对象。来源 `c7c0a07`
+- **契约侧补身份实体镜像**（STEP-66）：`packages/contracts/src/identity/dto.ts` 新增身份实体镜像；
+  同批的问答形状那一半因既有孤儿守卫判红，按实记**部分闭合**。来源 `c13dbd4`
+- **演示态的态出口按契约原字**（STEP-65）：通知铃在 `unavailable` 时不再渲「暂无通知」（那句只属于空态），
+  降级横幅换契约原字；热点页 `hot_score === 0` 显示「待评分」，空态从一支变**四档**（区分"没数据"与"取不到"）；
+  `/chat` 的 30002/50002 走契约降级句并标 `kind="unavailable"`。mock e2e 的旧文案断言随之改到契约降级字。来源 `5b1a78d`、`c13dbd4`
+- **管理端 e2e ⑥ 的定位器收窄**（STEP-74）：从"读到页面里任一数字"收成与 ⑤ 同形的窄正则，
+  避免把别的计数读成"⑦ 的退避次数"。来源 `299b220`
+
+### Fixed
+
+- **主干红：`decision-log.md` 的表格被一行空行劈成两张**——`7c15264` 追加 D-V24-01…12 时把表格终止空行
+  留在原地，其后 12 条裁决脱离表格，`backend` 的 `test_decision_log_tables_are_well_formed` 红；
+  `df210b3` 只删那一行，之后三次 push 的 `backend` 全绿（STEP-75 的定位与读数见 `EVD-V25-75`）。来源 `df210b3`
+- **`stop_all` 会给别人的进程发信号**（STEP-71）：属主判定提到命令行之前，端口归属的主判据改成
+  "它是不是该端口的监听者"——`next start` 会把进程标题改写成 `next-server (v15.x)`，
+  只按命令行特征匹配会认不出自己的前端进程。来源 `a1ef93a`
+- **r19 ① 的严格模式两命中**（STEP-60 第 2 轮）：提问正文复述了占位文案「思考中…」，
+  `getByText('思考中…')` 同时命中提问与占位符；提问正文改用别的话术。来源 `d6d67fc`
+- **需求判词 12 条纠真**（STEP-62，纯文档）：五条实现度、四条测试锚、无锚需求数 2→1，
+  并把 `/chat` 的"八态"按契约改成"五态"、`e2e-real` 的阻塞化判据按末三次真执行结案。来源 `6e78dff`
 
 ## [v1.1.4] - 2026-10-27
 

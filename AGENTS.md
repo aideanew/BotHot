@@ -68,55 +68,53 @@ PLAN 规划 → SPEC 规格 → APPROVE 批准 → IMPLEMENT 实施 → VERIFY �
 
 ## 当前项目状态
 
-- **版本**：**v1.1.4**（STEP-58 于 2026-10-27 发布，补丁+质量版：契约覆盖面孤儿守卫 + `/auth/me` 钱包白名单投影）。
-  证据：`CHANGELOG.md` 有 `## [v1.1.4] - 2026-10-27` 段（条目按 `git log v1.1.3..HEAD` 区间重新对账写入，
-  区间内 2 个 `feat` 主语逐个 `git log -1` 复核；**本行不抄发布批自己的 sha**——写这段时它还不存在，
-  权威读数一律现取：`git ls-remote --tags origin v1.1.4`（注释标签给出标签对象与 `^{}` 指向的提交两行）、
-  `git rev-parse v1.1.4^{commit}`）；发布批三绿 run id、S58.1 对 STEP-56/57 的独立复查
-  （两项均 **PASS-with-nits**，无 FAIL 也无 UNKNOWN ⇒ 判据①满足）与 Release 页读数见
-  `docs/06_validation/evidence/EVD-V21-58/`。
-  本版要点：**契约 def 覆盖面孤儿守卫**（新 `apps/api/tests/test_contract_def_coverage.py`：种子从两个反向核
-  模块**现读**（shapes 取 `_check(<名>, <响应值>)` 调用点、引擎取带 `db_session` 用例里 `_errors(<常量>, data)`
-  的常量绑定），沿 `$ref` 求可达闭包判 `全部 def − 可达集 == ∅`，两域同一张表，闭合 P-126；现读
-  21 种子 / 34 def / 孤儿 0 ⇒ 补的是覆盖面不是现存缺陷）；**`/auth/me` 钱包白名单五键投影**
-  （`app/services/auth/service.py` 的 `_project_wallet`，只吐 `balanceYuan`/`currency`/`heldYuan`/
-  `availableYuan`/`available`，可选键缺席不补 0、缺必填或 `null` 或非字典回降级形且不抛 500、
-  多余键名以 debug 每次记一次且值不落日志，`/me` 三条分支的降级形同源）；**契约链两处判据由弱变强**
-  （引擎 TS 产物从"名字两侧各一空白"的子串换成钉 `export interface`/`export type` 导出位本身的正则；
-  冻结稿↔生成 schema 从"只有逐对探针、列表按名字集的交构造"升级为 `genOnly` 出现即红 +
-  `draftOnly` 逐个必须指得出三条既有去处 + 探针列表与装饰器同串，STEP-56）；两处文档纠真
-  （`02-需求复核与辩证分析.md` 的 24→22；`EVD-V21-47` 以新增 `ERRATA.md` 登记行号漂移而不回改已归档原文）。
-  **本版一处对外可见变化是收紧**：`/auth/me` 不再外溢未声明的钱包键。限定一起读：契约里 `MeWallet` 仍是
-  全 30 个 def 中唯一一个开放对象（`additionalProperties: true`）⇒ 演示态样例多写一键、前端 TS 类型那一层
-  都不红；把它改封闭要与冻结稿 `docs/任务规划V0.12.0/contracts/shapes.schema.json` 那两行声明同步，而冻结稿
-  只有规划方能落笔（D-V21-20 与 D-V21-21 两条已由规划方裁定、执行助手在 STEP-58 收口批代录入档，
-  `decision-log.md` 现读止于 D-V21-21），故 STEP-57 按台账 P-129 出路③ 只交付投影，
-  **P-121 记为部分闭合**；另两处残留分别登在 P-128（`data` 发成列表时 `/auth/me` 仍 500，非本版引入）
-  与 P-129 裁定行（可选键被显式发成 `null` 时按"给了值"原样带出）。
-  本版**零数据库迁移、零新增对外 HTTP 端点**；区间内不属于 `docs/**` 与 `apps/api/tests/**` 的改动
-  **只有 `apps/api/app/services/auth/service.py` 一个文件**（无路由、无 `packages/contracts/**`、无 `apps/web/**`）。
-  测试基线（三绿 head `685e3f8`；收口批与发布批都是零代码文档批，计数三处（2496 / 6 skipped / 4 deselected）在收口批 `260a3a4` 自己的 CI run 上也逐字相同）：
-  CI `2496 passed / 6 skipped / 4 deselected`、`Total coverage: 88.89%`（本机按 CI 顺序复跑读 88.91%、
-  收口批 `260a3a4` 的 CI 读 88.92%）、
-  模块覆盖率门 `✅ 全部模块与全局达标`、前端 `53 文件 / 425 passed`、演示态 e2e `31 passed`、
-  CI-Windows `1810 passed / 692 skipped` 且 `failed=0 total_skipped=692 baseline=692`。
-  ⚠ 覆盖率那个数**不可当精确判据**：本版区间内已归档的读数落在 88.89（交付头 `685e3f8` 的 CI）/
-  88.90（STEP-56 收口批 CI）/ 88.91（STEP-56 交付头 `3b462d4` 的 CI、本机交付字节跑，以及 STEP-58 订正批
-  `c8d92c4` 的 CI）/ 88.92（STEP-57 收口批 `260a3a4` 的 CI、本机被取代的那跑，以及 STEP-58 收口链的
-  `835ffd1` 的 CI）/ 88.93（发布批 `c682acd` 与收口批 `25953e3` 的 CI——**这两个出处是 STEP-58 收口时补进来的，
-  原先这份清单没有 88.93，等于把两个真实交付读数漏在清单外**）/ 88.94（STEP-56 本机作废跑），
-  其中 88.94 与 88.92 的第二个出处来自作废或被取代的跑、不是交付读数；同族旧例是 88.01/87.95/88.00 那次同树三抖（台账 P-104）。
-  `@win` 侧 skip 基线仍是 **692**（零余量，本版新增 8 条用例全不连库 ⇒ 不动）。
-  区间计数：`git rev-list --count v1.1.3..HEAD` 于收口批 `260a3a4` = **7**，发布批自身 +1 ⇒
-  tag 指向的提交上是 8（自指提交不抄 sha，以现取为准）。
-  上一版 `v1.1.3`（STEP-53，2026-10-26）及更早各版也都是注释标签，现取口径不变——注意
-  `git rev-parse v1.x.0` 给的是**标签对象**的 sha 不是被标提交（历史读数：`v1.1.3` 标签对象 `f98740b`
-  指向提交 `88cb20f`；`v1.1.2` 标签对象见 `EVD-V20-44/`）。
-  ⚠ 失真教训仍有效（两条）：`[Unreleased]` 的条数 ≠ 区间提交数，发布段必须按区间重新对账
-  （v1.1.0 的原始登记见 `docs/06_validation/evidence/EVD-V17-12/s12_readings.md` §5.1）；
-  **被引用的行号与被引用的支撑都会失真**——钉 22 条那句断言的位置因 docstring 增删从 `:107` 漂到 `:114`，
-  `EVD-V21-47/ERRATA.md` 里"该测试文件只有一个提交"的支撑因本版 `685e3f8` 也变成两个，
-  两处都已在 `EVD-V21-58` 与该 ERRATA 的订正段里标注 ⇒ 门面文字优先点名（测试名/函数名），不点行号。
+- **版本**：**v1.1.5**（STEP-63 于 2026-10-29 发布，质量版：真后端 e2e 从骨架到 `/chat` 五态真跑 + UX 态契约自洽 + 需求判词纠真）。
+  证据：`CHANGELOG.md` 有 `## [v1.1.5] - 2026-10-29` 段（条目按 `git log v1.1.4..HEAD` 区间重新对账写入，
+  区间 63 个提交 = `feat` 10 / `fix` 12 / `docs(...)` 38（其中 1 个是 `docs+fix(...)` 合批主语）/ `chore` 3，
+  10 个 `feat` 主语逐个 `git log -1` 复核；**本行不抄发布批自己的 sha**——写这段时它还不存在，
+  权威读数一律现取：`git ls-remote --tags origin v1.1.5`（注释标签给出标签对象与 `^{}` 指向的提交两行）、
+  `git rev-parse v1.1.5^{commit}`）；发布批三绿 run id、全量回归读数与 tag/Release 读数见
+  `docs/06_validation/evidence/EVD-V22-63/`。
+  本版要点：**真后端 e2e 这条链第一次能真跑**——`apps/web/playwright.config.ts` 只在 `E2E_REAL_BACKEND=1` 时生成
+  `real` project（没有该开关就**不产生 `projects` 键**：Playwright 一见到非空 `projects` 就只跑列出的项目，
+  演示态那 43 条才不会被挤掉）；`e2e/real.setup.ts` 产出三角色 storageState；`scripts/e2e/run_real_backend.sh`
+  一条命令摆好迁移 → uvicorn(:3300) → 探活 → 种子会话 → next(:3200)，端口被占即非零退出（D-V4-02），
+  退出码 2/3/4/5/6/7/8/9/10/11/12 各指一件事；假 LLM / 假 LangBot 两件 + 可检索种子补上"不烧额度也能真跑"这一环；
+  `r19-chat-stream.spec.ts` 按契约现读重写为**五态**，CI 增「跑 r19（带 `E2E_CHAT_LLM=1`）」与「断言该步未被 skip」两步。
+  **UX 态契约自洽**：`UX_STATES` 是 8 值词表、`UX_VIEW_STATES` 给六视图投影（spaces 7 / hot 5 / chat 5 /
+  admin 6 / notificationbell 5 / onboarding 2），键序由冻结稿 `ux_states.schema.json` 钉住；`offstate` 移出
+  `states`、住进 `x-core-views[NotificationBell].x-build-mode-notes` ⇒ 逐键比对不再需要例外分支。
+  **`/chat` 的停止**：`useSseAsk` 的 `stop()` abort 流但保留已渲染正文、迟到 delta 不写入、该条标 `stopped`
+  且仍可重试；文案收成唯一源 `apps/web/lib/chat/copy.ts`（上一轮同一句散在三处，P-146）。**`MeWallet` 契约封闭**
+  （`apps/api/app/contracts/shapes.py` 加 `additionalProperties: false`），v1.1.4 记的 P-121 部分闭合就此闭合。
+  **需求判词 12 条纠真**（STEP-62）：五条实现度、四条测试锚、无锚需求数 2→1，`/chat` 的"八态"按契约改成"五态"。
+  **`e2e-real` job 仍是非阻塞**：STEP-62 交付时的末三次真执行是 `1eaf2d5` ✓ / `ca9ba70` ✗ / `d6d67fc` ✓ ⇒ 当时落
+  「保持」不是漏改；到本版末前件已成立（`d6d67fc` ✓ / `f536398` ✓ / `6e78dff` ✓），摘除动作**不在本版做**
+  （本版允许面不含 `ci.yml`），与 `ci.yml` 里那句"摘除归 STEP-62"的过期注释合并成一卡，登台账 **P-168**。
+  本版**零数据库迁移、零新增对外 HTTP 端点**；区间内 `apps/api/app/**` 只动了 `apps/api/app/contracts/shapes.py`
+  一个文件（无路由、无模型、无 `migrations/**`）。
+  测试基线（三绿 head `6e78dff`；其后的收口批 `3115532` 与发布批都是零代码文档批）：
+  CI `2503 passed / 6 skipped / 4 deselected`、`Total coverage: 88.93%`、模块覆盖率门 `✅ 全部模块与全局达标`、
+  skip 门 `total_skipped=6 baseline=6 pg_unreachable=0`；前端 `57 文件 / 452 passed`；
+  演示态 e2e `43 条中 31 passed / 12 skipped`（第 43 条是 mock 档跳过的 r19）；`e2e-real` job 内 r19 五条
+  `5 passed (4.9s)`、守卫步 `ok=5 skipped=0 failed=0`、admin `6 passed / 1 skipped`（② 键盘可达按 P-131 跳）；
+  CI-Windows `1817 passed / 692 skipped` 且门禁 `failed=0 total_skipped=692 baseline=692`。
+  本机全量（本版唯一一次，发布批；隔离 PG16@5547 + `PYTHONUTF8=1`）：`2503 passed / 6 skipped / 4 deselected`、
+  `Total coverage: 88.90%`、模块门 `✅ 全部模块与全局达标`、skip 门 `total_skipped=6 baseline=6 pg_unreachable=0`。
+  ⚠ **本机口径必须是 UTF-8 模式**：默认 cp936 码页下同一棵树读 `2500 passed / 3 failed`，三条红同一形状——
+  父进程用 gbk 解码子进程的 UTF-8 输出 ⇒ `proc.stdout` 为 `None`（`test_health_probe_bounded.py` 两条、
+  `test_security_scan_helper.py` 一条）；Linux CI 与 cp1252 的 CI-Windows 都碰不到，故不在 CI 暴露。修法动的是
+  测试文件、不在发版卡允许面，登 **P-169**。
+  ⚠ 覆盖率那个数**不可当精确判据**：本区间已归档的两个交付读数落在 88.93（`6e78dff` 的 CI）与 88.94
+  （`d6d67fc` 的 CI），本机这次读 88.90——同族旧例是 88.01/87.95/88.00 那次同树三抖（台账 P-104）。
+  `@win` 侧 skip 基线仍是 **692**（零余量，本版新增用例全不连库 ⇒ 不动）。
+  区间计数：`git rev-list --count v1.1.4..HEAD` 于收口批 `3115532` = **63**，发布批自身 +1 ⇒ tag 指向的提交上是 64
+  （自指提交不抄 sha，以现取为准）。上一版 `v1.1.4`（STEP-58，2026-10-27）及更早各版也都是注释标签，
+  现取口径不变——注意 `git rev-parse v1.x.0` 给的是**标签对象**的 sha 不是被标提交。
+  ⚠ 失真教训仍有效（三条）：`[Unreleased]` 的条数 ≠ 区间提交数，发布段必须按区间重新对账（v1.1.0 的原始登记见
+  `docs/06_validation/evidence/EVD-V17-12/s12_readings.md` §5.1）；**被引用的行号与被引用的支撑都会失真**，
+  门面文字优先点名（测试名/函数名），不点行号；**"本机复跑同数"要带口径**——本版默认 cp936 码页下差 3 条，
+  只报总数就会把环境差异读成交付缺陷（P-169）。
 - **后端**：FastAPI + SQLAlchemy 2.0 + Alembic，9 个业务域
 - **前端**：**Next.js 15** App Router（X-02 更正），10 个功能域
   - 证据：`apps/web/package.json:27` `"next": "^15.5.28"`、`:28` `"react": "^19.0.0"`；
