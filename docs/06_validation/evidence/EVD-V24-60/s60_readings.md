@@ -116,7 +116,7 @@ next 对 SSE 也套压缩 ⇒ 头里有 `content-encoding: gzip`；而 `route.fe
 |---|---|
 | head | `ca9ba70`（推送后 `git ls-remote origin refs/heads/main` 独立复核一致） |
 | `CI` run 结论 | **success** —— 但 `e2e-real` 自己是 **failure**，被 `continue-on-error: true` 掩成绿（这正是 STEP-62 要摘它的理由，见 §6.3） |
-| `Security` / `CI-Windows` | `Security` success；`CI-Windows` 见 §6.2 |
+| `Security` / `CI-Windows` | `Security` success（run `40806610279`）；`CI-Windows` success（run `40806609704`） |
 | `Start real stack` | 成功：`端口检查通过（本次要用：3200 3291 3290 3300）`；`② 假 LLM 上游 :3290` / `②b 假 LangBot 上游 :3291` 两行齐；health 载荷 `deps` 三项 `postgres/redis/langbot = ok`；`⑤b` 两轮 counts `spaces=1 sources=1 assets=1 documents=1` |
 | `① loading` | **✘ 647ms** —— 见下方根因 |
 | `② success` | **✓ 749ms** |
@@ -140,21 +140,39 @@ Error: strict mode violation: getByText('思考中…') resolved to 2 elements:
 改法（最小）：提问正文换成不复述文案的 `"R19 loading：先别急着回答，我要看等待这一态"`，
 并给占位符断言加 `exact: true` —— 两处都只动这一条用例，不动产品、不动其余四条。
 
-### 6.2 第 2 跑（待回填）
+### 6.2 第 2 跑：head `d6d67fc`，run `40808385199`（2026-10-29T02:46Z 起）
+
+原始切片在 `s60_ci_run_40808385199_log.txt`（zip 内 11 / 12 / 13 / 16 四段原样照抄，含行首时间戳）。
+该文件对 `github_pat_` / `ghp_` / `Bearer ` / `x-access-token` 四种形各计数 0。
 
 | 项 | 读数 |
 |---|---|
-| head | 待填 |
-| `e2e-real` 结论 / 五条逐条 | 待填 |
-| 守卫步输出（`ok=? skipped=? failed=?`） | 待填 |
-| `backend` / `frontend` / `CI-Windows` | 待填 |
+| head | `d6d67fc`（`fix(STEP-60 第 2 轮)…`；`git rev-parse HEAD` 与 run 的 `head_sha` `d6d67fc81c486d520192d52bd24b3e715eed8dd8` 一致） |
+| `e2e-real` job 结论 | **success**，22 步无一非 success；step 11 → 16 依次为 `E2E … r19-chat-stream.spec.ts` / `断言 r19 不是 skipped` / `E2E … admin.spec.ts` / `Reporter 自检` / `Upload report + screenshots` / `Stop stack`，**全部真执行**（第 1 跑里 12–14 是 skipped） |
+| `① loading` | **✓ 453ms** —— 严格模式两命中随提问正文改写 + `exact` 消失 |
+| `② success` | **✓ 554ms** |
+| `③ error` | **✓ 460ms** |
+| `④ unauthenticated` | **✓ 343ms** |
+| `⑤ degraded` | **✓ 339ms** |
+| 合计 | `5 passed (2.8s)`（`Running 5 tests using 1 worker`） |
+| 守卫步输出 | **`ok=5 skipped=0 failed=0`** —— 三条判据全过：`failed=0`、`ok≥1`、`ok+skipped=5` |
+| `admin.spec.ts`（step 13） | `6 passed` / `1 skipped (3.2s)`：`-  2`（② 键盘可达，real 档按 P-131 跳过），①③④⑤⑥⑦ 七条里六条 `✓` |
+| `Reporter 自检`（step 14） | `playwright-report 存在，文件 7 个；test-results 里 8 个` |
+| `Start real stack` | `health 就绪（3s）`，`deps` 三项 `postgres/redis/langbot = ok`；`seed 写入 … session 行 3 条（应为 3），种子脚本 rc=0`；`⑤b` 两轮均 `spaces=1 sources=1 assets=1 documents=1` |
+| `Stop stack` | `stopped fake_llm pid=3784` / `fake_langbot pid=3785` / `backend pid=3786` / `frontend pid=4122` 四行齐；四个端口 `端口终检 … 空闲；占用者读数：(空)` |
+| `CI` 其余 job | `compose-smoke` / `frontend` / `backend` / `compose` / `workflow-lint` 五个 job 全 **success**，步骤级无异常（`bad=-`） |
+| `Security` | 同 head run `40808385211` **success** |
+| `CI-Windows` | 同 head run `40808385207` **success**：`1817 passed, 692 skipped, 4 deselected`（1173.91s）、`windows 门禁：failed=0 total_skipped=692 baseline=692`、前端 `57 files / 452 tests passed` |
+
+一句话结论：本卡对外可主张的五态行为读数**齐了**——五条逐条 `✓`，守卫步三条判据全过，真栈起停干净。
 
 ### 6.3 顺带取到的两个事实（给 STEP-62 用）
 
-1. `e2e-real` 最近三次**真执行**（`8b695ce` / `de65373` / `1eaf2d5`）全 success；`408aae2` 与 `9b0a037`
-   两次是 skipped（上游 job 红），不算执行读数。本卡这一跑是第四次执行、且是第一次 failure ⇒
-   「连续三次绿」的窗口在本次被打破，`continue-on-error` 的摘除判据要按 STEP-62 卡面②重算。
-2. `CI` 的 run 结论在 `continue-on-error: true` 下**掩盖了 e2e-real 的 failure**（本跑即例），
+1. `e2e-real` 的**真执行**序列（按时间）：`8b695ce` ✓ / `de65373` ✓ / `1eaf2d5` ✓ / `ca9ba70` **✗**(run `40806609514`) /
+   `d6d67fc` ✓(run `40808385199`)；`408aae2` 与 `9b0a037` 两次是 skipped（上游 job 红），不计执行读数。
+   末三次真执行 = `1eaf2d5` ✓ / `ca9ba70` ✗ / `d6d67fc` ✓ ⇒ **「连续三次绿」不成立**，
+   STEP-62 卡面② 的判据按字面走「保留 `continue-on-error` + 写 run 号」那一支，不摘。
+2. `CI` 的 run 结论在 `continue-on-error: true` 下**掩盖了 e2e-real 的 failure**（第 1 跑即例），
    这是「绿着不算绿」的又一实例。
 
 ## 7. 同批附带：主干红的来源与修法（不属于本卡允许面）
@@ -182,8 +200,9 @@ Tests  1 failed | 451 passed (452)
 
 ## 8. 局限
 
-- 五态的行为读数只能在 CI 取（本机无 PG/Redis）。§6.1 已回填第 1 跑（②③④⑤ 绿、① 红在用例自身），
-  §6.2 的第 2 跑未回填前，本卡对外主张「四条已真跑通过 + ① 已改用例待复跑」。
+- 五态的行为读数只能在 CI 取（本机无 PG/Redis）。§6.1 第 1 跑（②③④⑤ 绿、① 红在用例自身）→ §6.2 第 2 跑
+  五条逐条 `✓` + 守卫步 `ok=5 skipped=0 failed=0` ⇒ 五态**均已真跑通过**。唯一未闭环的读数是本章开始时就
+  写明的两个 UNKNOWN（真网络错误 UX、slow 提示），它们不是本卡的五态。
 - 截断手段（手段②）改的是**响应体长度**，不是链路：它能证明「无 done 帧 ⇒ interruptedPartial + 正文保留」，
   不能证明「真网络错误下的 UX」——后者走 `useSseAsk` 的 catch，会把 `content` 清空（读数在
   `useSseAsk.ts:135-140`），本卡未把它写成用例。

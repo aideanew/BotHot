@@ -1,0 +1,164 @@
+CI run 40808385199（head d6d67fc81c486d520192d52bd24b3e715eed8dd8，attempt 1）的 e2e-real job 日志切片。
+来源：GET /repos/aideanew/BotHot/actions/runs/40808385199/logs（需认证），zip 内条目名形如 e2e-real/<序号>_<步名>.txt；
+下四处按原字节照抄（行首时间戳保留），未改写、未删行；仅在上方加本段中文说明。
+四段分别是：11 r19 五态实跑、12 守卫步（判「不是 skipped」）、13 admin.spec.ts、16 Stop stack。
+另：本文件对凭据做过计数检查 —— 结果 0（见同目录 s60_readings.md §6.2）。
+
+===== e2e-real/11_E2E (real backend, project=real, r19-chat-stream.spec.ts).txt =====
+﻿2026-10-29T02:54:19.0210699Z ##[group]Run set -o pipefail
+2026-10-29T02:54:19.0211004Z [36;1mset -o pipefail[0m
+2026-10-29T02:54:19.0211307Z [36;1m# 留一份 list 输出给下一步判「有没有真跑」——测试没跑与全过在 conclusion 上都长成绿。[0m
+2026-10-29T02:54:19.0211770Z [36;1mpnpm exec playwright test --project=real e2e/r19-chat-stream.spec.ts 2>&1 \[0m
+2026-10-29T02:54:19.0212204Z [36;1m  | tee "$RUNNER_TEMP/r19-list.txt"[0m
+2026-10-29T02:54:19.0233467Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-29T02:54:19.0233805Z env:
+2026-10-29T02:54:19.0234369Z   DATABASE_URL: ***localhost:5433/bothot
+2026-10-29T02:54:19.0234660Z   REDIS_URL: redis://localhost:6380/0
+2026-10-29T02:54:19.0235045Z   SESSION_STORE_BACKEND: redis
+2026-10-29T02:54:19.0235301Z   AIDEAN_ISSUER: http://127.0.0.1:9
+2026-10-29T02:54:19.0235596Z   APP_ENV: development
+2026-10-29T02:54:19.0235875Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-10-29T02:54:19.0236251Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:19.0236672Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-29T02:54:19.0237128Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:19.0237609Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:19.0238121Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:19.0238621Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-29T02:54:19.0239073Z   PUSH_SECRET_MASTER_KEY: ***
+2026-10-29T02:54:19.0239401Z   ENGINE_KEY_MASTER_KEY: ***
+2026-10-29T02:54:19.0239631Z   PORT: 3200
+2026-10-29T02:54:19.0239827Z   E2E_REAL_BACKEND: 1
+2026-10-29T02:54:19.0240039Z   E2E_CHAT_LLM: 1
+2026-10-29T02:54:19.0240294Z   E2E_SEED_FILE: /home/runner/work/_temp/e2e-real/seed.txt
+2026-10-29T02:54:19.0240869Z ##[endgroup]
+2026-10-29T02:54:19.7148369Z real.setup：由 /home/runner/work/_temp/e2e-real/seed.txt 生成 e2e/.auth/admin.json, e2e/.auth/operator.json, e2e/.auth/user.json（cookie=bothot_session，值不打印）
+2026-10-29T02:54:19.7525218Z 
+2026-10-29T02:54:19.7525767Z Running 5 tests using 1 worker
+2026-10-29T02:54:19.7525989Z 
+2026-10-29T02:54:20.6925118Z   ✓  1 [real] › e2e/r19-chat-stream.spec.ts:146:5 › ① loading：首 delta 前「思考中…」可见，且此刻「停止」可点 (453ms)
+2026-10-29T02:54:21.2527090Z   ✓  2 [real] › e2e/r19-chat-stream.spec.ts:171:5 › ② success：正常提问 → 增量正文 + 来源文章 + 来源引擎 (554ms)
+2026-10-29T02:54:21.7204267Z   ✓  3 [real] › e2e/r19-chat-stream.spec.ts:221:5 › ③ error：流在首段后被截断 → 「连接中断，可重试」+ 正文保留 + 重试按钮 (460ms)
+2026-10-29T02:54:22.0725594Z   ✓  4 [real] › e2e/r19-chat-stream.spec.ts:236:5 › ④ unauthenticated：会话失效 → 离开 /chat，且不出现 10004/权限不足 (343ms)
+2026-10-29T02:54:22.4205496Z   ✓  5 [real] › e2e/r19-chat-stream.spec.ts:246:5 › ⑤ degraded：引擎不可达 → 「引擎暂不可用，请稍后重试或换个空间」 (339ms)
+2026-10-29T02:54:22.4663757Z 
+2026-10-29T02:54:22.4666878Z   5 passed (2.8s)
+
+
+===== e2e-real/12_断言 r19 不是 skipped（F-6：绿着零读数比不跑更坏）.txt =====
+﻿2026-10-29T02:54:22.5106893Z ##[group]Run # 符号订正（第二轮）：GitHub Actions 的 list reporter 用的是 "  ✓  N …"（通过）与
+2026-10-29T02:54:22.5107417Z [36;1m# 符号订正（第二轮）：GitHub Actions 的 list reporter 用的是 "  ✓  N …"（通过）与[0m
+2026-10-29T02:54:22.5107810Z [36;1m# "  -   N …"（跳过），**不是** "ok"。上一次写成 "ok" 的读数来自本机管道（win32/git-bash[0m
+2026-10-29T02:54:22.5108142Z [36;1m# 下 ✓ 落不进管道），拿它当 CI 事实会让这一步对一次真跑也判红——取样改成[0m
+2026-10-29T02:54:22.5108522Z [36;1m# `4_frontend.txt`（CI run 40692846396 的 E2E (mock UI) 段，42 条：31 ✓ / 11 -）才作数。[0m
+2026-10-29T02:54:22.5108951Z [36;1m# 另一处实测：序号宽度不固定（"✓   1 " 与 "✓  10 " 并存、"  -   5 " 与 "  -  26 " 并存），[0m
+2026-10-29T02:54:22.5109265Z [36;1m# 故用 ` +` 而不是固定两个空格。[0m
+2026-10-29T02:54:22.5109545Z [36;1m# 判据两条：① 至少一条真跑通过；② 五条用例一条都不许凭空消失。故意不写 "skipped = 0"：[0m
+2026-10-29T02:54:22.5109924Z [36;1m# 增量 §1.4④ 把 skipped 与 passed/failed 并列为「明确读数」的三种，§1.2 也允许取不到读数的[0m
+2026-10-29T02:54:22.5110366Z [36;1m# 那条标 UNKNOWN（Playwright 里 UNKNOWN 的唯一机械载体就是 test.skip）⇒ 按 "= 0" 判会把[0m
+2026-10-29T02:54:22.5110762Z [36;1m# 契约允许的交付误判成红。[0m
+2026-10-29T02:54:22.5111046Z [36;1mlog="$RUNNER_TEMP/r19-list.txt"[0m
+2026-10-29T02:54:22.5111352Z [36;1mok_n=$(grep -cE "^  ✓ +[0-9]+ " "$log" || true)[0m
+2026-10-29T02:54:22.5111688Z [36;1mskip_n=$(grep -cE "^  - +[0-9]+ " "$log" || true)[0m
+2026-10-29T02:54:22.5112023Z [36;1mfail_n=$(grep -cE "^  ✘ +[0-9]+ " "$log" || true)[0m
+2026-10-29T02:54:22.5112363Z [36;1mecho "ok=$ok_n skipped=$skip_n failed=$fail_n"[0m
+2026-10-29T02:54:22.5112663Z [36;1mif [ "$fail_n" -ne 0 ]; then[0m
+2026-10-29T02:54:22.5112961Z [36;1m  echo "❌ 有 $fail_n 条红（用例本身在该步已让上一步失败，这里再点名一次）" >&2[0m
+2026-10-29T02:54:22.5113239Z [36;1m  exit 1[0m
+2026-10-29T02:54:22.5113434Z [36;1mfi[0m
+2026-10-29T02:54:22.5113659Z [36;1mif [ "$ok_n" -lt 1 ]; then[0m
+2026-10-29T02:54:22.5113975Z [36;1m  echo "❌ 一条真跑通过都没有（ok=$ok_n skipped=$skip_n）⇒ 本 step 绿着但零读数" >&2[0m
+2026-10-29T02:54:22.5114284Z [36;1m  exit 1[0m
+2026-10-29T02:54:22.5114476Z [36;1mfi[0m
+2026-10-29T02:54:22.5115410Z [36;1mif [ $((ok_n + skip_n)) -ne 5 ]; then[0m
+2026-10-29T02:54:22.5115799Z [36;1m  echo "❌ 用例数不对：ok+skipped=$((ok_n + skip_n))，契约 /chat 是 5 态 ⇒ 有用例凭空消失" >&2[0m
+2026-10-29T02:54:22.5116146Z [36;1m  exit 1[0m
+2026-10-29T02:54:22.5116338Z [36;1mfi[0m
+2026-10-29T02:54:22.5139489Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-29T02:54:22.5139839Z env:
+2026-10-29T02:54:22.5140336Z   DATABASE_URL: ***localhost:5433/bothot
+2026-10-29T02:54:22.5140626Z   REDIS_URL: redis://localhost:6380/0
+2026-10-29T02:54:22.5140900Z   SESSION_STORE_BACKEND: redis
+2026-10-29T02:54:22.5141161Z   AIDEAN_ISSUER: http://127.0.0.1:9
+2026-10-29T02:54:22.5141418Z   APP_ENV: development
+2026-10-29T02:54:22.5141693Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-10-29T02:54:22.5142064Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:22.5142472Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-29T02:54:22.5142861Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:22.5143251Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:22.5143631Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:22.5144012Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-29T02:54:22.5144461Z   PUSH_SECRET_MASTER_KEY: ***
+2026-10-29T02:54:22.5145086Z   ENGINE_KEY_MASTER_KEY: ***
+2026-10-29T02:54:22.5145327Z ##[endgroup]
+2026-10-29T02:54:22.5239975Z ok=5 skipped=0 failed=0
+
+
+===== e2e-real/13_E2E (real backend, project=real, admin.spec.ts).txt =====
+﻿2026-10-29T02:54:22.5265278Z ##[group]Run pnpm exec playwright test --project=real e2e/admin.spec.ts
+2026-10-29T02:54:22.5265592Z [36;1mpnpm exec playwright test --project=real e2e/admin.spec.ts[0m
+2026-10-29T02:54:22.5281946Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-29T02:54:22.5282144Z env:
+2026-10-29T02:54:22.5282454Z   DATABASE_URL: ***localhost:5433/bothot
+2026-10-29T02:54:22.5282634Z   REDIS_URL: redis://localhost:6380/0
+2026-10-29T02:54:22.5282809Z   SESSION_STORE_BACKEND: redis
+2026-10-29T02:54:22.5282981Z   AIDEAN_ISSUER: http://127.0.0.1:9
+2026-10-29T02:54:22.5283144Z   APP_ENV: development
+2026-10-29T02:54:22.5283313Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-10-29T02:54:22.5283541Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:22.5283785Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-29T02:54:22.5284033Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:22.5284264Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:22.5284510Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:22.5284994Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-29T02:54:22.5285276Z   PUSH_SECRET_MASTER_KEY: ***
+2026-10-29T02:54:22.5285515Z   ENGINE_KEY_MASTER_KEY: ***
+2026-10-29T02:54:22.5285668Z   PORT: 3200
+2026-10-29T02:54:22.5285792Z   E2E_REAL_BACKEND: 1
+2026-10-29T02:54:22.5285965Z   E2E_SEED_FILE: /home/runner/work/_temp/e2e-real/seed.txt
+2026-10-29T02:54:22.5286158Z ##[endgroup]
+2026-10-29T02:54:23.1361900Z real.setup：由 /home/runner/work/_temp/e2e-real/seed.txt 生成 e2e/.auth/admin.json, e2e/.auth/operator.json, e2e/.auth/user.json（cookie=bothot_session，值不打印）
+2026-10-29T02:54:23.2261506Z 
+2026-10-29T02:54:23.2262173Z Running 7 tests using 1 worker
+2026-10-29T02:54:23.2262428Z 
+2026-10-29T02:54:23.9269549Z   ✓  1 [real] › e2e/admin.spec.ts:147:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ① 游客访问 /admin 与 /admin/ops：未登录守卫给出可判定的落点（两档按不变量，D-V23-15） (350ms)
+2026-10-29T02:54:24.1235610Z   -  2 [real] › e2e/admin.spec.ts:152:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ② 键盘可达：Tab 到登录按钮、回车登录，落点是权限分层而不是白屏
+2026-10-29T02:54:24.5609286Z   ✓  3 [real] › e2e/admin.spec.ts:179:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ③ 非 admin 会话 › ③ 非 admin 的处置：两屏都给出出口链接 (427ms)
+2026-10-29T02:54:24.7670627Z ④ real 档只证游客卡；权限不足卡那一半未执行（原因：test.use 作用域是 describe，见 P-131）
+2026-10-29T02:54:24.7930281Z   ✓  4 [real] › e2e/admin.spec.ts:194:7 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › ④ 375px：游客卡与权限不足卡的内容区不横向溢出 (224ms)
+2026-10-29T02:54:25.3792792Z   ✓  5 [real] › e2e/admin.spec.ts:236:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑤ 五屏切换：各屏渲染自己的标题，切屏重挂载取当下读数 (577ms)
+2026-10-29T02:54:25.8070710Z   ✓  6 [real] › e2e/admin.spec.ts:264:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑥ 告警状态条：/ready 的 alerting 读数必须被画出来 (417ms)
+2026-10-29T02:54:26.1450844Z   ✓  7 [real] › e2e/admin.spec.ts:274:9 › 管理端 e2e（演示态无条件执行 + 真后端档闸门） › 四屏主路径（真后端 + operator 会话） › ⑦ 375px 下密钥表横向滚动而不是挤压 (328ms)
+2026-10-29T02:54:26.2588292Z 
+2026-10-29T02:54:26.2591116Z   1 skipped
+2026-10-29T02:54:26.2591380Z   6 passed (3.2s)
+
+
+===== e2e-real/16_Stop stack.txt =====
+﻿2026-10-29T02:54:28.2926503Z ##[group]Run bash scripts/e2e/run_real_backend.sh --stop
+2026-10-29T02:54:28.2926771Z [36;1mbash scripts/e2e/run_real_backend.sh --stop[0m
+2026-10-29T02:54:28.2943867Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-29T02:54:28.2944071Z env:
+2026-10-29T02:54:28.2944424Z   DATABASE_URL: ***localhost:5433/bothot
+2026-10-29T02:54:28.2944614Z   REDIS_URL: redis://localhost:6380/0
+2026-10-29T02:54:28.2944996Z   SESSION_STORE_BACKEND: redis
+2026-10-29T02:54:28.2945165Z   AIDEAN_ISSUER: http://127.0.0.1:9
+2026-10-29T02:54:28.2945335Z   APP_ENV: development
+2026-10-29T02:54:28.2945512Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-10-29T02:54:28.2945748Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:28.2946001Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-29T02:54:28.2946262Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:28.2946649Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:28.2946909Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:54:28.2947150Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-29T02:54:28.2947435Z   PUSH_SECRET_MASTER_KEY: ***
+2026-10-29T02:54:28.2947652Z   ENGINE_KEY_MASTER_KEY: ***
+2026-10-29T02:54:28.2947808Z ##[endgroup]
+2026-10-29T02:54:28.3404321Z stopped fake_llm pid=3784
+2026-10-29T02:54:28.3533121Z stopped fake_langbot pid=3785
+2026-10-29T02:54:28.3658764Z stopped backend pid=3786
+2026-10-29T02:54:28.3782216Z stopped frontend pid=4122
+2026-10-29T02:54:28.6107023Z 端口 3300 在第 1 次轮询（约 200ms）后才空闲——SIGTERM 的释放延迟，不是泄漏
+2026-10-29T02:54:28.6200616Z 端口终检 backend :3300 空闲；占用者读数：(空)
+2026-10-29T02:54:28.6306768Z 端口终检 frontend :3200 空闲；占用者读数：(空)
+2026-10-29T02:54:28.6410590Z 端口终检 fake_llm :3290 空闲；占用者读数：(空)
+2026-10-29T02:54:28.6514375Z 端口终检 fake_langbot :3291 空闲；占用者读数：(空)
