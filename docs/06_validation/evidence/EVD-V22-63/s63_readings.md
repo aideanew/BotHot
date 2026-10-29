@@ -22,7 +22,8 @@
 ## 1 判据① 本机全量一次（04 附录 B，本版唯一一次）
 
 环境：隔离 PG16.15 @5547（数据目录 `%USERPROFILE%\pg16-5547\pgdist\data`），
-`AIDEANBOT_TEST_PG_DSN=postgresql+psycopg://bothot:***@localhost:5547/bothot_test`，
+DSN 只经环境变量 `AIDEANBOT_TEST_PG_DSN` 传入、**不入仓也不在本文件复述**（本仓有 gitleaks 的
+「带凭据的 URL 形状」判据，写成形即阻断——见本文件 §7），
 `PYTHONUTF8=1`（口径见 §1.2），alembic head `ab1006c2a`。
 
 ### 1.1 逐门读数（`counts` 与 CI 三绿 head 逐字相同）
