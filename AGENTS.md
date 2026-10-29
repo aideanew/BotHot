@@ -91,7 +91,8 @@ PLAN 规划 → SPEC 规格 → APPROVE 批准 → IMPLEMENT 实施 → VERIFY �
   **需求判词 12 条纠真**（STEP-62）：五条实现度、四条测试锚、无锚需求数 2→1，`/chat` 的"八态"按契约改成"五态"。
   **`e2e-real` job 仍是非阻塞**：STEP-62 交付时的末三次真执行是 `1eaf2d5` ✓ / `ca9ba70` ✗ / `d6d67fc` ✓ ⇒ 当时落
   「保持」不是漏改；到本版末前件已成立（`d6d67fc` ✓ / `f536398` ✓ / `6e78dff` ✓），摘除动作**不在本版做**
-  （本版允许面不含 `ci.yml`），与 `ci.yml` 里那句"摘除归 STEP-62"的过期注释合并成一卡，登台账 **P-168**。
+  （**STEP-63 这张发版卡**的允许面不含 `ci.yml`——别读成"本版没碰过 CI"：区间内 `ci.yml` 由 STEP-59/60 加过
+  `e2e-real` job 与 r19 两步），与 `ci.yml` 里那句"摘除归 STEP-62"的过期注释合并成一卡，登台账 **P-168**。
   本版**零数据库迁移、零新增对外 HTTP 端点**；区间内 `apps/api/app/**` 只动了 `apps/api/app/contracts/shapes.py`
   一个文件（无路由、无模型、无 `apps/api/alembic/versions/**` 下的新迁移——本仓没有 `apps/api/migrations` 这个目录）。
   测试基线（三绿 head `6e78dff`；其后的收口批 `3115532` 与发布批都是零代码文档批）：
