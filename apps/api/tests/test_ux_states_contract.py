@@ -177,8 +177,9 @@ def test_ux_view_states_projection_equals_frozen_draft() -> None:
     live = _ux_view_states_literal()
     draft = _frozen_view_states()
     live_keys = [key for key, _ in live]
-    assert live_keys == [key for key, _ in draft], (
-        "投影的视图键集与冻结稿不同序或不同名：\n  活体 " + repr(live_keys) + "\n  稿   " + repr([key for key, _ in draft])
+    draft_keys = [key for key, _ in draft]
+    assert live_keys == draft_keys, (
+        "投影的视图键集与冻结稿不同序或不同名：\n  活体 " + repr(live_keys) + "\n  稿   " + repr(draft_keys)
     )
     assert len(live) == _EXPECTED_VIEW_COUNT, f"投影应为 {_EXPECTED_VIEW_COUNT} 个视图，实读 {len(live)}：{live_keys}"
     live_map = dict(live)
