@@ -1,0 +1,16 @@
+---- mode=normal ----
+status=200 x-fake-mode=normal
+  line[1]='data: {"choices": [{"delta": {"content": "假 LLM 首段：这是来自本机假上游的固定回复。"}}]}'
+  line[2]=''
+  line[3]='data: {"choices": [{"delta": {"content": "第二段：仅用于验证 SSE 帧能被逐行解析、增量渲染不丢字。"}}]}'
+  line[4]=''
+  line[5]='data: {"choices": [{"delta": {"content": "第三段：生成结束。"}}]}'
+  line[6]=''
+  line[7]='data: [DONE]'
+  line[8]=''
+RESULT mode=normal exception=None lines=8
+---- mode=abort ----
+status=200 x-fake-mode=abort
+  line[1]='data: {"choices": [{"delta": {"content": "假 LLM 首段：这是来自本机假上游的固定回复。"}}]}'
+  line[2]=''
+RESULT mode=abort exception=None lines=2

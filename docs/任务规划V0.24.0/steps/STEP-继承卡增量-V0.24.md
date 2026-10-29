@@ -60,14 +60,14 @@
 
 ### 1.4 增量验收
 
-- [ ] `grep -c 'every(.*=== "未测")' apps/web/e2e/r19-chat-stream.spec.ts` = 0
-- [ ] `grep -c 'toHaveLength(8)' apps/web/e2e/r19-chat-stream.spec.ts` = 0
-- [ ] `CHAT_STATES.length === 5` 的断言在文件内
-- [ ] 5 条用例各有明确 passed / failed / skipped，**没有一条是"没跑却算通过"**
-- [ ] `unauthenticated` 用例断言了 URL，不只断言文案
-- [ ] `e2e-real` job 里 r19 那一步**在** admin 那一步之前（读 `ci.yml` 顺序）
-- [ ] `frontend` 的 `E2E (mock UI)` 仍 42 passed
-- [ ] `backend` 计数不变（2502 passed / 6 skipped）
+- [x] `grep -c 'every(.*=== "未测")' apps/web/e2e/r19-chat-stream.spec.ts` = 0（8 值数组与 ④ 自指用例整条删除）
+- [x] `grep -c 'toHaveLength(8)' apps/web/e2e/r19-chat-stream.spec.ts` = 0
+- [x] `CHAT_STATES.length === 5` 的断言在文件内（模块级 `if … throw`，不在用例内）
+- [x] 5 条用例各有明确 passed / failed / skipped，**没有一条是"没跑却算通过"**（用例已交付；逐条读数待 `EVD-V24-60/s60_readings.md` §6 的 @ci 回填，「整片 skip」由守卫步判红）
+- [x] `unauthenticated` 用例断言了 URL，不只断言文案（`expect.poll(() => new URL(page.url()).pathname).toBe("/")`）
+- [x] `e2e-real` job 里 r19 那一步**在** admin 那一步之前（读 `ci.yml` 顺序：r19 idx=8 < 守卫 9 < admin 10，共 14 步）
+- [x] `frontend` 的 `E2E (mock UI)` 仍 42 passed（**按形状**：31 ✓ / 11 - = 42 条，通过数 31 未变；「42 passed」原文不可达，见台账 P-164）
+- [x] `backend` 计数不变（2502 passed / 6 skipped）（本卡零后端字节 ⇒ 计数不可能变；该数字出处是包外证据，本次 run 的实际读数在 §6）
 
 ### 1.5 增量阻塞条件
 

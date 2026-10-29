@@ -1,0 +1,5 @@
+① 限速 150B/s：总时长 10003ms，1 个 chunk（服务端 10 段）
+   chunk[1] @10003ms  "data: {\"n\":1,\"text\":\"段1：这是一段固定长度的占位正文，用来观察限速下每帧到达的时刻。\
+② 断网前：state=running chunks=0
+② 断网后：state=done chunks=1 end=clean-done
+② 已收正文长度 586（断网后未清空 ⇒ 前端能决定是否保留）

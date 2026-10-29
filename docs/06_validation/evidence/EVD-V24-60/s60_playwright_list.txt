@@ -1,0 +1,12 @@
+$ E2E_REAL_BACKEND=1 E2E_CHAT_LLM=1 PORT=3200 pnpm exec playwright test --project=real e2e/r19-chat-stream.spec.ts --list
+Listing tests:
+  [real] › r19-chat-stream.spec.ts:146:5 › ① loading：首 delta 前「思考中…」可见，且此刻「停止」可点
+  [real] › r19-chat-stream.spec.ts:168:5 › ② success：正常提问 → 增量正文 + 来源文章 + 来源引擎
+  [real] › r19-chat-stream.spec.ts:204:5 › ③ error：流在首段后被截断 → 「连接中断，可重试」+ 正文保留 + 重试按钮
+  [real] › r19-chat-stream.spec.ts:219:5 › ④ unauthenticated：会话失效 → 离开 /chat，且不出现 10004/权限不足
+  [real] › r19-chat-stream.spec.ts:229:5 › ⑤ degraded：引擎不可达 → 「引擎暂不可用，请稍后重试或换个空间」
+Total: 5 tests in 1 file
+
+$ NEXT_PUBLIC_API_MOCK=true PORT=3456 pnpm exec playwright test --list | tail -2
+  trunk.spec.ts:171:7 › mock 主干回归 › ⑨ 链接入库主链路：粘贴 → 解析预览 → 确认入库 → 轮询收敛（mock 即 READY）
+Total: 43 tests in 7 files

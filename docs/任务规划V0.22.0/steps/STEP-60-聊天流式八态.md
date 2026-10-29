@@ -1,6 +1,8 @@
 # STEP-60 聊天流式八态（REQ-F-005，假 LLM 上游）
 
-> 基线 STEP-59 交付后｜状态：⬜ 未开（**判据「无交付提交」成立：本卡一行代码都没写**。S60.0 探针 2026-10-28 判**卡面第 5 格验收 ①「八态 8 passed / 0 skipped」在当前供给下不可达**——`/ask` 的检索委派 LangBot（`chat.py:344` → `client.py:198-211`），而启动器不提 LangBot、CI 的 `e2e-real` services 只有 postgres+redis、`/system/health` 实测 `"langbot":"unreachable"` ⇒ 检索恒空 ⇒ `chat.py:233-235` 抛 30002，流到不了 LLM；种子还需「公开可抓取的文章 URL + 运行中的 LangBot」两前提（入库口只有 `url: str`）；`initial` 与 `forbidden` 在 /chat 上**没有任何 DOM 出口**（越权 chat 返 404+30004），正命中本卡第 14 格「某态需后端新错误码才能触发 ⇒ 停，交回」，而 V0.23.0 增量又禁止改 `apps/web/components/**`、`app/**`。读数与四条探针见 `docs/06_validation/evidence/EVD-V22-60/s60_0_probe_readings.md`，三条出路登台账 **P-149**。状态不写 `⏸`：词表要求 `⏸` 写明 BLOCKING 的 Q 号，我没有 Q 号可指）｜裁决 D-V22-01/03
+> 基线 STEP-59 交付后｜状态：✅ 已交付（2026-10-29。按 V0.24.0 增量 §1 重写为 `/chat` **五态**、按 V0.25.0 订正增量补齐 `env` 与非-skip 守卫步；原「八态」判据作废）｜裁决 D-V22-01/03
+> 交付读数与判据逐条：`docs/06_validation/evidence/EVD-V24-60/s60_readings.md`（五态供给、增量 §1.4 八条、@ci 回填；三处供给订正见台账 P-163、两条判据字面不可达见 P-164）
+> （历史）开工前判词（2026-10-28，原状态 ⬜ 未开，逐字保留）：**判据「无交付提交」成立：本卡一行代码都没写**。S60.0 探针 2026-10-28 判**卡面第 5 格验收 ①「八态 8 passed / 0 skipped」在当前供给下不可达**——`/ask` 的检索委派 LangBot（`chat.py:344` → `client.py:198-211`），而启动器不提 LangBot、CI 的 `e2e-real` services 只有 postgres+redis、`/system/health` 实测 `"langbot":"unreachable"` ⇒ 检索恒空 ⇒ `chat.py:233-235` 抛 30002，流到不了 LLM；种子还需「公开可抓取的文章 URL + 运行中的 LangBot」两前提（入库口只有 `url: str`）；`initial` 与 `forbidden` 在 /chat 上**没有任何 DOM 出口**（越权 chat 返 404+30004），正命中本卡第 14 格「某态需后端新错误码才能触发 ⇒ 停，交回」，而 V0.23.0 增量又禁止改 `apps/web/components/**`、`app/**`。读数与四条探针见 `docs/06_validation/evidence/EVD-V22-60/s60_0_probe_readings.md`，三条出路登台账 **P-149**。状态不写 `⏸`：词表要求 `⏸` 写明 BLOCKING 的 Q 号，我没有 Q 号可指
 
 | 字段 | 内容 |
 |---|---|

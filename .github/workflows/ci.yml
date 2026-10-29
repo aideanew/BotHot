@@ -639,7 +639,52 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           E2E_SEED_FILE: ${{ runner.temp }}/e2e-real/seed.txt
-        run: bash scripts/e2e/run_real_backend.sh
+        # STEP-60：/chat 五态需要三件供给（假 LLM :3290、假 LangBot :3291、种子空间），
+        # 都由启动器的两个开关起（D-V23-10 已授权改这一行）。
+        run: bash scripts/e2e/run_real_backend.sh --with-fake-llm --with-fake-langbot
+      # STEP-60：r19 必须排在 admin 之前（D-V23-09：Actions 顺序执行，admin 红则其后全 skipped）。
+      - name: E2E (real backend, project=real, r19-chat-stream.spec.ts)
+        shell: bash
+        env:
+          PORT: "3200"
+          E2E_REAL_BACKEND: "1"
+          E2E_CHAT_LLM: "1"
+          E2E_SEED_FILE: ${{ runner.temp }}/e2e-real/seed.txt
+        run: |
+          set -o pipefail
+          # 留一份 list 输出给下一步判「有没有真跑」——测试没跑与全过在 conclusion 上都长成绿。
+          pnpm exec playwright test --project=real e2e/r19-chat-stream.spec.ts 2>&1 \
+            | tee "$RUNNER_TEMP/r19-list.txt"
+      - name: 断言 r19 不是 skipped（F-6：绿着零读数比不跑更坏）
+        shell: bash
+        run: |
+          # 符号订正（第二轮）：GitHub Actions 的 list reporter 用的是 "  ✓  N …"（通过）与
+          # "  -   N …"（跳过），**不是** "ok"。上一次写成 "ok" 的读数来自本机管道（win32/git-bash
+          # 下 ✓ 落不进管道），拿它当 CI 事实会让这一步对一次真跑也判红——取样改成
+          # `4_frontend.txt`（CI run 40692846396 的 E2E (mock UI) 段，42 条：31 ✓ / 11 -）才作数。
+          # 另一处实测：序号宽度不固定（"✓   1 " 与 "✓  10 " 并存、"  -   5 " 与 "  -  26 " 并存），
+          # 故用 ` +` 而不是固定两个空格。
+          # 判据两条：① 至少一条真跑通过；② 五条用例一条都不许凭空消失。故意不写 "skipped = 0"：
+          # 增量 §1.4④ 把 skipped 与 passed/failed 并列为「明确读数」的三种，§1.2 也允许取不到读数的
+          # 那条标 UNKNOWN（Playwright 里 UNKNOWN 的唯一机械载体就是 test.skip）⇒ 按 "= 0" 判会把
+          # 契约允许的交付误判成红。
+          log="$RUNNER_TEMP/r19-list.txt"
+          ok_n=$(grep -cE "^  ✓ +[0-9]+ " "$log" || true)
+          skip_n=$(grep -cE "^  - +[0-9]+ " "$log" || true)
+          fail_n=$(grep -cE "^  ✘ +[0-9]+ " "$log" || true)
+          echo "ok=$ok_n skipped=$skip_n failed=$fail_n"
+          if [ "$fail_n" -ne 0 ]; then
+            echo "❌ 有 $fail_n 条红（用例本身在该步已让上一步失败，这里再点名一次）" >&2
+            exit 1
+          fi
+          if [ "$ok_n" -lt 1 ]; then
+            echo "❌ 一条真跑通过都没有（ok=$ok_n skipped=$skip_n）⇒ 本 step 绿着但零读数" >&2
+            exit 1
+          fi
+          if [ $((ok_n + skip_n)) -ne 5 ]; then
+            echo "❌ 用例数不对：ok+skipped=$((ok_n + skip_n))，契约 /chat 是 5 态 ⇒ 有用例凭空消失" >&2
+            exit 1
+          fi
       - name: E2E (real backend, project=real, admin.spec.ts)
         shell: bash
         env:

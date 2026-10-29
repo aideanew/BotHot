@@ -1,0 +1,14 @@
+$ pnpm exec vitest run  # 2026-10-29 09:26 本机（修 STEP-69 遗留的 ask-sse 期望之前：1 failed | 451 passed；之后：）
+
+[2mEnvironment [22m [33mhappy-dom was created 57 times[39m[2m · 118.79s total, 54% of tracked time[22m
+[2m            [22m [2mcreate it once per worker with [22m[33mpool: 'vmThreads'[39m[2m (keeps per-file isolation) or [22m[33misolate: false[39m[2m (shares it across files)[22m
+[2m            [22m [2mlearn more: https://vitest.dev/guide/improving-performance#test-environments[22m
+
+JUNIT report written to D:/Code/AideanBotHot/apps/web/vitest-report/junit.xml
+$ pnpm exec vitest run   # 2026-10-29 09:3x 本机（ask-sse 期望修好之后）
+[2m Test Files [22m [1m[32m57 passed[39m[22m[90m (57)[39m
+$ head -1 apps/web/vitest-report/junit.xml   # 2026-10-29 09:40 本机（连跑 6 次里的最后一跑写出）
+<testsuites name="vitest tests" tests="452" failures="0" errors="0" time="42.4545243">
+# ⇒ 452 条全过；上面那次 `Test Files 57 passed (57)` 的 stdout 汇总行没落进捕获，
+#   条数以 junit.xml 的 tests/failures 属性为准。
+# 连跑读数（本机，修复后）：Test Files 57 passed (57) × 6；测试条数 452 / failures=0。
