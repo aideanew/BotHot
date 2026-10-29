@@ -1,4 +1,5 @@
 import { engineLabel } from "@/lib/api";
+import { CHAT_COPY } from "@/lib/chat/copy";
 import type { ChatMessage } from "./types";
 
 /**
@@ -61,17 +62,42 @@ export default function ChatMessageList({
                   </button>
                 </div>
               ) : m.content ? (
-                <p className="whitespace-pre-wrap text-base text-neutral-700">
-                  {m.content}
-                </p>
+                <>
+                  <p className="whitespace-pre-wrap text-base text-neutral-700">
+                    {m.content}
+                  </p>
+                  {/* 停止后已生成的部分保留，并给一条「已停止」+ 重试——中止不等于作废 */}
+                  {m.stopped && (
+                    <div className="mt-3 flex items-center gap-3">
+                      <span className="text-caption text-neutral-400">{CHAT_COPY.stopped}</span>
+                      <button
+                        onClick={() => onRetry(m.id)}
+                        className="rounded-input border border-brand-500 px-3 py-1 text-base text-brand-500 hover:bg-brand-50"
+                      >
+                        重试
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : m.stopped ? (
+                /* 一个字都没生成就停了：中性灰，不是 danger——这是用户自己的操作 */
+                <div className="flex items-center gap-3">
+                  <p className="text-base text-neutral-400">{CHAT_COPY.stopped}</p>
+                  <button
+                    onClick={() => onRetry(m.id)}
+                    className="rounded-input border border-brand-500 px-3 py-1 text-base text-brand-500 hover:bg-brand-50"
+                  >
+                    重试
+                  </button>
+                </div>
               ) : m.slow ? (
                 /* U5（ux_states · degraded 的"给提示而非静默"那一半）：到首 token 锚点仍无声，
                    换个说法而不是继续假装在思考——提示不中断流，用户仍可等也可中止。 */
                 <p className="text-base text-amber-600" role="status">
-                  响应较慢，仍在生成…
+                  {CHAT_COPY.slow}
                 </p>
               ) : (
-                <p className="text-base text-neutral-400">正在思考…</p>
+                <p className="text-base text-neutral-400">{CHAT_COPY.thinking}</p>
               )}
 
               {/* 来源文章引用列表 */}

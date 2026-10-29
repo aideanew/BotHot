@@ -40,7 +40,7 @@ function ChatPageInner() {
   const [switchTarget, setSwitchTarget] = useState<string | null>(null); // 待确认切换的空间 id
   const firstQuestionRef = useRef<string | null>(null);
 
-  const { messages, asking, input, setInput, ask, retry, reset } = useSseAsk({
+  const { messages, asking, input, setInput, ask, retry, stop, reset } = useSseAsk({
     spaceId,
     // 会话过期掉落：停在此页，AuthGate 随 status→guest 自动切卡（G2.3），不再跳首页
     onUnauthorized: () => {},
@@ -164,6 +164,7 @@ function ChatPageInner() {
         canSend={!!spaceId}
         onChange={setInput}
         onSubmit={(q) => void ask(q)}
+        onStop={stop}
       />
 
       {/* 切换空间确认模态（页内，非原生 confirm） */}

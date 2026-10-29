@@ -7,6 +7,7 @@
  * onChunk：累积内容回调；onCitations：引用就绪回调；opts.signal：取消（不误报服务器故障）。
  */
 
+import { CHAT_COPY } from "@/lib/chat/copy";
 import { ERROR_MESSAGES, delay, friendlyMessage, isMockMode } from "./http";
 import { MOCK_SPACE_DETAILS } from "./mock-data";
 import { ApiError, type ChatAnswer, type ChatCitation, type Envelope } from "./types";
@@ -195,9 +196,9 @@ export async function askQuestion(
   // done 且无 error 帧 → 视为异常中断（后端断流/网络截断），已发 delta 保留并标记错误
   if (!streamError && !doneReceived) {
     if (content !== "") {
-      streamError = { code: 50002, message: "回答生成中断，内容可能不完整，请重试" };
+      streamError = { code: 50002, message: CHAT_COPY.interruptedPartial };
     } else if (citations.length > 0) {
-      streamError = { code: 50002, message: "回答生成中断，请重新提问" };
+      streamError = { code: 50002, message: CHAT_COPY.interrupted };
     }
     // 完全空流不标记（空回复可能合法，避免误报）
   }

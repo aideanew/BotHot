@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { CHAT_COPY } from "../lib/chat/copy";
 
 /**
  * C-T5 前端 e2e 回归（mock 主干 8 条路径）
@@ -82,8 +83,8 @@ test.describe.serial("mock 主干回归", () => {
     const citationList = page.getByText("来源文章").locator("xpath=following-sibling::ul/li");
     await expect(citationList).toHaveCount(2);
     // 生成结束：无 loading 态残留
-    await expect(page.getByText("正在思考…")).toHaveCount(0);
-    await expect(page.getByText("回答中…")).toHaveCount(0);
+    await expect(page.getByText(CHAT_COPY.thinking)).toHaveCount(0);
+    await expect(page.getByText(CHAT_COPY.stop)).toHaveCount(0);
   });
 
   test("④ 第二轮追问（多轮并存）", async ({ page }) => {

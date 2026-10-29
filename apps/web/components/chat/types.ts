@@ -30,4 +30,13 @@ export interface ChatMessage {
   streaming?: boolean;
   /** 首 token 慢：到 `LLM_FIRST_TOKEN_TIMEOUT` 锚点仍无首个 delta（提示用，不代表流已中断） */
   slow?: boolean;
+  /**
+   * 用户主动中止（STEP-69 / S69.3）。
+   *
+   * 与 `error` 的分界是**责任方**：`error` 是「上游/网络出错」，`stopped` 是「我让它停的」。
+   * 混成一个字段会让 UI 把用户的主动操作渲染成红色告警，也会让重试入口的守卫
+   * 变成「只有出错才给重试」——而停止后想接着问是更常见的诉求。
+   * `stopped` 不携带错误文案，只由 `ChatMessageList` 渲染一行中性灰的「已停止」。
+   */
+  stopped?: boolean;
 }

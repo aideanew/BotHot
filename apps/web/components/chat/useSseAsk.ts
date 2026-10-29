@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, askQuestion, isAuthError } from "@/lib/api";
+import { CHAT_COPY } from "@/lib/chat/copy";
 import type { ChatMessage } from "./types";
 
 /**
@@ -32,8 +33,13 @@ export interface UseSseAskResult {
   setInput: (value: string) => void;
   /** 发送提问；空串 / 回答进行中 / 未选空间 → 静默 no-op */
   ask: (question: string) => Promise<void>;
-  /** 重试失败的回答；无错误上下文 / 回答进行中 → 静默 no-op */
+  /** 重试失败或已停止的回答；无错误上下文 / 回答进行中 → 静默 no-op */
   retry: (answerId: number) => Promise<void>;
+  /**
+   * 中止进行中的流，**保留**已渲染内容并把该气泡标为 `stopped`（STEP-69 / S69.3）。
+   * 与 `reset()` 的分界：`reset` 清空会话（切空间语义），`stop` 只停这一条。
+   */
+  stop: () => void;
   /** 中止进行中的流并清空会话（切换空间前调用） */
   reset: () => void;
 }
@@ -122,10 +128,10 @@ export function useSseAsk({ spaceId, onUnauthorized }: UseSseAskOptions): UseSse
         }
         const degraded = err instanceof ApiError && DEGRADED_CODES.has(err.code);
         const text = degraded
-          ? "引擎暂不可用，请稍后重试或换个空间"
+          ? CHAT_COPY.degraded
           : err instanceof ApiError
             ? err.message
-            : "回答生成失败，请稍后重试";
+            : CHAT_COPY.interrupted;
         patch(answerId, {
           content: "",
           streaming: false,
@@ -162,18 +168,61 @@ export function useSseAsk({ spaceId, onUnauthorized }: UseSseAskOptions): UseSse
     [asking, spaceId, runQuestion]
   );
 
-  /** 重试失败的提问（复用原消息槽位，不追加新消息） */
+  /** 重试失败或已停止的提问（复用原消息槽位，不追加新消息） */
   const retry = useCallback(
     async (answerId: number) => {
-      const msg = messages.find((m) => m.id === answerId);
-      if (!msg?.error || asking) return; // asking 守卫：防连续重试双发
-      const question = msg.error.question;
-      patch(answerId, { error: undefined, content: "", streaming: true, slow: false });
+      const idx = messages.findIndex((m) => m.id === answerId);
+      if (idx < 0 || asking) return; // asking 守卫：防连续重试双发
+      const msg = messages[idx];
+      // 可重试的两种终态：出错（error）与用户主动停止（stopped）。
+      // 流式中、已完成都不给——点了也不该重发，否则凭空多一条回答。
+      if (!msg.error && !msg.stopped) return;
+      // question 两级来源：error 自带；stopped 没有错误上下文，取紧邻的前一条用户消息。
+      // 依赖 ask() 的 push 顺序 [user, assistant]（见下方 `ask`）——retry 只复用槽位不追加，
+      // 故 idx-1 恒为该问的用户消息；取不到就静默 no-op，不猜。
+      const prev = messages[idx - 1];
+      const question = msg.error?.question ?? (prev?.role === "user" ? prev.content : "");
+      if (!question) return;
+      patch(answerId, {
+        error: undefined,
+        stopped: false,
+        content: "",
+        streaming: true,
+        slow: false,
+      });
       setAsking(true);
       await runQuestion(answerId, question);
     },
     [messages, asking, patch, runQuestion]
   );
+
+  /**
+   * 中止进行中的流（STEP-69 / S69.3）。
+   *
+   * 三个「不」是这个函数存在的理由：不清 `messages`、不清 `input`、不写 `error`。
+   * 前两个是 `reset()` 的语义（切空间），第三个会把用户的主动操作渲染成红色失败。
+   * `asking` 在这里主动回落：`runQuestion` 的 finally 也会回落，但那条路径要等
+   * `fetch` 的 abort 真正抛出——中间那一帧按钮仍显示「停止」而流已断，是可感的错位。
+   */
+  const stop = useCallback(() => {
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    setMessages((prev) => {
+      // 从尾部找第一条仍在流式的助手消息：并发至多一条（ask 有 asking 守卫）
+      let target = -1;
+      for (let i = prev.length - 1; i >= 0; i -= 1) {
+        if (prev[i].role === "assistant" && prev[i].streaming) {
+          target = i;
+          break;
+        }
+      }
+      if (target === -1) return prev;
+      return prev.map((m, i) =>
+        i === target ? { ...m, streaming: false, slow: false, stopped: true } : m
+      );
+    });
+    setAsking(false);
+  }, []);
 
   /** 中止进行中请求并清空会话（切换空间前调用） */
   const reset = useCallback(() => {
@@ -183,5 +232,5 @@ export function useSseAsk({ spaceId, onUnauthorized }: UseSseAskOptions): UseSse
     setInput("");
   }, []);
 
-  return { messages, asking, input, setInput, ask, retry, reset };
+  return { messages, asking, input, setInput, ask, retry, stop, reset };
 }

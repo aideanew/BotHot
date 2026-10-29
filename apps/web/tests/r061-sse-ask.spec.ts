@@ -18,6 +18,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, type ChatAnswer } from "@/lib/api";
+import { CHAT_COPY } from "@/lib/chat/copy";
 import { useSseAsk } from "@/components/chat/useSseAsk";
 
 const h = vi.hoisted(() => ({
@@ -151,7 +152,7 @@ describe("R0.6.1 成功路径：流式增量 → 终态收敛", () => {
         answer({
           content: "已生成的一部分",
           citations: [],
-          error: { code: 50002, message: "回答生成中断，内容可能不完整，请重试" },
+          error: { code: 50002, message: CHAT_COPY.interruptedPartial },
         })
       );
     });
@@ -162,7 +163,7 @@ describe("R0.6.1 成功路径：流式增量 → 终态收敛", () => {
 
     const m = result.current.messages[1];
     expect(m.content).toBe("已生成的一部分");
-    expect(m.error?.text).toBe("回答生成中断，内容可能不完整，请重试");
+    expect(m.error?.text).toBe(CHAT_COPY.interruptedPartial);
     expect(m.streaming).toBe(false);
     expect(m.error?.question).toBe("继续说");
   });
@@ -206,7 +207,7 @@ describe("R0.6.1 失败路径：错误气泡与回落", () => {
     await act(async () => {
       await result.current.ask("网络问题");
     });
-    expect(result.current.messages[1].error?.text).toBe("回答生成失败，请稍后重试");
+    expect(result.current.messages[1].error?.text).toBe(CHAT_COPY.interrupted);
   });
 });
 
@@ -312,5 +313,75 @@ describe("R0.6.1 reset：切换空间的收敛", () => {
     const { result } = setup();
     expect(() => result.current.reset()).not.toThrow();
     expect(result.current.asking).toBe(false);
+  });
+});
+
+describe("R0.6.1 stop：中止单条而不清空会话（STEP-69 / S69.3）", () => {
+  it("中止流、保留消息与输入、标 stopped，且 asking 立刻回落", async () => {
+    let release!: (v: ChatAnswer) => void;
+    h.askQuestion.mockReturnValue(new Promise((res) => {
+      release = res;
+    }));
+    const { result } = setup();
+
+    await act(async () => {
+      void result.current.ask("要停的问题");
+    });
+    expect(result.current.asking).toBe(true);
+    expect(result.current.messages).toHaveLength(2);
+
+    act(() => {
+      result.current.stop();
+    });
+    // 与 reset 的分界：消息与用户输入都还在（reset 才清空）
+    expect(result.current.messages).toHaveLength(2);
+    expect(result.current.messages[0].content).toBe("要停的问题");
+    expect(result.current.messages[1].stopped).toBe(true);
+    expect(result.current.messages[1].streaming).toBe(false);
+    // asking 必须立刻回落，不等 fetch 抛 abort——否则按钮卡在「停止」而流已断
+    expect(result.current.asking).toBe(false);
+
+    // 流随后返回也不得再写入这条气泡
+    await act(async () => {
+      release(answer({ content: "迟到的内容" }));
+    });
+    expect(result.current.messages[1].content).toBe("");
+    expect(result.current.messages[1].stopped).toBe(true);
+  });
+
+  it("无进行中请求时 stop 为空操作且不抛错", () => {
+    const { result } = setup();
+    expect(() => result.current.stop()).not.toThrow();
+    expect(result.current.messages).toEqual([]);
+  });
+
+  it("stopped 气泡可重试：复用原槽位，问题取相邻用户消息", async () => {
+    h.askQuestion.mockReturnValueOnce(new Promise(() => {})); // 第一次永远挂起，等 stop
+    h.askQuestion.mockResolvedValueOnce(answer({ content: "第二次" }));
+    const { result } = setup();
+
+    await act(async () => {
+      void result.current.ask("被停止的问题");
+    });
+    act(() => {
+      result.current.stop();
+    });
+    const id = result.current.messages[1].id;
+    expect(result.current.messages[1].stopped).toBe(true);
+
+    await act(async () => {
+      await result.current.retry(id);
+    });
+    // 没有 error 上下文时，问题从紧邻的前一条 user 消息取
+    expect(h.askQuestion).toHaveBeenLastCalledWith(
+      "sp-1",
+      "被停止的问题",
+      expect.any(Function),
+      expect.any(Function),
+      expect.anything()
+    );
+    expect(result.current.messages).toHaveLength(2); // 复用槽位，不追加
+    expect(result.current.messages[1].content).toBe("第二次");
+    expect(result.current.messages[1].stopped).toBe(false);
   });
 });

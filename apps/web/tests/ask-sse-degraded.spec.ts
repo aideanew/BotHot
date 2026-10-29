@@ -43,10 +43,12 @@ vi.mock("@/lib/api", () => {
 
 import ChatMessageList from "@/components/chat/ChatMessageList";
 import { useSseAsk } from "@/components/chat/useSseAsk";
+import { CHAT_COPY } from "@/lib/chat/copy";
 import type { ChatMessage } from "@/components/chat/types";
 
 const SLOW_ANCHOR_MS = 15_000;
-const DEGRADED_TEXT = "引擎暂不可用，请稍后重试或换个空间";
+// 从产品唯一字面量导入，不再手抄——手抄的那一版在 P-146 里就是「改一处漏两处」的来源
+const DEGRADED_TEXT = CHAT_COPY.degraded;
 
 function setup() {
   return renderHook(() => useSseAsk({ spaceId: "sp-1", onUnauthorized: h.onUnauthorized }));
@@ -113,7 +115,7 @@ describe("U5 ① 降级码位分流（30002 / 50002）", () => {
     });
 
     const msg = assistant(view);
-    expect(msg.error?.text).toBe("回答生成失败，请稍后重试");
+    expect(msg.error?.text).toBe(CHAT_COPY.interrupted);
     expect(msg.error?.kind).toBe("failed");
   });
 
@@ -152,7 +154,7 @@ describe("U5 ① 降级码位分流（30002 / 50002）", () => {
     // 判的是"降级句子真的进了 DOM"；`kind` 本身由上面那组用例在状态层判，
     // 这里不再为它加一个只有测试在读的 DOM 属性（那才是真循环）。
     expect(screen.getByText(DEGRADED_TEXT)).toBeTruthy();
-    expect(screen.queryByText("正在思考…")).toBeNull();
+    expect(screen.queryByText(CHAT_COPY.thinking)).toBeNull();
   });
 });
 
@@ -228,8 +230,8 @@ describe("U5 ② 首 token 慢：给提示而不是静默", () => {
         onRetry: () => {},
       })
     );
-    expect(screen.getByText("响应较慢，仍在生成…")).toBeTruthy();
-    expect(screen.queryByText("正在思考…")).toBeNull();
+    expect(screen.getByText(CHAT_COPY.slow)).toBeTruthy();
+    expect(screen.queryByText(CHAT_COPY.thinking)).toBeNull();
     unmount();
 
     render(
@@ -239,7 +241,7 @@ describe("U5 ② 首 token 慢：给提示而不是静默", () => {
         onRetry: () => {},
       })
     );
-    expect(screen.getByText("正在思考…")).toBeTruthy();
-    expect(screen.queryByText("响应较慢，仍在生成…")).toBeNull();
+    expect(screen.getByText(CHAT_COPY.thinking)).toBeTruthy();
+    expect(screen.queryByText(CHAT_COPY.slow)).toBeNull();
   });
 });
