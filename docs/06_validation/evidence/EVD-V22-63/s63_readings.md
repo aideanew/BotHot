@@ -7,8 +7,8 @@
 
 | 项 | 现读 | 命令 |
 |---|---|---|
-| 区间提交数 | 63（发布批自身 +1 ⇒ tag 指向的提交上是 64） | `git log --oneline v1.1.4..HEAD \| wc -l` |
-| 主语分布 | `feat` 10 / `fix` 12 / `docs(...)` 38（内含 1 条 `docs+fix(...)` 合批）/ `chore` 3 | `git log --format=%s v1.1.4..HEAD \| sed -E 's/^([a-z]+)(\(.*\))?:.*/\1/' \| sort \| uniq -c` |
+| 区间提交数 | 于 STEP-62 尾批 `3115532` = **63**；于订正批 `1969271` = **66**（发布批 + 它的两个订正批）；**tag 指向的提交不在本文自抄**，出门后现取 | `git rev-list --count v1.1.4..3115532` / `..1969271`；tag 侧 `git rev-list --count v1.1.4..v1.1.5^{commit}` |
+| 主语分布（锚 `1969271`） | `feat` 10 / `fix` 12 / `docs(...)` 41（内含 1 条 `docs+fix(...)` 合批）/ `chore` 3 | `git log --format=%s v1.1.4..1969271 \| sed -E 's/^([a-z]+)([+(][^)]*\))?[!:]*.*/\1/' \| sort \| uniq -c` |
 | `apps/api/app/**` 改动面 | **1 个文件**：`apps/api/app/contracts/shapes.py`（+10/−5） | `git diff --stat v1.1.4..HEAD -- apps/api/app` |
 | 数据库迁移 | **0**（该路径区间内无 diff；目录实名是 `apps/api/alembic/versions`，本仓**没有** `apps/api/migrations`） | `git diff --stat v1.1.4..HEAD -- apps/api/alembic` |
 | 前端非 e2e 改动面 | 20 个文件（12 个源码 + 8 个测试/配置） | `git diff --stat v1.1.4..HEAD -- apps/web ':!apps/web/e2e'` |
