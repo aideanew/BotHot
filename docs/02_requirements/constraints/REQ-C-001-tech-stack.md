@@ -4,9 +4,10 @@ type: requirement
 title: 技术栈
 status: active
 owner: product
-实现度: 部分（实值与门面文本今天一致，但一致性本身无机检；本卡就是把一处失效的引用改回来）
-验收锚: 无
-最后核验 commit: bf141d5（2026-10-23 现读）
+实现度: 已实现（STEP-62 现读 2026-10-29）：门面声明与实值的一致性由常驻门维持——`scripts/check_docs_consistency.py` 的 STACK-001 段（STEP-50 收口，证据 `docs/06_validation/evidence/EVD-V21-50/`，含先红 `s50_1_old_blind.txt`），不一致即红；原「一致性本身无机检」一句作废
+验收锚:
+  - scripts/check_docs_consistency.py
+最后核验 commit: bf141d5（2026-10-23 现读）；实现度于 2026-10-29 STEP-62 按 EVD-V21-50 重判
 ---
 
 # REQ-C-001 技术栈
@@ -31,8 +32,13 @@ owner: product
 REQ-C-001 自己的判据就是「门面文本与实值一致」，所以这两处是本卡必须修的项，
 不是顺手润色。历史规划文档（`docs/任务规划V0.1.0/**` 等）里的旧值属禁止改写面，保持原样。
 
-## 无锚的替代机制
+## 替代机制已变成常驻门（STEP-62 现读，原「无锚的替代机制」作废）
 
-版本一致性目前靠**人读 + 冲突登记史**（X-02 就是这类漂移的一次更正），没有机检。
-已进 backlog **STACK-001**：给「门面声明 ↔ `package.json`/`pyproject` 实值」做一道
-门（形态与 `check_docs_consistency` 同族），未开始。
+原状是「版本一致性靠人读 + 冲突登记史」，已进 backlog **STACK-001** 等做门。**STEP-50 已把它做出来**：
+`scripts/check_docs_consistency.py` 的 STACK-001 段把门面里的 `"key": "^x.y.z"` 声明与
+`apps/web/package.json` / `apps/api/pyproject.toml` 实值逐键比对，不一致即红；先红读数
+`docs/06_validation/evidence/EVD-V21-50/s50_1_old_blind.txt` 记的是门之前「两处旧值无人报警」的样子。
+backlog 侧该条已翻 ✅（`docs/04_engineering/backlog.md` 的 STACK-001 段）。
+
+限定读法：这道门只比**声明里的版本号**，不比 `AGENTS.md` / 本文件里所有人读的叙述句——
+「门面文本」在判据里的含义就是可被解析的那几个版本字段。
