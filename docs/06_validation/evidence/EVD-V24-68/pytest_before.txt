@@ -1,0 +1,30 @@
+....F                                                                    [100%]
+================================== FAILURES ===================================
+_____________ test_ux_view_states_projection_equals_frozen_draft ______________
+
+    def test_ux_view_states_projection_equals_frozen_draft() -> None:
+        """逐视图键集 == 冻结稿 `x-core-views[].states` 的键集，同序，无例外。
+    
+        为什么不留例外：例外会腐化，且下一个写卡的人不知道要不要再加一个。STEP-70 已把唯一那一态
+        移到 `x-build-mode-notes`（view 对象的兄弟键，不在 `states` 里），所以这里可以无条件逐键比；
+        它若回流进 `states`，逐键同序比对立刻红——这就是"无例外分支"的机械凭据。
+        """
+>       live = _ux_view_states_literal()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_ux_states_contract.py:177: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def _ux_view_states_literal() -> list[tuple[str, list[str]]]:
+        """从手写的 TS 投影对象里取 (键, 值列表) 序列。取不到/多条/条目不合形 ⇒ 判红并说清是哪一种。"""
+        assert STATES_TS.exists(), f"逐视图投影锚缺失：{STATES_TS} 不存在"
+        blocks = _VIEW_BLOCK_RE.findall(STATES_TS.read_text(encoding="utf-8"))
+>       assert len(blocks) == 1, f"UX_VIEW_STATES 块应恰好一条，实读 {len(blocks)} 条 ⇒ 谁是唯一源说不清了"
+E       AssertionError: UX_VIEW_STATES 块应恰好一条，实读 0 条 ⇒ 谁是唯一源说不清了
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests\test_ux_states_contract.py:151: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_ux_states_contract.py::test_ux_view_states_projection_equals_frozen_draft
+1 failed, 4 passed in 0.21s

@@ -13,7 +13,10 @@ EVD-V23-64/`。一句话——把 `ux` 接进生成器会强制为它建一张�
    这里先红，而不是让 CI 的比对器红成一团没人看得懂的形）；
 ③ 前端/契约包看得见的名字确实在 `index.ts` 导出了（否则消费方 `import type { UxState }` 直接编译失败）；
 ④ 冻结稿里那两条把 A 堵死的关键词仍在位——它们一旦消失，本文件的选路依据就过期，
-   这条判据要红一次逼人回去重跑 S64.0，而不是让 B 悄悄变成"没人说得清为什么是 B"。
+   这条判据要红一次逼人回去重跑 S64.0，而不是让 B 悄悄变成"没人说得清为什么是 B"；
+⑤ `states.ts` 的逐视图投影与冻结稿 `x-core-views[].states` 的**键与键序**逐视图相等
+   （STEP-68）。口径：投影是「本视图要交的态」，词表是「可能的态」——把词表当要求，
+   就会给只有 5 个键的视图造出契约里没有的态（`r19` ④ 的退化就是这么来的）。
 """
 
 from __future__ import annotations
@@ -110,4 +113,85 @@ def test_frozen_draft_is_read_only_for_this_card() -> None:
     state = doc["definitions"]["State"]
     assert "note" in state, "冻结稿 State 的 `note` 不见了 ⇒ A 的堵点可能已解除，回去重跑 S64.0 选路探针（台账 P-142）"
     assert "x-required-for-every-core-view" in state, "冻结稿 State 的注释键漂移，本卡的选路依据需重读"
+
+
+# ── 逐视图投影（STEP-68 / D-V24-05）──
+
+# 形态同样钉死：一条 `export const UX_VIEW_STATES = {` 起、`} as const;` 收，中间每行一个
+# `<小写键>: ["…", …],`。锚不到就说清是哪一种，而不是"返回空表 ⇒ 看起来像键集对不上"。
+_VIEW_BLOCK_RE = re.compile(
+    r"^export const UX_VIEW_STATES = \{\n(?P<body>.*?)^\} as const;$", re.MULTILINE | re.DOTALL
+)
+_VIEW_ROW_RE = re.compile(r'^\s*(?P<key>[a-z0-9]+): \[(?P<items>[^\]]*)\],$')
+_ITEM_ONLY_RE = re.compile(r'^"([a-z]+)"$')
+_EXPECTED_VIEW_COUNT = 6
+
+
+def _view_key(view: str) -> str:
+    """冻结稿 `view` 标题 → 投影键：首段 → 去前导 `/` → 小写 → 去非字母数字。
+
+    六个视图上都不产生歧义（`/spaces 列表…`→`spaces`、`NotificationBell（站内通知）`→
+    `notificationbell`）。**不引别名表**：别名表会变成第二个真源，正是 D-V24-05 明令禁止的。
+    """
+    tokens = view.split()
+    assert tokens, f"冻结稿某视图的 `view` 是空串，归一规则无从下手：{view!r}"
+    return re.sub(r"[^a-z0-9]", "", tokens[0].lstrip("/").lower())
+
+
+def _frozen_view_states() -> list[tuple[str, list[str]]]:
+    assert FROZEN_DRAFT.exists(), f"冻结稿缺失：{FROZEN_DRAFT}"
+    doc: dict[str, Any] = json.loads(FROZEN_DRAFT.read_text(encoding="utf-8"))
+    return [(_view_key(v["view"]), list(v["states"])) for v in doc["x-core-views"]]
+
+
+def _ux_view_states_literal() -> list[tuple[str, list[str]]]:
+    """从手写的 TS 投影对象里取 (键, 值列表) 序列。取不到/多条/条目不合形 ⇒ 判红并说清是哪一种。"""
+    assert STATES_TS.exists(), f"逐视图投影锚缺失：{STATES_TS} 不存在"
+    blocks = _VIEW_BLOCK_RE.findall(STATES_TS.read_text(encoding="utf-8"))
+    assert len(blocks) == 1, f"UX_VIEW_STATES 块应恰好一条，实读 {len(blocks)} 条 ⇒ 谁是唯一源说不清了"
+    rows: list[tuple[str, list[str]]] = []
+    for line in blocks[0].splitlines():
+        if not line.strip():
+            continue
+        hit = _VIEW_ROW_RE.match(line)
+        assert hit is not None, f'UX_VIEW_STATES 条目不合形（要 `<键>: ["…", …],`）：{line!r}'
+        items: list[str] = []
+        for raw in hit.group("items").split(","):
+            token = raw.strip()
+            if not token:
+                continue
+            item = _ITEM_ONLY_RE.match(token)
+            assert item is not None, f"UX_VIEW_STATES 值不合形（要双引号小写串）：{token!r}"
+            items.append(item.group(1))
+        rows.append((hit.group("key"), items))
+    return rows
+
+
+def test_ux_view_states_projection_equals_frozen_draft() -> None:
+    """逐视图键集 == 冻结稿 `x-core-views[].states` 的键集，同序，无例外。
+
+    为什么不留例外：例外会腐化，且下一个写卡的人不知道要不要再加一个。STEP-70 已把唯一那一态
+    移到 `x-build-mode-notes`（view 对象的兄弟键，不在 `states` 里），所以这里可以无条件逐键比；
+    它若回流进 `states`，逐键同序比对立刻红——这就是"无例外分支"的机械凭据。
+    """
+    live = _ux_view_states_literal()
+    draft = _frozen_view_states()
+    live_keys = [key for key, _ in live]
+    assert live_keys == [key for key, _ in draft], (
+        "投影的视图键集与冻结稿不同序或不同名：\n  活体 " + repr(live_keys) + "\n  稿   " + repr([key for key, _ in draft])
+    )
+    assert len(live) == _EXPECTED_VIEW_COUNT, f"投影应为 {_EXPECTED_VIEW_COUNT} 个视图，实读 {len(live)}：{live_keys}"
+    live_map = dict(live)
+    for key, draft_states in draft:
+        assert live_map[key] == draft_states, (
+            f"视图 {key} 的态与冻结稿不同序或不同键：\n  活体 " + repr(live_map[key]) + "\n  稿   " + repr(draft_states)
+        )
+    vocab = set(_ux_states_literal())
+    for key, states in live:
+        extra = [s for s in states if s not in vocab]
+        assert not extra, f"视图 {key} 用了词表外的值 {extra}：投影必须是 UX_STATES 的子集"
+    chat = live_map["chat"]
+    assert chat == ["loading", "success", "error", "unauthenticated", "degraded"], (
+        "chat 应为契约的 5 键（不含 initial / empty / forbidden），实读 " + repr(chat)
+    )
 

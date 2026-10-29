@@ -108,6 +108,7 @@ export type {
 // （两侧都不许改）⇒ 依卡面第 13 格 ① 转 B。八值与冻结稿逐值同序，由
 // `apps/api/tests/test_ux_states_contract.py` 钉住。
 export type { UxState } from "./ux/states";
+export type { UxViewStates } from "./ux/states";
 
 // ── identity 域（STEP-66，P-82 余项 / U6）──
 // **两类产物要分清**（这是 identity↔shapes 的分工，也是本行注释存在的理由）：

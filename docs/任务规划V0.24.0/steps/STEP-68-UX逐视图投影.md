@@ -27,7 +27,7 @@
 
 ## 5. Execution Steps
 
-1. [ ] **S68.1** 在 `states.ts` 末尾追加（**保持 `UX_STATES` 那一行的形态不变**，`:36` 的正则锚着它）：
+1. [x] **S68.1** 在 `states.ts` 末尾追加（**保持 `UX_STATES` 那一行的形态不变**，`:36` 的正则锚着它）：
 
    ```ts
    /**
@@ -55,8 +55,8 @@
    export type UxViewStates = typeof UX_VIEW_STATES;
    ```
 
-2. [ ] **S68.2** `index.ts` 增加 `export type { UxViewStates } from "./ux/states";`（**只导出类型**，不导出值——`emitDeclarationOnly` 下导出值等于给消费侧一个运行时黑洞）
-3. [ ] **S68.3** `test_ux_states_contract.py` 新增一条：
+2. [x] **S68.2** `index.ts` 增加 `export type { UxViewStates } from "./ux/states";`（**只导出类型**，不导出值——`emitDeclarationOnly` 下导出值等于给消费侧一个运行时黑洞）
+3. [x] **S68.3** `test_ux_states_contract.py` 新增一条：
 
    ```python
    def test_ux_view_states_projection_equals_frozen_draft() -> None:
@@ -71,20 +71,20 @@
 
    归一实现必须是纯函数、写在测试文件内，不引第三方。
 
-4. [ ] 头注（`states.ts` 与测试文件）补第 ⑤ 条说明：**投影是"本视图要交的态"，词表是"可能的态"**
-5. [ ] 跑定向测试
-6. [ ] 本卡单独提交并推送
+4. [x] 头注（`states.ts` 与测试文件）补第 ⑤ 条说明：**投影是"本视图要交的态"，词表是"可能的态"**
+5. [x] 跑定向测试
+6. [x] 本卡单独提交并推送
 
 ## 6. 验收标准
 
-- [ ] `states.ts` 中 `UX_STATES` 那一行**字节未变**（`grep -n '^export const UX_STATES = \[' ` 仍恰好 1 条）
-- [ ] `UX_VIEW_STATES` 6 个键，各键的值都是 `UX_STATES` 的子集
-- [ ] `chat` 的值恰为 `["loading","success","error","unauthenticated","degraded"]`（**不含** `initial`/`empty`/`forbidden`）
-- [ ] `notificationbell` 的值**不含** `offstate`
-- [ ] `pytest tests/test_ux_states_contract.py -q` = **5 passed**（原 4 条 + 新增 1 条）
-- [ ] `grep -c "offstate" apps/api/tests/test_ux_states_contract.py` = **0**（无例外分支）
-- [ ] `pnpm exec tsc --noEmit`（`packages/contracts` 与 `apps/web`）通过
-- [ ] 本卡不改 `scripts/gen_contracts.py`（`ux` 仍不进生成器，`test_ux_domain_is_not_half_wired_into_the_generator` 绿）
+- [x] `states.ts` 中 `UX_STATES` 那一行**字节未变**（`grep -n '^export const UX_STATES = \[' ` 仍恰好 1 条）
+- [x] `UX_VIEW_STATES` 6 个键，各键的值都是 `UX_STATES` 的子集
+- [x] `chat` 的值恰为 `["loading","success","error","unauthenticated","degraded"]`（**不含** `initial`/`empty`/`forbidden`）
+- [x] `notificationbell` 的值**不含** `offstate`
+- [x] `pytest tests/test_ux_states_contract.py -q` = **5 passed**（原 4 条 + 新增 1 条）
+- [x] `grep -c "offstate" apps/api/tests/test_ux_states_contract.py` = **0**（无例外分支）
+- [x] `pnpm exec tsc --noEmit`（`packages/contracts` 与 `apps/web`）通过
+- [x] 本卡不改 `scripts/gen_contracts.py`（`ux` 仍不进生成器，`test_ux_domain_is_not_half_wired_into_the_generator` 绿）
 
 ## 7. 验证命令
 

@@ -1,0 +1,27 @@
+冻结稿：docs/任务规划V0.12.0/contracts/ux_states.schema.json#x-core-views
+投影：  packages/contracts/src/ux/states.ts#UX_VIEW_STATES
+
+view                n  states
+------------------------------------------------------------------------------------------------
+spaces              7  loading, empty, success, error, forbidden, unauthenticated, degraded
+hot                 5  loading, empty, success, error, degraded
+chat                5  loading, success, error, unauthenticated, degraded
+admin               6  unauthenticated, forbidden, empty, success, error, degraded
+notificationbell    5  loading, empty, success, error, degraded
+onboarding          2  success, degraded
+
+live key            n  states
+------------------------------------------------------------------------------------------------
+spaces              7  loading, empty, success, error, forbidden, unauthenticated, degraded
+hot                 5  loading, empty, success, error, degraded
+chat                5  loading, success, error, unauthenticated, degraded
+admin               6  unauthenticated, forbidden, empty, success, error, degraded
+notificationbell    5  loading, empty, success, error, degraded
+onboarding          2  success, degraded
+
+视图键集（同序）: True
+逐视图逐键同序: {'spaces': True, 'hot': True, 'chat': True, 'admin': True, 'notificationbell': True, 'onboarding': True}
+视图数: 6 (期望 6)
+全局词表 UX_STATES: ['initial', 'loading', 'empty', 'success', 'error', 'forbidden', 'unauthenticated', 'degraded']
+投影 ⊆ 词表: {'spaces': True, 'hot': True, 'chat': True, 'admin': True, 'notificationbell': True, 'onboarding': True}
+chat 恰为 5 键: ['loading', 'success', 'error', 'unauthenticated', 'degraded']
