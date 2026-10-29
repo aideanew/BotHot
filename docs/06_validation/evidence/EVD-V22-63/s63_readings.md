@@ -102,9 +102,73 @@ in 1272.21s (0:21:12)`。三条红同一形状：
 
 推送后回填：见 §5。
 
-## 5 推送后回填
+## 5 推送后回填（三绿、标签、Release 与双端一致）
 
-_（待推送后按 `git/ref`、`git/tags`、`releases/tags/v1.1.5` 三处独立读数填写。）_
+### 5.1 判据② 发版提交三绿（全部 attempt 1）
+
+发版头 = `d346872`（`docs(STEP-63 订正 3)`）。三个工作流在同一提交上各自首跑即绿：
+
+| 工作流 | run id | attempt | 结论 | 关键读数（run 级 `/logs` 原文） |
+|---|---|---|---|---|
+| CI | `40837061037` | 1 | **success** | `backend` `2503 passed, 6 skipped, 4 deselected, 2 warnings in 165.08s`；`Total coverage: 88.90%`；`skip 门禁：total_skipped=6 baseline=6 pg_unreachable=0`；`✅ 全部模块与全局达标`；治理门 `rounds-check rc=0 / evidence-check rc=0` + `敏感形门…HIGH 0，ALLOWED 放行 1` + `✅ 治理门通过`；`frontend` `Test Files 57 passed (57)` / `Tests 452 passed (452)` / e2e `31 passed (1.4m)`；`e2e-real` **success**（22 步）：r19 `Running 5 tests` → `5 passed (2.8s)`，admin `Running 7 tests` → `6 passed (3.1s)` |
+| Security | `40837060894` | 1 | **success** | 四扫描器全过（gitleaks 那一半正是 §7 逐指纹登记后的复扫） |
+| CI-Windows | `40837060911` | 1 | **success** | `windows-dev` `1817 passed, 692 skipped, 4 deselected, 2 warnings in 1175.31s (0:19:35)`；`windows 门禁：failed=0 total_skipped=692 baseline=692`；vitest `Test Files 57 passed (57)` / `Tests 452 passed (452)` |
+
+判据② **满足**。同一条链上此前的两个头各自红过，逐一头是：
+
+| 头 | CI | Security | CI-Windows | 红在哪 |
+|---|---|---|---|---|
+| `698b346` | failure `40827011663` | failure `40827011635` | success `40827011638` | 治理门 `evidence-check rc=1`（敏感形门 HIGH 1，DSN 形状）+ Security `阻断 1 项`（gitleaks 历史档同一形状） |
+| `1969271` | failure `40836344451` | **success** `40836344438` | success `40836344571` | 逐指纹登记后 Security 已自愈；CI 仍红在敏感形门 `HIGH 2`（`assign` 判据把流水里复述的规则名与后随值读成赋值） |
+| `d346872` | success | success | success | 订正 3 把流水里的规则名改成不落形状的指称 ⇒ 敏感形门 `HIGH 0，ALLOWED 放行 1` |
+
+⇒ 「发版提交三绿」指的是**最终这个头**，不是"一次都没红过"。
+
+### 5.2 判据③ 标签：逐字点名推送，既有标签未动
+
+```
+git tag -a v1.1.5 -m "v1.1.5 (STEP-63): 真后端 e2e 五态真跑 + UX 态契约自洽 + 需求判词纠真"   rc=0
+git push <内嵌 token 的 URL> v1.1.5                                                            rc=0
+  → To https://github.com/aideanew/BotHot.git | * [new tag]  v1.1.5 -> v1.1.5
+git push <同一 URL> main                                                                       rc=0 → Everything up-to-date
+```
+
+远端标签集前后比对（`git ls-remote --tags`，注释标签每个给两行：标签对象与 `^{}` 指向的提交）：
+
+```
+tags_before=6  tags_after=7
+既有 tag 被改动 = []   消失 = []   新增 = ['v1.1.5']
+v1.1.5 lines: 59d5a320595a（标签对象）  d3468720dacc（指向的提交）
+```
+
+既有 6 个标签（`v1.0.0`/`v1.1.0`/`v1.1.1`/`v1.1.2`/`v1.1.3`/`v1.1.4`）逐行 sha 相同 ⇒ 未被移动、未被删除。
+
+### 5.3 判据④ Release
+
+```
+POST /repos/aideanew/BotHot/releases                 → 201  id=427596865
+GET  /repos/aideanew/BotHot/releases/tags/v1.1.5     → 200  tag=v1.1.5  published=2026-10-29T08:06:57Z
+  name=v1.1.5  draft=False  prerelease=False  assets=0
+  html=https://github.com/aideanew/BotHot/releases/tag/v1.1.5
+```
+
+判据④ **满足**（200 是独立 API 读，不是 POST 自己的回声）。
+
+### 5.4 双端一致（不靠 git 自己的输出）
+
+| 读面 | 命令 | 读数 |
+|---|---|---|
+| 分支 | `GET /repos/aideanew/BotHot/git/ref/heads/main` | `refs/heads/main = d3468720daccff55dc3c943eabf5d8a6e2c6bd48` = 本地 `git rev-parse HEAD` ⇒ **match=True** |
+| 标签 | `git ls-remote --tags`（上表） | `v1.1.5^{}` 指向 `d3468720dacc`，与 main 同一个提交 |
+| Release | `GET /releases/tags/v1.1.5` | 200，`target_commitish=main` |
+
+⚠ 本机 `refs/remotes/origin/main` 仍是旧值（推送走内联 token 的 URL，git 不更新本地远端引用，
+且工作树被其他会话共用）⇒ 「是否同步」只能按上表这三处独立读，不能读 `git status` 的 ahead/behind。
+
+### 5.5 区间计数的现取读数
+
+`git rev-list --count v1.1.4..v1.1.5^{commit}` = **67**。发布段导语里那句「不抄自己所在的提交」就此落地：
+于订正批 `1969271` 是 66，tag 指向的提交上多的那个就是记这一笔的提交本身。
 
 ## 6 保留项与残留
 
