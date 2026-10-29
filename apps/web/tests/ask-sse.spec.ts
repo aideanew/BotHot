@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { CHAT_COPY } from "@/lib/chat/copy";
+
 /**
  * SSE 解析单元测试（C-T7R 步骤②，契约 v0.4 定稿基线）
  *
@@ -181,7 +183,7 @@ describe("C-FRONTEND-HARDENING：SSE 流中断防御（v0.4 契约 done 为终�
     const answer = await askQuestion("sp-001", "问题");
     expect(answer.content).toBe("");
     expect(answer.error?.code).toBe(50002);
-    expect(answer.error?.message).toContain("重新提问");
+    expect(answer.error?.message).toContain(CHAT_COPY.interrupted);
   });
 
   it("完全空流（无 meta/delta/done）→ 不标记（空回复可能合法）", async () => {
