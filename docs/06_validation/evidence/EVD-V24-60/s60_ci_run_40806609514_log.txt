@@ -1,0 +1,143 @@
+# S60.ci · run 40806609514 / job e2e-real（2026-10-29T02:34:33Z–02:36:49Z）原始日志切片
+
+> 取法：GitHub REST `GET /actions/runs/40806609514/logs`（鉴权读，zip 内 `e2e-real/<序号>_<步名>.txt`）
+> 后用本脚本按行号原样切出三段，**未做任何改写**（时间戳前缀保留）。行号对 `r19_ci_log.txt` 而言。
+> 只切三段：启动段（含 `--with-fake-llm --with-fake-langbot` 与 health 载荷）、r19 那一步全段、Stop stack。
+>
+> 结论（读数只看本文件，不看转述）：
+>   - 供给齐：`deps` 三键 `postgres/redis/langbot = ok`；种子 ⑤b 两轮 counts 相同。
+>   - 五条用例：②③④⑤ `✓`，① `✘` —— 红因是**用例自身**：提问正文里复述了「思考中…」，
+>     `getByText` 严格模式下同时命中用户气泡与占位符两条（见 ①的 error 段，原文第 121–123 行）。
+>   - 同一跑里 ③ error 是绿的 ⇒ 截断手段（`route.fetch()` + 摘 `content-encoding`）在真链路上成立。
+>   - 该步失败后 `断言 r19 不是 skipped`、admin、Reporter 自检三步被 skipped（日志里可见）。
+
+2026-10-29T02:35:59.0865614Z == ② 假 LLM 上游 :3290 ==
+2026-10-29T02:35:59.0869324Z == ②b 假 LangBot 上游 :3291 ==
+2026-10-29T02:35:59.0873472Z == ③ uvicorn :3300 ==
+2026-10-29T02:35:59.0876811Z == ④ 探活：GET /api/v1/system/health 直到 code==0（上限 60s）==
+2026-10-29T02:36:01.2172673Z health 就绪（4s）：{"code":0,"message":"ok","data":{"status":"ok","app":"BotHot","env":"development","deps":{"postgres":"ok","redis":"ok","langbot":"ok"}},"requestId":"c85c6673-bad9-4dcc-b96e-a7e7ce241fe3"}
+2026-10-29T02:36:01.2173746Z == ⑤ 种子会话（qa_seed_sessions.py 收编，不另写一份）==
+2026-10-29T02:36:01.2174368Z    给 Playwright 的接法：那一步要显式带 E2E_SEED_FILE=/home/runner/work/_temp/e2e-real/seed.txt
+2026-10-29T02:36:01.2175140Z    （本脚本自己 export 不了调用方的 shell，real.setup.ts 的默认路径与本行同源：${RUNNER_TEMP:-/tmp}/e2e-real/seed.txt）
+2026-10-29T02:36:02.1168771Z seed 写入 /home/runner/work/_temp/e2e-real/seed.txt：session 行 3 条（应为 3），种子脚本 rc=0
+2026-10-29T02:36:02.8773336Z == ⑤b /chat 可检索种子（STEP-73：直写表是测试夹具，不是产品路径，D-V24-12）==
+2026-10-29T02:36:02.8774222Z     space_id=bcef1c5e-a638-4116-8ac9-8a96c7930b9b
+2026-10-29T02:36:02.8774989Z     pass1 counts: spaces=1 sources=1 assets=1 documents=1
+2026-10-29T02:36:02.8775612Z     pass2 counts: spaces=1 sources=1 assets=1 documents=1
+2026-10-29T02:36:02.8776629Z     space: id=bcef1c5e-a638-4116-8ac9-8a96c7930b9b name='R24 流式验收空间' langbot_kb_uuid='fake-kb-1' engine='builtin' engine_kb_id='fake-kb-1' status='ACTIVE'
+2026-10-29T02:36:02.8777535Z     source: id=f262b7a6-c4d4-4e83-b75d-f4fc1cff7c45 type='web' external_id='r24-fake-source'
+2026-10-29T02:36:02.8778863Z     asset: id=aa573f18-c277-4cca-9b37-4a810e824bd8 external_id='r24-fake-doc-1' title='R24 假文章' content_hash=f695ff7d742b1680f75cb41ffdc425e86b7e6ca0e2394ab3b8b4fc238b6aaa61 status='READY'
+2026-10-29T02:36:02.8781005Z     document: id=f7175537-d647-46fd-95aa-697ff5d64233 space_id=bcef1c5e-a638-4116-8ac9-8a96c7930b9b langbot_file_id='fake-doc-1' status='READY' content_hash=f695ff7d742b1680f75cb41ffdc425e86b7e6ca0e2394ab3b8b4fc238b6aaa61
+2026-10-29T02:36:02.8805287Z seed 追加：space bcef1c5e-a638-4116-8ac9-8a96c7930b9b → /home/runner/work/_temp/e2e-real/seed.txt（real.setup.ts 只解析 ^session 行，多这一行不影响它）
+2026-10-29T02:36:02.8806510Z == ⑥ S59.0 先验探针：主平台不可达时，admin 会话能不能进后台 ==
+2026-10-29T02:36:02.9601913Z probe: cookie=bothot_session value_len=32
+2026-10-29T02:36:02.9604673Z probe: GET /auth/me → curl_rc=0 body={"code":0,"message":"ok","data":{"user":{"sub":"qa-admin-001","email":"qa-admin@bothot.local","nickname":"QA管理员","tier":"","role":"admin","is_admin":true},"wallet":{"balanceYuan":0,"currency":"CNY","available":false},"providerUnreachable":true,"qaFixture":true},"requestId":"30441847-9ae5-44cc-b81f-4b06c0f41ffc"}
+2026-10-29T02:36:02.9620527Z probe: GET /system/ready → HTTP 200 body={"code":0,"message":"ok","data":{"status":"ready","checks":{"postgres":{"ok":true,"state":"ok"},"redis":{"ok":true,"state":"ok"},"schema":{"ok":true,"state":"ok","current":"ab1006c2a","head":"ab1006c2a"}},"alerting":"disabled"},"requestId":"a834296c-6783-4e11-ad5b-929d3ead9b20"}
+2026-10-29T02:36:02.9638655Z S59.0 绿：方案 A 成立（qa-fixture 短路 + 本地 users 行就够，不进主平台）
+2026-10-29T02:36:02.9639949Z probe /ready 判定通过：HTTP 200（503 属合法降级读数）
+2026-10-29T02:36:02.9640622Z == ⑦ 前端 :3200（MOCK=false 构建一次后 next start）==
+2026-10-29T02:36:32.7979392Z next build（MOCK=false）用时 30s
+2026-10-29T02:36:34.9012920Z 前端就绪（37s）
+2026-10-29T02:36:34.9030235Z == 全部就绪：后端 :3300、前端 :3200、seed=/home/runner/work/_temp/e2e-real/seed.txt、pidfile=/home/runner/work/_temp/e2e-real/pids（4 条）==
+
+===== 11_E2E (real backend, project=real, r19-chat-stream.spec.ts).txt =====
+﻿2026-10-29T02:36:34.9081882Z ##[group]Run set -o pipefail
+2026-10-29T02:36:34.9082349Z [36;1mset -o pipefail[0m
+2026-10-29T02:36:34.9082815Z [36;1m# 留一份 list 输出给下一步判「有没有真跑」——测试没跑与全过在 conclusion 上都长成绿。[0m
+2026-10-29T02:36:34.9083551Z [36;1mpnpm exec playwright test --project=real e2e/r19-chat-stream.spec.ts 2>&1 \[0m
+2026-10-29T02:36:34.9084227Z [36;1m  | tee "$RUNNER_TEMP/r19-list.txt"[0m
+2026-10-29T02:36:34.9104940Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-29T02:36:34.9105474Z env:
+2026-10-29T02:36:34.9106294Z   DATABASE_URL: ***localhost:5433/bothot
+2026-10-29T02:36:34.9106762Z   REDIS_URL: redis://localhost:6380/0
+2026-10-29T02:36:34.9107267Z   SESSION_STORE_BACKEND: redis
+2026-10-29T02:36:34.9107678Z   AIDEAN_ISSUER: http://127.0.0.1:9
+2026-10-29T02:36:34.9108093Z   APP_ENV: development
+2026-10-29T02:36:34.9108515Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-10-29T02:36:34.9109103Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:36:34.9109935Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-29T02:36:34.9110697Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:36:34.9111302Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:36:34.9111892Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:36:34.9112503Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-29T02:36:34.9113239Z   PUSH_SECRET_MASTER_KEY: ***
+2026-10-29T02:36:34.9113824Z   ENGINE_KEY_MASTER_KEY: ***
+2026-10-29T02:36:34.9114196Z   PORT: 3200
+2026-10-29T02:36:34.9114507Z   E2E_REAL_BACKEND: 1
+2026-10-29T02:36:34.9115061Z   E2E_CHAT_LLM: 1
+2026-10-29T02:36:34.9115470Z   E2E_SEED_FILE: /home/runner/work/_temp/e2e-real/seed.txt
+2026-10-29T02:36:34.9115961Z ##[endgroup]
+2026-10-29T02:36:35.9963311Z real.setup：由 /home/runner/work/_temp/e2e-real/seed.txt 生成 e2e/.auth/admin.json, e2e/.auth/operator.json, e2e/.auth/user.json（cookie=bothot_session，值不打印）
+2026-10-29T02:36:36.0542328Z 
+2026-10-29T02:36:36.0543330Z Running 5 tests using 1 worker
+2026-10-29T02:36:36.0543772Z 
+2026-10-29T02:36:41.1125105Z   ✘  1 [real] › e2e/r19-chat-stream.spec.ts:146:5 › ① loading：首 delta 前「思考中…」可见，且此刻「停止」可点 (647ms)
+2026-10-29T02:36:42.3743642Z   ✓  2 [real] › e2e/r19-chat-stream.spec.ts:168:5 › ② success：正常提问 → 增量正文 + 来源文章 + 来源引擎 (749ms)
+2026-10-29T02:36:43.0018413Z   ✓  3 [real] › e2e/r19-chat-stream.spec.ts:218:5 › ③ error：流在首段后被截断 → 「连接中断，可重试」+ 正文保留 + 重试按钮 (617ms)
+2026-10-29T02:36:43.4361932Z   ✓  4 [real] › e2e/r19-chat-stream.spec.ts:233:5 › ④ unauthenticated：会话失效 → 离开 /chat，且不出现 10004/权限不足 (425ms)
+2026-10-29T02:36:43.8525189Z   ✓  5 [real] › e2e/r19-chat-stream.spec.ts:243:5 › ⑤ degraded：引擎不可达 → 「引擎暂不可用，请稍后重试或换个空间」 (404ms)
+2026-10-29T02:36:44.0547511Z 
+2026-10-29T02:36:44.0551680Z 
+2026-10-29T02:36:44.0561314Z   1) [real] › e2e/r19-chat-stream.spec.ts:146:5 › ① loading：首 delta 前「思考中…」可见，且此刻「停止」可点 ────────────
+2026-10-29T02:36:44.0561922Z 
+2026-10-29T02:36:44.0562199Z     Error: expect(locator).toBeVisible() failed
+2026-10-29T02:36:44.0562566Z 
+2026-10-29T02:36:44.0562839Z     Locator: getByText('思考中…')
+2026-10-29T02:36:44.0563255Z     Expected: visible
+2026-10-29T02:36:44.0563913Z     Error: strict mode violation: getByText('思考中…') resolved to 2 elements:
+2026-10-29T02:36:44.0565036Z         1) <div class="max-w-[80%] rounded-card rounded-br-sm bg-brand-500 px-4 py-2.5 text-white">R19 loading：先别急着回答，我要看「思考中…」这一态</div> aka getByText('R19 loading')
+2026-10-29T02:36:44.0565946Z         2) <p class="text-base text-neutral-400">思考中…</p> aka getByText('思考中…', { exact: true })
+2026-10-29T02:36:44.0566287Z 
+2026-10-29T02:36:44.0566426Z     Call log:
+2026-10-29T02:36:44.0566846Z       - Expect "toBeVisible" getByText('思考中…') with timeout 5000ms
+2026-10-29T02:36:44.0567276Z       - waiting for getByText('思考中…')
+2026-10-29T02:36:44.0567471Z 
+2026-10-29T02:36:44.0567480Z 
+2026-10-29T02:36:44.0567584Z       155 |   try {
+2026-10-29T02:36:44.0567996Z       156 |     await ask(page, "R19 loading：先别急着回答，我要看「思考中…」这一态");
+2026-10-29T02:36:44.0568861Z     > 157 |     await expect(page.getByText(CHAT_COPY.thinking)).toBeVisible({ timeout: 5_000 });
+2026-10-29T02:36:44.0569368Z           |                                                      ^
+2026-10-29T02:36:44.0569966Z       158 |     const stop = page.getByRole("button", { name: CHAT_COPY.stop });
+2026-10-29T02:36:44.0570629Z       159 |     await expect(stop).toBeVisible();
+2026-10-29T02:36:44.0571117Z       160 |     await stop.click();
+2026-10-29T02:36:44.0571769Z         at /home/runner/work/BotHot/BotHot/apps/web/e2e/r19-chat-stream.spec.ts:157:54
+2026-10-29T02:36:44.0572241Z 
+2026-10-29T02:36:44.0572854Z     attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+2026-10-29T02:36:44.0573929Z     test-results/r19-chat-stream-①-loading：首-delta-前「思考中…」可见，且此刻「停止」可点-real/test-failed-1.png
+2026-10-29T02:36:44.0575001Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+2026-10-29T02:36:44.0575433Z 
+2026-10-29T02:36:44.0576070Z     Error Context: test-results/r19-chat-stream-①-loading：首-delta-前「思考中…」可见，且此刻「停止」可点-real/error-context.md
+2026-10-29T02:36:44.0576459Z 
+2026-10-29T02:36:44.0576564Z   1 failed
+2026-10-29T02:36:44.0577094Z     [real] › e2e/r19-chat-stream.spec.ts:146:5 › ① loading：首 delta 前「思考中…」可见，且此刻「停止」可点 ─────────────
+2026-10-29T02:36:44.0577528Z   4 passed (8.2s)
+2026-10-29T02:36:44.0999087Z ##[error]Process completed with exit code 1.
+===== 16_Stop stack.txt =====
+﻿2026-10-29T02:36:45.6870077Z ##[group]Run bash scripts/e2e/run_real_backend.sh --stop
+2026-10-29T02:36:45.6870567Z [36;1mbash scripts/e2e/run_real_backend.sh --stop[0m
+2026-10-29T02:36:45.6885484Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-29T02:36:45.6885874Z env:
+2026-10-29T02:36:45.6886413Z   DATABASE_URL: ***localhost:5433/bothot
+2026-10-29T02:36:45.6886734Z   REDIS_URL: redis://localhost:6380/0
+2026-10-29T02:36:45.6887050Z   SESSION_STORE_BACKEND: redis
+2026-10-29T02:36:45.6887350Z   AIDEAN_ISSUER: http://127.0.0.1:9
+2026-10-29T02:36:45.6887638Z   APP_ENV: development
+2026-10-29T02:36:45.6887946Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-10-29T02:36:45.6888344Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:36:45.6888783Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-29T02:36:45.6889232Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:36:45.6889640Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:36:45.6890393Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-29T02:36:45.6890856Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-29T02:36:45.6891348Z   PUSH_SECRET_MASTER_KEY: ***
+2026-10-29T02:36:45.6891733Z   ENGINE_KEY_MASTER_KEY: ***
+2026-10-29T02:36:45.6891995Z ##[endgroup]
+2026-10-29T02:36:45.8365265Z stopped fake_llm pid=4126
+2026-10-29T02:36:45.8516607Z stopped fake_langbot pid=4127
+2026-10-29T02:36:45.8661706Z stopped backend pid=4128
+2026-10-29T02:36:45.8808171Z stopped frontend pid=4508
+2026-10-29T02:36:45.9234588Z 端口终检 backend :3300 空闲；占用者读数：(空)
+2026-10-29T02:36:45.9365404Z 端口终检 frontend :3200 空闲；占用者读数：(空)
+2026-10-29T02:36:45.9491847Z 端口终检 fake_llm :3290 空闲；占用者读数：(空)
+2026-10-29T02:36:45.9617789Z 端口终检 fake_langbot :3291 空闲；占用者读数：(空)
+

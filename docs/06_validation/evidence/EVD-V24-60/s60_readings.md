@@ -103,18 +103,59 @@ next 对 SSE 也套压缩 ⇒ 头里有 `content-encoding: gzip`；而 `route.fe
 现改为：删掉 `content-encoding` / `content-length` / `transfer-encoding` 三头，`content-type` 显式钉回
 `text/event-stream`，`status` 显式取 `response.status()`。这条**不是**在修复真实产品链路——产品链路里
 浏览器自己解 gzip，没有问题；它只修「回放一份已被解压的正文」这个测试侧动作的头部一致性。
-本机无法验证这一点（起不了真栈）⇒ 它属于 §6 要回填的读数之一，若 ③ 仍红，下一轮先看这一点。
+本机无法验证这一点（起不了真栈）⇒ 由 §6 的读数裁决。**裁决结果：成立** —— 第 1 跑里 ③ 是 `✓`，
+说明摘掉那三个头之后浏览器确实把回放正文当成 SSE 读完了。
 
-## 6. @ci 读数（本轮推送后回填）
+## 6. @ci 读数
+
+### 6.1 第 1 跑：head `ca9ba70`，run `40806609514`（2026-10-29T02:29Z 起）
+
+原始切片在 `s60_ci_run_40806609514_log.txt`（zip 内 `e2e-real/` 三段原样，未改写）。
+
+| 项 | 读数 |
+|---|---|
+| head | `ca9ba70`（推送后 `git ls-remote origin refs/heads/main` 独立复核一致） |
+| `CI` run 结论 | **success** —— 但 `e2e-real` 自己是 **failure**，被 `continue-on-error: true` 掩成绿（这正是 STEP-62 要摘它的理由，见 §6.3） |
+| `Security` / `CI-Windows` | `Security` success；`CI-Windows` 见 §6.2 |
+| `Start real stack` | 成功：`端口检查通过（本次要用：3200 3291 3290 3300）`；`② 假 LLM 上游 :3290` / `②b 假 LangBot 上游 :3291` 两行齐；health 载荷 `deps` 三项 `postgres/redis/langbot = ok`；`⑤b` 两轮 counts `spaces=1 sources=1 assets=1 documents=1` |
+| `① loading` | **✘ 647ms** —— 见下方根因 |
+| `② success` | **✓ 749ms** |
+| `③ error` | **✓ 617ms** —— 手段②（截断 + 摘 `content-encoding`）在真链路上成立，§5.5 的怀疑解除 |
+| `④ unauthenticated` | **✓ 425ms** |
+| `⑤ degraded` | **✓ 404ms** |
+| 合计 | `1 failed / 4 passed (8.2s)` |
+| 守卫步输出 | **无读数**：该步被 skipped（上一步已失败）。step 结论表：11 `E2E … r19` failure → 12 `断言 r19 不是 skipped` skipped → 13 admin skipped → 14 Reporter 自检 skipped → 15 Upload success |
+| `Stop stack` | 成功：`stopped fake_llm / fake_langbot / backend / frontend` 四行齐，四个端口 `端口终检 … 空闲；占用者读数：(空)` |
+
+**① 红的根因是这一条用例自己**，不是产品、不是供给：提问正文写的是
+`"R19 loading：先别急着回答，我要看「思考中…」这一态"`，把占位文案原样复述进了用户气泡，于是
+`getByText(CHAT_COPY.thinking)` 在严格模式下同时命中两条：
+
+```
+Error: strict mode violation: getByText('思考中…') resolved to 2 elements:
+    1) <div class="…bg-brand-500…">R19 loading：先别急着回答，我要看「思考中…」这一态</div>
+    2) <p class="text-base text-neutral-400">思考中…</p> aka getByText('思考中…', { exact: true })
+```
+
+改法（最小）：提问正文换成不复述文案的 `"R19 loading：先别急着回答，我要看等待这一态"`，
+并给占位符断言加 `exact: true` —— 两处都只动这一条用例，不动产品、不动其余四条。
+
+### 6.2 第 2 跑（待回填）
 
 | 项 | 读数 |
 |---|---|
 | head | 待填 |
-| `e2e-real` 结论 | 待填 |
-| ①②③④⑤ 逐条 | 待填 |
+| `e2e-real` 结论 / 五条逐条 | 待填 |
 | 守卫步输出（`ok=? skipped=? failed=?`） | 待填 |
-| `Stop stack` | 待填 |
 | `backend` / `frontend` / `CI-Windows` | 待填 |
+
+### 6.3 顺带取到的两个事实（给 STEP-62 用）
+
+1. `e2e-real` 最近三次**真执行**（`8b695ce` / `de65373` / `1eaf2d5`）全 success；`408aae2` 与 `9b0a037`
+   两次是 skipped（上游 job 红），不算执行读数。本卡这一跑是第四次执行、且是第一次 failure ⇒
+   「连续三次绿」的窗口在本次被打破，`continue-on-error` 的摘除判据要按 STEP-62 卡面②重算。
+2. `CI` 的 run 结论在 `continue-on-error: true` 下**掩盖了 e2e-real 的 failure**（本跑即例），
+   这是「绿着不算绿」的又一实例。
 
 ## 7. 同批附带：主干红的来源与修法（不属于本卡允许面）
 
@@ -141,7 +182,8 @@ Tests  1 failed | 451 passed (452)
 
 ## 8. 局限
 
-- 五态的行为读数只能在 CI 取（本机无 PG/Redis），§6 未回填前，本卡对外只能主张「结构面交付完成」。
+- 五态的行为读数只能在 CI 取（本机无 PG/Redis）。§6.1 已回填第 1 跑（②③④⑤ 绿、① 红在用例自身），
+  §6.2 的第 2 跑未回填前，本卡对外主张「四条已真跑通过 + ① 已改用例待复跑」。
 - 截断手段（手段②）改的是**响应体长度**，不是链路：它能证明「无 done 帧 ⇒ interruptedPartial + 正文保留」，
   不能证明「真网络错误下的 UX」——后者走 `useSseAsk` 的 catch，会把 `content` 清空（读数在
   `useSseAsk.ts:135-140`），本卡未把它写成用例。

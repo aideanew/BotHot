@@ -153,8 +153,11 @@ test("① loading：首 delta 前「思考中…」可见，且此刻「停止�
     });
   });
   try {
-    await ask(page, "R19 loading：先别急着回答，我要看「思考中…」这一态");
-    await expect(page.getByText(CHAT_COPY.thinking)).toBeVisible({ timeout: 5_000 });
+    // 提问正文刻意不复述占位文案：首跑把它写进了用户气泡，`getByText` 严格模式同时命中
+    // 气泡与占位符两条（run 40806609514 的 ① 就是这么红的），断言当场变成「2 个元素里挑哪个」。
+    // 外加 `exact`：文案若哪天缩成别的用例里也出现的词，这里不该跟着红。
+    await ask(page, "R19 loading：先别急着回答，我要看等待这一态");
+    await expect(page.getByText(CHAT_COPY.thinking, { exact: true })).toBeVisible({ timeout: 5_000 });
     const stop = page.getByRole("button", { name: CHAT_COPY.stop });
     await expect(stop).toBeVisible();
     await stop.click();
