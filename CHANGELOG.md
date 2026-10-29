@@ -26,7 +26,7 @@ v1.1.5 又添两条同族教训：**"本机复跑同数"要带上口径**（默�
 > 其余 38 个是 `docs(...)`（其中 1 个是 `docs+fix(...)` 合批主语）与 3 个 `chore(...)`——四版规划增量
 > （V0.22.0～V0.25.0）与各步的交付/收口记录。
 > **本版零数据库迁移、零新增对外 HTTP 端点**——区间内 `apps/api/app/**` 只动了 `apps/api/app/contracts/shapes.py`
-> 一个文件（`MeWallet` 契约封闭），没有路由、没有模型、没有 `apps/api/migrations/**`。
+> 一个文件（`MeWallet` 契约封闭），没有路由、没有模型、没有 `apps/api/alembic/versions/**` 下的新迁移。
 > 对外可感的变化集中在前端：`/chat` 多了"停止"与唯一的文案源，热点页与通知铃的空态/降级态按契约原字，
 > 演示态若干文案与状态出口随契约走。
 > 本版新增的东西大多在**测试与 CI 面**：真后端 e2e 有了 `real` project、假上游两件、可检索种子与五态用例，
@@ -39,7 +39,7 @@ v1.1.5 又添两条同族教训：**"本机复跑同数"要带上口径**（默�
 > 演示态 e2e `43 条中 31 passed / 12 skipped`（第 43 条是 mock 档跳过的 r19）；`e2e-real` job 内 r19 五条
 > `5 passed (4.9s)` + 守卫步 `ok=5 skipped=0 failed=0` + admin `6 passed / 1 skipped`（② 键盘可达在真后端档按 P-131 跳）；
 > CI-Windows `1817 passed / 692 skipped` 且门禁 `failed=0 total_skipped=692 baseline=692`。
-> 本机全量（本版唯一一次，发布批；隔离 PG16@5547 + `PYTHONUTF8=1`）：`2503 passed / 6 skipped / 4 deselected`
+> 本机全量（本版唯一一次发版口径；同一棵树跑了两次，差量是码页、见下一行）：`2503 passed / 6 skipped / 4 deselected`
 > （19:39），`Total coverage: 88.90%`，模块门 `✅ 全部模块与全局达标`（TOTAL 88.90% ≥ 79%），
 > skip 门 `total_skipped=6 baseline=6 pg_unreachable=0`。
 > ⚠ **本机口径必须是 UTF-8 模式**：默认 cp936 码页下同一棵树读 `2500 passed / 3 failed`，三条红是同一形状——
@@ -108,6 +108,15 @@ v1.1.5 又添两条同族教训：**"本机复跑同数"要带上口径**（默�
   `getByText('思考中…')` 同时命中提问与占位符；提问正文改用别的话术。来源 `d6d67fc`
 - **需求判词 12 条纠真**（STEP-62，纯文档）：五条实现度、四条测试锚、无锚需求数 2→1，
   并把 `/chat` 的"八态"按契约改成"五态"、`e2e-real` 的阻塞化判据按末三次真执行结案。来源 `6e78dff`
+- **发版批自己踩中的两处门禁形状**（STEP-63，纯文档/配置）：证据文件 §1 当时把本机隔离库的 DSN
+  写成 `账号:***@主机` 形式——**掩码不等于去形**，规则判的是「协议+账号+口令+@」的邻接形状，与口令真假无关，
+  于是同一形状同时打红 CI 的敏感形头扫（`guards.py evidence-check`，扫 HEAD）与 Security 的 gitleaks（git 模式扫历史）；
+  处置分两半：`ded5089` 把该行改为「DSN 只经环境变量传入、不复述形状」使头扫当场自愈，
+  历史那一半依 D-12 **逐指纹**登记进 `.gitleaksignore`（只登记那一条命中，规则本身一字未改、
+  不做整文件/整目录/整 commit 豁免），指纹由本机真实 gitleaks 8.21.2 现取：登记前 `517 commits scanned / 1 leak found`，
+  登记后同命令 `no leaks found`（rc 0）。另修 §0 一条取证命令写错的路径——`apps/api/migrations` 在本仓不存在，
+  实名是 `apps/api/alembic`，结论（零迁移）为真但证据空转。全貌见 `docs/06_validation/evidence/EVD-V22-63/s63_readings.md` §7。
+  来源 `ded5089`
 
 ## [v1.1.4] - 2026-10-27
 

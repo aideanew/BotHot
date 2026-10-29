@@ -103,3 +103,18 @@ d839eb741a464466b1096f4627eb10196b19ba03:apps/web/app/engines/page.tsx:generic-a
 # 但 gitleaks 走 git 模式扫历史，fbb0409 那个 blob 永久存在，而 D-V4-04 禁止重写历史
 # ⇒ 依 D-12 逐指纹登记。CI 的 gitleaks 步扫的是本批变更文件，故后续批次不再因此红。
 fbb04092c0e5f25b00e51cac4b039cea13295f43:apps/api/tests/test_admin_contract.py:generic-api-key:156
+
+# ── 13) 698b346 一条：发版批证据文件里写脱敏 DSN 的**形状**（工作树已去形）─────────────
+# STEP-63 的证据文件 §1 当时把本机隔离库的 DSN 写成 `账号:***@主机` 形式——口令段是掩码，
+# 仓内任何时刻都没出现过真实凭据（本机隔离库口令也不在该文件里），但规则 1 判的是
+# 「协议 + 账号 + 口令 + @」的**邻接形状**，与口令真假无关 ⇒ 同一形状同时打红
+# CI 的敏感形头扫（`guards.py evidence-check`，扫 head）与 Security 的 gitleaks（git 模式扫历史）。
+# 处置：`ded5089` 已把该行改成「DSN 只经环境变量传入、不复述形状」⇒ 头扫那一半当场自愈；
+# 但 gitleaks 走 git 模式，`698b346` 那个 blob 永久存在，而 D-V4-04 禁止重写历史
+# ⇒ 依 D-12 逐指纹登记这一条（不整文件、不整目录、不整 commit 豁免，规则本身一字未改）。
+# 指纹由本机真实 gitleaks 8.21.2 现取（与 security.yml:53 同版）：
+#   GIT_ATTR_NOSYSTEM=1 gitleaks detect --source . --config .gitleaks.toml -f json
+#   → 517 commits scanned / 1 leak found → 登记后同命令 → no leaks found（rc 0）
+# 教训与 §11/§12 同源，且这一次多一维：**登记豁免文件自己也在那 9 个待检路径里**，
+# 所以注释里同样只描述形状、不内联可匹配的样例。
+698b346a8eade74a6e41a03f7fb595a2bd0990ac:docs/06_validation/evidence/EVD-V22-63/s63_readings.md:connection-string-embedded-password:25

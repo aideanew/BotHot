@@ -10,14 +10,15 @@
 | 区间提交数 | 63（发布批自身 +1 ⇒ tag 指向的提交上是 64） | `git log --oneline v1.1.4..HEAD \| wc -l` |
 | 主语分布 | `feat` 10 / `fix` 12 / `docs(...)` 38（内含 1 条 `docs+fix(...)` 合批）/ `chore` 3 | `git log --format=%s v1.1.4..HEAD \| sed -E 's/^([a-z]+)(\(.*\))?:.*/\1/' \| sort \| uniq -c` |
 | `apps/api/app/**` 改动面 | **1 个文件**：`apps/api/app/contracts/shapes.py`（+10/−5） | `git diff --stat v1.1.4..HEAD -- apps/api/app` |
-| 数据库迁移 | **0**（该路径区间内无 diff） | `git diff --stat v1.1.4..HEAD -- apps/api/migrations` |
+| 数据库迁移 | **0**（该路径区间内无 diff；目录实名是 `apps/api/alembic/versions`，本仓**没有** `apps/api/migrations`） | `git diff --stat v1.1.4..HEAD -- apps/api/alembic` |
 | 前端非 e2e 改动面 | 20 个文件（12 个源码 + 8 个测试/配置） | `git diff --stat v1.1.4..HEAD -- apps/web ':!apps/web/e2e'` |
 | 契约包改动面 | 5 个路径（`identity/dto.ts` 新增、`ux/states.ts` 新增、`index.ts`、`shapes.schema.json`、`identity/.gitkeep`） | `git diff --stat v1.1.4..HEAD -- packages/contracts` |
 
 10 个 `feat` 主语逐个 `git log -1` 复核过：`a31dc42`、`0e53199`、`31e1977`、`4160b81`、`6da2a0c`、
 `c7c0a07`、`5b1a78d`、`e675a26`、`8614365`、`ca9ba70`（`643440b` 是 `fix`，同属 STEP-59 那条链）；
-发布段引用的 20 个短 hash 全部做存在性核验（`git log -1 --format='%h %s' <sha>` 逐条命中，
-含 `Fixed` 里点名的肇事提交 `7c15264`），没有一条是从别处抄来的引用。
+发布段共出现 23 个唯一短 hash——**条目「来源」位 20 个**（`7c15264`、`f536398`、`3115532` 这 3 个在导语与
+正文里，不是条目来源），逐个 `git log -1` 全部存在、且 `git rev-list --count <sha> ^v1.1.4` 全 > 0
+⇒ 没有一条引用落在区间外。
 
 ## 1 判据① 本机全量一次（04 附录 B，本版唯一一次）
 
@@ -113,3 +114,37 @@ _（待推送后按 `git/ref`、`git/tags`、`releases/tags/v1.1.5` 三处独立
 | 三处 `subprocess.run(text=True)` 缺 `encoding="utf-8"` | 本机 cp936 下三条用例必红；CI 两平台都碰不到 | 台账 P-169（修的是测试文件，不在发版卡允许面） |
 | `ci.yml:542` 那句「摘除归 STEP-62」的过期注释 | 与判据② 的决策有偏差 | 并入 P-168 那一卡 |
 | 覆盖率读数不可当精确判据 | 本区间已归档 88.93 / 88.94，本机 88.90 | 既有口径（台账 P-104） |
+
+## 7 本批自打的两道门禁（发版批自己就是被测对象）
+
+发布批推上去的第一个头 `698b346` 同时打红 **CI** 与 **Security**。根因是同一处：
+`docs/06_validation/evidence/EVD-V22-63/s63_readings.md` 的原 §1 把本机隔离库 DSN 写成
+「账号 + 掩码口令 + `@` + 主机」的形式。**掩码不等于去形**——本仓 `.gitleaks.toml` 的规则 1
+判的是邻接形状而非词表，所以口令段写成 `***` 一样命中。
+
+| 门禁 | 取材面 | 原文读数 | 出路 |
+|---|---|---|---|
+| CI `backend` → Governance gates | **HEAD 内容**（本批 9 个变更路径） | `敏感形门（STEP-00P S00P.1.1）：待检 9 个路径（取材面=head），实扫 9，跳过 0，HIGH 1，ALLOWED 放行 0` / `HIGH dsn-embedded-password docs/06_validation/evidence/EVD-V22-63/s63_readings.md:25` / `rounds-check rc=0 / evidence-check rc=1` | `ded5089` 改文档：该行只写「DSN 经环境变量传入、不复述形状」⇒ 头扫自愈 |
+| Security `汇总门禁` | **git 模式全历史**（`517 commits scanned`） | `gitleaks：🔴 检出 1 处明文密钥` / `🔴 connection-string-embedded-password \| docs/06_validation/evidence/EVD-V22-63/s63_readings.md:25 \| commit=698b346a` / `阻断 1 项 / 告警 3 项` | 工作树去形**不消灭历史 blob**，D-V4-04 禁止重写历史 ⇒ 依 D-12 逐指纹登记 `.gitleaksignore`（用户 2026-10-29 授权；该文件属 STEP-00S 归属面，不在发版卡允许面内） |
+
+指纹由本机真实 gitleaks 8.21.2（与 `security.yml` 的钉版同版）现取，并按 D-12 纪律做了登记前后对照跑：
+
+```
+登记前：517 commits scanned / leaks found: 1
+        698b346a…:docs/06_validation/evidence/EVD-V22-63/s63_readings.md:connection-string-embedded-password:25
+登记后：517 commits scanned / no leaks found（rc=0）
+```
+
+对照跑的命令与 §11/§12 的先例一致：`GIT_ATTR_NOSYSTEM=1 gitleaks detect --source . --config .gitleaks.toml`
+（不加该变量时 Git for Windows 的 system 级 `docx` textconv 会让整次扫描失败）。
+登记条目只放行**那一条指纹**，规则本体一字未改，也没有任何整文件/整目录/整 commit 豁免。
+
+顺带修掉独立复查助手挑出的一处空转证据：§0 的「零迁移」原本写成 `git diff --stat … -- apps/api/migrations`，
+而**本仓没有 `apps/api/migrations` 这个目录**（实名 `apps/api/alembic`）⇒ 结论真、取证路径不存在。
+现按真实路径复算：`git diff --stat v1.1.4..HEAD -- apps/api/alembic` = 空输出 ⇒ 零迁移成立。
+
+独立复查助手（只读，18 次工具调用）对本批四条判据的结论：**面内性 PASS / 数字可核 PASS / 过度主张 PASS /
+markdown 完整性 PASS，必须修的 FAIL 无**；其 nits 共 4 条，本批已修其中 3 条（上面的取证路径、
+「发布段 20 个短 hash」改为「条目来源位 20 个 + 导语 3 个 = 23 个唯一 hash」、「唯一一次全量」补成
+「唯一一次发版口径，同树两次、差量是码页」），第 4 条是 commit message 措辞、不改历史。
+

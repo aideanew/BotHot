@@ -92,14 +92,15 @@ PLAN 规划 → SPEC 规格 → APPROVE 批准 → IMPLEMENT 实施 → VERIFY �
   「保持」不是漏改；到本版末前件已成立（`d6d67fc` ✓ / `f536398` ✓ / `6e78dff` ✓），摘除动作**不在本版做**
   （本版允许面不含 `ci.yml`），与 `ci.yml` 里那句"摘除归 STEP-62"的过期注释合并成一卡，登台账 **P-168**。
   本版**零数据库迁移、零新增对外 HTTP 端点**；区间内 `apps/api/app/**` 只动了 `apps/api/app/contracts/shapes.py`
-  一个文件（无路由、无模型、无 `migrations/**`）。
+  一个文件（无路由、无模型、无 `apps/api/alembic/versions/**` 下的新迁移——本仓没有 `apps/api/migrations` 这个目录）。
   测试基线（三绿 head `6e78dff`；其后的收口批 `3115532` 与发布批都是零代码文档批）：
   CI `2503 passed / 6 skipped / 4 deselected`、`Total coverage: 88.93%`、模块覆盖率门 `✅ 全部模块与全局达标`、
   skip 门 `total_skipped=6 baseline=6 pg_unreachable=0`；前端 `57 文件 / 452 passed`；
   演示态 e2e `43 条中 31 passed / 12 skipped`（第 43 条是 mock 档跳过的 r19）；`e2e-real` job 内 r19 五条
   `5 passed (4.9s)`、守卫步 `ok=5 skipped=0 failed=0`、admin `6 passed / 1 skipped`（② 键盘可达按 P-131 跳）；
   CI-Windows `1817 passed / 692 skipped` 且门禁 `failed=0 total_skipped=692 baseline=692`。
-  本机全量（本版唯一一次，发布批；隔离 PG16@5547 + `PYTHONUTF8=1`）：`2503 passed / 6 skipped / 4 deselected`、
+  本机全量（本版唯一一次发版口径，发布批；隔离 PG16@5547 + `PYTHONUTF8=1`；同一棵树跑了两次，差量见下一行）：
+  `2503 passed / 6 skipped / 4 deselected`、
   `Total coverage: 88.90%`、模块门 `✅ 全部模块与全局达标`、skip 门 `total_skipped=6 baseline=6 pg_unreachable=0`。
   ⚠ **本机口径必须是 UTF-8 模式**：默认 cp936 码页下同一棵树读 `2500 passed / 3 failed`，三条红同一形状——
   父进程用 gbk 解码子进程的 UTF-8 输出 ⇒ `proc.stdout` 为 `None`（`test_health_probe_bounded.py` 两条、
